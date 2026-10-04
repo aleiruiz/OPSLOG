@@ -1,0 +1,5 @@
+{
+  "extends": "../../tests/orchestrator/tsconfig.json",
+  "compilerOptions": { "composite": true, "outDir": "dist", "rootDir": "." },
+  "include": ["./**/*.ts"]
+}
