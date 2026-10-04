@@ -1,4 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
+import { fileURLToPath } from 'node:url';
+
+const repositoryRoot = fileURLToPath(new URL('..', import.meta.url));
 
 export default defineConfig({
   testDir: '.',
@@ -12,6 +15,7 @@ export default defineConfig({
   },
   webServer: {
     command: 'pnpm exec vite --config e2e/vite.config.mjs --host 127.0.0.1 --port 4173',
+    cwd: repositoryRoot,
     url: 'http://127.0.0.1:4173',
     reuseExistingServer: !process.env.CI,
   },

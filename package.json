@@ -11,7 +11,7 @@
     "typecheck": "tsc -b",
     "test:unit": "pnpm --filter @opslog/contracts test && pnpm --filter @opslog/ui test && pnpm --filter @opslog/ui axe && vitest run tests/harness/unit.test.ts --coverage.enabled --coverage.include=tests/harness/tenant-key.ts --coverage.exclude=packages/** --coverage.exclude=apps/** --coverage.exclude=**/dist/** --coverage.exclude=**/*.d.ts --coverage.exclude=eslint.config.mjs --coverage.thresholds.lines=80",
     "test:integration": "vitest run tests/harness/mysql.integration.test.ts",
-    "test:e2e": "playwright test --config=e2e/playwright.config.ts",
+    "test:e2e": "playwright test --config=e2e/playwright.config.mjs",
     "test": "pnpm test:unit && pnpm test:integration",
     "build": "tsc -b",
     "quality": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test:unit && pnpm test:integration && pnpm build"

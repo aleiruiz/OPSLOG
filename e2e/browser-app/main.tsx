@@ -68,6 +68,14 @@ function Gallery() {
           </Typography>
           <Stack spacing={1}>
             <UiState kind="loading" />
+            <UiState kind="empty" />
+            <UiState kind="no-results" />
+            <UiState kind="no-permission" />
+            <UiState kind="incomplete" />
+            <UiState kind="expired" />
+            <UiState kind="closed" />
+            <UiState kind="success" />
+            <UiState kind="session-expired" />
             <UiState
               kind="error"
               actionLabel="Reintentar estado"

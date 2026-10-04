@@ -13,6 +13,14 @@ test.describe('OPSLOG UI components in a real browser', () => {
       page.getByLabel('Estado: Activo. Severidad: Baja. Descripción: Procesamiento normal'),
     ).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Cargando' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Aún no hay registros' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Sin resultados' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'No tienes acceso' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Información incompleta' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Vencido' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Cerrado' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Listo' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Sesión expirada' })).toBeVisible();
     await expect(
       page.getByRole('heading', { name: 'No pudimos cargar la información' }),
     ).toBeVisible();
