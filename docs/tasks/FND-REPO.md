@@ -21,7 +21,7 @@ e2e_cases: ["clon limpio ejecuta quality/build/test", "CI no conecta AWS ni lee 
 commands: ["pnpm install --frozen-lockfile", "pnpm lint", "pnpm format:check", "pnpm typecheck", "pnpm test:unit", "pnpm test:integration", "pnpm build"]
 fixtures: ["datos sintéticos tenant-A/tenant-B", "reloj determinista", "credenciales efímeras de test explícitas"]
 non_goals: ["funcionalidad M1+", "conexión AWS", "leer .env", "decidir ORM o contratos compartidos sin ADR/propietario"]
-completion_evidence: ["commit/PR", "baseSHA/headSHA", "lista de comandos y resultados", "CI real", "auditoría local", "dos auditorías Codex independientes por SHA"]
+completion_evidence: ["commit/PR listo para revisión", "baseSHA/headSHA", "lista de comandos y resultados", "CI real", "una auditoría independiente del proveedor activo por SHA"]
 rollback: "Revertir commits del paquete; conservar lock/worktree y evidencia. No borrar fixtures ni resetear bases externas."
 max_repair_cycles: 3
 ```

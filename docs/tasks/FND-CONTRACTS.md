@@ -21,7 +21,7 @@ e2e_cases: ["contrato puede consumirse sin ORM", "trazabilidad enlaza FR→contr
 commands: ["pnpm test --filter contracts", "pnpm lint --filter contracts", "pnpm typecheck --filter contracts", "pnpm contracts:check"]
 fixtures: ["payloads sintéticos válidos/inválidos", "tenant-A/tenant-B", "errores sin datos reales"]
 non_goals: ["implementar handlers/ORM", "pantallas", "resolver decisiones D3/D6/D7/D16", "conectar AWS"]
-completion_evidence: ["commit/PR", "schemas y tests", "matriz individual completa", "auditoría local", "dos auditorías Codex independientes por SHA"]
+completion_evidence: ["commit/PR listo para revisión", "schemas y tests", "matriz individual completa", "una auditoría independiente del proveedor activo por SHA"]
 rollback: "Revertir el commit del contrato y marcar consumidores incompatibles; no cambiar baselines ni copiar interfaces de otros paquetes."
 max_repair_cycles: 3
 ```

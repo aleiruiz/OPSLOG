@@ -21,7 +21,7 @@ e2e_cases: ["navegación por teclado en DataTable/Wizard/Timeline", "estados com
 commands: ["pnpm storybook", "pnpm test --filter ui", "pnpm axe --filter ui", "pnpm lint --filter ui"]
 fixtures: ["stories sintéticas", "sin datos reales", "roles y permisos representados como lenguaje de usuario"]
 non_goals: ["pantallas de producto", "API/ORM", "reglas de autorización en componentes", "copiar código del artifact"]
-completion_evidence: ["commit/PR", "stories y axe", "tokens/contraste", "auditoría local", "dos auditorías Codex independientes por SHA"]
+completion_evidence: ["commit/PR listo para revisión", "stories y axe", "tokens/contraste", "una auditoría independiente del proveedor activo por SHA"]
 rollback: "Revertir cambios del paquete y conservar snapshots/evidencia; no tocar aplicaciones consumidoras."
 max_repair_cycles: 3
 ```

@@ -21,7 +21,7 @@ e2e_cases: ["runbook reproduce preparación sin credenciales", "plan distingue e
 commands: ["Get-Content infra/plan/AWS.md", "git diff --check -- infra/plan/fnd-aws docs/adr/aws docs/runbooks/inventory"]
 fixtures: ["valores placeholder no secretos", "datos sintéticos", "matriz de controles pendiente"]
 non_goals: ["az/aws/terraform/cdk apply", "RDS/AppSync/S3 inventory", "leer .env", "probar credenciales", "deploy"]
-completion_evidence: ["commit/PR", "checklist documental", "bloqueos reales", "auditoría local", "dos auditorías Codex independientes por SHA"]
+completion_evidence: ["commit/PR listo para revisión", "checklist documental", "bloqueos reales", "una auditoría independiente del proveedor activo por SHA"]
 rollback: "Revertir documentación nueva; conservar AWS.md vigente e historial de decisiones. No destruir recursos ni borrar evidencia."
 max_repair_cycles: 3
 ```

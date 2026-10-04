@@ -14,7 +14,7 @@ AGENTS.md, CLAUDE.md, docs/baselines/ACTIVE.md, originales SPECS.md/Orchestrator
 
 Único escritor de Tasks.md y `.orchestrator/`. Puede materializar paquetes, registrar leases, preparar commit documental inicial, crear ramas/worktrees y coordinar subagentes/PRs de M0. Escrituras de preparación: docs/tasks, docs/operations y estado local. Código de aplicación y del runtime se asigna a implementadores, no se implementa silenciosamente como orquestador.
 
-Prohibido: editar SPECS/Orchestrator/fuentes congeladas; leer/publicar secretos; configurar/conectar AWS; usar producción; lanzar modelos distintos de los fijados por proveedor; force-push; autoaprobar; avanzar M1 sin G0.
+Prohibido: editar SPECS/Orchestrator/fuentes congeladas; leer/publicar secretos; configurar/conectar AWS; usar producción; lanzar modelos distintos de los fijados por proveedor; force-push sobre ramas o worktrees ajenos; autoaprobar; avanzar M1 sin G0.
 
 ## Entregables y aceptación
 
@@ -22,7 +22,7 @@ Prohibido: editar SPECS/Orchestrator/fuentes congeladas; leer/publicar secretos;
 2. Commit base seguro disponible para worktrees o limitación de Git concreta registrada.
 3. Paquetes FND materializados con requisitos individuales, contratos, acceptance, tests/commands y paths sin solapamiento antes de despacharlos.
 4. Tres carriles M0 despachados con modelo explícito, worktree/branch/baseSHA/lease; si slots/acceso impiden algo, estado honesto y trabajo independiente preparado.
-5. Auditorías locales y dos auditores externos al equipo autor con el modelo del proveedor activo, sin recursión ni capacidad ficticia; sin revisión cruzada. Lock de proveedor y procedimiento de transferencia registrados.
+5. Una auditoría independiente externa al equipo autor, con el modelo del proveedor activo y sobre el SHA candidato; sin auditorías adicionales ni revisión cruzada. Registrar lock de proveedor y procedimiento de transferencia.
 6. Tasks.md actualizado localmente, ignorado y sin credenciales; evento de handoff y estado recuperable.
 7. No gates pasados ni AWS configurado como consecuencia de este bootstrap.
 
