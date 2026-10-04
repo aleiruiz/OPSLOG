@@ -1,0 +1,9 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": { "rootDir": "../../../", "outDir": "dist" },
+  "include": [
+    "src/**/*.ts",
+    "../../../packages/domain/identity/src/**/*.ts",
+    "../../../packages/platform/auth/src/**/*.ts"
+  ]
+}
