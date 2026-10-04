@@ -36,10 +36,12 @@ export function Field({ id, label, description, helperText, error, ...props }: F
   return (
     <TextField
       {...props}
-      id={id}
       label={label}
-      error={error}
-      helperText={helperText ?? description}
+      {...(id === undefined ? {} : { id })}
+      {...(error === undefined ? {} : { error })}
+      {...(helperText === undefined && description === undefined
+        ? {}
+        : { helperText: helperText ?? description })}
       FormHelperTextProps={{ id: helperId }}
       inputProps={{ 'aria-describedby': helperId, ...props.inputProps }}
     />

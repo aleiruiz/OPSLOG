@@ -1,0 +1,11 @@
+{
+  "name": "@opslog/contracts",
+  "private": true,
+  "scripts": {
+    "test": "vitest run src/index.test.ts",
+    "typecheck": "tsc -b"
+  },
+  "devDependencies": {
+    "vitest": "3.2.6"
+  }
+}

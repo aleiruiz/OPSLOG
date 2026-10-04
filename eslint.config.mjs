@@ -5,7 +5,7 @@ import prettier from 'eslint-config-prettier';
 export default [
   { ignores: ['**/dist/**', '**/coverage/**', 'pnpm-lock.yaml'] },
   {
-    files: ['**/*.ts'],
+    files: ['**/*.ts', '**/*.tsx'],
     languageOptions: { parser, parserOptions: { project: true } },
     plugins: { '@typescript-eslint': tseslint },
     rules: {

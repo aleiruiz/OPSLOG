@@ -7,9 +7,9 @@
   },
   "scripts": {
     "lint": "eslint . --max-warnings 0",
-    "format:check": "prettier --check package.json pnpm-workspace.yaml tsconfig*.json eslint.config.mjs .prettierrc.json apps/*/package.json tests/harness/*.{json,ts} .github/workflows/quality.yml",
+    "format:check": "prettier --check package.json pnpm-workspace.yaml tsconfig*.json eslint.config.mjs .prettierrc.json apps/*/package.json packages/*/package.json packages/*/tsconfig.json packages/ui/src/**/*.{ts,tsx} packages/contracts/src/**/*.ts tests/harness/*.{json,ts} .github/workflows/quality.yml",
     "typecheck": "tsc -b",
-    "test:unit": "vitest run tests/harness/unit.test.ts --coverage.enabled --coverage.thresholds.lines=80",
+    "test:unit": "pnpm --filter @opslog/contracts test && vitest run tests/harness/unit.test.ts --coverage.enabled --coverage.include=tests/harness/tenant-key.ts --coverage.exclude=packages/** --coverage.exclude=apps/** --coverage.exclude=**/dist/** --coverage.exclude=**/*.d.ts --coverage.exclude=eslint.config.mjs --coverage.thresholds.lines=80",
     "test:integration": "vitest run tests/harness/mysql.integration.test.ts",
     "test": "pnpm test:unit && pnpm test:integration",
     "build": "tsc -b",

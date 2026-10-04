@@ -10,8 +10,7 @@ type Story = StoryObj<typeof meta>;
 const story = (kind: UiStateKind): Story => ({
   args: {
     kind,
-    actionLabel: kind === 'error' ? 'Reintentar' : undefined,
-    onAction: () => undefined,
+    ...(kind === 'error' ? { actionLabel: 'Reintentar', onAction: () => {} } : {}),
   },
 });
 export const Loading = story('loading');
