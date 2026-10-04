@@ -27,6 +27,9 @@ describe('orchestrator runtime', () => {
     expect(() =>
       runtime.acquire('a', 'agent-a', 'C:/wt/a', 'base', 10, 100, ['packages/other/file.ts']),
     ).toThrow('path outside');
+    expect(() =>
+      runtime.acquire('a', 'agent-a', 'C:/wt/a', 'base', 10, 100, ['tools/a/../b.ts']),
+    ).toThrow('path outside');
     const lease = runtime.acquire('a', 'agent-a', 'C:/wt/a', 'base', 10, 100, [
       'tools/a/src/index.ts',
     ]);
@@ -40,6 +43,13 @@ describe('orchestrator runtime', () => {
     expect(() =>
       runtime.acquire('b', 'agent-b', 'C:/wt/b', 'base', 10, 100, ['tools/a/src/index.ts']),
     ).toThrow('overlap');
+    const nested = new OrchestratorRuntime();
+    nested.register([
+      { ...task('a'), allowedPaths: ['tools/a/**'] },
+      { ...task('b'), allowedPaths: ['tools/a/sub/**'] },
+    ]);
+    nested.acquire('a', 'agent-a', 'C:/wt/a', 'base', 10);
+    expect(() => nested.acquire('b', 'agent-b', 'C:/wt/b', 'base', 10)).toThrow('overlap');
     const planned = new OrchestratorRuntime();
     planned.register([{ ...task('planned'), status: 'planned' }]);
     expect(() => planned.acquire('planned', 'agent-p', 'C:/wt/p', 'base', 0)).toThrow('not ready');

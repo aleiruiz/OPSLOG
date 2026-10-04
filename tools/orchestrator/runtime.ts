@@ -186,10 +186,33 @@ export class OrchestratorRuntime {
     return runtime;
   }
   private pathMatches(allowed: string, actual: string): boolean {
-    const prefix = allowed.endsWith('/**') ? allowed.slice(0, -3) : allowed;
-    return actual === prefix || actual.startsWith(`${prefix}/`);
+    const allowedPath = this.canonicalPath(allowed);
+    const actualPath = this.canonicalPath(actual);
+    if (!allowedPath || !actualPath) return false;
+
+    const prefix = allowedPath.endsWith('/**') ? allowedPath.slice(0, -3) : allowedPath;
+    return actualPath === prefix || actualPath.startsWith(`${prefix}/`);
   }
   private pathsOverlap(left: string, right: string): boolean {
-    return left === right || left.startsWith(`${right}/`) || right.startsWith(`${left}/`);
+    const leftPath = this.canonicalPath(left);
+    const rightPath = this.canonicalPath(right);
+    if (!leftPath || !rightPath) return false;
+
+    const leftPrefix = leftPath.endsWith('/**') ? leftPath.slice(0, -3) : leftPath;
+    const rightPrefix = rightPath.endsWith('/**') ? rightPath.slice(0, -3) : rightPath;
+    return (
+      leftPrefix === rightPrefix ||
+      leftPrefix.startsWith(`${rightPrefix}/`) ||
+      rightPrefix.startsWith(`${leftPrefix}/`)
+    );
+  }
+  private canonicalPath(path: string): string | undefined {
+    const normalized = path.replaceAll('\\', '/');
+    if (normalized.startsWith('/') || /^[A-Za-z]:\//.test(normalized)) return undefined;
+    const segments = normalized.split('/');
+    if (segments.some((segment) => segment === '.' || segment === '..')) return undefined;
+    const compact = segments.filter((segment) => segment.length > 0);
+    if (compact.length === 0) return undefined;
+    return compact.join('/');
   }
 }
