@@ -31,6 +31,8 @@ export interface IdentityUser {
   mfaEnabled: boolean;
   mfaSecret: string | null;
   authorizationVersion: number;
+  failedLoginAttempts?: number;
+  lockedUntil?: number | null;
 }
 
 export interface Membership {
@@ -94,6 +96,7 @@ export interface CredentialPort {
   verifyPassword(password: string, hash: string): Promise<boolean>;
   digestOpaque(value: string): string;
   randomOpaque(): string;
+  isPasswordCompromised?: (password: string) => Promise<boolean>;
 }
 
 export interface MfaPort {
@@ -143,6 +146,21 @@ const defaultPermissions: Record<SystemRole, readonly Permission[]> = {
   viewer: ['view'],
 };
 const normalized = (email: string) => email.trim().toLowerCase();
+const validRoles = new Set<SystemRole>([
+  'company_admin',
+  'fleet_manager',
+  'dispatcher',
+  'incident_manager',
+  'mechanic',
+  'supervisor',
+  'viewer',
+]);
+const assertRoles = (roles: readonly SystemRole[]): readonly SystemRole[] => {
+  const unique = [...new Set(roles)];
+  if (unique.length !== roles.length || unique.some((role) => !validRoles.has(role)))
+    throw new IdentityError('invalid_roles', 'Roles are invalid');
+  return unique;
+};
 const assertPassword = (password: string) => {
   if (
     password.length < 12 ||
@@ -168,6 +186,7 @@ export class IdentityService {
     roles: readonly SystemRole[] = [],
   ): Promise<{ invitationId: string; token: string }> {
     this.requirePermission(actorUserId, tenantId, 'manage_users');
+    const normalizedRoles = assertRoles(roles);
     const address = normalized(email);
     if (!address.includes('@')) throw new IdentityError('invalid_email', 'Email is invalid');
     const existing = this.repo.getUserByEmail(address);
@@ -188,13 +207,13 @@ export class IdentityService {
     this.repo.saveMembership({
       tenantId,
       userId: user.id,
-      roles: [...roles],
-      permissions: [...new Set(roles.flatMap((role) => defaultPermissions[role]))],
+      roles: [...normalizedRoles],
+      permissions: [...new Set(normalizedRoles.flatMap((role) => defaultPermissions[role]))],
       owner: false,
       active: false,
     });
     const token = this.crypto.randomOpaque();
-    this.repo.saveInvitation({
+    const invitation = {
       id: this.crypto.randomOpaque(),
       tenantId,
       userId: user.id,
@@ -202,8 +221,9 @@ export class IdentityService {
       expiresAt: now + 72 * 60 * 60 * 1000,
       revokedAt: null,
       acceptedAt: null,
-    });
-    return { invitationId: user.id, token };
+    } satisfies Invitation;
+    this.repo.saveInvitation(invitation);
+    return { invitationId: invitation.id, token };
   }
 
   public async acceptInvitation(
@@ -212,28 +232,33 @@ export class IdentityService {
     now: number,
   ): Promise<IdentityUser> {
     assertPassword(password);
-    const invitation = this.repo.getInvitationByDigest(this.crypto.digestOpaque(token));
-    if (
-      !invitation ||
-      invitation.revokedAt !== null ||
-      invitation.acceptedAt !== null ||
-      invitation.expiresAt <= now
-    )
-      throw new IdentityError('invalid_invitation', 'Invitation is invalid or expired');
-    const user = this.repo.getUser(invitation.userId);
-    if (!user || user.status !== 'invited')
-      throw new IdentityError('invalid_invitation', 'Invitation is invalid or expired');
-    user.passwordHash = await this.crypto.hashPassword(password);
-    user.status = 'active';
-    this.repo.saveUser(user);
-    const membership = this.repo.getMembership(invitation.tenantId, user.id);
-    if (membership) {
-      membership.active = membership.roles.length > 0;
-      this.repo.saveMembership(membership);
-    }
-    invitation.acceptedAt = now;
-    this.repo.saveInvitation(invitation);
-    return user;
+    if (await this.crypto.isPasswordCompromised?.(password))
+      throw new IdentityError('compromised_password', 'Password does not satisfy policy');
+    const passwordHash = await this.crypto.hashPassword(password);
+    return this.repo.withLock(() => {
+      const invitation = this.repo.getInvitationByDigest(this.crypto.digestOpaque(token));
+      if (
+        !invitation ||
+        invitation.revokedAt !== null ||
+        invitation.acceptedAt !== null ||
+        invitation.expiresAt <= now
+      )
+        throw new IdentityError('invalid_invitation', 'Invitation is invalid or expired');
+      const user = this.repo.getUser(invitation.userId);
+      if (!user || user.status !== 'invited')
+        throw new IdentityError('invalid_invitation', 'Invitation is invalid or expired');
+      user.passwordHash = passwordHash;
+      user.status = 'active';
+      this.repo.saveUser(user);
+      const membership = this.repo.getMembership(invitation.tenantId, user.id);
+      if (membership) {
+        membership.active = true;
+        this.repo.saveMembership(membership);
+      }
+      invitation.acceptedAt = now;
+      this.repo.saveInvitation(invitation);
+      return user;
+    });
   }
 
   public revokeInvitation(actorUserId: string, tenantId: string, token: string, now: number): void {
@@ -252,16 +277,19 @@ export class IdentityService {
     roles: readonly SystemRole[],
   ): void {
     this.requirePermission(actorUserId, tenantId, 'manage_users');
+    const normalizedRoles = assertRoles(roles);
     const membership = this.repo.getMembership(tenantId, targetUserId);
     if (!membership) throw new IdentityError('not_found', 'Membership not found');
     this.repo.withLock(() => {
       const removingAdmin =
         membership.roles.some((role) => adminRoles.has(role)) &&
-        !roles.some((role) => adminRoles.has(role));
+        !normalizedRoles.some((role) => adminRoles.has(role));
       if (removingAdmin && this.repo.countActiveAdmins(tenantId) <= 1)
         throw new IdentityError('last_admin', 'The tenant must retain an administrator');
-      membership.roles = [...roles];
-      membership.permissions = [...new Set(roles.flatMap((role) => defaultPermissions[role]))];
+      membership.roles = [...normalizedRoles];
+      membership.permissions = [
+        ...new Set(normalizedRoles.flatMap((role) => defaultPermissions[role])),
+      ];
       this.repo.saveMembership(membership);
       const user = this.repo.getUser(targetUserId);
       if (user) {
@@ -319,13 +347,31 @@ export class IdentityService {
     mfaCode?: string,
   ): Promise<{ userId: string; token: string }> {
     const user = this.repo.getUserByEmail(normalized(email));
-    if (
-      !user ||
-      user.status !== 'active' ||
-      !user.passwordHash ||
-      !(await this.crypto.verifyPassword(password, user.passwordHash))
-    )
+    if (user?.lockedUntil !== undefined && user.lockedUntil !== null && user.lockedUntil > now)
       throw new IdentityError('invalid_credentials', 'Invalid credentials');
+    const validPassword =
+      !!user &&
+      user.status === 'active' &&
+      !!user.passwordHash &&
+      (await this.crypto.verifyPassword(password, user.passwordHash));
+    if (!user || user.status !== 'active' || !user.passwordHash || !validPassword) {
+      if (user?.status === 'active') {
+        this.repo.withLock(() => {
+          const current = this.repo.getUser(user.id);
+          if (!current || current.status !== 'active') return;
+          const attempts = (current.failedLoginAttempts ?? 0) + 1;
+          current.failedLoginAttempts = attempts;
+          if (attempts >= 5) current.lockedUntil = now + 15 * 60 * 1000;
+          this.repo.saveUser(current);
+        });
+      }
+      throw new IdentityError('invalid_credentials', 'Invalid credentials');
+    }
+    this.repo.withLock(() => {
+      user.failedLoginAttempts = 0;
+      user.lockedUntil = null;
+      this.repo.saveUser(user);
+    });
     const membership = this.repo.getMembership(tenantId, user.id);
     if (!membership?.active || membership.permissions.length === 0)
       throw new IdentityError('forbidden', 'Permission denied');
@@ -407,6 +453,8 @@ export class IdentityService {
 
   public async resetPassword(token: string, password: string, now: number): Promise<void> {
     assertPassword(password);
+    if (await this.crypto.isPasswordCompromised?.(password))
+      throw new IdentityError('compromised_password', 'Password does not satisfy policy');
     const reset = this.repo.getPasswordResetByDigest(this.crypto.digestOpaque(token));
     const user = reset && this.repo.getUser(reset.userId);
     if (

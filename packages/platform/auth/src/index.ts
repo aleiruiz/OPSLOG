@@ -73,6 +73,13 @@ export class InMemoryIdentityRepository implements IdentityRepository {
 }
 
 export class NodeCredentialAdapter implements CredentialPort {
+  private static readonly compromisedPasswords = new Set([
+    'password1234',
+    'password12345',
+    'qwertyuiop12',
+    'letmein12345',
+  ]);
+
   public randomOpaque(): string {
     return randomBytes(32).toString('base64url');
   }
@@ -90,6 +97,10 @@ export class NodeCredentialAdapter implements CredentialPort {
     const derived = (await scrypt(password, Buffer.from(saltText, 'base64url'), 64)) as Buffer;
     const expected = Buffer.from(hashText, 'base64url');
     return expected.length === derived.length && timingSafeEqual(expected, derived);
+  }
+
+  public async isPasswordCompromised(password: string): Promise<boolean> {
+    return NodeCredentialAdapter.compromisedPasswords.has(password.toLowerCase());
   }
 }
 

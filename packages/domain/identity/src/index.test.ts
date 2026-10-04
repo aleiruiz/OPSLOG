@@ -104,8 +104,9 @@ const setup = () => {
 
 describe('CORE-AUTH', () => {
   it('expires invitations at 72 hours and blocks revoked ones', async () => {
-    const { service } = setup();
+    const { service, repo } = setup();
     const sent = await service.invite('admin', 'A', 'new@example.test', 0);
+    expect(sent.invitationId).toBe([...repo.invitations.values()][0]?.id);
     expect(
       (await service.acceptInvitation(sent.token, 'ValidPassword1', 72 * 60 * 60 * 1000 - 1))
         .status,
@@ -119,6 +120,45 @@ describe('CORE-AUTH', () => {
     await expect(service.acceptInvitation(second.token, 'ValidPassword1', 2)).rejects.toMatchObject(
       { code: 'invalid_invitation' },
     );
+  });
+
+  it('activates the membership and atomically consumes the invitation', async () => {
+    const { service, repo } = setup();
+    const sent = await service.invite('admin', 'A', 'new@example.test', 0, ['viewer']);
+    await service.acceptInvitation(sent.token, 'ValidPassword1', 1);
+    const user = [...repo.users.values()].find((u) => u.email === 'new@example.test');
+    expect(repo.getMembership('A', user!.id)?.active).toBe(true);
+    await expect(
+      service.acceptInvitation(sent.token, 'OtherValidPassword1', 2),
+    ).rejects.toMatchObject({
+      code: 'invalid_invitation',
+    });
+  });
+
+  it('progressively locks repeated failed logins and clears the counter on success', async () => {
+    const { service, repo } = setup();
+    for (let attempt = 0; attempt < 5; attempt++)
+      await expect(
+        service.authenticate('admin@example.test', 'WrongPassword1', 'A', attempt),
+      ).rejects.toMatchObject({ code: 'invalid_credentials' });
+    expect(repo.getUser('admin')?.lockedUntil).toBe(15 * 60 * 1000 + 4);
+    await expect(
+      service.authenticate('admin@example.test', 'ValidPassword1', 'A', 5),
+    ).rejects.toMatchObject({ code: 'invalid_credentials' });
+    await expect(
+      service.authenticate('admin@example.test', 'ValidPassword1', 'A', 15 * 60 * 1000 + 5),
+    ).resolves.toMatchObject({ userId: 'admin' });
+    expect(repo.getUser('admin')?.failedLoginAttempts).toBe(0);
+  });
+
+  it('rejects malformed or duplicate roles before persisting them', async () => {
+    const { service } = setup();
+    await expect(
+      service.invite('admin', 'A', 'new@example.test', 0, ['not-a-role' as never]),
+    ).rejects.toMatchObject({ code: 'invalid_roles' });
+    await expect(
+      service.invite('admin', 'A', 'new@example.test', 0, ['viewer', 'viewer']),
+    ).rejects.toMatchObject({ code: 'invalid_roles' });
   });
   it('prevents the last administrator from being removed, including concurrent attempts', () => {
     const { service, repo } = setup();
