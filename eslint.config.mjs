@@ -3,10 +3,7 @@ import parser from '@typescript-eslint/parser';
 import prettier from 'eslint-config-prettier';
 
 export default [
-  {
-    // FND-INTEGRATE registers packages/ui with its own TypeScript project.
-    ignores: ['**/dist/**', '**/coverage/**', 'pnpm-lock.yaml', 'packages/ui/**'],
-  },
+  { ignores: ['**/dist/**', '**/coverage/**', 'pnpm-lock.yaml'] },
   {
     files: ['**/*.ts'],
     languageOptions: { parser, parserOptions: { project: true } },
