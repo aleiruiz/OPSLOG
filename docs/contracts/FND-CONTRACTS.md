@@ -1,6 +1,6 @@
 # FND-CONTRACTS — contrato runtime v1
 
-SPEC-1.1 / ORCH-1.1 (hereda 1.0) · M0 · taskID FND-CONTRACTS · intento 2 · fencing 2 · baseSHA `097a52e5975dd5c925245c4605f2b9eef8b32d0a`. implementationSHA `91a6c0f` (composición FND-INTEGRATE).
+SPEC-1.1 / ORCH-1.1 (hereda 1.0) · M0 · taskID FND-CONTRACTS · intento 2 · fencing 2 · baseSHA `097a52e5975dd5c925245c4605f2b9eef8b32d0a`. implementationSHA `2cfb28a` (composición FND-INTEGRATE).
 
 `packages/contracts/src/index.ts` contiene tipos sin ORM y validadores runtime. `TenantContext` es la única fuente confiable del tenant; nunca se acepta `tenantId` desde body, query o header. Errores se serializan con `correlationId`, `fieldErrors` y `missingRequirements`, sin SQL/stack/PII; recursos ausentes usan `notFoundApiError`. Eventos exigen `eventId`, `schemaVersion`, tenant, entidad, UTC, actor con `kind` cerrado y payload mínimo. `OutboxRecord` exige `idempotencyKey` y `IdempotencyClaim` expresan el alcance lógico `tenant:event`; el contrato no persiste ni deduplica por sí mismo, y validateIdempotencyClaim comprueba tenantId, eventId, key y scope; el consumidor/outbox debe imponer la unicidad tenant+evento+clave y la persistencia queda fuera del paquete. Archivos exigen categoría, contentType permitido, hash SHA-256, versión, fechas ordenadas y límite por categoría; la URL será firmada y ≤15 min.
 
