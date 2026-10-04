@@ -1,6 +1,6 @@
 # FND-CONTRACTS — matriz individual de trazabilidad
 
-SPEC-1.1 / ORCH-1.1 · taskID FND-CONTRACTS · intento 2 · fencing 2 · baseSHA `097a52e5975dd5c925245c4605f2b9eef8b32d0a`. implementationSHA `e0f18f3729851dec6a37df775cd66cdbde83c932`.
+SPEC-1.1 / ORCH-1.1 · taskID FND-CONTRACTS · intento 2 · fencing 2 · baseSHA `097a52e5975dd5c925245c4605f2b9eef8b32d0a`. implementationSHA `e0f18f3729851dec6a37df775cd66cdbde83c932`; documentationCommit `fdff8ce320fc5aafffc8be8a670703c23daba739`.
 
 Estados normativos: `confirmed` = SPECS/BRD adoptado; `proposed` = fuente no adoptada como regla; `assumption` = supuesto; `decision_required` = pendiente. `M0 coverage` separa validación/contrato compartido de funcionalidad de módulo; `contractual partial` identifica cobertura de esquema/validación sin handler; `future functionality` identifica implementación posterior. Esta matriz es inventario y no declara implementación funcional de módulos.
 
@@ -54,18 +54,18 @@ Estados normativos: `confirmed` = SPECS/BRD adoptado; `proposed` = fuente no ado
 | BR-M4 | proposed | traceability reference | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
 | BR-M5 | proposed | traceability reference | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
 | BR-M6 | proposed | traceability reference | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
-| FR-001 | confirmed | index.ts: common envelope/validator | implemented: shared types/validation | index.test.ts (synthetic) | BRD/SPECS; not CI-verified |
-| FR-002 | confirmed | index.ts: common envelope/validator | implemented: shared types/validation | index.test.ts (synthetic) | BRD/SPECS; not CI-verified |
+| FR-001 | confirmed | contractual partial | contract validator only; functional module implementation future | index.test.ts (synthetic) | BRD/SPECS; not CI-verified |
+| FR-002 | confirmed | contractual partial | contract validator only; functional module implementation future | index.test.ts (synthetic) | BRD/SPECS; not CI-verified |
 | FR-003 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
 | FR-010 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
 | FR-011 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
 | FR-012 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
 | FR-013 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
 | FR-014 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
-| FR-020 | confirmed | index.ts: common envelope/validator | implemented: shared types/validation | index.test.ts (synthetic) | BRD/SPECS; not CI-verified |
+| FR-020 | confirmed | contractual partial | contract validator only; functional module implementation future | index.test.ts (synthetic) | BRD/SPECS; not CI-verified |
 | FR-021 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
 | FR-022 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
-| FR-023 | confirmed | index.ts: common envelope/validator | implemented: shared types/validation | index.test.ts (synthetic) | BRD/SPECS; not CI-verified |
+| FR-023 | confirmed | contractual partial | contract validator only; functional module implementation future | index.test.ts (synthetic) | BRD/SPECS; not CI-verified |
 | FR-030 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
 | FR-031 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
 | FR-032 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
@@ -108,7 +108,7 @@ Estados normativos: `confirmed` = SPECS/BRD adoptado; `proposed` = fuente no ado
 | FR-106 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
 | FR-107 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
 | FR-108 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
-| FR-110 | confirmed | index.ts: common envelope/validator | implemented: shared types/validation | index.test.ts (synthetic) | BRD/SPECS; not CI-verified |
+| FR-110 | confirmed | contractual partial | contract validator only; functional module implementation future | index.test.ts (synthetic) | BRD/SPECS; not CI-verified |
 | FR-111 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
 | FR-112 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
 | FR-113 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
@@ -124,7 +124,7 @@ Estados normativos: `confirmed` = SPECS/BRD adoptado; `proposed` = fuente no ado
 | FR-123 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
 | FR-124 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
 | FR-125 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
-| FR-130 | confirmed | index.ts: common envelope/validator | implemented: shared types/validation | index.test.ts (synthetic) | BRD/SPECS; not CI-verified |
+| FR-130 | confirmed | contractual partial | contract validator only; functional module implementation future | index.test.ts (synthetic) | BRD/SPECS; not CI-verified |
 | FR-131 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
 | FR-132 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
 | FR-133 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
@@ -139,7 +139,7 @@ Estados normativos: `confirmed` = SPECS/BRD adoptado; `proposed` = fuente no ado
 | FR-147 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
 | FR-148 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
 | FR-149 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
-| FR-150 | confirmed | index.ts: common envelope/validator | implemented: shared types/validation | index.test.ts (synthetic) | BRD/SPECS; not CI-verified |
+| FR-150 | confirmed | contractual partial | contract validator only; functional module implementation future | index.test.ts (synthetic) | BRD/SPECS; not CI-verified |
 | FR-151 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
 | FR-152 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
 | FR-153 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
@@ -148,7 +148,7 @@ Estados normativos: `confirmed` = SPECS/BRD adoptado; `proposed` = fuente no ado
 | FR-160 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
 | FR-161 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
 | FR-162 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
-| FR-170 | confirmed | index.ts: common envelope/validator | implemented: shared types/validation | index.test.ts (synthetic) | BRD/SPECS; not CI-verified |
+| FR-170 | confirmed | contractual partial | contract validator only; functional module implementation future | index.test.ts (synthetic) | BRD/SPECS; not CI-verified |
 | FR-171 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
 | FR-180 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
 | FR-181 | proposed | deferred module contract; no handler in M0 | deferred or pending consumer | pending: no M0 consumer | BRD/SPECS; not CI-verified |
