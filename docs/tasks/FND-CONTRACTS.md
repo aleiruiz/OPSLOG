@@ -2,12 +2,12 @@
 
 ```yaml
 id: FND-CONTRACTS
-baseline: [SPEC-1.0, ORCH-1.0]
+baseline: [SPEC-1.1, ORCH-1.1, inherited: SPEC-1.0/ORCH-1.0]
 milestone: M0
 kind: foundation
 purpose: Materializar contratos tipados/runtime y trazabilidad individual del alcance, sin importar entidades ORM.
 requirements: [FR-001, FR-002, FR-010, FR-011, FR-020, FR-023, FR-050, FR-070, FR-090, FR-110, FR-130, FR-150, FR-170, NFR-S2, NFR-S4]
-source_decisions: [U-03, U-05, "SPECS §4", "SPECS §7", "SPECS §10.1"]
+source_decisions: [U-03, U-05, "SPECS §4", "SPECS §7", "SPECS §10.1", "ADR-0005 single active provider"]
 depends_on: ["baseline-checked"]
 consumes: ["SPEC-1.0", "ORCH-1.0", "BRD FR/BR/AC/NFR/US"]
 produces: ["contracts-v1", "traceability-m0-v1", "error-event-file-contracts-v1"]
@@ -21,7 +21,7 @@ e2e_cases: ["contrato puede consumirse sin ORM", "trazabilidad enlaza FR→contr
 commands: ["pnpm test --filter contracts", "pnpm lint --filter contracts", "pnpm typecheck --filter contracts", "pnpm contracts:check"]
 fixtures: ["payloads sintéticos válidos/inválidos", "tenant-A/tenant-B", "errores sin datos reales"]
 non_goals: ["implementar handlers/ORM", "pantallas", "resolver decisiones D3/D6/D7/D16", "conectar AWS"]
-completion_evidence: ["commit/PR", "schemas y tests", "matriz individual completa", "auditoría local", "auditorías externas por SHA"]
+completion_evidence: ["commit/PR", "schemas y tests", "matriz individual completa", "auditoría local", "dos auditorías Codex independientes por SHA"]
 rollback: "Revertir el commit del contrato y marcar consumidores incompatibles; no cambiar baselines ni copiar interfaces de otros paquetes."
 max_repair_cycles: 3
 ```
@@ -29,3 +29,5 @@ max_repair_cycles: 3
 ## Decisiones y límites
 
 Los conflictos del BRD (por ejemplo referencias documentales a FR-120) se registran por texto y se resuelven con SPECS, sin editar la fuente. El paquete debe separar `CONFIRMED`, `PROPOSED`, `ASSUMPTION` y `DECISION REQUIRED`; no convertir una propuesta en regla sin decisión compatible.
+
+Provider-lock efectivo: Codex es el único proveedor activo de esta ronda, con `gpt-5.6-luna` explícito para autor y auditores. No se espera adaptador Anthropic ni se bloquea el paquete por su ausencia.

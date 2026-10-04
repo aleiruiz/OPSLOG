@@ -2,13 +2,13 @@
 
 Tipo: bootstrap de coordinación, previo al runtime FND-ORCH.
 Autorización: petición directa del usuario de iniciar otra sesión con Luna 5.6 para Codex y Sonnet 5 para Claude.
-Baseline: SPEC-1.0 / ORCH-1.0; modelos obligatorios `gpt-5.6-luna` (Codex) / `claude-sonnet-5` (Claude), según ADR-0004.
+Baseline efectiva: SPEC-1.1 / ORCH-1.1, enmiendas sobre originales 1.0; modelos `gpt-5.6-luna` (Codex) / `claude-sonnet-5` (Claude), según ADR-0004/0005. Solo un proveedor activo; inicial Codex.
 Dependencias: planificación presente, hashes válidos y sesión dedicada configurada con ese modelo.
 Propósito: convertir el plan M0 en paquetes asignables y despachar trabajo asíncrono aislado sin perder contexto/calidad.
 
 ## Lecturas
 
-AGENTS.md, CLAUDE.md, SPECS.md, Orchestrator.md, docs/operations/ORCHESTRATOR_START.md, ADR-0001/0002/0004, infra/plan/AWS.md y fuentes de producto. ADR-0003 está supersedido. No leer .env.
+AGENTS.md, CLAUDE.md, docs/baselines/ACTIVE.md, originales SPECS.md/Orchestrator.md más sucesoras 1.1, docs/operations/ORCHESTRATOR_START.md, ADR-0001/0002/0004/0005, infra/plan/AWS.md y fuentes de producto. ADR-0003 está supersedido. No leer .env.
 
 ## Alcance y permisos
 
@@ -22,7 +22,7 @@ Prohibido: editar SPECS/Orchestrator/fuentes congeladas; leer/publicar secretos;
 2. Commit base seguro disponible para worktrees o limitación de Git concreta registrada.
 3. Paquetes FND materializados con requisitos individuales, contratos, acceptance, tests/commands y paths sin solapamiento antes de despacharlos.
 4. Tres carriles M0 despachados con modelo explícito, worktree/branch/baseSHA/lease; si slots/acceso impiden algo, estado honesto y trabajo independiente preparado.
-5. Auditorías locales con el modelo autorizado por proveedor planificadas sin recursión ni capacidad ficticia; revisión externa Luna/Sonnet 5 con disponibilidad real documentada.
+5. Auditorías locales y dos auditores externos al equipo autor con el modelo del proveedor activo, sin recursión ni capacidad ficticia; sin revisión cruzada. Lock de proveedor y procedimiento de transferencia registrados.
 6. Tasks.md actualizado localmente, ignorado y sin credenciales; evento de handoff y estado recuperable.
 7. No gates pasados ni AWS configurado como consecuencia de este bootstrap.
 

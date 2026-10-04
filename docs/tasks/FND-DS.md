@@ -2,12 +2,12 @@
 
 ```yaml
 id: FND-DS
-baseline: [SPEC-1.0, ORCH-1.0]
+baseline: [SPEC-1.1, ORCH-1.1, inherited: SPEC-1.0/ORCH-1.0]
 milestone: M0
 kind: foundation
 purpose: Entregar tokens, tema, componentes base y stories accesibles antes de pantallas funcionales.
 requirements: [U-02, U-06, FR-023, FR-140, NFR-S2, NFR-M5, "SPECS §8"]
-source_decisions: [U-02, U-06, "SPECS §8", "CLAUDE_ARTIFACT_REFERENCE"]
+source_decisions: [U-02, U-06, "SPECS §8", "CLAUDE_ARTIFACT_REFERENCE", "ADR-0005 single active provider"]
 depends_on: ["baseline-checked"]
 consumes: ["SPEC-1.0", "ORCH-1.0", "artifact-ux-reference"]
 produces: ["opslog-theme-v1", "ui-components-v1", "ui-state-catalog-v1"]
@@ -21,7 +21,7 @@ e2e_cases: ["navegación por teclado en DataTable/Wizard/Timeline", "estados com
 commands: ["pnpm storybook", "pnpm test --filter ui", "pnpm axe --filter ui", "pnpm lint --filter ui"]
 fixtures: ["stories sintéticas", "sin datos reales", "roles y permisos representados como lenguaje de usuario"]
 non_goals: ["pantallas de producto", "API/ORM", "reglas de autorización en componentes", "copiar código del artifact"]
-completion_evidence: ["commit/PR", "stories y axe", "tokens/contraste", "auditoría local", "auditorías externas por SHA"]
+completion_evidence: ["commit/PR", "stories y axe", "tokens/contraste", "auditoría local", "dos auditorías Codex independientes por SHA"]
 rollback: "Revertir cambios del paquete y conservar snapshots/evidencia; no tocar aplicaciones consumidoras."
 max_repair_cycles: 3
 ```
@@ -29,3 +29,5 @@ max_repair_cycles: 3
 ## Fronteras
 
 Material UI es la base; IBM Plex Sans/Mono y los valores de SPECS son tokens. Las etiquetas deben ser comprensibles, no exponer IDs técnicos de permisos. No se inicia ninguna pantalla funcional hasta G0.
+
+Provider-lock efectivo: solo Codex está activo, con `gpt-5.6-luna` para autor y auditores. No se lanza Claude concurrentemente; un cambio de proveedor requiere drenaje y nuevo epoch.

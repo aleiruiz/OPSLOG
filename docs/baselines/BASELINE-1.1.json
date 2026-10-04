@@ -1,0 +1,18 @@
+{
+  "baseline": "OPSLOG-1.1",
+  "specification": "SPEC-1.1",
+  "orchestration": "ORCH-1.1",
+  "inherits": "OPSLOG-1.0",
+  "scope": "Single active provider per repository; independent reviewers from the same active provider; no cross-provider review requirement.",
+  "adoption": "Direct user clarification on 2026-10-03",
+  "files": [
+    {
+      "path": "docs/baselines/1.1/SPECS.md",
+      "sha256": "0bfa9db293f720b5e3f204ce55043644f73c6a82a26471635ad9ef2b1903349c"
+    },
+    {
+      "path": "docs/baselines/1.1/Orchestrator.md",
+      "sha256": "c2b34290ac8141c70c9bd672304a50d898ad82772bba43e59adb021ce5677163"
+    }
+  ]
+}
