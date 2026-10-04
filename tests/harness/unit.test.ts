@@ -2,12 +2,15 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { tenantKey } from './tenant-key.js';
 
 describe('workspace safety', () => {
   it('keeps tenant keys independent even when local ids collide', () => {
-    const a = { tenant: 'tenant-A', id: 1 };
-    const b = { tenant: 'tenant-B', id: 1 };
-    expect(`${a.tenant}:${a.id}`).not.toBe(`${b.tenant}:${b.id}`);
+    expect(tenantKey('tenant-A', 1)).not.toBe(tenantKey('tenant-B', 1));
+  });
+
+  it('rejects an empty tenant key', () => {
+    expect(() => tenantKey('', 1)).toThrow('tenant is required');
   });
 
   it('does not include secret-looking files in the repository tree', async () => {

@@ -1,0 +1,28 @@
+{
+  "name": "@opslog/ui",
+  "private": true,
+  "scripts": {
+    "test": "vitest run --environment jsdom --coverage.enabled --coverage.include=src/components/StatusBadge.tsx --coverage.include=src/components/UiState.tsx --coverage.thresholds.lines=80",
+    "axe": "vitest run src/a11y.test.tsx --environment jsdom",
+    "lint": "eslint src --max-warnings 0",
+    "typecheck": "tsc -b",
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@emotion/react": "11.14.0",
+    "@emotion/styled": "11.14.0",
+    "@mui/material": "6.4.12",
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
+  "devDependencies": {
+    "@storybook/react": "8.6.14",
+    "@testing-library/jest-dom": "6.6.3",
+    "@testing-library/react": "16.2.0",
+    "@types/react": "19.1.2",
+    "@types/react-dom": "19.1.2",
+    "axe-core": "4.10.2",
+    "jsdom": "26.0.0",
+    "vitest": "3.2.6"
+  }
+}

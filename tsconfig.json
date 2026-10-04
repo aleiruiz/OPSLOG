@@ -1,4 +1,8 @@
 {
   "files": [],
-  "references": [{ "path": "./tests/harness" }]
+  "references": [
+    { "path": "./tests/harness" },
+    { "path": "./packages/contracts" },
+    { "path": "./packages/ui" }
+  ]
 }
