@@ -52,7 +52,6 @@ export class OrchestratorRuntime {
   ): Lease {
     const task = this.tasks.get(taskId);
     if (!task) throw new Error(`unknown task ${taskId}`);
-    if (task.status === 'completed') throw new Error(`task ${taskId} is completed`);
     const activeLease = this.leases.get(taskId);
     if (activeLease && activeLease.expiresAt > now)
       throw new Error(`task ${taskId} already leased`);
@@ -60,6 +59,7 @@ export class OrchestratorRuntime {
       this.leases.delete(taskId);
       task.status = 'ready';
     }
+    if (task.status !== 'ready') throw new Error(`task ${taskId} is not ready`);
     if (task.stage > 0 && this.gates.get(task.stage - 1) !== 'passed')
       throw new Error(`stage ${task.stage} is blocked by gate ${task.stage - 1}`);
     for (const dependency of task.dependencies)
@@ -68,11 +68,20 @@ export class OrchestratorRuntime {
     const paths = requestedPaths ?? task.allowedPaths;
     if (paths.some((path) => !task.allowedPaths.some((allowed) => this.pathMatches(allowed, path))))
       throw new Error(`path outside task scope ${taskId}`);
+    if (
+      [...this.leases.values()].some((lease) =>
+        lease.requestedPaths.some((heldPath) =>
+          paths.some((path) => this.pathsOverlap(heldPath, path)),
+        ),
+      )
+    )
+      throw new Error('requested paths overlap an active lease');
     const lease: Lease = {
       taskId,
       owner,
       worktree,
       baseSha,
+      requestedPaths: [...paths],
       fencing: ++this.fencing,
       provider: this.provider,
       model: this.model,
@@ -155,7 +164,10 @@ export class OrchestratorRuntime {
         dependencies: [...task.dependencies],
         allowedPaths: [...task.allowedPaths],
       })),
-      leases: [...this.leases.values()].map((lease) => ({ ...lease })),
+      leases: [...this.leases.values()].map((lease) => ({
+        ...lease,
+        requestedPaths: [...lease.requestedPaths],
+      })),
       gates: Object.fromEntries(this.gates),
       eventIds: [...this.eventIds],
     };
@@ -166,7 +178,8 @@ export class OrchestratorRuntime {
     runtime.fencing = snapshot.fencing;
     runtime.register(snapshot.tasks);
     runtime.leases.clear();
-    for (const lease of snapshot.leases) runtime.leases.set(lease.taskId, { ...lease });
+    for (const lease of snapshot.leases)
+      runtime.leases.set(lease.taskId, { ...lease, requestedPaths: [...lease.requestedPaths] });
     for (const [stage, status] of Object.entries(snapshot.gates))
       runtime.gates.set(Number(stage), status);
     for (const eventId of snapshot.eventIds) runtime.eventIds.add(eventId);
@@ -175,5 +188,8 @@ export class OrchestratorRuntime {
   private pathMatches(allowed: string, actual: string): boolean {
     const prefix = allowed.endsWith('/**') ? allowed.slice(0, -3) : allowed;
     return actual === prefix || actual.startsWith(`${prefix}/`);
+  }
+  private pathsOverlap(left: string, right: string): boolean {
+    return left === right || left.startsWith(`${right}/`) || right.startsWith(`${left}/`);
   }
 }

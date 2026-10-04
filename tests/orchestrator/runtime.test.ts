@@ -23,7 +23,7 @@ const evidence = (taskId: string, sha: string) => ({
 describe('orchestrator runtime', () => {
   it('assigns explicit lease/fencing and enforces allowed paths', () => {
     const runtime = new OrchestratorRuntime();
-    runtime.register([task('a')]);
+    runtime.register([task('a'), { ...task('b'), allowedPaths: ['tools/a/**'] }]);
     expect(() =>
       runtime.acquire('a', 'agent-a', 'C:/wt/a', 'base', 10, 100, ['packages/other/file.ts']),
     ).toThrow('path outside');
@@ -37,6 +37,12 @@ describe('orchestrator runtime', () => {
       fencing: 1,
     });
     expect(() => runtime.acquire('a', 'agent-b', 'C:/wt/b', 'base', 10)).toThrow('already leased');
+    expect(() =>
+      runtime.acquire('b', 'agent-b', 'C:/wt/b', 'base', 10, 100, ['tools/a/src/other.ts']),
+    ).toThrow('overlap');
+    const planned = new OrchestratorRuntime();
+    planned.register([{ ...task('planned'), status: 'planned' }]);
+    expect(() => planned.acquire('planned', 'agent-p', 'C:/wt/p', 'base', 0)).toThrow('not ready');
   });
   it('reassigns expired leases with new fencing and separates base from candidate SHA', () => {
     const runtime = new OrchestratorRuntime();

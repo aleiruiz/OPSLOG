@@ -15,6 +15,7 @@ export interface Lease {
   owner: string;
   worktree: string;
   baseSha: string;
+  requestedPaths: string[];
   fencing: number;
   provider: Provider;
   model: Model;
