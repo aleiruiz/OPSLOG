@@ -1,0 +1,12 @@
+{
+  "name": "@opslog/api-auth",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "@opslog/domain-identity": "workspace:*",
+    "@opslog/platform-auth": "workspace:*"
+  }
+}
