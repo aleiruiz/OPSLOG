@@ -119,6 +119,21 @@ describe('synthetic MySQL tenant isolation', () => {
         );
         expect(rowsA).toEqual([{ local_id: 1, value: 'tenant-A' }]);
         expect(rowsB).toEqual([{ local_id: 1, value: 'tenant-B' }]);
+        const crossTenantConnection = await mysql.createConnection({
+          host: adminConfig.host,
+          port: adminConfig.port,
+          user: users[0]!,
+          password: credential,
+        });
+        try {
+          await expect(
+            crossTenantConnection.query(
+              `SELECT local_id FROM ${identifier(databases[1]!)}.opslog_harness_records`,
+            ),
+          ).rejects.toThrow(/denied/i);
+        } finally {
+          await crossTenantConnection.end();
+        }
         const transactionBarrier = new Barrier(connections.length);
         await Promise.all(
           connections.map(async (connection, index) => {
