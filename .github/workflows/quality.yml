@@ -1,0 +1,27 @@
+name: quality
+on:
+  push:
+  pull_request:
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0.45
+        env:
+          MYSQL_ROOT_PASSWORD: test-root-password
+          MYSQL_DATABASE: opslog_test
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -ptest-root-password"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    env:
+      OPSLOG_TEST_MYSQL_URL: mysql://root:test-root-password@127.0.0.1:3306/opslog_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 11.25.0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20.13.1, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm quality
