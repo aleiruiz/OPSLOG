@@ -1,0 +1,17 @@
+{
+  "orchestration": "ORCH-1.2",
+  "adoption": "Direct user instructions 2026-10-04",
+  "files": [
+    {
+      "sha256": "a77d6679b2ad9bd2f9930db88f98e4ae99d8097254df8b20aede98bac043fa53",
+      "path": "docs/baselines/1.2/SPECS.md"
+    },
+    {
+      "sha256": "1ca056effc30e685ad6891610adb1f88f6ebbf77d4eea2a81a9255b9cd6f0963",
+      "path": "docs/baselines/1.2/Orchestrator.md"
+    }
+  ],
+  "inherits": "OPSLOG-1.1",
+  "specification": "SPEC-1.2",
+  "baseline": "OPSLOG-1.2"
+}
