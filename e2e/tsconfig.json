@@ -1,0 +1,21 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "allowSyntheticDefaultImports": true,
+    "baseUrl": "..",
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "paths": { "@opslog/ui": ["packages/ui/src/index.ts"] },
+    "rootDir": "..",
+    "types": ["node", "@playwright/test", "react", "react-dom"]
+  },
+  "include": [
+    "./**/*.ts",
+    "./**/*.tsx",
+    "../packages/ui/src/**/*.ts",
+    "../packages/ui/src/**/*.tsx"
+  ],
+  "exclude": ["../packages/ui/src/**/*.stories.tsx", "../packages/ui/src/**/*.test.tsx"]
+}
