@@ -36,7 +36,8 @@ export function startProvisioning(tenant: TenantRecord): { tenant: TenantRecord;
   if (tenant.status === 'active') return { tenant, event: { type: 'provisioned', attempt: tenant.provisioningAttempt } };
   if (tenant.status === 'suspended') throw new TenantStateError('suspended tenant cannot be provisioned');
   const attempt = tenant.provisioningAttempt + 1;
-  const { failureCode: _failureCode, ...withoutFailure } = tenant;
+  const withoutFailure = { ...tenant };
+  delete withoutFailure.failureCode;
   return {
     tenant: { ...withoutFailure, status: 'provisioning', provisioningAttempt: attempt },
     event: { type: 'provisioning_started', attempt },
@@ -45,7 +46,8 @@ export function startProvisioning(tenant: TenantRecord): { tenant: TenantRecord;
 
 export function completeProvisioning(tenant: TenantRecord): { tenant: TenantRecord; event: TenantEvent } {
   if (tenant.status !== 'provisioning') throw new TenantStateError('tenant is not provisioning');
-  const { failureCode: _failureCode, ...withoutFailure } = tenant;
+  const withoutFailure = { ...tenant };
+  delete withoutFailure.failureCode;
   return {
     tenant: { ...withoutFailure, status: 'active' },
     event: { type: 'provisioned', attempt: tenant.provisioningAttempt },
