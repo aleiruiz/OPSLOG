@@ -18,7 +18,7 @@ const adminConfig = {
 const suffix = `${Date.now()}_${process.pid}`;
 const databases = [`opslog_a_${suffix}`, `opslog_b_${suffix}`];
 const users = [`opslog_a_${suffix}`, `opslog_b_${suffix}`];
-const credential = `synthetic_${suffix}`;
+const credentials = [`synthetic_a_${suffix}`, `synthetic_b_${suffix}`];
 
 function identifier(value: string): string {
   if (!/^[a-z0-9_]+$/.test(value)) throw new Error(`Unsafe identifier: ${value}`);
@@ -80,8 +80,23 @@ describe('synthetic MySQL tenant isolation', () => {
       for (let index = 0; index < databases.length; index += 1) {
         const database = identifier(databases[index]!);
         const user = users[index]!;
-        await admin.query(`CREATE USER ${identifier(user)}@'%' IDENTIFIED BY ?`, [credential]);
-        await admin.query(`GRANT ALL PRIVILEGES ON ${database}.* TO ${identifier(user)}@'%'`);
+        await admin.query(`CREATE USER ${identifier(user)}@'%' IDENTIFIED BY ?`, [
+          credentials[index],
+        ]);
+        await admin.query(
+          `GRANT SELECT, INSERT, UPDATE, DELETE ON ${database}.* TO ${identifier(user)}@'%'`,
+        );
+      }
+      for (const databaseName of databases) {
+        const migrationConnection = await mysql.createConnection({
+          ...adminConfig,
+          database: databaseName,
+        });
+        try {
+          await applyMigrations(migrationConnection);
+        } finally {
+          await migrationConnection.end();
+        }
       }
       const connections = await Promise.all(
         databases.map((database, index) =>
@@ -89,13 +104,12 @@ describe('synthetic MySQL tenant isolation', () => {
             host: adminConfig.host,
             port: adminConfig.port,
             user: users[index]!,
-            password: credential,
+            password: credentials[index]!,
             database,
           }),
         ),
       );
       try {
-        await Promise.all(connections.map(applyMigrations));
         const [migrationRows] = await connections[0]!.query(
           'SELECT version FROM opslog_schema_migrations ORDER BY version',
         );
@@ -123,7 +137,7 @@ describe('synthetic MySQL tenant isolation', () => {
           host: adminConfig.host,
           port: adminConfig.port,
           user: users[0]!,
-          password: credential,
+          password: credentials[0]!,
         });
         try {
           await expect(
@@ -133,6 +147,29 @@ describe('synthetic MySQL tenant isolation', () => {
           ).rejects.toThrow(/denied/i);
         } finally {
           await crossTenantConnection.end();
+        }
+        await expect(
+          mysql.createConnection({
+            host: adminConfig.host,
+            port: adminConfig.port,
+            user: users[0]!,
+            password: credentials[1]!,
+          }),
+        ).rejects.toThrow(/denied/i);
+        const reverseCrossTenantConnection = await mysql.createConnection({
+          host: adminConfig.host,
+          port: adminConfig.port,
+          user: users[1]!,
+          password: credentials[1]!,
+        });
+        try {
+          await expect(
+            reverseCrossTenantConnection.query(
+              `SELECT local_id FROM ${identifier(databases[0]!)}.opslog_harness_records`,
+            ),
+          ).rejects.toThrow(/denied/i);
+        } finally {
+          await reverseCrossTenantConnection.end();
         }
         const transactionBarrier = new Barrier(connections.length);
         await Promise.all(
