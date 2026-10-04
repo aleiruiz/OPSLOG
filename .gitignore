@@ -1,0 +1,17 @@
+# Estado local del orquestador; nunca publicar asignaciones ni sesiones.
+/Tasks.md
+/.orchestrator/
+/.worktrees/
+/.agent-workspaces/
+
+# Dependencias, salidas y secretos.
+node_modules/
+dist/
+coverage/
+playwright-report/
+test-results/
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+

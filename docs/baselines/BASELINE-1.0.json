@@ -1,0 +1,26 @@
+{
+  "baseline": "OPSLOG-1.0",
+  "specification": "SPEC-1.0",
+  "orchestration": "ORCH-1.0",
+  "recordedDate": "2026-10-03",
+  "timezone": "America/Mexico_City",
+  "policy": "Preserve original files; incompatible changes require an explicitly adopted successor. CI enforcement is a planned M0 deliverable.",
+  "files": [
+    {
+      "path": "SPECS.md",
+      "sha256": "fa6fcbd34855dfb8a53dcd6dfec5e97aec257dd81fd998cfaf7df0391ef51122"
+    },
+    {
+      "path": "Orchestrator.md",
+      "sha256": "d91ed4808ef29ab77091b489b289dda17dd708162de11157e2951525e745e44c"
+    },
+    {
+      "path": "docs/sources/BRD_SRD_OPSLOG_Bitacoras_Operativas_v0.2.md",
+      "sha256": "ee907b2c1e7cb2061b27a6aae2d2489a1c1c21f99838b69d105114e3e6846ae3"
+    },
+    {
+      "path": "docs/sources/CLAUDE_ARTIFACT_REFERENCE.md",
+      "sha256": "1b0372e60721d3e7b1eba15e4adaf8da4a329c355e72d7a4d01224dd590aad96"
+    }
+  ]
+}
