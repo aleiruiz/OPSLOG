@@ -1,8 +1,8 @@
 # FND-CONTRACTS — matriz individual de trazabilidad
 
-SPEC-1.1 / ORCH-1.1 · taskID FND-CONTRACTS · intento 2 · fencing 2 · baseSHA `d04e487c05fc528e076cb5449063283df0587ed`.
+SPEC-1.1 / ORCH-1.1 · taskID FND-CONTRACTS · intento 2 · fencing 2 · baseSHA `65de7f9a17d906374a17f844dd5663a2742aa7c9`.
 
-Estados normativos: `confirmed` = SPECS/BRD adoptado; `proposed` = fuente no adoptada como regla; `assumption` = supuesto; `decision_required` = pendiente. `M0 coverage` separa validación/contrato compartido de funcionalidad de módulo; `future functionality` identifica implementación posterior. Esta matriz es inventario y no declara implementación funcional de módulos.
+Estados normativos: `confirmed` = SPECS/BRD adoptado; `proposed` = fuente no adoptada como regla; `assumption` = supuesto; `decision_required` = pendiente. `M0 coverage` separa validación/contrato compartido de funcionalidad de módulo; `contractual partial` identifica cobertura de esquema/validación sin handler; `future functionality` identifica implementación posterior. Esta matriz es inventario y no declara implementación funcional de módulos.
 
 | ID | Estado normativo | M0 coverage | Contrato | Implementación / funcionalidad futura | Prueba | Evidencia |
 |---|---|---|---|---|---|
