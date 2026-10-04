@@ -18,11 +18,29 @@ const adminConfig = {
 const suffix = `${Date.now()}_${process.pid}`;
 const databases = [`opslog_a_${suffix}`, `opslog_b_${suffix}`];
 const users = [`opslog_a_${suffix}`, `opslog_b_${suffix}`];
-const password = `test_${suffix}`;
+const credentials = [`synthetic_a_${suffix}`, `synthetic_b_${suffix}`];
 
 function identifier(value: string): string {
   if (!/^[a-z0-9_]+$/.test(value)) throw new Error(`Unsafe identifier: ${value}`);
   return `\`${value}\``;
+}
+
+class Barrier {
+  private waiting = 0;
+  private readonly release: Promise<void>;
+  private resolveRelease!: () => void;
+
+  public constructor(private readonly parties: number) {
+    this.release = new Promise<void>((resolve) => {
+      this.resolveRelease = resolve;
+    });
+  }
+
+  public wait(): Promise<void> {
+    this.waiting += 1;
+    if (this.waiting === this.parties) this.resolveRelease();
+    return this.release;
+  }
 }
 
 async function applyMigrations(connection: mysql.Connection): Promise<void> {
@@ -62,8 +80,23 @@ describe('synthetic MySQL tenant isolation', () => {
       for (let index = 0; index < databases.length; index += 1) {
         const database = identifier(databases[index]!);
         const user = users[index]!;
-        await admin.query(`CREATE USER ${identifier(user)}@'%' IDENTIFIED BY ?`, [password]);
-        await admin.query(`GRANT ALL PRIVILEGES ON ${database}.* TO ${identifier(user)}@'%'`);
+        await admin.query(`CREATE USER ${identifier(user)}@'%' IDENTIFIED BY ?`, [
+          credentials[index],
+        ]);
+        await admin.query(
+          `GRANT SELECT, INSERT, UPDATE, DELETE ON ${database}.* TO ${identifier(user)}@'%'`,
+        );
+      }
+      for (const databaseName of databases) {
+        const migrationConnection = await mysql.createConnection({
+          ...adminConfig,
+          database: databaseName,
+        });
+        try {
+          await applyMigrations(migrationConnection);
+        } finally {
+          await migrationConnection.end();
+        }
       }
       const connections = await Promise.all(
         databases.map((database, index) =>
@@ -71,13 +104,12 @@ describe('synthetic MySQL tenant isolation', () => {
             host: adminConfig.host,
             port: adminConfig.port,
             user: users[index]!,
-            password,
+            password: credentials[index]!,
             database,
           }),
         ),
       );
       try {
-        await Promise.all(connections.map(applyMigrations));
         const [migrationRows] = await connections[0]!.query(
           'SELECT version FROM opslog_schema_migrations ORDER BY version',
         );
@@ -101,26 +133,65 @@ describe('synthetic MySQL tenant isolation', () => {
         );
         expect(rowsA).toEqual([{ local_id: 1, value: 'tenant-A' }]);
         expect(rowsB).toEqual([{ local_id: 1, value: 'tenant-B' }]);
-        await connections[0]!.beginTransaction();
-        await connections[1]!.beginTransaction();
-        await connections[0]!.execute(
-          'UPDATE opslog_harness_records SET value = ?, version = version + 1 WHERE local_id = ?',
-          ['A-interleaved', 1],
-        );
-        await connections[1]!.execute(
-          'UPDATE opslog_harness_records SET value = ?, version = version + 1 WHERE local_id = ?',
-          ['B-interleaved', 1],
+        const crossTenantConnection = await mysql.createConnection({
+          host: adminConfig.host,
+          port: adminConfig.port,
+          user: users[0]!,
+          password: credentials[0]!,
+        });
+        try {
+          await expect(
+            crossTenantConnection.query(
+              `SELECT local_id FROM ${identifier(databases[1]!)}.opslog_harness_records`,
+            ),
+          ).rejects.toThrow(/denied/i);
+        } finally {
+          await crossTenantConnection.end();
+        }
+        await expect(
+          mysql.createConnection({
+            host: adminConfig.host,
+            port: adminConfig.port,
+            user: users[0]!,
+            password: credentials[1]!,
+          }),
+        ).rejects.toThrow(/denied/i);
+        const reverseCrossTenantConnection = await mysql.createConnection({
+          host: adminConfig.host,
+          port: adminConfig.port,
+          user: users[1]!,
+          password: credentials[1]!,
+        });
+        try {
+          await expect(
+            reverseCrossTenantConnection.query(
+              `SELECT local_id FROM ${identifier(databases[0]!)}.opslog_harness_records`,
+            ),
+          ).rejects.toThrow(/denied/i);
+        } finally {
+          await reverseCrossTenantConnection.end();
+        }
+        const transactionBarrier = new Barrier(connections.length);
+        await Promise.all(
+          connections.map(async (connection, index) => {
+            await connection.beginTransaction();
+            await transactionBarrier.wait();
+            await connection.execute(
+              'UPDATE opslog_harness_records SET value = ?, version = version + 1 WHERE local_id = ?',
+              [index === 0 ? 'A-interleaved' : 'B-interleaved', 1],
+            );
+          }),
         );
         await connections[1]!.commit();
         await connections[0]!.rollback();
         const [afterRollback] = await connections[0]!.query(
-          'SELECT local_id FROM opslog_harness_records WHERE local_id = 2',
+          'SELECT local_id, value, version FROM opslog_harness_records WHERE local_id = 1',
         );
-        const [untouchedB] = await connections[1]!.query(
-          'SELECT local_id, value FROM opslog_harness_records',
+        const [committedB] = await connections[1]!.query(
+          'SELECT local_id, value, version FROM opslog_harness_records WHERE local_id = 1',
         );
-        expect(afterRollback).toEqual([]);
-        expect(untouchedB).toEqual([{ local_id: 1, value: 'B-interleaved' }]);
+        expect(afterRollback).toEqual([{ local_id: 1, value: 'tenant-A', version: 1 }]);
+        expect(committedB).toEqual([{ local_id: 1, value: 'B-interleaved', version: 2 }]);
       } finally {
         await Promise.all(connections.map((connection) => connection.end()));
       }
