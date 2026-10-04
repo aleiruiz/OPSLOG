@@ -1,3 +1,6 @@
+import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 describe('workspace safety', () => {
@@ -22,5 +25,20 @@ describe('workspace safety', () => {
     }
     await scan('.');
     expect(suspicious).toEqual([]);
+  });
+
+  it('protects the adopted baseline bytes with their manifests', async () => {
+    const root = process.cwd();
+    for (const manifestName of ['BASELINE-1.0.json', 'BASELINE-1.1.json']) {
+      const manifest = JSON.parse(
+        await readFile(join(root, 'docs', 'baselines', manifestName), 'utf8'),
+      ) as { files: Array<{ path: string; sha256: string }> };
+      for (const file of manifest.files) {
+        const bytes = await readFile(join(root, file.path));
+        const canonical = bytes.toString('utf8').replace(/\r\n/g, '\n');
+        const digest = createHash('sha256').update(canonical).digest('hex');
+        expect(digest, `${manifestName}: ${file.path}`).toBe(file.sha256);
+      }
+    }
   });
 });
