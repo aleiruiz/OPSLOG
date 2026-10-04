@@ -38,7 +38,7 @@ describe('orchestrator runtime', () => {
     });
     expect(() => runtime.acquire('a', 'agent-b', 'C:/wt/b', 'base', 10)).toThrow('already leased');
     expect(() =>
-      runtime.acquire('b', 'agent-b', 'C:/wt/b', 'base', 10, 100, ['tools/a/src/other.ts']),
+      runtime.acquire('b', 'agent-b', 'C:/wt/b', 'base', 10, 100, ['tools/a/src/index.ts']),
     ).toThrow('overlap');
     const planned = new OrchestratorRuntime();
     planned.register([{ ...task('planned'), status: 'planned' }]);
