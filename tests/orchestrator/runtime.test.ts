@@ -8,68 +8,84 @@ const task = (id: string, stage = 0, dependencies: string[] = []) => ({
   dependencies,
   allowedPaths: [`tools/${id}/**`],
 });
+const evidence = (taskId: string, sha: string) => ({
+  taskId,
+  sha,
+  auditSha: sha,
+  auditProvider: 'codex' as const,
+  ciPassed: true,
+  auditCount: 1 as const,
+  independentAudit: true,
+  observedModel: 'gpt-5.6-luna' as const,
+  evidenceId: `audit-${taskId}`,
+});
+
 describe('orchestrator runtime', () => {
-  it('assigns explicit lease and fencing', () => {
+  it('assigns explicit lease/fencing and enforces allowed paths', () => {
     const runtime = new OrchestratorRuntime();
-    runtime.register([task('a'), task('b'), task('c')]);
-    const lease = runtime.acquire('a', 'agent-a', 'C:/wt/a', 'abc', 10);
+    runtime.register([task('a')]);
+    expect(() =>
+      runtime.acquire('a', 'agent-a', 'C:/wt/a', 'base', 10, 100, ['packages/other/file.ts']),
+    ).toThrow('path outside');
+    const lease = runtime.acquire('a', 'agent-a', 'C:/wt/a', 'base', 10, 100, [
+      'tools/a/src/index.ts',
+    ]);
     expect(lease).toMatchObject({
       owner: 'agent-a',
-      baseSha: 'abc',
+      baseSha: 'base',
       model: 'gpt-5.6-luna',
       fencing: 1,
     });
-    expect(() => runtime.acquire('a', 'agent-b', 'C:/wt/b', 'abc', 10)).toThrow('already leased');
+    expect(() => runtime.acquire('a', 'agent-b', 'C:/wt/b', 'base', 10)).toThrow('already leased');
   });
-  it('rejects stale fencing, changed SHA and expired leases', () => {
+  it('reassigns expired leases with new fencing and separates base from candidate SHA', () => {
     const runtime = new OrchestratorRuntime();
     runtime.register([task('a')]);
-    const lease = runtime.acquire('a', 'agent-a', 'C:/wt/a', 'abc', 10, 5);
-    expect(() => runtime.complete('a', lease.fencing - 1, 'abc', 11)).toThrow('stale fencing');
-    expect(() => runtime.complete('a', lease.fencing, 'def', 11)).toThrow('candidate base SHA');
-    expect(() => runtime.complete('a', lease.fencing, 'abc', 15)).toThrow('expired');
+    const first = runtime.acquire('a', 'agent-a', 'C:/wt/a', 'base', 10, 5);
+    expect(() => runtime.complete('a', first.fencing, 'head', 15, 'event-1')).toThrow('expired');
+    const second = runtime.acquire('a', 'agent-b', 'C:/wt/b', 'base', 16);
+    expect(second.fencing).toBeGreaterThan(first.fencing);
+    runtime.complete('a', second.fencing, 'head', 17, 'event-2');
+    expect(runtime.validateCandidate(evidence('a', 'head'))).toBe(true);
   });
-  it('blocks later stages and requires one audit on the candidate SHA', () => {
+  it('is idempotent and rejects stale fencing', () => {
+    const runtime = new OrchestratorRuntime();
+    runtime.register([task('a')]);
+    const lease = runtime.acquire('a', 'agent-a', 'C:/wt/a', 'base', 0);
+    expect(() => runtime.complete('a', lease.fencing - 1, 'head', 1, 'event-1')).toThrow(
+      'stale fencing',
+    );
+    runtime.complete('a', lease.fencing, 'head', 1, 'event-1');
+    expect(() => runtime.complete('a', lease.fencing, 'head', 1, 'event-1')).not.toThrow();
+  });
+  it('blocks stages and requires exactly one independent audit before passing a gate', () => {
     const runtime = new OrchestratorRuntime();
     runtime.register([task('a', 0), task('b', 1, ['a'])]);
-    expect(() => runtime.acquire('b', 'agent-b', 'C:/wt/b', 'abc', 0)).toThrow('blocked');
-    const lease = runtime.acquire('a', 'agent-a', 'C:/wt/a', 'abc', 0);
-    runtime.complete('a', lease.fencing, 'abc', 1);
-    runtime.setGate(0, 'passed');
-    const next = runtime.acquire('b', 'agent-b', 'C:/wt/b', 'def', 1);
-    runtime.complete('b', next.fencing, 'def', 2);
-    expect(
-      runtime.validateCandidate({
-        taskId: 'b',
-        sha: 'def',
-        auditSha: 'def',
-        auditProvider: 'codex',
-        ciPassed: true,
-      }),
-    ).toBe(true);
-    expect(
-      runtime.validateCandidate({
-        taskId: 'b',
-        sha: 'def',
-        auditSha: 'old',
-        auditProvider: 'codex',
-        ciPassed: true,
-      }),
-    ).toBe(false);
+    expect(() => runtime.acquire('b', 'agent-b', 'C:/wt/b', 'base', 0)).toThrow('blocked');
+    const lease = runtime.acquire('a', 'agent-a', 'C:/wt/a', 'base', 0);
+    runtime.complete('a', lease.fencing, 'head-a', 1, 'event-a');
+    expect(() => runtime.setGate(0, 'passed', [])).toThrow('lacks candidate evidence');
+    runtime.setGate(0, 'passed', [evidence('a', 'head-a')]);
+    const next = runtime.acquire('b', 'agent-b', 'C:/wt/b', 'base-b', 1);
+    runtime.complete('b', next.fencing, 'head-b', 2, 'event-b');
+    expect(() =>
+      runtime.setGate(1, 'passed', [{ ...evidence('b', 'head-b'), auditCount: 1 }]),
+    ).not.toThrow();
+    expect(runtime.validateCandidate({ ...evidence('b', 'head-b'), auditSha: 'old' })).toBe(false);
   });
-  it('increments provider epoch and restores synthetic state', () => {
+  it('persists fencing, events and provider epoch through restore', () => {
     const runtime = new OrchestratorRuntime();
     runtime.register([task('a')]);
+    const lease = runtime.acquire('a', 'agent-a', 'C:/wt/a', 'base', 0);
+    runtime.complete('a', lease.fencing, 'head', 1, 'event-a');
     runtime.handoff('claude');
-    expect(runtime.snapshot()).toMatchObject({
+    const restored = OrchestratorRuntime.restore(runtime.snapshot());
+    expect(restored.snapshot()).toMatchObject({
       epoch: 2,
+      fencing: 1,
       provider: 'claude',
       model: 'claude-sonnet-5',
-    });
-    expect(OrchestratorRuntime.restore(runtime.snapshot()).snapshot()).toMatchObject({
-      epoch: 2,
-      provider: 'claude',
-      model: 'claude-sonnet-5',
+      eventIds: ['event-a'],
     });
   });
 });
