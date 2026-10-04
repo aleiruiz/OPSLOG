@@ -45,13 +45,17 @@ export const NavigationAndFeedback: Story = {
       </FilterBar>
       <DetailTabs
         tabs={[
-          { id: 'summary', label: 'Resumen' },
-          { id: 'history', label: 'Historial' },
+          { id: 'summary', label: 'Resumen', content: <p>Resumen sintético.</p> },
+          { id: 'history', label: 'Historial', content: <p>Historial sintético.</p> },
         ]}
         value="summary"
         onChange={() => undefined}
       />
-      <Wizard steps={['Datos', 'Evidencia', 'Confirmación']} activeStep={1} />
+      <Wizard
+        steps={['Datos', 'Evidencia', 'Confirmación']}
+        activeStep={1}
+        onStepChange={() => undefined}
+      />
       <Notifications
         messages={[{ id: 'saved', text: 'Cambios guardados.', severity: 'success' }]}
       />
@@ -86,6 +90,13 @@ export const DataAndWorkflow: Story = {
           { id: 'upload-2', name: 'foto.jpg', progress: 100, status: 'complete' },
           { id: 'upload-3', name: 'documento.docx', progress: 0, status: 'error' },
         ]}
+      />
+      <UploadQueue
+        items={[{ id: 'upload-4', name: 'sin-reintento.pdf', progress: 0, status: 'error' }]}
+      />
+      <UploadQueue
+        items={[{ id: 'upload-5', name: 'con-reintento.pdf', progress: 0, status: 'error' }]}
+        onRetry={() => undefined}
       />
     </>
   ),

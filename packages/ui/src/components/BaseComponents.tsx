@@ -8,7 +8,7 @@ import Chip from '@mui/material/Chip';
 import LinearProgress from '@mui/material/LinearProgress';
 import Stack from '@mui/material/Stack';
 import Step from '@mui/material/Step';
-import StepLabel from '@mui/material/StepLabel';
+import StepButton from '@mui/material/StepButton';
 import Stepper from '@mui/material/Stepper';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
@@ -205,28 +205,43 @@ export function DetailTabs({
   value,
   onChange,
 }: {
-  tabs: { id: string; label: string }[];
+  tabs: { id: string; label: string; content?: React.ReactNode }[];
   value: string;
   onChange: (value: string) => void;
 }) {
   return (
-    <Tabs
-      value={value}
-      onChange={(_, next) => onChange(next)}
-      aria-label="Secciones del detalle"
-      variant="scrollable"
-      scrollButtons="auto"
-    >
+    <Box>
+      <Tabs
+        value={value}
+        onChange={(_, next) => onChange(next)}
+        aria-label="Secciones del detalle"
+        variant="scrollable"
+        scrollButtons="auto"
+      >
+        {tabs.map((tab) => (
+          <Tab
+            key={tab.id}
+            value={tab.id}
+            label={tab.label}
+            id={`tab-${tab.id}`}
+            aria-controls={`tabpanel-${tab.id}`}
+          />
+        ))}
+      </Tabs>
       {tabs.map((tab) => (
-        <Tab
+        <Box
           key={tab.id}
-          value={tab.id}
-          label={tab.label}
-          id={`tab-${tab.id}`}
-          aria-controls={`tabpanel-${tab.id}`}
-        />
+          role="tabpanel"
+          hidden={value !== tab.id}
+          id={`tabpanel-${tab.id}`}
+          aria-labelledby={`tab-${tab.id}`}
+          tabIndex={0}
+          sx={{ pt: 2 }}
+        >
+          {value === tab.id && tab.content}
+        </Box>
       ))}
-    </Tabs>
+    </Box>
   );
 }
 export function Wizard({
@@ -242,7 +257,7 @@ export function Wizard({
     <Stepper activeStep={activeStep} alternativeLabel aria-label="Progreso del formulario">
       {steps.map((label, index) => (
         <Step key={label} completed={index < activeStep}>
-          <StepLabel onClick={() => onStepChange?.(index)}>{label}</StepLabel>
+          <StepButton onClick={() => onStepChange?.(index)}>{label}</StepButton>
         </Step>
       ))}
     </Stepper>
@@ -358,7 +373,7 @@ export function UploadQueue({
                 ✓
               </span>
             )}
-            {item.status === 'error' && (
+            {item.status === 'error' && onRetry && (
               <ButtonControl size="small" onClick={() => onRetry?.(item.id)}>
                 Reintentar
               </ButtonControl>
