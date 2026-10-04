@@ -3,6 +3,7 @@
   "references": [
     { "path": "./tests/harness" },
     { "path": "./packages/contracts" },
-    { "path": "./packages/ui" }
+    { "path": "./packages/ui" },
+    { "path": "./e2e" }
   ]
 }
