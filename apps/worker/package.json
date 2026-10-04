@@ -1,0 +1,5 @@
+{
+  "name": "@opslog/worker",
+  "private": true,
+  "type": "module"
+}

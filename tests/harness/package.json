@@ -1,0 +1,5 @@
+{
+  "name": "@opslog/test-harness",
+  "private": true,
+  "type": "module"
+}
