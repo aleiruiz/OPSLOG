@@ -1,10 +1,10 @@
 # OPSLOG — Guía autocontenida de arranque del orquestador
 
-Fecha: 2026-10-03. Esta guía explica las baselines; no las modifica ni constituye evidencia de ejecución.
+Fecha: 2026-10-03. Esta guía explica SPEC/ORCH-1.0 más sus sucesoras acotadas 1.1; no modifica documentos congelados ni constituye evidencia de ejecución.
 
 ## 1. Encargo concreto
 
-Eres el orquestador de OPSLOG, en una sesión dedicada del proyecto `C:\Repos\OPSLOG`. Tu modelo Codex y el de todos los agentes OpenAI que lances deben ser **gpt-5.6-luna**. Los agentes Claude/Anthropic deben usar **claude-sonnet-5**. Inicia el bootstrap manual de M0; prepara y coordina sus paquetes. No desarrollar módulos de M1 ni pantallas funcionales antes de G0.
+Eres el orquestador de OPSLOG, en una sesión dedicada del proyecto `C:\Repos\OPSLOG`. Proveedor activo inicial: Codex/OpenAI; tú y todos tus agentes usan **gpt-5.6-luna**. Claude/Anthropic usa **claude-sonnet-5** solo después de una transferencia que detenga/libere todo trabajo Codex. Nunca ambos proveedores simultáneamente ni revisión cruzada obligatoria. Inicia el bootstrap manual de M0; prepara y coordina sus paquetes. No desarrollar módulos de M1 ni pantallas funcionales antes de G0.
 
 El producto es web React para flota/personas/documentos/seguro/mantenimiento/siniestros, complementario al despacho. Backend TypeScript/ORM/MySQL, design system Material UI primero. La calidad y el aislamiento entre empresas son criterios de aceptación, no trabajo opcional posterior.
 
@@ -13,8 +13,8 @@ El producto es web React para flota/personas/documentos/seguro/mantenimiento/sin
 Leer en este orden:
 
 1. AGENTS.md y CLAUDE.md.
-2. docs/adr/0004-provider-model-policy.md y docs/tasks/ORCH-BOOTSTRAP.md; ADR-0003 está supersedido.
-3. SPECS.md y Orchestrator.md completos; verificar docs/baselines/BASELINE-1.0.json.
+2. docs/baselines/ACTIVE.md, ADR-0004/0005 y docs/tasks/ORCH-BOOTSTRAP.md; ADR-0003 está supersedido.
+3. SPECS.md y Orchestrator.md completos más docs/baselines/1.1/SPECS.md y Orchestrator.md; verificar manifiestos 1.0/1.1.
 4. docs/adr/0001-environment-assumptions.md, docs/adr/0002-defer-aws-configuration.md e infra/plan/AWS.md.
 5. docs/sources/CLAUDE_ARTIFACT_REFERENCE.md y BRD/SRD de docs/sources, priorizando la sección de cada paquete y conservando etiquetas CONFIRMED/PROPOSED/DECISION REQUIRED.
 6. Tasks.md solo como estado local; consultar GitHub antes de asumir estado durable.
@@ -43,7 +43,7 @@ Prioridad: instrucción directa del usuario más reciente > baseline adoptada > 
 7. Crear worktree/branch por paquete desde commit base; registrar lease y fencing token antes de despachar. No dar a autores root compartido ni permisos sobre Tasks. El usuario autorizó worktrees y subagentes para este trabajo.
 8. Lanzar al menos tres carriles elegibles: FND-REPO, FND-CONTRACTS y FND-DS. Reservar capacidad para auditoría local. Si la plataforma permite solo cuatro agentes incluido tú, tres implementadores ocupan toda la capacidad: escalonar sus subauditorías cuando termine/libere slot un autor, nunca inventar slots ni omitir auditoría.
 9. FND-ORCH puede empezar al liberar capacidad; FND-AWS solo documental y sin comprobaciones remotas. Que AWS espere no autoriza declarar pruebas cloud aprobadas ni pasar gates que las requieran.
-10. Revisar cada entrega y auditoría local; publicar PR si hay acceso. Solicitar revisiones externas OpenAI Luna y Anthropic Sonnet 5; si un proveedor no está disponible, su revisión sigue pendiente y no se fusiona sin ella. No detener trabajo local independiente mientras se prepara evidencia.
+10. Revisar cada entrega y auditoría local; publicar PR si hay acceso. Solicitar dos revisiones independientes del proveedor activo, en sesiones distintas y externas al equipo autor; no solicitar revisión al otro proveedor. Ausencia del proveedor inactivo no bloquea fusión. Mantener CI/consenso por SHA y no autoaprobar.
 11. Integrar únicamente cambios aceptados según protocolo. No copiar archivos de otro worktree para eludir PR/revisión ni tratar código terminado como dependencia accepted.
 12. Al llegar a FND-INTEGRATE/G0, ejecutar validación acumulativa; si hay bloqueos de proveedor o AWS, presentar alcance y evidencia concreta. No iniciar M1 mientras G0 siga pendiente.
 
@@ -79,7 +79,7 @@ Antes de enviar, comprobar que no haya placeholders en campos indispensables. Un
 
 En herramientas Codex de subagentes usar `model=gpt-5.6-luna` con `fork_turns=none` o fork limitado y prompt completo. En adaptador Claude usar `claude-sonnet-5` explícito, también para subagentes. Si la herramienta no permite fijar/verificar modelo, no lanzar por defecto otro modelo. Dejar esa asignación bloqueada o elegir una herramienta que admita el modelo solicitado.
 
-Un auditor Luna y un auditor Sonnet 5 deben preparar revisión técnica y hallazgos en sesiones separadas sobre el mismo SHA para satisfacer el consenso entre proveedores de ORCH-1.0. No se encontró CLI Claude en PATH durante esta preparación; verificar otro adaptador autorizado y documentar disponibilidad real. Conserva evidencias útiles y requisito pendiente si Anthropic no se puede ejecutar. Solicitar decisión humana solo cuando la limitación impida el resultado concreto, con PR/candidato listo para revisar.
+Dos auditores del proveedor activo deben preparar revisión técnica y hallazgos en sesiones separadas sobre el mismo SHA; esto satisface ORCH-1.1 sin revisión cruzada. Durante Codex no verificar/invocar agentes Claude ni bloquear gates por su ausencia. Antes de cambiar proveedor, drenar todos los agentes/leases, entregar contexto y adquirir lock con epoch nuevo. Solicitar decisión humana solo cuando una limitación real del proveedor activo impida el resultado concreto, con PR/candidato listo para revisar.
 
 El orquestador no crea nuevos chats de usuario para cada subtask salvo petición expresa; emplea subagentes para implementación y revisión. No modifica modelo de chats ajenos ni dispara automaciones recurrentes no solicitadas.
 

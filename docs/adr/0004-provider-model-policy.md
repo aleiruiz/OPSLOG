@@ -1,6 +1,6 @@
 # ADR-0004 — Luna 5.6 para Codex y Sonnet 5 para Claude
 
-Estado: vigente; aclaración directa del usuario, supersede ADR-0003.
+Estado: selección de modelos vigente; revisión cruzada de este documento supersedida por ADR-0005 y SPEC/ORCH-1.1. No aplicar el requisito histórico de dos proveedores simultáneos descrito en la sección Auditoría.
 Fecha: 2026-10-03, America/Mexico_City.
 Compatible con SPEC-1.0 / ORCH-1.0, cuyos archivos se conservan sin cambios.
 

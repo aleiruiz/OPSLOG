@@ -2,12 +2,12 @@
 
 ```yaml
 id: FND-AWS
-baseline: [SPEC-1.0, ORCH-1.0]
+baseline: [SPEC-1.1, ORCH-1.1, inherited: SPEC-1.0/ORCH-1.0]
 milestone: M0
 kind: foundation
 purpose: Consolidar plan documental de AWS/DB/secretos/recuperación sin conexión, inventario remoto ni provisionamiento.
 requirements: [U-04, FR-002, NFR-S2, NFR-S4, NFR-B1, NFR-B3, NFR-B5, "SPECS §11"]
-source_decisions: ["ADR-0001", "ADR-0002", "infra/plan/AWS.md"]
+source_decisions: ["ADR-0001", "ADR-0002", "ADR-0005 single active provider", "infra/plan/AWS.md"]
 depends_on: ["baseline-checked"]
 consumes: ["SPEC-1.0", "ORCH-1.0", "MySQL 8.0.45 como dato del usuario"]
 produces: ["aws-deferred-plan-v1", "db-compatibility-checklist-v1", "staging-readiness-pending-v1"]
@@ -21,7 +21,7 @@ e2e_cases: ["runbook reproduce preparación sin credenciales", "plan distingue e
 commands: ["Get-Content infra/plan/AWS.md", "git diff --check -- infra/plan/fnd-aws docs/adr/aws docs/runbooks/inventory"]
 fixtures: ["valores placeholder no secretos", "datos sintéticos", "matriz de controles pendiente"]
 non_goals: ["az/aws/terraform/cdk apply", "RDS/AppSync/S3 inventory", "leer .env", "probar credenciales", "deploy"]
-completion_evidence: ["commit/PR", "checklist documental", "bloqueos reales", "auditoría local", "auditorías externas por SHA"]
+completion_evidence: ["commit/PR", "checklist documental", "bloqueos reales", "auditoría local", "dos auditorías Codex independientes por SHA"]
 rollback: "Revertir documentación nueva; conservar AWS.md vigente e historial de decisiones. No destruir recursos ni borrar evidencia."
 max_repair_cycles: 3
 ```
@@ -29,3 +29,5 @@ max_repair_cycles: 3
 ## Bloqueo conocido
 
 La falta de acceso remoto no impide preparar documentación, pero impide afirmar compatibilidad, capacidad, IAM, TLS, backups o recuperación sobre AWS. El paquete debe cerrar como documental con esas verificaciones `pending`.
+
+Provider-lock efectivo: Codex es el único proveedor activo de esta ronda y usa `gpt-5.6-luna`; no se bloquea FND-AWS documental por Anthropic. AWS sigue diferido y no se leen secretos.

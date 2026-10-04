@@ -2,12 +2,12 @@
 
 ```yaml
 id: FND-REPO
-baseline: [SPEC-1.0, ORCH-1.0]
+baseline: [SPEC-1.1, ORCH-1.1, inherited: SPEC-1.0/ORCH-1.0]
 milestone: M0
 kind: foundation
 purpose: Crear el workspace pnpm reproducible, scripts de calidad/build/test y CI local sintética sin AWS.
 requirements: [U-02, U-03, U-05, U-06, FR-002, FR-170, NFR-P1, NFR-S2, NFR-M5]
-source_decisions: [U-03, U-05, U-06, "SPECS §3", "SPECS §9"]
+source_decisions: [U-03, U-05, U-06, "SPECS §3", "SPECS §9", "ADR-0005 single active provider"]
 depends_on: ["baseline-checked"]
 consumes: ["SPEC-1.0", "ORCH-1.0"]
 produces: ["workspace-v1", "quality-ci-v1", "synthetic-mysql-harness-v1"]
@@ -21,7 +21,7 @@ e2e_cases: ["clon limpio ejecuta quality/build/test", "CI no conecta AWS ni lee 
 commands: ["pnpm install --frozen-lockfile", "pnpm lint", "pnpm format:check", "pnpm typecheck", "pnpm test:unit", "pnpm test:integration", "pnpm build"]
 fixtures: ["datos sintéticos tenant-A/tenant-B", "reloj determinista", "credenciales efímeras de test explícitas"]
 non_goals: ["funcionalidad M1+", "conexión AWS", "leer .env", "decidir ORM o contratos compartidos sin ADR/propietario"]
-completion_evidence: ["commit/PR", "baseSHA/headSHA", "lista de comandos y resultados", "CI real", "auditoría local", "auditorías externas por SHA"]
+completion_evidence: ["commit/PR", "baseSHA/headSHA", "lista de comandos y resultados", "CI real", "auditoría local", "dos auditorías Codex independientes por SHA"]
 rollback: "Revertir commits del paquete; conservar lock/worktree y evidencia. No borrar fixtures ni resetear bases externas."
 max_repair_cycles: 3
 ```
@@ -29,3 +29,5 @@ max_repair_cycles: 3
 ## Notas de coordinación
 
 FND-REPO es propietario exclusivo de la raíz de workspace, lockfile, configuración compartida y workflows. Debe solicitar `ContractChangeRequested` para cualquier cambio fuera de `write_paths`. La auditoría local se crea antes del PR y no puede editar el árbol del autor. El CI de AWS/staging queda pendiente y no puede representarse como verde.
+
+Provider-lock efectivo: solo Codex está activo en este repositorio durante esta ronda y todos los agentes/auditores usan `gpt-5.6-luna`; no se requiere revisión Anthropic para este intento. Cambiar a Claude exige drenar leases/agentes y registrar un nuevo epoch.
