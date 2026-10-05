@@ -1,5 +1,5 @@
 export type Provider = 'codex' | 'claude';
-export type Model = 'gpt-6-luna' | 'claude-sonnet-5';
+export type Model = 'gpt-6-luna' | 'claude-sonnet-5-5' | 'claude-opus-5-5';
 export type TaskStatus = 'planned' | 'ready' | 'leased' | 'blocked' | 'completed';
 export type GateStatus = 'pending' | 'passed' | 'failed';
 export interface Task {
@@ -45,5 +45,9 @@ export interface RuntimeSnapshot {
 }
 export const MODEL_BY_PROVIDER: Record<Provider, Model> = {
   codex: 'gpt-6-luna',
-  claude: 'claude-sonnet-5',
+  claude: 'claude-sonnet-5-5',
+};
+export const AUDIT_MODEL_BY_PROVIDER: Record<Provider, Model> = {
+  codex: 'gpt-6-luna',
+  claude: 'claude-opus-5-5',
 };
