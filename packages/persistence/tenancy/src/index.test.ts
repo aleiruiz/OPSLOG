@@ -13,6 +13,7 @@ import {
   subjectId,
 } from '@opslog/domain-tenants';
 import { TenantAccessDeniedError } from '@opslog/domain-tenants';
+import { trustContextForTests } from './testing.js';
 import {
   TenantContextResolver,
   TenantDataSourceCapacityError,
@@ -249,7 +250,7 @@ describe('trusted tenant context and data source selection', () => {
     const { resolver, session } = fixture();
     const firstContext = await resolver.resolve({ sessionId: session.id });
     const secondTenantId = opaqueTenantId();
-    const secondContext = {
+    const secondContext = trustContextForTests({
       ...firstContext,
       tenantId: secondTenantId,
       database: {
@@ -258,7 +259,7 @@ describe('trusted tenant context and data source selection', () => {
         databaseName: `opslog_t_${secondTenantId.replaceAll('-', '')}`,
         credentialRef: `tenant/${secondTenantId}/runtime`,
       },
-    } as TenantContext;
+    } as TenantContext);
     let resolveCount = 0;
     let releaseResolvers!: () => void;
     const bothResolversStarted = new Promise<void>((resolve) => {
@@ -349,14 +350,14 @@ describe('trusted tenant context and data source selection', () => {
     await first.release();
     await shared.release();
 
-    const rotatedContext = {
+    const rotatedContext = trustContextForTests({
       ...context,
       database: {
         ...context.database,
         credentialRef: `${context.database.credentialRef}/rotated`,
         secretVersion: context.database.secretVersion + 1,
       },
-    } as TenantContext;
+    } as TenantContext);
     const rotated = await factory.acquire(rotatedContext);
     expect(resolvedVersions).toEqual([location.secretVersion, location.secretVersion + 1]);
     expect(created).toHaveLength(2);
@@ -422,5 +423,89 @@ describe('trusted tenant context and data source selection', () => {
         password: 'synthetic-test-only',
       }),
     ).toThrow('restricted runtime account');
+  });
+
+  it('rejects a shape-compatible context that was not issued by the resolver', async () => {
+    const { resolver, session } = fixture();
+    const issued = await resolver.resolve({ sessionId: session.id });
+    const forged = JSON.parse(JSON.stringify(issued)) as TenantContext;
+    const factory = new TenantDataSourceFactory(
+      { host: '127.0.0.1', port: 3306 },
+      {
+        async resolve() {
+          throw new Error('credentials must not be resolved for an untrusted context');
+        },
+      },
+      {},
+      fakeDataSource,
+    );
+    await expect(factory.acquire(forged)).rejects.toBeInstanceOf(TenantAccessDeniedError);
+    expect(factory.activeLeaseCount).toBe(0);
+  });
+
+  it('does not hold the pool lock while a stale data source is being destroyed', async () => {
+    const { resolver, session } = fixture();
+    const context = await resolver.resolve({ sessionId: session.id });
+    const otherTenantId = opaqueTenantId();
+    const otherContext = trustContextForTests({
+      ...context,
+      tenantId: otherTenantId,
+      database: {
+        ...context.database,
+        tenantId: otherTenantId,
+        databaseName: `opslog_t_${otherTenantId.replaceAll('-', '')}`,
+        credentialRef: `tenant/${otherTenantId}/runtime`,
+      },
+    } as TenantContext);
+    const rotatedContext = trustContextForTests({
+      ...context,
+      database: {
+        ...context.database,
+        credentialRef: `${context.database.credentialRef}/rotated`,
+        secretVersion: context.database.secretVersion + 1,
+      },
+    } as TenantContext);
+    let releaseDestroy!: () => void;
+    const destroyGate = new Promise<void>((resolve) => {
+      releaseDestroy = resolve;
+    });
+    let created = 0;
+    const factory = new TenantDataSourceFactory(
+      { host: '127.0.0.1', port: 3306 },
+      {
+        async resolve(ref, version) {
+          const owner = ref === otherContext.database.credentialRef ? otherContext : context;
+          return {
+            tenantId: owner.tenantId,
+            databaseName: owner.database.databaseName,
+            username: 'opslog_u_synthetic',
+            password: 'synthetic-test-only',
+            secretVersion: version,
+          };
+        },
+      },
+      { maxDataSources: 4 },
+      (options) => {
+        created += 1;
+        const source = fakeDataSource(options);
+        if (created === 1) {
+          const destroy = source.destroy.bind(source);
+          source.destroy = async () => {
+            await destroyGate;
+            await destroy();
+          };
+        }
+        return source;
+      },
+    );
+    const first = await factory.acquire(context);
+    await first.release();
+    const rotation = factory.acquire(rotatedContext);
+    await Promise.resolve();
+    const other = await factory.acquire(otherContext);
+    releaseDestroy();
+    await other.release();
+    await (await rotation).release();
+    await factory.close();
   });
 });

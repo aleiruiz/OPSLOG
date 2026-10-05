@@ -53,7 +53,7 @@ La auditoría reportó brechas en persistencia durable, MySQL real, leases, evid
 - `pnpm build`: pasó.
 - `pnpm quality`: no completó porque el `format:check` global reportó 38 archivos preexistentes fuera del alcance de esta tarea; ninguno de los archivos modificados de tenancy aparece en esa lista. No se reformatearon archivos ajenos.
 - Revisión de alerta de fixture: se eliminaron los UUID literales del test; las identidades se generan en runtime mediante el generador UUIDv7 del dominio. Son valores efímeros usados solo en memoria por pruebas y no representan credenciales ni recursos externos. Conteo local de UUID estáticos en el archivo: 0.
-- Entorno de esta remediación: Node 24.19.0 y pnpm 11.25.0. Typecheck, todas las pruebas unitarias, integración MySQL sintética (harness 1 y tenancy 2), build y Prettier scoped pasaron. `pnpm quality` sigue limitado por los mismos 38 archivos preexistentes listados por `format:check` global.
+- Entorno de esta remediación: Node 24.19.0 y pnpm 11.25.0. Typecheck, todas las pruebas unitarias, integración MySQL sintética (harness 1 y tenancy 2), build y Prettier scoped pasaron. `pnpm quality` se reportó limitado por 38 archivos preexistentes en el `format:check` local del autor (corrección: ese fallo no se reproduce en una exportación limpia de este SHA; ver remediación Opus 5.5).
 - `git diff --check`: pendiente de verificación final. El escaneo remoto/CI y la auditoría independiente del SHA final quedan pendientes; no se declara ningún gate aprobado.
 
 ## Remediación posterior al informe de auditoría única — base 2cb37c6 (SPEC/ORCH-1.3)
@@ -77,3 +77,15 @@ La auditoría reportó brechas en persistencia durable, MySQL real, leases, evid
 - No se declara aprobado el gate ni la auditoría. CI/escaneo remoto y la única auditoría independiente requerida para el SHA final siguen pendientes.
 
 Leer instrucciones, baselines, ADR-0001/0002/0004/0005, SESSION_HANDSHAKE, AUTONOMOUS_ORCHESTRATOR y SPECS §4–§7. Usar solo fixtures sintéticos/locales. El autor no audita ni fusiona. Si se necesita contrato compartido o lockfile, detenerse y pedir reasignación.
+
+## Remediación tras revisión de código Opus 5.5 (SHA 17e6050)
+
+- Rollback con fencing: antes de `adapter.rollback`, `runProvisioning` relee el job bajo bloqueo. Si el intento ya está `succeeded` (acuse de commit perdido) devuelve el tenant activo y no borra su base ni usuario; si no puede probar el estado, no hace rollback y falla.
+- Tope de intentos: `claimJob` rechaza con `ATTEMPTS_EXHAUSTED` tras 5 intentos; cada intento usa base/credencial propias, por lo que un fallo persistente ya no crea recursos sin límite. El comentario sobre reutilizar la ubicación quedó corregido.
+- `TenantDataSourceFactory.acquire` solo acepta contextos emitidos por `TenantContextResolver` (WeakSet en `trusted-context.ts`); `testing.ts` (no exportado desde el entry point) permite a las pruebas marcar contextos construidos a mano.
+- `destroy()` ya no se espera dentro del bloqueo del pool: las entradas se desvinculan bajo el bloqueo y se liberan después, así un `pool.end` lento no bloquea a otros tenants.
+- Pruebas nuevas (unitarias): contexto no emitido por el resolver es rechazado sin resolver credenciales; adquirir otro tenant mientras un `destroy` está colgado.
+- Sin MySQL local (no hay Docker/mysqld en este entorno) no se ejecutaron las pruebas de integración; las rutas nuevas de acuse perdido y tope de intentos no tienen prueba de integración todavía y quedan cubiertas solo por la revisión.
+- Decisiones/pendientes que no se cambiaron: `authorizationVersion` sigue siendo por tenant (revocar a un miembro invalida las sesiones de todo el tenant; el miembro revocado ya se deniega por su estado de membresía, por lo que mover la versión a la membresía es una decisión de diseño de SPECS §4.2); suspensión sin `evictTenant` automático; sin cola por capacidad de data sources; migraciones MySQL no transaccionales; idempotencia global (no por actor); sin guardia de transición en `setTenantStatus`; igualdad exacta de `migrationVersion`.
+- Alcance: este PR modifica `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `tsconfig.json`, `packages/domain/tenants` y `apps/api/tenants`, fuera de `write_paths` original; el usuario autorizó ampliar el alcance el 2026-10-05.
+- PR #15 también edita `package.json` (`format:check`, `test:unit`) y `tsconfig.json`: resolver ese conflicto al fusionar el segundo PR.

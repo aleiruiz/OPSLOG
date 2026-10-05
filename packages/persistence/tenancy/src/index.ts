@@ -38,6 +38,7 @@ import {
   TenantSessionEntity,
   TENANT_DATA_ENTITIES,
 } from './entities.js';
+import { isTrustedContext, markTrustedContext } from './trusted-context.js';
 
 export interface ControlPlaneDatabaseConfig {
   readonly host: string;
@@ -194,11 +195,15 @@ type TenantDataSourceEntry = {
   lastUsedAt: number;
 };
 
+type DisposableEntry = Pick<TenantDataSourceEntry, 'dataSource' | 'ready'>;
+
 type LeaseWaiter = {
   readonly resolve: () => void;
   readonly reject: (error: Error) => void;
   timer: ReturnType<typeof setTimeout>;
 };
+
+const MAX_PROVISIONING_ATTEMPTS = 5;
 
 type TenantDataSourceCreator = (options: DataSourceOptions) => DataSource;
 
@@ -267,6 +272,21 @@ export class TenantDataSourceFactory {
     }
   }
 
+  /**
+   * Runs `operation` under the pool lock and disposes any entries it unlinked only after the lock is
+   * released, so a slow or hung `destroy()` never blocks acquires and releases of other tenants.
+   */
+  private async withPoolLockDisposing<T>(
+    operation: (doomed: DisposableEntry[]) => T | Promise<T>,
+  ): Promise<T> {
+    const doomed: DisposableEntry[] = [];
+    try {
+      return await this.withPoolLock(() => operation(doomed));
+    } finally {
+      await Promise.allSettled(doomed.map((entry) => this.disposeEntry(entry)));
+    }
+  }
+
   private assertEntryMatches(
     entry: TenantDataSourceEntry,
     context: TenantContext,
@@ -283,6 +303,8 @@ export class TenantDataSourceFactory {
   }
 
   async acquire(context: TenantContext): Promise<TenantDataSourceLease> {
+    // Only contexts issued by TenantContextResolver are accepted; a shape-compatible object is not enough.
+    if (!isTrustedContext(context)) throw new TenantAccessDeniedError();
     await this.reserveLeaseSlot();
     try {
       const location = context.database;
@@ -321,7 +343,7 @@ export class TenantDataSourceFactory {
         )
           throw new TenantAccessDeniedError();
 
-        entry = await this.withPoolLock(async () => {
+        entry = await this.withPoolLockDisposing((doomed) => {
           if (this.closed) throw new TenantDataSourceCapacityError();
 
           // The entry is inserted under the lock before initialize() is awaited, so
@@ -341,8 +363,8 @@ export class TenantDataSourceFactory {
             return concurrent;
           }
 
-          await this.evictOlderTenantVersions(context.tenantId, location.secretVersion);
-          await this.makeRoom();
+          this.evictOlderTenantVersions(context.tenantId, location.secretVersion, doomed);
+          this.makeRoom(doomed);
           const dataSource = this.createDataSource({
             type: 'mysql',
             host: this.host.host,
@@ -363,7 +385,7 @@ export class TenantDataSourceFactory {
           try {
             ready = dataSource.initialize();
           } catch (error) {
-            if (dataSource.isInitialized) await dataSource.destroy();
+            doomed.push({ dataSource, ready: Promise.resolve(dataSource) });
             throw error;
           }
           const created: TenantDataSourceEntry = {
@@ -386,11 +408,11 @@ export class TenantDataSourceFactory {
       try {
         await entry.ready;
       } catch (error) {
-        await this.withPoolLock(async () => {
+        await this.withPoolLockDisposing((doomed) => {
           entry!.leases = Math.max(0, entry!.leases - 1);
           if (entry!.leases === 0) {
             if (this.entries.get(entry!.key) === entry) this.entries.delete(entry!.key);
-            if (entry!.dataSource.isInitialized) await entry!.dataSource.destroy();
+            doomed.push(entry!);
           }
         });
         throw error;
@@ -403,25 +425,25 @@ export class TenantDataSourceFactory {
   }
 
   async evictTenant(tenantId: TenantId): Promise<void> {
-    await this.withPoolLock(async () => {
+    await this.withPoolLockDisposing((doomed) => {
       const tenantEntries = [...this.entries.values()].filter(
         (entry) => entry.tenantId === tenantId,
       );
       if (tenantEntries.some((entry) => entry.leases > 0))
         throw new TenantDataSourceCapacityError();
-      await Promise.all(tenantEntries.map((entry) => this.destroyEntry(entry)));
+      for (const entry of tenantEntries) this.unlinkEntry(entry, doomed);
     });
   }
 
   async close(): Promise<void> {
-    await this.withPoolLock(async () => {
+    await this.withPoolLockDisposing((doomed) => {
       if (this.activeLeases > 0) throw new TenantDataSourceCapacityError();
       this.closed = true;
       for (const waiter of this.waiters.splice(0)) {
         clearTimeout(waiter.timer);
         waiter.reject(new TenantDataSourceCapacityError());
       }
-      await Promise.all([...this.entries.values()].map((entry) => this.destroyEntry(entry)));
+      for (const entry of [...this.entries.values()]) this.unlinkEntry(entry, doomed);
     });
   }
 
@@ -457,26 +479,33 @@ export class TenantDataSourceFactory {
     this.activeLeases = Math.max(0, this.activeLeases - 1);
   }
 
-  private async makeRoom(): Promise<void> {
+  private makeRoom(doomed: DisposableEntry[]): void {
     if (this.entries.size < this.limits.maxDataSources) return;
     const idle = [...this.entries.values()]
       .filter((entry) => entry.leases === 0)
       .sort((left, right) => left.lastUsedAt - right.lastUsedAt)[0];
     if (!idle) throw new TenantDataSourceCapacityError();
-    await this.destroyEntry(idle);
+    this.unlinkEntry(idle, doomed);
   }
 
-  private async evictOlderTenantVersions(tenantId: TenantId, secretVersion: number): Promise<void> {
-    const staleEntries = [...this.entries.values()].filter(
-      (entry) =>
-        entry.tenantId === tenantId && entry.secretVersion < secretVersion && entry.leases === 0,
-    );
-    await Promise.all(staleEntries.map((entry) => this.destroyEntry(entry)));
+  private evictOlderTenantVersions(
+    tenantId: TenantId,
+    secretVersion: number,
+    doomed: DisposableEntry[],
+  ): void {
+    for (const entry of [...this.entries.values()])
+      if (entry.tenantId === tenantId && entry.secretVersion < secretVersion && entry.leases === 0)
+        this.unlinkEntry(entry, doomed);
   }
 
-  private async destroyEntry(entry: TenantDataSourceEntry): Promise<void> {
+  /** Removes the entry from the pool synchronously (under the lock); disposal happens after unlock. */
+  private unlinkEntry(entry: TenantDataSourceEntry, doomed: DisposableEntry[]): void {
     if (entry.leases > 0) throw new TenantDataSourceCapacityError();
     if (this.entries.get(entry.key) === entry) this.entries.delete(entry.key);
+    doomed.push(entry);
+  }
+
+  private async disposeEntry(entry: DisposableEntry): Promise<void> {
     await entry.ready.catch(() => undefined);
     if (entry.dataSource.isInitialized) await entry.dataSource.destroy();
   }
@@ -489,7 +518,7 @@ export class TenantDataSourceFactory {
         if (released) return;
         released = true;
         try {
-          await this.withPoolLock(async () => {
+          await this.withPoolLockDisposing((doomed) => {
             entry.leases = Math.max(0, entry.leases - 1);
             entry.lastUsedAt = Date.now();
             const hasNewerVersion = [...this.entries.values()].some(
@@ -497,7 +526,7 @@ export class TenantDataSourceFactory {
                 candidate.tenantId === entry.tenantId &&
                 candidate.secretVersion > entry.secretVersion,
             );
-            if (entry.leases === 0 && hasNewerVersion) await this.destroyEntry(entry);
+            if (entry.leases === 0 && hasNewerVersion) this.unlinkEntry(entry, doomed);
           });
         } finally {
           this.releaseLeaseSlot();
@@ -754,6 +783,10 @@ export class TypeOrmTenantStore implements TenantStore, TenantProvisioner {
       }
       const now = new Date();
       if (job.leaseOwner && job.leaseExpiresAt && job.leaseExpiresAt > now) return { kind: 'busy' };
+      // Every attempt provisions its own database and credential; cap them so a persistent failure
+      // cannot create unbounded orphaned resources.
+      if (job.attempt >= MAX_PROVISIONING_ATTEMPTS)
+        throw new ProvisioningFailedError('ATTEMPTS_EXHAUSTED');
       job.status = 'running';
       job.attempt += 1;
       job.leaseOwner = owner;
@@ -796,6 +829,30 @@ export class TypeOrmTenantStore implements TenantStore, TenantProvisioner {
       }
     }
     throw new ProvisioningFailedError();
+  }
+
+  private async attemptOutcome(
+    target: TenantProvisioningTarget,
+    attempt: number,
+  ): Promise<
+    { kind: 'succeeded'; tenant: Tenant } | { kind: 'not_succeeded' } | { kind: 'unknown' }
+  > {
+    try {
+      return await this.dataSource.transaction(async (manager) => {
+        const job = await manager.getRepository(ProvisioningJobEntity).findOne({
+          where: { tenantId: target.tenantId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (job?.attempt !== attempt || job.status !== 'succeeded')
+          return { kind: 'not_succeeded' } as const;
+        const row = await manager.getRepository(TenantEntity).findOneBy({ id: target.tenantId });
+        return row?.status === 'active'
+          ? ({ kind: 'succeeded', tenant: toTenant(row) } as const)
+          : ({ kind: 'not_succeeded' } as const);
+      });
+    } catch {
+      return { kind: 'unknown' };
+    }
   }
 
   private async runProvisioning(
@@ -870,10 +927,16 @@ export class TypeOrmTenantStore implements TenantStore, TenantProvisioner {
       return tenant;
     } catch (error) {
       const failureCode = safeFailureCode(error);
+      // The commit may have succeeded with a lost acknowledgement. Never roll back an attempt that is
+      // already `succeeded`, and never roll back when its state cannot be proven.
+      const outcome = await this.attemptOutcome(target, attempt);
+      if (outcome.kind === 'succeeded') return outcome.tenant;
+      if (outcome.kind === 'unknown') throw new ProvisioningFailedError(failureCode);
       try {
         await adapter.rollback(target);
       } catch {
-        // Failed cleanup leaves the tenant inaccessible; retry uses the durable job and same opaque location.
+        // Failed cleanup leaves the tenant inaccessible; each attempt uses its own opaque database and
+        // credential names, so a retry never reuses or deletes these resources.
       }
       await this.dataSource.transaction(async (manager) => {
         const jobs = manager.getRepository(ProvisioningJobEntity);
@@ -934,13 +997,15 @@ export class TenantContextResolver {
       database.migrationVersion !== TENANT_DATABASE_MIGRATION_VERSION
     )
       throw new TenantAccessDeniedError();
-    return immutableContext({
-      tenantId: session.tenantId,
-      actor: { subjectId: session.subjectId, membershipVersion: membership.version },
-      authorizationVersion: tenant.authorizationVersion,
-      correlationId: opaqueId() as TenantContext['correlationId'],
-      database,
-    });
+    return markTrustedContext(
+      immutableContext({
+        tenantId: session.tenantId,
+        actor: { subjectId: session.subjectId, membershipVersion: membership.version },
+        authorizationVersion: tenant.authorizationVersion,
+        correlationId: opaqueId() as TenantContext['correlationId'],
+        database,
+      }),
+    );
   }
 }
 

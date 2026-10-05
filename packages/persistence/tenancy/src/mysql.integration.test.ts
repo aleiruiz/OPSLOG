@@ -37,6 +37,7 @@ import {
   TenantDataRecordEntity,
   TENANT_DATA_ENTITIES,
 } from './entities.js';
+import { trustContextForTests } from './testing.js';
 
 const adminUrlValue = process.env.OPSLOG_TEST_MYSQL_ADMIN_URL;
 if (!adminUrlValue)
@@ -635,14 +636,14 @@ describe('TypeORM tenancy against synthetic MySQL 8', () => {
       ...currentCredential,
       secretVersion: ctxA.context.database.secretVersion + 1,
     });
-    const rotatedContext = {
+    const rotatedContext = trustContextForTests({
       ...ctxA.context,
       database: {
         ...ctxA.context.database,
         credentialRef: rotatedRef,
         secretVersion: ctxA.context.database.secretVersion + 1,
       },
-    } as typeof ctxA.context;
+    } as typeof ctxA.context);
     const versionTwo = await sourceForVersionCheck.acquire(rotatedContext);
     expect(versionTwo.dataSource).not.toBe(versionOne.dataSource);
     expect(versionOne.dataSource.isInitialized).toBe(false);
