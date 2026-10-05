@@ -94,7 +94,7 @@ max_repair_cycles: 3
 
 ## Política de proveedores
 
-Provider-lock efectivo: solo Codex está activo en esta ronda; autor y auditor reciben `gpt-6-luna` explícito. Claude queda inactivo, no es un bloqueo. Un handoff futuro debe drenar los agentes/leases Codex, incrementar epoch y fijar `claude-sonnet-5-5` para código y `claude-opus-5-5` para auditoría (ADR-0007); si la herramienta no permite fijar/observar el modelo del proveedor activo, el estado es `blocked`. No se implementan adaptadores para secretos reales.
+Provider-lock vigente (ADR-0005/0007): solo Claude está activo desde 2026-10-05 (autor `claude-sonnet-5-5`, auditor `claude-opus-5-5`); Codex (`gpt-6-luna`) quedó detenido y drenado. El runtime conserva el pin de Codex para histórico y handoff. Un handoff futuro debe drenar los agentes/leases Codex, incrementar epoch y fijar `claude-sonnet-5-5` para código y `claude-opus-5-5` para auditoría (ADR-0007); si la herramienta no permite fijar/observar el modelo del proveedor activo, el estado es `blocked`. No se implementan adaptadores para secretos reales.
 
 ## Diferido explícitamente (registro de G0, 2026-10-05)
 

@@ -5,7 +5,7 @@ Fecha: 2026-10-05, America/Mexico_City.
 
 ## Contexto
 
-La revisión independiente de G0 sobre `main@776abce` (informe en `docs/audits/G0/`) encontró dos hechos de proceso:
+La revisión independiente de G0 sobre `main@776abce` (sus conclusiones se recogen en el informe vigente en `docs/audits/G0/8b1b61c187c153c2c24e4cf3d714f8ae7f41051e/`) encontró dos hechos de proceso:
 
 1. ORCH-1.1 §2 y SPEC-1.3 conservan **dos auditores independientes por hito**; la regla de una sola auditoría de ADR-0005 y ADR-0007 aplica por PR/headSHA, no por gate.
 2. Los paquetes M1 de audit/outbox (#15), tenancy (#16) y auth (#17) y la corrección posterior (#20) se fusionaron antes de que G0 estuviera aprobado, aunque AGENTS.md, SPECS.md (gates G0–G5) y Orchestrator.md bloquean etapas posteriores mientras un gate esté pendiente.
