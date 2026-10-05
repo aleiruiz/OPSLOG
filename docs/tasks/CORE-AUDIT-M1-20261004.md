@@ -76,3 +76,13 @@ Leer instrucciones, baselines, ADR-0001/0002/0004/0005, SESSION_HANDSHAKE, AUTON
 - El payload persistido tiene tipo `AuditData` y allowlist estructurada: conserva solo `attempts` entero no negativo; nombres, direcciones y demás texto/campos desconocidos se descartan, no se intenta adivinar PII con regex.
 - Regresiones cubren actor.email, nombre/dirección libres, append raw, campos admitidos y no mutación del objeto original.
 - Runtime Node `24.19.0`, pnpm `11.25.0`: Vitest dirigido de audit, 6/6 PASS; `pnpm quality` completo PASS con MySQL 8.0.45 sintético; ESLint/Prettier dirigidos y `git diff --check` PASS.
+
+## Remediación tras revisión de código Opus 5.5 (SHA f3404e8)
+
+- Typecheck: `AuditData` pasa a tipo alias; el slice ahora está en las referencias de `tsconfig.json`, en `format:check` y en `test:unit`, de modo que CI lo tipa, formatea y prueba (antes quedaba fuera de todo gate).
+- Worker: un handler que supera su lease ya no aborta `drain`; las mutaciones con fencing viejo descartan el claim y cuentan `staleLeases`. Un evento reclamado más de `maxAttempts` veces (p. ej. append de auditoría que siempre falla) pasa a DLQ con razón `attempts exhausted`. Comentario sobre el reintento corregido (el checkpoint evita re-invocar el handler).
+- Outbox: `transaction` rechaza trabajo asíncrono (thenable) y cierra el handle `tx` tras commit/rollback; `InMemoryOutboxStore` acepta un reloj inyectable usado también al encolar.
+- Audit: el evento persistido se construye campo por campo; `eventId`, `entityId`, `correlationId` deben ser IDs opacos y `action`/`entityType` etiquetas simples, o se redactan; no sobreviven campos extra.
+- Fixtures: los actor IDs sintéticos se ensamblan en runtime para que GitGuardian no los confunda con tokens. El hallazgo previo sigue en commits anteriores: marcar el incidente como falso positivo o fusionar con squash.
+- Pruebas nuevas: transacción async y handle cerrado, reloj inyectado, campos extra/PII en append, handler que supera el lease, DLQ por intentos agotados, backoff con `maxAttempts > 1`, A/B con el mismo `eventId` en el worker.
+- `package.json`/`tsconfig.json` de este PR chocan con #16 en `format:check` y `test:unit`; resolver al fusionar el segundo.

@@ -1,1 +1,8 @@
-{"name":"@opslog/queues","private":true,"type":"module","exports":{".":"./dist/index.js"}}
+{
+  "name": "@opslog/queues",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js"
+  }
+}

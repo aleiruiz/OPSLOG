@@ -122,3 +122,103 @@ describe('worker tenant, handler and DLQ controls', () => {
     expect(executions).toBe(1);
   });
 });
+
+describe('worker lease loss, attempts and tenant isolation', () => {
+  const enqueue = (store: InMemoryOutboxStore, tenantId: string, eventId = 'e1') =>
+    store.transaction((tx) =>
+      tx.enqueue({
+        eventId,
+        tenantId,
+        type: 'demo',
+        payload: {},
+        occurredAt: '2026-10-04T00:00:00.000Z',
+        idempotencyKey: eventId,
+      }),
+    );
+  it('drops the claim instead of crashing when the handler outlives its lease', async () => {
+    const store = new InMemoryOutboxStore(() => 0);
+    enqueue(store, 'tenant-a');
+    const audit = new InMemoryAuditStore();
+    const slow = new Worker(store, { status: () => 'active' }, audit, 'worker-a', 10, 5);
+    const fast = new Worker(store, { status: () => 'active' }, audit, 'worker-b', 10, 5);
+    let release: () => void = () => undefined;
+    slow.register(
+      'demo',
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    fast.register('demo', () => undefined);
+    const first = slow.process(0);
+    await Promise.resolve();
+    await expect(fast.process(100)).resolves.toBe(true);
+    release();
+    await expect(first).resolves.toBe(true);
+    expect(slow.metrics.staleLeases).toBe(1);
+    expect(slow.metrics.handlerFailures).toBe(0);
+    expect(store.get('tenant-a', 'e1')?.status).toBe('delivered');
+  });
+  it('dead-letters an event whose audit append keeps failing after maxAttempts claims', async () => {
+    const store = new InMemoryOutboxStore(() => 0);
+    enqueue(store, 'tenant-a');
+    const failing = {
+      append: () => {
+        throw new Error('audit down');
+      },
+      list: () => [],
+    };
+    const worker = new Worker(store, { status: () => 'active' }, failing, 'worker-a', 10, 2);
+    let calls = 0;
+    worker.register('demo', () => {
+      calls += 1;
+    });
+    for (let tick = 0; tick < 4; tick += 1) await worker.process(tick * 100);
+    expect(calls).toBe(1);
+    expect(store.get('tenant-a', 'e1')?.status).toBe('dead_letter');
+    expect(worker.dlq.receive()?.body).toMatchObject({ reason: 'attempts exhausted' });
+  });
+  it('retries with backoff before dead-lettering when maxAttempts is greater than one', async () => {
+    const store = new InMemoryOutboxStore(() => 0);
+    enqueue(store, 'tenant-a');
+    const worker = new Worker(
+      store,
+      { status: () => 'active' },
+      new InMemoryAuditStore(),
+      'worker-a',
+      10,
+      3,
+    );
+    worker.register('demo', () => {
+      throw new Error('boom');
+    });
+    await worker.process(0);
+    expect(store.get('tenant-a', 'e1')).toMatchObject({ status: 'retry', availableAt: 1000 });
+    await expect(worker.process(500)).resolves.toBe(false);
+    await worker.process(1000);
+    await worker.process(3000);
+    expect(store.get('tenant-a', 'e1')?.status).toBe('dead_letter');
+    expect(worker.metrics).toMatchObject({ retried: 2, deadLettered: 1, handlerFailures: 3 });
+  });
+  it('keeps identical event ids in two tenants isolated', async () => {
+    const store = new InMemoryOutboxStore(() => 0);
+    enqueue(store, 'tenant-a');
+    enqueue(store, 'tenant-b');
+    const audit = new InMemoryAuditStore();
+    const worker = new Worker(
+      store,
+      { status: (tenantId) => (tenantId === 'tenant-a' ? 'active' : 'suspended') },
+      audit,
+      'worker-a',
+      10,
+      2,
+    );
+    worker.register('demo', () => undefined);
+    await worker.process(0);
+    await worker.process(0);
+    expect(store.get('tenant-a', 'e1')?.status).toBe('delivered');
+    expect(store.get('tenant-b', 'e1')?.status).toBe('dead_letter');
+    expect(audit.list('tenant-a')).toHaveLength(1);
+    expect(audit.list('tenant-b')).toHaveLength(0);
+  });
+});

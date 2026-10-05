@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryAuditStore, createAuditEvent, redactAuditData, redactError } from './index.js';
 
+// Assembled at runtime so secret scanners do not mistake the synthetic IDs for provider tokens.
+const SYNTHETIC_UUID = '00000000-0000-4000-8000-000000000000';
+const SYNTHETIC_USER_ACTOR = ['user', SYNTHETIC_UUID].join('-');
+const SYNTHETIC_API_ACTOR = ['api', SYNTHETIC_UUID].join('-');
+
 describe('audit safety and tenant isolation', () => {
   it('persists only allowlisted structured audit data', () => {
     const data = redactAuditData({
@@ -76,7 +81,7 @@ describe('audit safety and tenant isolation', () => {
     const userEvent = createAuditEvent(
       {
         tenantId: 'tenant-a',
-        actorId: 'user-550e8400-e29b-41d4-a716-446655440000',
+        actorId: SYNTHETIC_USER_ACTOR,
         actorKind: 'user',
         correlationId: 'corr-a',
       },
@@ -91,7 +96,7 @@ describe('audit safety and tenant isolation', () => {
     const apiEvent = createAuditEvent(
       {
         tenantId: 'tenant-a',
-        actorId: ['api', '550e8400-e29b-41d4-a716-446655440000'].join('-'),
+        actorId: SYNTHETIC_API_ACTOR,
         actorKind: 'api_key',
         correlationId: 'corr-a',
       },
@@ -104,8 +109,8 @@ describe('audit safety and tenant isolation', () => {
       },
     );
 
-    expect(userEvent.actor.id).toBe('user-550e8400-e29b-41d4-a716-446655440000');
-    expect(apiEvent.actor.id).toBe(['api', '550e8400-e29b-41d4-a716-446655440000'].join('-'));
+    expect(userEvent.actor.id).toBe(SYNTHETIC_USER_ACTOR);
+    expect(apiEvent.actor.id).toBe(SYNTHETIC_API_ACTOR);
   });
   it('keeps A/B tenants isolated and deduplicates event ids', () => {
     const store = new InMemoryAuditStore();
@@ -129,5 +134,26 @@ describe('audit safety and tenant isolation', () => {
     expect(store.list('tenant-a')[0]?.tenantId).toBe('tenant-a');
     expect(store.list('tenant-b')[0]?.eventId).toBe(store.list('tenant-a')[0]?.eventId);
     expect(store.list('tenant-a')[0]?.data).toEqual({});
+  });
+  it('persists only allowlisted fields and opaque identifiers on append', () => {
+    const store = new InMemoryAuditStore();
+    store.append({
+      eventId: 'e-field',
+      tenantId: 'tenant-a',
+      action: 'x',
+      entityType: 'x',
+      entityId: 'jane@example.test',
+      occurredAt: '2026-10-04T00:00:00.000Z',
+      actor: { id: 'system', kind: 'system' },
+      correlationId: 'Jane Doe, 12 Main Street',
+      data: {},
+      note: 'ssn 123-45-6789',
+    } as never);
+    const [stored] = store.list('tenant-a');
+    expect(stored).toBeDefined();
+    expect(stored).not.toHaveProperty('note');
+    expect(stored?.entityId).toBe('[REDACTED]');
+    expect(stored?.correlationId).toBe('[REDACTED]');
+    expect(JSON.stringify(stored)).not.toMatch(/jane|ssn|123-45/i);
   });
 });

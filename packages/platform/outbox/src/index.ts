@@ -48,12 +48,15 @@ export interface OutboxStore {
 export class InMemoryOutboxStore implements OutboxStore {
   private readonly records = new Map<string, OutboxRecord>();
   private fencing = 0;
+  constructor(private readonly clock: () => number = Date.now) {}
   transaction<T>(work: (tx: OutboxTransaction) => T): T {
     const staged: OutboxRecord[] = [];
     const keys = new Set<string>();
     const store = this;
+    let closed = false;
     const tx: OutboxTransaction = {
       enqueue<T>(input: Omit<OutboxRecord<T>, 'status' | 'attempts' | 'availableAt'>) {
+        if (closed) throw new Error('transaction is closed');
         const recordKey = scopedKey(input.tenantId, input.eventId);
         const eventKey = `event:${recordKey}`;
         const idempotencyKey = `idempotency:${scopedKey(input.tenantId, tuple(input.eventId, input.idempotencyKey))}`;
@@ -77,7 +80,7 @@ export class InMemoryOutboxStore implements OutboxStore {
           idempotencyKey: input.idempotencyKey,
           status: 'pending',
           attempts: 0,
-          availableAt: Date.now(),
+          availableAt: store.clock(),
         };
         staged.push(record);
         keys.add(eventKey);
@@ -87,11 +90,18 @@ export class InMemoryOutboxStore implements OutboxStore {
     };
     try {
       const result = work(tx);
+      if (isThenable(result)) {
+        // An async callback would commit before it settles, so a later rejection could not roll back.
+        void Promise.resolve(result).catch(() => undefined);
+        throw new Error('outbox transactions must be synchronous');
+      }
+      closed = true;
       for (const record of staged) {
         this.records.set(scopedKey(record.tenantId, record.eventId), record);
       }
       return result;
     } catch (error) {
+      closed = true;
       staged.length = 0;
       throw error;
     }
@@ -173,6 +183,13 @@ export class InMemoryOutboxStore implements OutboxStore {
   all(): readonly OutboxRecord[] {
     return [...this.records.values()].map((record) => structuredClone(record));
   }
+}
+function isThenable(value: unknown): boolean {
+  return (
+    (typeof value === 'object' || typeof value === 'function') &&
+    value !== null &&
+    typeof (value as { then?: unknown }).then === 'function'
+  );
 }
 function scopedKey(tenantId: string, key: string): string {
   return `${tenantId.length}:${tenantId}${key.length}:${key}`;

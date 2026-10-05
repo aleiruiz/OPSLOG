@@ -1,1 +1,8 @@
-{"name":"@opslog/platform-outbox","private":true,"type":"module","exports":{".":"./dist/index.js"}}
+{
+  "name": "@opslog/platform-outbox",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js"
+  }
+}

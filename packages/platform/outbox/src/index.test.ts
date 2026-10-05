@@ -97,4 +97,31 @@ describe('outbox atomicity and fencing', () => {
     store.acknowledge('tenant-a', 'e1', next.fencing);
     expect(() => store.acknowledge('tenant-a', 'e1', next.fencing)).not.toThrow();
   });
+  it('rejects async transaction work instead of committing before it settles', async () => {
+    const store = new InMemoryOutboxStore();
+    expect(() =>
+      store.transaction(async (tx) => {
+        tx.enqueue(input('async-e'));
+        await Promise.resolve();
+        throw new Error('late failure');
+      }),
+    ).toThrow('synchronous');
+    await Promise.resolve();
+    expect(store.all()).toHaveLength(0);
+  });
+  it('closes the transaction handle after commit or rollback', () => {
+    const store = new InMemoryOutboxStore();
+    let leaked: Parameters<Parameters<typeof store.transaction>[0]>[0] | undefined;
+    store.transaction((tx) => {
+      leaked = tx;
+    });
+    expect(() => leaked?.enqueue(input('late'))).toThrow('closed');
+    expect(store.all()).toHaveLength(0);
+  });
+  it('uses the injected clock for availability', () => {
+    const store = new InMemoryOutboxStore(() => 5_000);
+    store.transaction((tx) => tx.enqueue(input('clocked')));
+    expect(store.claim(4_999, 10, 'w')).toBeUndefined();
+    expect(store.claim(5_000, 10, 'w')?.record.eventId).toBe('clocked');
+  });
 });

@@ -14,6 +14,7 @@ export interface WorkerMetrics {
   rejectedTenants: number;
   handlerFailures: number;
   auditFailures: number;
+  staleLeases: number;
 }
 export type Handler = (
   payload: unknown,
@@ -28,6 +29,7 @@ export class Worker {
     rejectedTenants: 0,
     handlerFailures: 0,
     auditFailures: 0,
+    staleLeases: 0,
   };
   readonly dlq = new DeadLetterQueue<unknown>();
   private readonly handlers = new Map<string, Handler>();
@@ -48,14 +50,38 @@ export class Worker {
     if (!claim) return false;
     this.metrics.claimed += 1;
     const { record, fencing } = claim;
+    if (record.attempts > this.maxAttempts) {
+      // Reclaimed after repeated lease expiries without ever reaching a terminal state.
+      this.guarded(() => {
+        this.store.retry(
+          record.tenantId,
+          record.eventId,
+          fencing,
+          'attempts exhausted',
+          now,
+          this.maxAttempts,
+        );
+        this.metrics.deadLettered += 1;
+        this.dlq.send({
+          eventId: record.eventId,
+          tenantId: record.tenantId,
+          reason: 'attempts exhausted',
+          type: record.type,
+          attempts: record.attempts,
+        });
+      });
+      return true;
+    }
     if (!record.handlerCompleted && this.tenants.status(record.tenantId) !== 'active') {
       this.metrics.rejectedTenants += 1;
-      this.store.retry(record.tenantId, record.eventId, fencing, 'tenant unavailable', now, 1);
-      this.metrics.deadLettered += 1;
-      this.dlq.send({
-        eventId: record.eventId,
-        tenantId: record.tenantId,
-        reason: 'tenant unavailable',
+      this.guarded(() => {
+        this.store.retry(record.tenantId, record.eventId, fencing, 'tenant unavailable', now, 1);
+        this.metrics.deadLettered += 1;
+        this.dlq.send({
+          eventId: record.eventId,
+          tenantId: record.tenantId,
+          reason: 'tenant unavailable',
+        });
       });
       return true;
     }
@@ -82,57 +108,79 @@ export class Worker {
       } else this.metrics.retried += 1;
       return true;
     }
-    try {
-      if (!record.handlerCompleted) {
-        if (!handler) throw new Error('handler not registered');
+    if (!record.handlerCompleted) {
+      if (!handler) throw new Error('handler not registered');
+      try {
         await handler(record.payload, {
           eventId: record.eventId,
           tenantId: record.tenantId,
           type: record.type,
         });
-        this.store.markHandlerCompleted(record.tenantId, record.eventId, fencing);
-      }
-      const auditEvent: AuditEvent = {
-        eventId: `outbox:${record.eventId}`,
-        tenantId: record.tenantId,
-        action: 'outbox.delivered',
-        entityType: 'outbox',
-        entityId: record.eventId,
-        occurredAt: new Date(now).toISOString(),
-        actor: { id: this.workerId, kind: 'system' },
-        correlationId: record.eventId,
-        data: { type: record.type, attempts: record.attempts },
-      };
-      try {
-        this.audit.append(auditEvent);
-      } catch {
-        // Keep the claim processing until lease expiry. The handler must be idempotent
-        // because it may be invoked again after the claim is reconciled.
-        this.metrics.auditFailures += 1;
+      } catch (error) {
+        this.guarded(() => {
+          this.metrics.handlerFailures += 1;
+          const status = this.store.retry(
+            record.tenantId,
+            record.eventId,
+            fencing,
+            redactError(error),
+            now,
+            this.maxAttempts,
+          );
+          if (status === 'dead_letter') {
+            this.metrics.deadLettered += 1;
+            this.dlq.send({
+              eventId: record.eventId,
+              tenantId: record.tenantId,
+              reason: 'handler failed',
+            });
+          } else this.metrics.retried += 1;
+        });
         return true;
       }
+      const checkpointed = this.guarded(() =>
+        this.store.markHandlerCompleted(record.tenantId, record.eventId, fencing),
+      );
+      if (!checkpointed) return true;
+    }
+    const auditEvent: AuditEvent = {
+      eventId: `outbox:${record.eventId}`,
+      tenantId: record.tenantId,
+      action: 'outbox.delivered',
+      entityType: 'outbox',
+      entityId: record.eventId,
+      occurredAt: new Date(now).toISOString(),
+      actor: { id: this.workerId, kind: 'system' },
+      correlationId: record.eventId,
+      data: { type: record.type, attempts: record.attempts },
+    };
+    try {
+      this.audit.append(auditEvent);
+    } catch {
+      // Keep the claim processing until lease expiry. The handler checkpoint is already stored,
+      // so reclaiming retries only the audit append and never re-invokes the handler.
+      this.metrics.auditFailures += 1;
+      return true;
+    }
+    this.guarded(() => {
       this.store.acknowledge(record.tenantId, record.eventId, fencing);
       this.metrics.delivered += 1;
+    });
+    return true;
+  }
+  /** Runs a fenced store mutation; a lost lease drops the claim instead of crashing the drain loop. */
+  private guarded(work: () => void): boolean {
+    try {
+      work();
       return true;
     } catch (error) {
-      this.metrics.handlerFailures += 1;
-      const status = this.store.retry(
-        record.tenantId,
-        record.eventId,
-        fencing,
-        redactError(error),
-        now,
-        this.maxAttempts,
-      );
-      if (status === 'dead_letter') {
-        this.metrics.deadLettered += 1;
-        this.dlq.send({
-          eventId: record.eventId,
-          tenantId: record.tenantId,
-          reason: 'handler failed',
-        });
-      } else this.metrics.retried += 1;
-      return true;
+      if (
+        !(error instanceof Error) ||
+        !/^(stale fencing|outbox event not found)$/.test(error.message)
+      )
+        throw error;
+      this.metrics.staleLeases += 1;
+      return false;
     }
   }
 }
