@@ -664,6 +664,7 @@ export class TypeOrmTenantStore implements TenantStore, TenantProvisioner {
     const claim = await this.claimJob(target, hash, owner);
     if (claim.kind === 'succeeded') return claim.tenant;
     if (claim.kind === 'exhausted') throw new ProvisioningFailedError('ATTEMPTS_EXHAUSTED');
+    if (claim.kind === 'blocked') throw new ProvisioningFailedError('TENANT_NOT_PROVISIONABLE');
     if (claim.kind === 'busy') return this.waitForProvisioning(target, hash, adapter);
     return this.runProvisioning(this.fencedTarget(target, claim.attempt, owner), hash, adapter);
   }
@@ -767,6 +768,7 @@ export class TypeOrmTenantStore implements TenantStore, TenantProvisioner {
     | { kind: 'claimed'; attempt: number }
     | { kind: 'busy' }
     | { kind: 'exhausted' }
+    | { kind: 'blocked' }
     | { kind: 'succeeded'; tenant: Tenant }
   > {
     return this.dataSource.transaction(async (manager) => {
@@ -783,6 +785,12 @@ export class TypeOrmTenantStore implements TenantStore, TenantProvisioner {
       }
       const now = new Date();
       if (job.leaseOwner && job.leaseExpiresAt && job.leaseExpiresAt > now) return { kind: 'busy' };
+      // A tenant an operator suspended is not provisioned further: no attempt is consumed and no resources are created.
+      const tenantRow = await manager
+        .getRepository(TenantEntity)
+        .findOneBy({ id: target.tenantId });
+      if (tenantRow && !PROVISIONABLE_STATUSES.includes(tenantRow.status))
+        return { kind: 'blocked' };
       // Every attempt provisions its own database and credential; cap them so a persistent failure
       // cannot create unbounded orphaned resources.
       if (job.attempt >= MAX_PROVISIONING_ATTEMPTS) {
@@ -837,6 +845,7 @@ export class TypeOrmTenantStore implements TenantStore, TenantProvisioner {
       const result = await this.claimJob(target, hash, owner);
       if (result.kind === 'succeeded') return result.tenant;
       if (result.kind === 'exhausted') throw new ProvisioningFailedError('ATTEMPTS_EXHAUSTED');
+      if (result.kind === 'blocked') throw new ProvisioningFailedError('TENANT_NOT_PROVISIONABLE');
       if (result.kind === 'claimed') {
         return this.runProvisioning(
           this.fencedTarget(target, result.attempt, owner),

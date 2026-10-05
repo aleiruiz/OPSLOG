@@ -693,6 +693,11 @@ describe('TypeORM tenancy against synthetic MySQL 8', () => {
       .createAndProvision({ name: 'Suspended tenant' }, key, new SyntheticMySqlProvisioner())
       .catch(() => undefined);
     expect(await firstStore.getTenant(tenantId)).toMatchObject({ status: 'suspended' });
+    // The blocked retry consumed no attempt and created no resources.
+    expect(
+      (await controlSource.getRepository(ProvisioningJobEntity).findOneBy({ idempotencyKey: key }))
+        ?.attempt,
+    ).toBe(1);
   }, 60_000);
 
   it('fences expired lease attempts so stale rollback cannot delete the active winner', async () => {

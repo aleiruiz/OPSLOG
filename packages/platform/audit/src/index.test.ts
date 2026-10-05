@@ -184,5 +184,13 @@ describe('audit safety and tenant isolation', () => {
     const message = redactError(new Error(`upstream 401 api_key=abc123 failed for ${jwtLike}`));
     expect(message).not.toMatch(/abc123|eyJhbGci/);
     expect(message).toContain('upstream 401');
+    for (const text of [
+      'access_token=abc123secretvalue',
+      'client_secret: s3cr3tvalue',
+      'db_password=hunter2xyz',
+      'Authorization: Basic dXNlcjpwYXNz',
+      'password = "hunter 2"',
+    ])
+      expect(redactError(new Error(text))).not.toMatch(/abc123|s3cr3t|hunter|dXNlcjpwYXNz/);
   });
 });

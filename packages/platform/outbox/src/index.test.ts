@@ -143,6 +143,12 @@ describe('outbox atomicity and fencing', () => {
     expect(() => store.transaction((tx) => tx.enqueue(input('e1')))).not.toThrow();
     expect(store.all()).toHaveLength(1);
   });
+  it('treats an identical replay with a non-plain payload as the same event', () => {
+    const store = new InMemoryOutboxStore();
+    const payload = Object.assign(Object.create(null) as object, { value: 'e1' });
+    store.transaction((tx) => tx.enqueue({ ...input('e1'), payload }));
+    expect(() => store.transaction((tx) => tx.enqueue({ ...input('e1'), payload }))).not.toThrow();
+  });
   it('rejects nested transactions so an inner commit cannot outlive an outer rollback', () => {
     const store = new InMemoryOutboxStore();
     expect(() =>

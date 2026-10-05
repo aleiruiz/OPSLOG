@@ -88,7 +88,8 @@ export class InMemoryOutboxStore implements OutboxStore {
         const prior = existing ?? sameEventStaged;
         if (
           prior &&
-          (prior.type !== input.type || !isDeepStrictEqual(prior.payload, input.payload))
+          (prior.type !== input.type ||
+            !isDeepStrictEqual(prior.payload, structuredClone(input.payload)))
         )
           throw new OutboxConflictError();
         if (existing || keys.has(eventKey) || keys.has(idempotencyKey))

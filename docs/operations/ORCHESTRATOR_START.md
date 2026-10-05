@@ -14,7 +14,7 @@ Leer en este orden:
 
 1. AGENTS.md y CLAUDE.md.
 2. docs/operations/SESSION_HANDSHAKE.md. Ninguna sesión hija puede iniciar trabajo real hasta enviar `HANDSHAKE_READY` y recibir del padre un `HANDSHAKE_ACK` explícito, correlacionado con identidad, lease, epoch, baseSHA y paths, que incluya `startAuthorized: true`.
-3. docs/baselines/ACTIVE.md, ADR-0004/0005/0006/0007 y docs/tasks/ORCH-BOOTSTRAP.md; ADR-0003 está supersedido.
+3. docs/baselines/ACTIVE.md, ADR-0004/0005/0006/0007, docs/tasks/ORCH-BOOTSTRAP.md (historia) y docs/tasks/ORCH-RESTART.md (arranque vigente); ADR-0003 está supersedido.
 4. SPECS.md y Orchestrator.md completos más docs/baselines/1.1/ a 1.4/ (SPECS.md y Orchestrator.md de cada sucesora vigente); verificar manifiestos 1.0–1.4.
 5. docs/adr/0001-environment-assumptions.md, docs/adr/0002-defer-aws-configuration.md e infra/plan/AWS.md.
 6. docs/sources/CLAUDE_ARTIFACT_REFERENCE.md y BRD/SRD de docs/sources, priorizando la sección de cada paquete y conservando etiquetas CONFIRMED/PROPOSED/DECISION REQUIRED.
