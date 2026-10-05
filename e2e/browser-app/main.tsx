@@ -1,4 +1,5 @@
 import React from 'react';
+import '../../packages/ui/src/fonts';
 import { createRoot } from 'react-dom/client';
 import { CssBaseline, Stack, ThemeProvider, Typography } from '@mui/material';
 import {

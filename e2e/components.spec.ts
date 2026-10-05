@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 
 test.describe('OPSLOG UI components in a real browser', () => {
@@ -57,5 +58,23 @@ test.describe('OPSLOG UI components in a real browser', () => {
     await expect(page.getByText('Reintento solicitado: error')).toBeVisible();
     await page.getByRole('button', { name: 'Reintentar estado' }).click();
     await expect(page.getByText('Estado reintentado')).toBeVisible();
+  });
+
+  test('has no WCAG 2.1 A/AA violations, including measured colour contrast', async ({ page }) => {
+    await expect(
+      page.getByRole('heading', { name: 'Galería de componentes OPSLOG' }),
+    ).toBeVisible();
+    const results = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .analyze();
+    expect(results.violations).toEqual([]);
+    // Contrast really was measured in the browser (jsdom cannot): many text nodes passed the rule. Axe reports
+    // glyph-only icons and inputs behind the outline as "incomplete", which it cannot decide automatically.
+    const contrast = results.passes.find((item) => item.id === 'color-contrast');
+    expect(contrast?.nodes.length ?? 0).toBeGreaterThan(20);
+  });
+
+  test('keeps the accessibility tree of the component gallery stable', async ({ page }) => {
+    await expect(page.locator('body')).toMatchAriaSnapshot({ name: 'gallery.aria.yml' });
   });
 });

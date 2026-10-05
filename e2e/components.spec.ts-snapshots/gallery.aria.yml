@@ -1,0 +1,113 @@
+- main:
+    - heading "Galería de componentes OPSLOG" [level=1]
+    - paragraph: Harness browser con fixtures sintéticos
+    - button "Acción de cabecera"
+    - region "StatusBadge":
+        - heading "StatusBadge" [level=2]
+        - text: Activo Baja Procesamiento normal
+    - region "UiState":
+        - heading "UiState" [level=2]
+        - status:
+            - progressbar "Cargando":
+                - img
+            - heading "Cargando" [level=2]
+            - paragraph: Estamos preparando la información.
+        - status:
+            - heading "Aún no hay registros" [level=2]
+            - paragraph: Cuando existan registros aparecerán aquí.
+        - status:
+            - heading "Sin resultados" [level=2]
+            - paragraph: Prueba con otros filtros o términos de búsqueda.
+        - status:
+            - heading "No tienes acceso" [level=2]
+            - paragraph: Solicita acceso a una persona administradora.
+        - status:
+            - heading "Información incompleta" [level=2]
+            - paragraph: Faltan datos para continuar.
+        - status:
+            - heading "Vencido" [level=2]
+            - paragraph: Este elemento requiere renovación o revisión.
+        - status:
+            - heading "Cerrado" [level=2]
+            - paragraph: Este registro es histórico y no admite cambios.
+        - status:
+            - heading "Listo" [level=2]
+            - paragraph: La operación se completó correctamente.
+        - status:
+            - heading "Sesión expirada" [level=2]
+            - paragraph: Vuelve a iniciar sesión para continuar.
+        - alert:
+            - heading "No pudimos cargar la información" [level=2]
+            - paragraph: Intenta nuevamente.
+            - button "Reintentar estado"
+    - region "BaseComponents":
+        - heading "BaseComponents" [level=2]
+        - group "Formulario":
+            - paragraph: Datos sintéticos de validación
+            - textbox "Nombre"
+            - paragraph: Campo requerido
+            - button "Guardar cargando" [disabled]
+        - search "Filtros":
+            - text: Filtrar
+            - textbox "Filtrar"
+            - button "Limpiar filtros"
+        - paragraph: 'Filtro actual: ninguno'
+        - table "Tenants sintéticos":
+            - caption: Tenants sintéticos
+            - rowgroup:
+                - row "Seleccionar Nombre Estado":
+                    - columnheader "Seleccionar"
+                    - columnheader "Nombre"
+                    - columnheader "Estado"
+            - rowgroup:
+                - row "Seleccionar tenant-a Tenant A Activo":
+                    - cell "Seleccionar tenant-a":
+                        - checkbox "Seleccionar tenant-a"
+                    - cell "Tenant A"
+                    - cell "Activo"
+                - row "Seleccionar tenant-b Tenant B Pendiente":
+                    - cell "Seleccionar tenant-b":
+                        - checkbox "Seleccionar tenant-b"
+                    - cell "Tenant B"
+                    - cell "Pendiente"
+        - paragraph: 'Seleccionados: ninguno'
+        - tablist "Secciones del detalle":
+            - tab "Resumen" [selected]
+            - tab "Historial"
+        - tabpanel "Resumen":
+            - paragraph: Resumen visible
+        - button "Preparar"
+        - button "Validar" [disabled]
+        - button "Completar" [disabled]
+        - paragraph: 'Paso actual: 1'
+        - list "Línea de tiempo":
+            - listitem:
+                - heading "Creado" [level=6]
+                - paragraph: /\d+-\d+-\d+/
+            - listitem:
+                - heading "Validado" [level=6]
+                - paragraph: /\d+-\d+-\d+/
+                - paragraph: Fixture sintético
+        - complementary "Siguiente paso":
+            - heading "Siguiente paso" [level=6]
+            - list:
+                - listitem:
+                    - paragraph: Revisar
+                - listitem:
+                    - paragraph: Aprobar
+        - region "Confirmar cambio":
+            - heading "Confirmar cambio" [level=6]
+            - textbox "Motivo"
+            - button "Confirmar" [disabled]
+            - button "Cancelar"
+        - region "Archivos por cargar":
+            - paragraph: reporte.csv
+            - progressbar "Progreso de reporte.csv"
+            - paragraph: resumen.pdf
+            - img "Completado"
+            - paragraph: fallo.csv
+            - button "Reintentar"
+            - alert: No se pudo cargar el archivo.
+        - region "Notificaciones":
+            - alert: Información sintética
+            - alert: Operación completada

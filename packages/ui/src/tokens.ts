@@ -26,8 +26,10 @@ export const opslogTokens = {
     fontFamily: '"IBM Plex Sans", "Segoe UI", sans-serif',
     monoFamily: '"IBM Plex Mono", "Cascadia Code", monospace',
     baseSize: 14,
+    sizes: { body: 14, h1: 22, h2: 16 },
   },
   spacing: 8,
+  spacingScale: [4, 8, 12, 16, 24, 32, 48],
   shape: { controlRadius: 6, cardRadius: 8 },
   layout: { sidebarWidth: 232, contentPadding: 24, rowHeight: 38, compactRowHeight: 30 },
 } as const;

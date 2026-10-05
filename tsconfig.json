@@ -11,6 +11,10 @@
     { "path": "./infra/queues" },
     { "path": "./packages/platform/audit" },
     { "path": "./packages/platform/outbox" },
-    { "path": "./apps/worker/base" }
+    { "path": "./apps/worker/base" },
+    { "path": "./tests/orchestrator" },
+    { "path": "./packages/domain/identity" },
+    { "path": "./packages/platform/auth" },
+    { "path": "./apps/api/auth" }
   ]
 }

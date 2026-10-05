@@ -234,5 +234,6 @@ Estados normativos: `confirmed` = SPECS/BRD adoptado; `proposed` = fuente no ado
 ## Explicit gaps and conflict resolution
 
 - FR-120 text is incident closure. Document/people/insurance rows in the BRD that point to FR-120 are not copied into the dependency DAG; document behavior is mapped by semantic text to FR-130–137 and incident closure remains FR-120, per SPECS §10.1.
+- `BR-V5` aparece referenciada en el BRD pero nunca se define; no se infiere su contenido y ningún validador la reclama implementada.
 - `FR-137`, `FR-149`, `FR-154`, `FR-155`, `FR-184` and other C/roadmap items remain deferred; no validator claims them implemented.
 - `D3/D6/D7/D16`, provider/cloud checks, OpenAPI generation and MySQL integration remain decision/pipeline dependencies.
