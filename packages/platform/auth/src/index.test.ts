@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AUTH_COOKIE,
   assertClaims,
+  authCookie,
   isVerifiedExternalPrincipal,
   type ExternalClaims,
   verifyExternalPrincipal,
@@ -87,5 +89,22 @@ describe('OIDC callback claim validation', () => {
         'expected-nonce',
       ),
     ).rejects.toThrow('identity verification failed');
+  });
+});
+
+describe('session cookie attributes', () => {
+  it('defaults to a secure, http-only, lax cookie scoped to the API path', () => {
+    expect(authCookie()).toEqual({
+      name: AUTH_COOKIE,
+      httpOnly: true,
+      secure: true,
+      sameSite: 'lax',
+      path: '/api',
+    });
+    expect(AUTH_COOKIE).toBe('opslog_session');
+  });
+
+  it('allows disabling secure for local development while keeping http-only', () => {
+    expect(authCookie(false)).toMatchObject({ secure: false, httpOnly: true, sameSite: 'lax' });
   });
 });

@@ -9,6 +9,7 @@ export interface Task {
   dependencies: string[];
   allowedPaths: string[];
   candidateSha?: string;
+  author?: string;
 }
 export interface Lease {
   taskId: string;
@@ -31,6 +32,17 @@ export interface Candidate {
   auditCount: 1;
   independentAudit: boolean;
   observedModel: Model;
+  evidenceId: string;
+}
+/** Independent milestone audit of a gate candidate (ORCH-1.1 §2: two auditors per gate). */
+export interface GateAudit {
+  auditorId: string;
+  candidateSha: string;
+  /** Task candidate SHAs contained in the audited cumulative candidate. */
+  coveredShas: string[];
+  provider: Provider;
+  observedModel: Model;
+  verdict: 'approve' | 'request_changes';
   evidenceId: string;
 }
 export interface RuntimeSnapshot {

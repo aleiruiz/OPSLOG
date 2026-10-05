@@ -4,6 +4,7 @@ export const opslogTokens = {
     surface: '#FFFFFF',
     border: '#E3E6EB',
     borderStrong: '#C9CFD8',
+    inputBorder: '#6B7280',
     text: '#171A1F',
     textSecondary: '#3E4650',
     textMuted: '#5C6571',

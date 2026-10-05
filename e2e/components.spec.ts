@@ -95,6 +95,14 @@ test.describe('OPSLOG UI components in a real browser', () => {
     ).toBe('14px');
   });
 
+  test('draws text-field borders with at least 3:1 contrast', async ({ page }) => {
+    const border = await page
+      .locator('.MuiOutlinedInput-notchedOutline')
+      .first()
+      .evaluate((node) => getComputedStyle(node).borderTopColor);
+    expect(border).toBe('rgb(107, 114, 128)');
+  });
+
   test('does not overflow horizontally at 360px or 1280px', async ({ page }) => {
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     for (const width of [360, 1280]) {

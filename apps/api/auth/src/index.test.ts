@@ -215,4 +215,78 @@ describe('auth API trust boundaries', () => {
       status: 'active',
     });
   });
+
+  it('returns the tenant context for a valid session and rejects invalid ones', async () => {
+    const service = new IdentityService(new InMemoryIdentityStore(), {
+      deliver: async () => undefined,
+    });
+    const api = new AuthApi(service, {
+      resolveActiveTenant: async () => 'tenant-a',
+      resolvePermissions: async () => [],
+    });
+    const identityId = await enroll(service, 'tenant-a', 'oidc-test', 'session-user');
+    const { token } = await service.createSession(identityId, 'tenant-a');
+
+    await expect(api.session(token, 'corr-s')).resolves.toEqual({
+      ok: true,
+      value: {
+        tenantId: 'tenant-a',
+        actor: { subject: identityId, kind: 'user' },
+        authorizationVersion: 1,
+        correlationId: 'corr-s',
+      },
+    });
+    await expect(api.session('unknown-token', 'corr-s')).resolves.toEqual({
+      ok: false,
+      error: { code: 'unauthorized', message: 'Authentication required' },
+    });
+    await expect(api.session(token, '')).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'unauthorized' },
+    });
+    await api.logout(token);
+    await expect(api.session(token, 'corr-s')).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'unauthorized' },
+    });
+  });
+
+  it('logs out successfully and hides unexpected failures behind a generic error', async () => {
+    const service = new IdentityService(new InMemoryIdentityStore(), {
+      deliver: async () => undefined,
+    });
+    const api = new AuthApi(service, {
+      resolveActiveTenant: async () => null,
+      resolvePermissions: async () => [],
+    });
+    await expect(api.logout('never-issued')).resolves.toEqual({ ok: true, value: null });
+
+    const boom = new IdentityService(new InMemoryIdentityStore(), {
+      deliver: async () => undefined,
+    });
+    boom.authenticate = async () => {
+      throw new Error('database password leaked');
+    };
+    const failing = new AuthApi(boom, {
+      resolveActiveTenant: async () => null,
+      resolvePermissions: async () => [],
+    });
+    const expected = { ok: false, error: { code: 'internal_error', message: 'Request failed' } };
+    await expect(failing.session('t', 'c')).resolves.toEqual(expected);
+    await expect(failing.authorize('t', 'c', 'view')).resolves.toEqual(expected);
+  });
+
+  it('reports non-string authorize input as unauthorized', async () => {
+    const service = new IdentityService(new InMemoryIdentityStore(), {
+      deliver: async () => undefined,
+    });
+    const api = new AuthApi(service, {
+      resolveActiveTenant: async () => null,
+      resolvePermissions: async () => ['view'],
+    });
+    await expect(api.authorize('token', 7 as unknown as string, 'view')).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'unauthorized' },
+    });
+  });
 });
