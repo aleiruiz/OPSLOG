@@ -64,7 +64,7 @@ export class OrchestratorRuntime {
     }
     if (task.status !== 'ready') throw new Error(`task ${taskId} is not ready`);
     for (let stage = 0; stage < task.stage; stage += 1)
-      if (this.gates.get(stage) !== 'passed')
+      if (this.gates.has(stage) && this.gates.get(stage) !== 'passed')
         throw new Error(`stage ${task.stage} is blocked by gate ${stage}`);
     for (const dependency of task.dependencies)
       if (this.tasks.get(dependency)?.status !== 'completed')
@@ -119,8 +119,12 @@ export class OrchestratorRuntime {
       throw new Error('stale fencing token');
     if (lease.expiresAt <= now) throw new Error('lease expired');
     if (!candidateSha) throw new Error('candidate SHA is required');
+    for (let stage = 0; stage < task.stage; stage += 1)
+      if (this.gates.has(stage) && this.gates.get(stage) !== 'passed')
+        throw new Error(`stage ${task.stage} is blocked by gate ${stage}`);
     this.eventIds.add(eventId);
     task.candidateSha = candidateSha;
+    task.author = lease.owner;
     task.status = 'completed';
     this.leases.delete(taskId);
   }
@@ -146,7 +150,7 @@ export class OrchestratorRuntime {
   ): void {
     if (status === 'passed') {
       for (let earlier = 0; earlier < stage; earlier += 1)
-        if (this.gates.get(earlier) !== 'passed')
+        if (this.gates.has(earlier) && this.gates.get(earlier) !== 'passed')
           throw new Error(`gate ${earlier} must pass before gate ${stage}`);
       if ([...this.leases.values()].some((lease) => this.tasks.get(lease.taskId)?.stage === stage))
         throw new Error(`cannot pass gate ${stage} with active leases`);
@@ -169,23 +173,38 @@ export class OrchestratorRuntime {
     }
     this.gates.set(stage, status);
   }
+  /**
+   * ORCH-1.1 §2: a gate needs two independent approving auditors who all reviewed the same
+   * cumulative candidate SHA, and none of them may be an author of a task in the stage.
+   */
   private requireGateAudits(stageTasks: Task[], audits: GateAudit[]): void {
-    const shas = new Set(stageTasks.map((task) => task.candidateSha));
+    if (audits.some((audit) => audit.verdict !== 'approve'))
+      throw new Error('a gate auditor requested changes');
+    const authors = new Set(stageTasks.map((task) => task.author));
     const valid = audits.filter(
       (audit) =>
-        audit.verdict === 'approve' &&
         audit.provider === this.provider &&
         audit.observedModel === AUDIT_MODEL_BY_PROVIDER[this.provider] &&
         audit.evidenceId.length > 0 &&
         audit.auditorId.length > 0 &&
-        shas.has(audit.candidateSha),
+        audit.candidateSha.length > 0 &&
+        !authors.has(audit.auditorId),
     );
-    if (audits.some((audit) => audit.verdict !== 'approve'))
-      throw new Error('a gate auditor requested changes');
-    if (new Set(valid.map((audit) => audit.auditorId)).size < 2)
+    const bySha = new Map<string, Set<string>>();
+    for (const audit of valid)
+      bySha.set(
+        audit.candidateSha,
+        (bySha.get(audit.candidateSha) ?? new Set()).add(audit.auditorId),
+      );
+    if (new Set(audits.map((audit) => audit.candidateSha)).size > 1)
+      throw new Error('gate audits must review the same candidate SHA');
+    if (![...bySha.values()].some((auditors) => auditors.size >= 2))
       throw new Error('a gate needs two independent approving auditors');
   }
-  /** A gate that fails or reopens invalidates every later gate (gates are cumulative). */
+  /**
+   * A gate that fails or reopens invalidates every later gate (gates are cumulative). Leases already
+   * granted in later stages survive but cannot complete until the earlier gate passes again.
+   */
   private invalidateFrom(stage: number): void {
     for (const [known, status] of this.gates)
       if (known >= stage && status === 'passed') this.gates.set(known, 'pending');
@@ -215,16 +234,24 @@ export class OrchestratorRuntime {
     runtime.fencing = snapshot.fencing;
     runtime.register(snapshot.tasks);
     runtime.leases.clear();
+    for (const lease of snapshot.leases) {
+      const leased = runtime.tasks.get(lease.taskId);
+      if (!leased || leased.status !== 'leased' || lease.epoch !== snapshot.epoch)
+        throw new Error(`snapshot lease for ${lease.taskId} is inconsistent`);
+    }
     for (const lease of snapshot.leases)
       runtime.leases.set(lease.taskId, { ...lease, requestedPaths: [...lease.requestedPaths] });
     for (const [stage, status] of Object.entries(snapshot.gates)) {
       const number = Number(stage);
       if (status === 'passed') {
         const stageTasks = snapshot.tasks.filter((task) => task.stage === number);
-        if (stageTasks.length === 0 || stageTasks.some((task) => task.status !== 'completed'))
+        if (
+          stageTasks.length === 0 ||
+          stageTasks.some((task) => task.status !== 'completed' || !task.candidateSha)
+        )
           throw new Error(`snapshot gate ${stage} passed without completed tasks`);
         for (let earlier = 0; earlier < number; earlier += 1)
-          if (snapshot.gates[earlier] !== 'passed')
+          if (earlier in snapshot.gates && snapshot.gates[earlier] !== 'passed')
             throw new Error(`snapshot gate ${stage} passed before gate ${earlier}`);
       }
       runtime.gates.set(number, status);

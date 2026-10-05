@@ -31,3 +31,7 @@ El entrypoint exporta `Button`, `Field`, `FormSection`, `SeverityBadge`, `DataTa
 - Tokens de escala: `typography.sizes` (14/22/16 px) y `spacingScale` (4/8/12/16/24/32/48) siguen SPECS §8 y alimentan el tema.
 - Fuentes: IBM Plex Sans y Mono se autoalojan desde paquetes npm fijados (`packages/ui/src/fonts.ts`), sin CDN.
 - Snapshots: el árbol de accesibilidad de la galería se compara con `e2e/components.spec.ts-snapshots/gallery.aria.yml`. **Diferido explícitamente:** snapshots de píxeles (dependen del renderer de CI) y un runtime de Storybook; las stories `*.stories.tsx` se renderizan en el navegador con un renderizador CSF mínimo (`e2e/browser-app/stories.tsx`) y se escanean con axe (WCAG 2.1 A/AA); un runtime de Storybook queda diferido a antes de la primera pantalla funcional y no más tarde de G1. Las fuentes IBM Plex se cargan desde el entrypoint del paquete (`packages/ui/src/fonts.ts`). El indicador de foco es un contorno sólido de 3px con offset 2px, verificado por teclado en `e2e/components.spec.ts`.
+
+## Borde de campos de texto
+
+Los campos usan el token `inputBorder` (`#6B7280`, aprox. 4,8:1 sobre la superficie y 4,2:1 sobre el fondo de página) para cumplir WCAG 1.4.11 (contraste de componentes ≥3:1). Es una desviación deliberada de la paleta de bordes de la referencia (`#E3E6EB`/`#C9CFD8`), que se conserva para divisores y tarjetas.

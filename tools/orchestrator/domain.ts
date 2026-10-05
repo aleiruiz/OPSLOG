@@ -9,6 +9,7 @@ export interface Task {
   dependencies: string[];
   allowedPaths: string[];
   candidateSha?: string;
+  author?: string;
 }
 export interface Lease {
   taskId: string;

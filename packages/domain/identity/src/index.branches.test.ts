@@ -94,7 +94,7 @@ describe('InMemoryIdentityStore lookups and guards', () => {
     ).resolves.toMatchObject({ membership: { id: expect.any(String), status: 'active' } });
   });
 
-  it('refuses activation for a revoked identity or a membership that is not pending', async () => {
+  it('refuses activation for a revoked membership or a membership that is not pending', async () => {
     const store = new InMemoryIdentityStore();
     const auth = new IdentityService(store, notifier);
     const invitation = await auth.issueInvitation('tenant-a');
@@ -199,7 +199,7 @@ describe('IdentityService input and state guards', () => {
     await expect(code(auth.issueInvitation('t', 'i', Infinity))).resolves.toBe('invalid_input');
   });
 
-  it('issueInvitation conflicts on a revoked identity', async () => {
+  it('issueInvitation conflicts on a revoked membership', async () => {
     class Revoked extends InMemoryIdentityStore {
       public revoked = false;
       public override async findIdentity(id: string) {

@@ -32,6 +32,8 @@ describe('design tokens', () => {
     const { inputBorder, surface, background } = opslogTokens.colors;
     expect(ratio(inputBorder, surface)).toBeGreaterThanOrEqual(3);
     expect(ratio(inputBorder, background)).toBeGreaterThanOrEqual(3);
-    expect(opslogTheme.components?.MuiOutlinedInput?.styleOverrides).toBeDefined();
+    expect(opslogTheme.components?.MuiOutlinedInput?.styleOverrides).toMatchObject({
+      notchedOutline: { borderColor: inputBorder },
+    });
   });
 });
