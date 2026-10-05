@@ -96,6 +96,7 @@ test.describe('OPSLOG UI components in a real browser', () => {
   });
 
   test('does not overflow horizontally at 360px or 1280px', async ({ page }) => {
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     for (const width of [360, 1280]) {
       await page.setViewportSize({ width, height: 800 });
       const overflow = await page.evaluate(
@@ -112,6 +113,7 @@ test.describe('OPSLOG UI components in a real browser', () => {
     await expect(page.getByText('Filtro actual: tenant')).toBeVisible();
     await expect(filter).toBeFocused();
     await expect(filter).toHaveCSS('outline-style', 'solid');
+    await expect(filter).toHaveCSS('outline-width', '3px');
 
     const checkbox = page.getByRole('checkbox', { name: 'Seleccionar tenant-a' });
     await checkbox.focus();
@@ -138,7 +140,7 @@ test.describe('OPSLOG stories render and pass accessibility checks', () => {
     await page.goto('/stories.html');
     await expect(page.getByRole('heading', { name: 'Stories OPSLOG' })).toBeVisible();
     // Foundations: StatusBadge, UiState and the base components each contribute stories.
-    expect(await page.locator('main > section').count()).toBeGreaterThanOrEqual(10);
+    expect(await page.locator('main > section').count()).toBeGreaterThanOrEqual(17);
     const results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
       .analyze();
