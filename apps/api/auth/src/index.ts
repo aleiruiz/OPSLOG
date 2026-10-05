@@ -26,7 +26,7 @@ export class AuthApi {
   ): Promise<AuthResponse<{ token: string; expiresAt: Date }>> {
     try {
       if (!isVerifiedExternalPrincipal(principal)) throw new AuthError('unauthorized');
-      const identity = await this.service.linkExternal(principal.provider, principal.subject);
+      const identity = await this.service.resolveExternal(principal.provider, principal.subject);
       const tenantId = await this.accessResolver.resolveActiveTenant(identity.id);
       if (!tenantId) throw new AuthError('unauthorized');
       return { ok: true, value: await this.service.createSession(identity.id, tenantId) };

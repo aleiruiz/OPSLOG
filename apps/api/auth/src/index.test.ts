@@ -16,6 +16,17 @@ const verifiedPrincipal = (subject: string) =>
     'synthetic-nonce',
   );
 
+const enroll = async (
+  service: IdentityService,
+  tenantId: string,
+  provider: string,
+  subject: string,
+): Promise<string> => {
+  const invitation = await service.issueInvitation(tenantId);
+  await service.activateInvitation(invitation.token, provider, subject);
+  return invitation.identityId;
+};
+
 describe('auth API trust boundaries', () => {
   it('derives active tenant and permissions from the server resolver', async () => {
     const service = new IdentityService(new InMemoryIdentityStore(), {
@@ -27,7 +38,9 @@ describe('auth API trust boundaries', () => {
     };
     const api = new AuthApi(service, accessResolver);
 
-    const login = await api.login(await verifiedPrincipal('subject-1'));
+    const principal = await verifiedPrincipal('subject-1');
+    await enroll(service, 'tenant-from-membership', principal.provider, principal.subject);
+    const login = await api.login(principal);
     expect(login.ok).toBe(true);
     if (!login.value) throw new Error('login should return a session');
     await expect(service.authenticate(login.value.token, 'corr-1')).resolves.toMatchObject({
@@ -74,8 +87,8 @@ describe('auth API trust boundaries', () => {
     const service = new IdentityService(new InMemoryIdentityStore(), {
       deliver: async () => undefined,
     });
-    const identityA = await service.linkExternal('oidc-test', 'session-a');
-    const identityB = await service.linkExternal('oidc-test', 'session-b');
+    const identityA = { id: await enroll(service, 'tenant-a', 'oidc-test', 'session-a') };
+    const identityB = { id: await enroll(service, 'tenant-b', 'oidc-test', 'session-b') };
     const sessionA = await service.createSession(identityA.id, 'tenant-a');
     const sessionB = await service.createSession(identityB.id, 'tenant-b');
     const seenContexts: Array<{ tenantId: string; actorSubject: string }> = [];
@@ -115,6 +128,39 @@ describe('auth API trust boundaries', () => {
     await expect(api.login(await verifiedPrincipal('subject-2'))).resolves.toMatchObject({
       ok: false,
       error: { code: 'unauthorized', message: 'Authentication required' },
+    });
+  });
+
+  it('does not provision identities at login, so invitations stay usable afterwards', async () => {
+    const store = new InMemoryIdentityStore();
+    const service = new IdentityService(store, { deliver: async () => undefined });
+    const api = new AuthApi(service, {
+      resolveActiveTenant: async () => 'tenant-a',
+      resolvePermissions: async () => [],
+    });
+    const principal = await verifiedPrincipal('invitee-logs-in-first');
+    await expect(api.login(principal)).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'unauthorized' },
+    });
+    await expect(store.findExternal(principal.provider, principal.subject)).resolves.toBeNull();
+    const invitation = await service.issueInvitation('tenant-a');
+    await expect(api.activateInvitation(invitation.token, principal)).resolves.toMatchObject({
+      ok: true,
+    });
+  });
+
+  it('rejects logout input that is not a token', async () => {
+    const service = new IdentityService(new InMemoryIdentityStore(), {
+      deliver: async () => undefined,
+    });
+    const api = new AuthApi(service, {
+      resolveActiveTenant: async () => null,
+      resolvePermissions: async () => [],
+    });
+    await expect(api.logout(42 as unknown as string)).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'invalid_input' },
     });
   });
 
@@ -163,7 +209,7 @@ describe('auth API trust boundaries', () => {
       },
     });
     await expect(
-      service.linkExternal(principal.provider, principal.subject),
+      service.provisionExternal(principal.provider, principal.subject),
     ).resolves.toMatchObject({ id: invitation.identityId });
     await expect(store.findMembership('tenant-a', invitation.identityId)).resolves.toMatchObject({
       status: 'active',

@@ -112,7 +112,11 @@ export interface IdentityStore {
     membership: Membership,
     invitation: Invitation,
   ): Promise<void>;
-  /** Atomically consume the unexpired invitation, bind the verified subject, and activate identity plus membership. */
+  /**
+   * Atomically consume the unexpired invitation, bind the verified subject, and activate identity plus membership.
+   * An identity that already has an external link, or is not pending, may only be activated by that same
+   * provider+subject; a different subject must be rejected (returns null) so a leaked token cannot take over an account.
+   */
   activateInvitation(
     tokenHash: string,
     provider: string,
@@ -120,8 +124,14 @@ export interface IdentityStore {
     activatedAt: Date,
   ): Promise<InvitationActivation | null>;
   findRecovery(tokenHash: string): Promise<RecoveryRequest | null>;
+  /** Persist the request and invalidate any older unused recovery requests of the same identity. */
   saveRecovery(request: RecoveryRequest): Promise<void>;
+  /** Conditional atomic update: only when `usedAt IS NULL AND expiresAt > usedAt`. */
   consumeRecovery(id: string, usedAt: Date): Promise<boolean>;
+  /** Mark the membership revoked; returns false when it does not exist or is already revoked. */
+  revokeMembership(tenantId: string, identityId: string): Promise<boolean>;
+  /** Atomically increment the identity authorizationVersion, invalidating its existing sessions. */
+  bumpAuthorizationVersion(identityId: string): Promise<Identity | null>;
   saveSession(session: Session): Promise<void>;
   findSession(tokenHash: string): Promise<Session | null>;
   revokeSession(id: string, revokedAt: Date): Promise<boolean>;
@@ -202,12 +212,17 @@ export class InMemoryIdentityStore implements IdentityStore {
     const membership = this.memberships.get(membershipKey);
     const externalKey = `${provider}\u0000${subject}`;
     const linked = this.external.get(externalKey);
+    const identityLink = identity
+      ? [...this.external.values()].find((item) => item.identityId === identity.id)
+      : undefined;
     if (
       !identity ||
       identity.status === 'revoked' ||
       !membership ||
       membership.status !== 'pending' ||
-      (linked !== undefined && linked.identityId !== identity.id)
+      (linked !== undefined && linked.identityId !== identity.id) ||
+      (identityLink !== undefined && identityLink !== linked) ||
+      (identityLink === undefined && identity.status !== 'pending')
     )
       return null;
     const activatedIdentity: Identity = { ...identity, status: 'active' };
@@ -236,13 +251,30 @@ export class InMemoryIdentityStore implements IdentityStore {
     );
   }
   public async saveRecovery(request: RecoveryRequest) {
+    for (const [id, item] of this.recoveries)
+      if (item.identityId === request.identityId && !item.usedAt)
+        this.recoveries.set(id, { ...item, usedAt: request.expiresAt });
     this.recoveries.set(request.id, request);
   }
   public async consumeRecovery(id: string, usedAt: Date) {
     const item = this.recoveries.get(id);
-    if (!item || item.usedAt) return false;
+    if (!item || item.usedAt || item.expiresAt <= usedAt) return false;
     this.recoveries.set(id, { ...item, usedAt });
     return true;
+  }
+  public async revokeMembership(tenantId: string, identityId: string) {
+    const key = `${tenantId}\u0000${identityId}`;
+    const item = this.memberships.get(key);
+    if (!item || item.status === 'revoked') return false;
+    this.memberships.set(key, { ...item, status: 'revoked' });
+    return true;
+  }
+  public async bumpAuthorizationVersion(identityId: string) {
+    const item = this.identities.get(identityId);
+    if (!item) return null;
+    const next: Identity = { ...item, authorizationVersion: item.authorizationVersion + 1 };
+    this.identities.set(identityId, next);
+    return next;
   }
   public async saveSession(session: Session) {
     this.sessions.set(session.id, session);
@@ -262,13 +294,24 @@ export class InMemoryIdentityStore implements IdentityStore {
 
 const nonEmpty = (value: string): boolean => value.trim().length > 0 && value.length <= 200;
 export class IdentityService {
+  private readonly pending = new Set<Promise<void>>();
   public constructor(
     private readonly store: IdentityStore,
     private readonly recoveryNotifier: RecoveryNotifier,
     private readonly tokens: TokenGenerator = opaqueTokenGenerator,
     private readonly now: () => Date = () => new Date(),
   ) {}
-  public async linkExternal(provider: string, subject: string): Promise<Identity> {
+  /** Resolve an already-linked external subject. Never provisions: identities are created only by invitations. */
+  public async resolveExternal(provider: string, subject: string): Promise<Identity> {
+    if (!nonEmpty(provider) || !nonEmpty(subject)) throw new AuthError('invalid_input');
+    const existing = await this.store.findExternal(provider, subject);
+    if (!existing) throw new AuthError('unauthorized');
+    const identity = await this.store.findIdentity(existing.identityId);
+    if (!identity || identity.status !== 'active') throw new AuthError('unauthorized');
+    return identity;
+  }
+  /** Bootstrap/administration only (e.g. first tenant owner); not reachable from AuthApi.login. */
+  public async provisionExternal(provider: string, subject: string): Promise<Identity> {
     if (!nonEmpty(provider) || !nonEmpty(subject)) throw new AuthError('invalid_input');
     const existing = await this.store.findExternal(provider, subject);
     if (existing) {
@@ -355,24 +398,30 @@ export class IdentityService {
   ): Promise<{ accepted: true }> {
     if (!nonEmpty(identityId) || !Number.isFinite(ttlMs) || ttlMs <= 0)
       throw new AuthError('invalid_input');
+    // Existing and unknown identities run the same foreground path; all lookups and delivery
+    // happen in the background so response time does not reveal whether the account exists.
+    const work = this.deliverRecovery(identityId, ttlMs).catch(() => undefined);
+    this.pending.add(work);
+    void work.finally(() => this.pending.delete(work));
+    return { accepted: true };
+  }
+  /** Resolves when background recovery deliveries have finished (tests, graceful shutdown). */
+  public async settled(): Promise<void> {
+    while (this.pending.size > 0) await Promise.all([...this.pending]);
+  }
+  private async deliverRecovery(identityId: string, ttlMs: number): Promise<void> {
     const token = this.tokens.create();
     const identity = await this.store.findIdentity(identityId);
-    if (identity?.status === 'active') {
-      const expiresAt = new Date(this.now().getTime() + ttlMs);
-      await this.store.saveRecovery({
-        id: randomUUID(),
-        identityId,
-        tokenHash: this.tokens.hash(token),
-        expiresAt,
-        usedAt: null,
-      });
-      try {
-        await this.recoveryNotifier.deliver(identity.id, token, expiresAt);
-      } catch {
-        // Preserve the same public response for existing and unknown identities.
-      }
-    }
-    return { accepted: true };
+    if (identity?.status !== 'active') return;
+    const expiresAt = new Date(this.now().getTime() + ttlMs);
+    await this.store.saveRecovery({
+      id: randomUUID(),
+      identityId,
+      tokenHash: this.tokens.hash(token),
+      expiresAt,
+      usedAt: null,
+    });
+    await this.recoveryNotifier.deliver(identity.id, token, expiresAt);
   }
   public async consumeRecovery(token: string): Promise<Identity> {
     if (!nonEmpty(token)) throw new AuthError('invalid_input');
@@ -383,7 +432,17 @@ export class IdentityService {
       throw new AuthError('conflict');
     const identity = await this.store.findIdentity(request.identityId);
     if (!identity || identity.status !== 'active') throw new AuthError('unauthorized');
-    return identity;
+    // Recovery means the credential may be compromised: invalidate every existing session.
+    const bumped = await this.store.bumpAuthorizationVersion(identity.id);
+    if (!bumped) throw new AuthError('unauthorized');
+    return bumped;
+  }
+  /** Revoke a tenant membership and invalidate the identity's sessions. Callers must authorize `manage_users` first. */
+  public async revokeMembership(tenantId: string, identityId: string): Promise<void> {
+    if (!nonEmpty(tenantId) || !nonEmpty(identityId)) throw new AuthError('invalid_input');
+    if (!(await this.store.revokeMembership(tenantId, identityId)))
+      throw new AuthError('not_found');
+    await this.store.bumpAuthorizationVersion(identityId);
   }
   public async createSession(identityId: string, tenantId: string, ttlMs = 8 * 60 * 60 * 1000) {
     if (!nonEmpty(identityId) || !nonEmpty(tenantId) || !Number.isFinite(ttlMs) || ttlMs <= 0)
@@ -418,6 +477,8 @@ export class IdentityService {
       identity.authorizationVersion !== session.authorizationVersion
     )
       throw new AuthError('unauthorized');
+    const membership = await this.store.findMembership(session.tenantId, identity.id);
+    if (membership?.status !== 'active') throw new AuthError('unauthorized');
     return Object.freeze({
       tenantId: session.tenantId,
       actor: Object.freeze({ subject: identity.id, kind: 'user' as const }),
@@ -426,6 +487,7 @@ export class IdentityService {
     });
   }
   public async revoke(token: string): Promise<void> {
+    if (typeof token !== 'string' || !nonEmpty(token)) throw new AuthError('invalid_input');
     const session = await this.store.findSession(this.tokens.hash(token));
     if (session) await this.store.revokeSession(session.id, this.now());
   }
