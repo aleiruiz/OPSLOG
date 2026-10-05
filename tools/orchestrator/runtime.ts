@@ -137,6 +137,8 @@ export class OrchestratorRuntime {
   }
   public setGate(stage: number, status: GateStatus, candidates: Candidate[] = []): void {
     if (status === 'passed') {
+      if (stage > 0 && this.gates.get(stage - 1) !== 'passed')
+        throw new Error(`gate ${stage - 1} must pass before gate ${stage}`);
       if ([...this.leases.values()].some((lease) => this.tasks.get(lease.taskId)?.stage === stage))
         throw new Error(`cannot pass gate ${stage} with active leases`);
       const stageTasks = [...this.tasks.values()].filter((task) => task.stage === stage);

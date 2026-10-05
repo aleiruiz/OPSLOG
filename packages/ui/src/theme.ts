@@ -14,6 +14,8 @@ export const opslogTheme = createTheme({
   typography: {
     fontFamily: opslogTokens.typography.fontFamily,
     fontSize: opslogTokens.typography.baseSize,
+    h1: { fontSize: `${opslogTokens.typography.sizes.h1}px` },
+    h2: { fontSize: `${opslogTokens.typography.sizes.h2}px` },
   },
   shape: { borderRadius: opslogTokens.shape.cardRadius },
   spacing: opslogTokens.spacing,

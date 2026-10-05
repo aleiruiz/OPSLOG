@@ -90,6 +90,11 @@ describe('orchestrator runtime', () => {
     ).not.toThrow();
     expect(runtime.validateCandidate({ ...evidence('b', 'head-b'), auditSha: 'old' })).toBe(false);
   });
+  it('does not let a later gate pass before the previous gate passed', () => {
+    const runtime = new OrchestratorRuntime();
+    runtime.register([task('a', 0), task('b', 1)]);
+    expect(() => runtime.setGate(1, 'passed', [])).toThrow('must pass before');
+  });
   it('persists fencing, events and provider epoch through restore', () => {
     const runtime = new OrchestratorRuntime();
     runtime.register([task('a')]);
