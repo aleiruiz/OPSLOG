@@ -1,0 +1,17 @@
+{
+  "specification": "SPEC-1.4",
+  "orchestration": "ORCH-1.4",
+  "baseline": "OPSLOG-1.4",
+  "inherits": "OPSLOG-1.3",
+  "adoption": "Direct user instruction 2026-10-05; Claude model pins and Opus code review only",
+  "files": [
+    {
+      "path": "docs/baselines/1.4/SPECS.md",
+      "sha256": "3b4dd6ffda5a63448f0fd1ca14d08ada275269d4510590d3c8cca5531afe4c9a"
+    },
+    {
+      "path": "docs/baselines/1.4/Orchestrator.md",
+      "sha256": "d670d4b24c7596e7871346a33726141f5535add516085a23fe51623cdd35a762"
+    }
+  ]
+}
