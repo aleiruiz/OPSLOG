@@ -33,12 +33,74 @@ describe('auth API trust boundaries', () => {
     await expect(service.authenticate(login.value.token, 'corr-1')).resolves.toMatchObject({
       tenantId: 'tenant-from-membership',
     });
-    const context = await service.authenticate(login.value.token, 'corr-2');
-    await expect(api.authorize(context, 'view')).resolves.toEqual({ ok: true, value: null });
-    await expect(api.authorize(context, 'manage_users')).resolves.toMatchObject({
-      ok: false,
-      error: { code: 'forbidden', message: 'Authentication request rejected' },
+    await expect(api.authorize(login.value.token, 'corr-2', 'view')).resolves.toEqual({
+      ok: true,
+      value: null,
     });
+    await expect(api.authorize(login.value.token, 'corr-2', 'manage_users')).resolves.toMatchObject(
+      {
+        ok: false,
+        error: { code: 'forbidden', message: 'Authentication request rejected' },
+      },
+    );
+  });
+
+  it('rejects a forged tenant and actor context before resolving permissions', async () => {
+    let permissionLookups = 0;
+    const service = new IdentityService(new InMemoryIdentityStore(), {
+      deliver: async () => undefined,
+    });
+    const api = new AuthApi(service, {
+      resolveActiveTenant: async () => 'tenant-a',
+      resolvePermissions: async () => {
+        permissionLookups += 1;
+        return ['manage_users'];
+      },
+    });
+    const forgedContext = {
+      tenantId: 'tenant-admin',
+      actor: { subject: 'forged-admin', kind: 'user' },
+      authorizationVersion: 1,
+      correlationId: 'forged-correlation',
+    };
+
+    await expect(
+      api.authorize(forgedContext as unknown as string, 'corr-forged', 'manage_users'),
+    ).resolves.toMatchObject({ ok: false, error: { code: 'unauthorized' } });
+    expect(permissionLookups).toBe(0);
+  });
+
+  it('derives tenant and actor from the session and rejects cross-session scope mismatch', async () => {
+    const service = new IdentityService(new InMemoryIdentityStore(), {
+      deliver: async () => undefined,
+    });
+    const identityA = await service.linkExternal('oidc-test', 'session-a');
+    const identityB = await service.linkExternal('oidc-test', 'session-b');
+    const sessionA = await service.createSession(identityA.id, 'tenant-a');
+    const sessionB = await service.createSession(identityB.id, 'tenant-b');
+    const seenContexts: Array<{ tenantId: string; actorSubject: string }> = [];
+    const api = new AuthApi(service, {
+      resolveActiveTenant: async () => null,
+      resolvePermissions: async (context) => {
+        seenContexts.push({ tenantId: context.tenantId, actorSubject: context.actor.subject });
+        return context.tenantId === 'tenant-b' && context.actor.subject === identityB.id
+          ? ['manage_users']
+          : [];
+      },
+    });
+
+    await expect(api.authorize(sessionA.token, 'corr-a', 'manage_users')).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'forbidden' },
+    });
+    await expect(api.authorize(sessionB.token, 'corr-b', 'manage_users')).resolves.toEqual({
+      ok: true,
+      value: null,
+    });
+    expect(seenContexts).toEqual([
+      { tenantId: 'tenant-a', actorSubject: identityA.id },
+      { tenantId: 'tenant-b', actorSubject: identityB.id },
+    ]);
   });
 
   it('denies login when trusted server state has no active membership', async () => {

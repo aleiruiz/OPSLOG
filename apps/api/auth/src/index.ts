@@ -64,10 +64,14 @@ export class AuthApi {
     }
   }
   public async authorize(
-    context: TenantContext,
+    sessionToken: string,
+    correlationId: string,
     permission: Permission,
   ): Promise<AuthResponse<null>> {
     try {
+      if (typeof sessionToken !== 'string' || typeof correlationId !== 'string')
+        throw new AuthError('unauthorized');
+      const context = await this.service.authenticate(sessionToken, correlationId);
       const granted = await this.accessResolver.resolvePermissions(context);
       await this.service.requirePermission(context, permission, granted);
       return { ok: true, value: null };
