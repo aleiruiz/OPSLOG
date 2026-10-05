@@ -13,6 +13,7 @@ Ambos auditores ejecutaron por su cuenta install, `baseline:check`, lint, `forma
 
 ## Historial de la ronda
 
+0. `776abce` (main tras #20): primera revisión de G0 (cambios solicitados; conclusiones recogidas en las rondas siguientes; el informe vive en el almacén del proyecto, no en el repositorio).
 1. `940fbdf`: la primera revisión y dos auditores solicitaron cambios (informes en el almacén del proyecto; PR #21 y #22 los atendieron).
 2. `89d3de1`: dos auditores solicitaron cambios (`previous-audit-a-89d3de1.md`, `previous-audit-b-89d3de1.md`). Bloqueos: umbrales 90/85 solo en ui, contracts y orquestador; huecos en gates del orquestador; diferimiento de FND-ORCH sin autoridad; contraste de bordes de campos (~1,7:1); `main` sin branch protection.
 3. #23 cerró los bloqueos de código (gates acumulativos con dos auditores no autores sobre un mismo SHA que cubre todos los candidatos de la etapa; contraste 4,8:1; umbrales 90/85 en los 12 paquetes de producción y el orquestador). La decisión sobre FND-ORCH la tomó el usuario (ADR-0008).
@@ -29,7 +30,24 @@ Ambos auditores ejecutaron por su cuenta install, `baseline:check`, lint, `forma
 
 ## Hallazgos no bloqueantes (a atender en G1)
 
-- Umbral 95/90 de §9.1 para auth/identity/tenancy: hoy se cumple salvo funciones de `persistence-tenancy` (91 %, por `entities.ts`), pero el CI exige 90/85.
+- Umbral 95/90 de §9.1 para auth/identity/tenancy: se cumple por medición (p. ej. tenancy 96,2 % líneas / 95,8 % ramas) pero el CI solo exige 90/85.
+- `TenantControlPlane.provision` sin comprobación de autorización propia y regla del último administrador sin aplicar (pertenece al adaptador de auth persistente); `handoff` impide que candidatos del proveedor anterior pasen un gate (tensión con ADR-0007); `requestedPaths` vacío da un lease que no bloquea nada; un titular de lease vencido o un identificador que difiere solo en mayúsculas/espacios cuenta como auditor independiente; Tabs de MUI en mayúsculas; `pnpm audit` con 3 avisos moderados; CORE-AUTH-M1 aún dice que `format:check` falla.
 - Runtime del orquestador (aún sin conectar): una etapa sin gate registrado cuenta como abierta; `register` acepta `stage` no entero y tareas ya `completed`; dedupe global por `eventId`; `restore` no valida rutas de lease ni puede re-verificar evidencia; los locks de rutas ignoran globs `*`.
 - Trazabilidad: la matriz de FND-CONTRACTS no incluye aún el código M1 fusionado.
 - Documentación: líneas históricas de proveedor en `docs/tasks/FND-ORCH.md` y referencia a un informe 776abce que no está en el repositorio (ADR-0008) — corregidas en este mismo cambio.
+
+## Inventario acumulativo (PR y SHA de fusión en `main`)
+
+| PR     | Contenido                                                                                                                                                              | SHA de fusión |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| #1–#14 | Base M0 (FND-REPO/CONTRACTS/DS/AWS/ORCH/INTEGRATE, orquestador 1.2, handshake) integrada antes de esta ronda por Codex; los SHA individuales no se re-verificaron aquí | n/d           |
+| #19    | ADR-0007, baseline 1.4, pines de modelo                                                                                                                                | `e8c9305`     |
+| #17    | Auth e identidad                                                                                                                                                       | `cc56f1f`     |
+| #15    | Outbox de auditoría                                                                                                                                                    | `72db075`     |
+| #16    | Plano de control de tenancy                                                                                                                                            | `80fa641`     |
+| #20    | Seguimientos M1                                                                                                                                                        | `776abce`     |
+| #21    | Cierre de huecos G0 (CI, integridad de baseline, evidencia DS)                                                                                                         | `940fbdf`     |
+| #22    | Escala tipográfica, e2e de teclado/360px/stories, etiquetas de trazabilidad                                                                                            | `89d3de1`     |
+| #23    | Gates acumulativos, contraste de bordes, umbrales M1                                                                                                                   | `8b1b61c`     |
+
+Auditoría de cada PR: revisión de código Opus 5.5 sobre el headSHA vigente antes de fusionar (ADR-0007); la evidencia por PR está en las conversaciones de revisión, no en el repositorio. La decisión del usuario sobre el diferimiento de FND-ORCH se tomó mediante una tarjeta de decisión en la app el 2026-10-05 (sin identificador verificable desde el repositorio).
