@@ -1,0 +1,33 @@
+import { describe, expect, it } from 'vitest';
+import { InMemoryAuditStore, createAuditEvent, redactAuditData } from './index.js';
+
+describe('audit safety and tenant isolation', () => {
+  it('redacts PII and secrets recursively while preserving safe fields', () => {
+    const data = redactAuditData({
+      email: 'person@example.test',
+      nested: { token: 'Bearer secret-value' },
+      safe: 'ok',
+    });
+    expect(data).toEqual({ email: '[REDACTED]', nested: { token: '[REDACTED]' }, safe: 'ok' });
+  });
+  it('keeps A/B tenants isolated and deduplicates event ids', () => {
+    const store = new InMemoryAuditStore();
+    const event = (tenantId: string) =>
+      createAuditEvent(
+        { tenantId, actorId: 'opaque-actor', actorKind: 'system', correlationId: `${tenantId}-c` },
+        {
+          eventId: `${tenantId}-e`,
+          action: 'x',
+          entityType: 'x',
+          entityId: 'e',
+          occurredAt: '2026-10-04T00:00:00.000Z',
+        },
+      );
+    store.append(event('tenant-a'));
+    store.append(event('tenant-a'));
+    store.append(event('tenant-b'));
+    expect(store.list('tenant-a')).toHaveLength(1);
+    expect(store.list('tenant-b')).toHaveLength(1);
+    expect(store.list('tenant-a')[0]?.tenantId).toBe('tenant-a');
+  });
+});
