@@ -3,5 +3,9 @@
   "compilerOptions": {
     "rootDir": "../../../"
   },
-  "include": ["src/**/*.ts", "../../../packages/domain/identity/src/**/*.ts"]
+  "include": [
+    "src/**/*.ts",
+    "../../../packages/domain/identity/src/**/*.ts",
+    "../../../packages/platform/auth/src/**/*.ts"
+  ]
 }

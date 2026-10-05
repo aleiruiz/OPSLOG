@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { assertClaims, type ExternalClaims } from './index.js';
+import {
+  assertClaims,
+  isVerifiedExternalPrincipal,
+  type ExternalClaims,
+  verifyExternalPrincipal,
+} from './index.js';
 
 const valid: ExternalClaims = {
   issuer: 'https://issuer.example',
@@ -33,5 +38,54 @@ describe('OIDC callback claim validation', () => {
         'nonce-1',
       ),
     ).toThrow('identity verification failed');
+  });
+
+  it('creates a verified principal only after the server verifier and claim checks pass', async () => {
+    const principal = await verifyExternalPrincipal(
+      {
+        verify: async (_code, issuer, nonce) => ({ issuer, subject: 'subject-1', nonce }),
+      },
+      'synthetic-code',
+      'https://issuer.example',
+      'expected-nonce',
+    );
+    expect(isVerifiedExternalPrincipal(principal)).toBe(true);
+    expect(principal).toMatchObject({ provider: 'https://issuer.example', subject: 'subject-1' });
+    expect(
+      isVerifiedExternalPrincipal({ provider: 'https://issuer.example', subject: 'subject-1' }),
+    ).toBe(false);
+  });
+
+  it('does not mint a principal when server-side verification or expected claims fail', async () => {
+    const verifier = {
+      verify: async (_code: string, issuer: string, nonce: string) => ({
+        issuer,
+        subject: 'subject-1',
+        nonce: `${nonce}-wrong`,
+      }),
+    };
+    await expect(
+      verifyExternalPrincipal(
+        verifier,
+        'synthetic-code',
+        'https://issuer.example',
+        'expected-nonce',
+      ),
+    ).rejects.toThrow('identity verification failed');
+    await expect(
+      verifyExternalPrincipal(verifier, '', 'https://issuer.example', 'expected-nonce'),
+    ).rejects.toThrow('identity verification failed');
+    await expect(
+      verifyExternalPrincipal(
+        {
+          verify: async () => {
+            throw new Error('sensitive provider response');
+          },
+        },
+        'synthetic-code',
+        'https://issuer.example',
+        'expected-nonce',
+      ),
+    ).rejects.toThrow('identity verification failed');
   });
 });

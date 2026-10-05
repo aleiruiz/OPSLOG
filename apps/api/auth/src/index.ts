@@ -2,9 +2,11 @@ import {
   AuthError,
   IdentityService,
   type IdentityAccessResolver,
+  type InvitationActivation,
   type Permission,
   type TenantContext,
 } from '../../../../packages/domain/identity/src/index.js';
+import { isVerifiedExternalPrincipal } from '../../../../packages/platform/auth/src/index.js';
 export interface AuthResponse<T> {
   readonly ok: boolean;
   readonly value?: T;
@@ -20,14 +22,28 @@ export class AuthApi {
     private readonly accessResolver: IdentityAccessResolver,
   ) {}
   public async login(
-    provider: string,
-    subject: string,
+    principal: unknown,
   ): Promise<AuthResponse<{ token: string; expiresAt: Date }>> {
     try {
-      const identity = await this.service.linkExternal(provider, subject);
+      if (!isVerifiedExternalPrincipal(principal)) throw new AuthError('unauthorized');
+      const identity = await this.service.linkExternal(principal.provider, principal.subject);
       const tenantId = await this.accessResolver.resolveActiveTenant(identity.id);
       if (!tenantId) throw new AuthError('unauthorized');
       return { ok: true, value: await this.service.createSession(identity.id, tenantId) };
+    } catch (error) {
+      return errorResponse(error);
+    }
+  }
+  public async activateInvitation(
+    token: string,
+    principal: unknown,
+  ): Promise<AuthResponse<InvitationActivation>> {
+    try {
+      if (!isVerifiedExternalPrincipal(principal)) throw new AuthError('unauthorized');
+      return {
+        ok: true,
+        value: await this.service.activateInvitation(token, principal.provider, principal.subject),
+      };
     } catch (error) {
       return errorResponse(error);
     }

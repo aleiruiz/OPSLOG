@@ -54,6 +54,18 @@ export interface Invitation {
   readonly expiresAt: Date;
   readonly consumedAt: Date | null;
 }
+export interface Membership {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly identityId: string;
+  readonly status: 'pending' | 'active' | 'revoked';
+  readonly createdAt: Date;
+  readonly activatedAt: Date | null;
+}
+export interface InvitationActivation {
+  readonly identity: Identity;
+  readonly membership: Membership;
+}
 export interface RecoveryRequest {
   readonly id: string;
   readonly identityId: string;
@@ -93,9 +105,20 @@ export interface IdentityStore {
   createExternalIdentity(identity: Identity, external: ExternalIdentity): Promise<ExternalIdentity>;
   findIdentity(id: string): Promise<Identity | null>;
   findExternal(provider: string, subject: string): Promise<ExternalIdentity | null>;
-  findInvitation(tokenHash: string): Promise<Invitation | null>;
-  saveInvitation(invitation: Invitation): Promise<void>;
-  consumeInvitation(id: string, consumedAt: Date): Promise<boolean>;
+  findMembership(tenantId: string, identityId: string): Promise<Membership | null>;
+  /** Atomically create the invitation and pending identity/membership, preserving existing non-revoked identities. */
+  createInvitation(
+    identity: Identity,
+    membership: Membership,
+    invitation: Invitation,
+  ): Promise<void>;
+  /** Atomically consume the unexpired invitation, bind the verified subject, and activate identity plus membership. */
+  activateInvitation(
+    tokenHash: string,
+    provider: string,
+    subject: string,
+    activatedAt: Date,
+  ): Promise<InvitationActivation | null>;
   findRecovery(tokenHash: string): Promise<RecoveryRequest | null>;
   saveRecovery(request: RecoveryRequest): Promise<void>;
   consumeRecovery(id: string, usedAt: Date): Promise<boolean>;
@@ -125,6 +148,7 @@ export class InMemoryIdentityStore implements IdentityStore {
   private readonly identities = new Map<string, Identity>();
   private readonly external = new Map<string, ExternalIdentity>();
   private readonly invitations = new Map<string, Invitation>();
+  private readonly memberships = new Map<string, Membership>();
   private readonly recoveries = new Map<string, RecoveryRequest>();
   private readonly sessions = new Map<string, Session>();
   public async findIdentity(id: string) {
@@ -141,19 +165,70 @@ export class InMemoryIdentityStore implements IdentityStore {
     this.external.set(key, external);
     return external;
   }
-  public async findInvitation(tokenHash: string) {
-    return (
-      [...this.invitations.values()].find((item) => sameSecret(item.tokenHash, tokenHash)) ?? null
-    );
+  public async findMembership(tenantId: string, identityId: string) {
+    return this.memberships.get(`${tenantId}\u0000${identityId}`) ?? null;
   }
-  public async saveInvitation(invitation: Invitation) {
+  public async createInvitation(
+    identity: Identity,
+    membership: Membership,
+    invitation: Invitation,
+  ) {
+    if (
+      membership.identityId !== identity.id ||
+      invitation.identityId !== identity.id ||
+      membership.tenantId !== invitation.tenantId
+    )
+      throw new AuthError('invalid_input');
+    const currentIdentity = this.identities.get(identity.id);
+    if (currentIdentity?.status === 'revoked') throw new AuthError('conflict');
+    if (!currentIdentity) this.identities.set(identity.id, identity);
+    const membershipKey = `${membership.tenantId}\u0000${membership.identityId}`;
+    const currentMembership = this.memberships.get(membershipKey);
+    if (currentMembership?.status === 'active') throw new AuthError('conflict');
+    if (currentMembership?.status !== 'pending') this.memberships.set(membershipKey, membership);
     this.invitations.set(invitation.id, invitation);
   }
-  public async consumeInvitation(id: string, consumedAt: Date) {
-    const item = this.invitations.get(id);
-    if (!item || item.consumedAt) return false;
-    this.invitations.set(id, { ...item, consumedAt });
-    return true;
+  public async activateInvitation(
+    tokenHash: string,
+    provider: string,
+    subject: string,
+    activatedAt: Date,
+  ): Promise<InvitationActivation | null> {
+    const invitation =
+      [...this.invitations.values()].find((item) => sameSecret(item.tokenHash, tokenHash)) ?? null;
+    if (!invitation || invitation.consumedAt || invitation.expiresAt <= activatedAt) return null;
+    const identity = this.identities.get(invitation.identityId);
+    const membershipKey = `${invitation.tenantId}\u0000${invitation.identityId}`;
+    const membership = this.memberships.get(membershipKey);
+    const externalKey = `${provider}\u0000${subject}`;
+    const linked = this.external.get(externalKey);
+    if (
+      !identity ||
+      identity.status === 'revoked' ||
+      !membership ||
+      membership.status !== 'pending' ||
+      (linked !== undefined && linked.identityId !== identity.id)
+    )
+      return null;
+    const activatedIdentity: Identity = { ...identity, status: 'active' };
+    const activatedMembership: Membership = {
+      ...membership,
+      status: 'active',
+      activatedAt,
+    };
+    if (!linked)
+      this.external.set(externalKey, {
+        id: randomUUID(),
+        provider,
+        subject,
+        identityId: identity.id,
+        status: 'active',
+        createdAt: activatedAt,
+      });
+    this.identities.set(identity.id, activatedIdentity);
+    this.memberships.set(membershipKey, activatedMembership);
+    this.invitations.set(invitation.id, { ...invitation, consumedAt: activatedAt });
+    return { identity: activatedIdentity, membership: activatedMembership };
   }
   public async findRecovery(tokenHash: string) {
     return (
@@ -221,31 +296,58 @@ export class IdentityService {
     if (!linkedIdentity || linkedIdentity.status === 'revoked') throw new AuthError('unauthorized');
     return linkedIdentity;
   }
-  public async issueInvitation(tenantId: string, identityId: string, ttlMs = 72 * 60 * 60 * 1000) {
+  public async issueInvitation(
+    tenantId: string,
+    identityId: string = randomUUID(),
+    ttlMs = 72 * 60 * 60 * 1000,
+  ) {
     if (!nonEmpty(tenantId) || !nonEmpty(identityId) || !Number.isFinite(ttlMs) || ttlMs <= 0)
       throw new AuthError('invalid_input');
-    if (!(await this.store.findIdentity(identityId))) throw new AuthError('not_found');
+    const currentIdentity = await this.store.findIdentity(identityId);
+    if (currentIdentity?.status === 'revoked') throw new AuthError('conflict');
+    const now = this.now();
+    const identity: Identity = currentIdentity ?? {
+      id: identityId,
+      status: 'pending',
+      mfa: 'disabled',
+      authorizationVersion: 1,
+      createdAt: now,
+    };
+    const membership: Membership = {
+      id: randomUUID(),
+      tenantId,
+      identityId,
+      status: 'pending',
+      createdAt: now,
+      activatedAt: null,
+    };
     const token = this.tokens.create();
     const invitation: Invitation = {
       id: randomUUID(),
       tenantId,
       identityId,
       tokenHash: this.tokens.hash(token),
-      expiresAt: new Date(this.now().getTime() + ttlMs),
+      expiresAt: new Date(now.getTime() + ttlMs),
       consumedAt: null,
     };
-    await this.store.saveInvitation(invitation);
-    return { id: invitation.id, token, expiresAt: invitation.expiresAt } as const;
+    await this.store.createInvitation(identity, membership, invitation);
+    return { id: invitation.id, identityId, token, expiresAt: invitation.expiresAt } as const;
   }
-  public async activateInvitation(token: string): Promise<Identity> {
-    if (!nonEmpty(token)) throw new AuthError('invalid_input');
-    const item = await this.store.findInvitation(this.tokens.hash(token));
-    if (!item || item.consumedAt || item.expiresAt <= this.now())
+  public async activateInvitation(
+    token: string,
+    provider: string,
+    subject: string,
+  ): Promise<InvitationActivation> {
+    if (!nonEmpty(token) || !nonEmpty(provider) || !nonEmpty(subject))
       throw new AuthError('unauthorized');
-    if (!(await this.store.consumeInvitation(item.id, this.now()))) throw new AuthError('conflict');
-    const identity = await this.store.findIdentity(item.identityId);
-    if (!identity || identity.status !== 'active') throw new AuthError('unauthorized');
-    return identity;
+    const result = await this.store.activateInvitation(
+      this.tokens.hash(token),
+      provider,
+      subject,
+      this.now(),
+    );
+    if (!result) throw new AuthError('unauthorized');
+    return result;
   }
   public async requestRecovery(
     identityId: string,

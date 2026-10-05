@@ -32,16 +32,50 @@ describe('identity and authentication', () => {
     const auth = new IdentityService(new InMemoryIdentityStore(), notifier, undefined, () => now);
     const identity = await auth.linkExternal('oidc-test', 'invitee');
     const invitation = await auth.issueInvitation('tenant-a', identity.id, 1_000);
-    await expect(auth.activateInvitation(invitation.token)).resolves.toMatchObject({
-      id: identity.id,
+    await expect(
+      auth.activateInvitation(invitation.token, 'oidc-test', 'invitee'),
+    ).resolves.toMatchObject({
+      identity: { id: identity.id, status: 'active' },
+      membership: { tenantId: 'tenant-a', status: 'active' },
     });
-    await expect(auth.activateInvitation(invitation.token)).rejects.toMatchObject({
+    await expect(
+      auth.activateInvitation(invitation.token, 'oidc-test', 'invitee'),
+    ).rejects.toMatchObject({
       code: 'unauthorized',
     });
-    const expired = await auth.issueInvitation('tenant-a', identity.id, 1_000);
+    const expired = await auth.issueInvitation('tenant-a', undefined, 1_000);
     now = new Date('2026-10-04T00:00:02.000Z');
-    await expect(auth.activateInvitation(expired.token)).rejects.toMatchObject({
+    await expect(
+      auth.activateInvitation(expired.token, 'oidc-test', 'invitee'),
+    ).rejects.toMatchObject({
       code: 'unauthorized',
+    });
+  });
+
+  it('creates a pending identity and membership, then activates both from an invitation', async () => {
+    const store = new InMemoryIdentityStore();
+    const auth = new IdentityService(store, notifier);
+    const invitation = await auth.issueInvitation('tenant-new');
+    expect(await store.findIdentity(invitation.identityId)).toMatchObject({ status: 'pending' });
+    expect(await store.findMembership('tenant-new', invitation.identityId)).toMatchObject({
+      status: 'pending',
+    });
+
+    const result = await auth.activateInvitation(
+      invitation.token,
+      'oidc-test',
+      'new-invitee-subject',
+    );
+    expect(result).toMatchObject({
+      identity: { id: invitation.identityId, status: 'active' },
+      membership: {
+        tenantId: 'tenant-new',
+        identityId: invitation.identityId,
+        status: 'active',
+      },
+    });
+    await expect(auth.linkExternal('oidc-test', 'new-invitee-subject')).resolves.toMatchObject({
+      id: invitation.identityId,
     });
   });
 
@@ -88,8 +122,8 @@ describe('identity and authentication', () => {
     const identity = await auth.linkExternal('oidc-test', 'concurrent-user');
     const invitation = await auth.issueInvitation('tenant-a', identity.id);
     const results = await Promise.allSettled([
-      auth.activateInvitation(invitation.token),
-      auth.activateInvitation(invitation.token),
+      auth.activateInvitation(invitation.token, 'oidc-test', 'concurrent-user'),
+      auth.activateInvitation(invitation.token, 'oidc-test', 'concurrent-user'),
     ]);
     expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
     expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
