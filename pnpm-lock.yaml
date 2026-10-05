@@ -71,6 +71,8 @@ importers:
 
   apps/api: {}
 
+  apps/api/auth: {}
+
   apps/api/tenants:
     dependencies:
       '@opslog/domain-tenants':
@@ -84,11 +86,15 @@ importers:
 
   apps/worker: {}
 
+  apps/worker/base: {}
+
   packages/contracts:
     devDependencies:
       vitest:
         specifier: 3.2.6
         version: 3.2.6(@types/node@22.15.21)(jsdom@26.0.0(supports-color@7.2.0))(supports-color@7.2.0)
+
+  packages/domain/identity: {}
 
   packages/domain/tenants:
     devDependencies:
@@ -114,6 +120,12 @@ importers:
       vitest:
         specifier: 3.2.6
         version: 3.2.6(@types/node@22.15.21)(jsdom@26.0.0(supports-color@7.2.0))(supports-color@7.2.0)
+
+  packages/platform/audit: {}
+
+  packages/platform/auth: {}
+
+  packages/platform/outbox: {}
 
   packages/ui:
     dependencies:

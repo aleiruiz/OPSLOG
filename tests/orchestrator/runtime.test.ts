@@ -101,7 +101,7 @@ describe('orchestrator runtime', () => {
       epoch: 2,
       fencing: 1,
       provider: 'claude',
-      model: 'claude-sonnet-5',
+      model: 'claude-sonnet-5-5',
       eventIds: ['event-a'],
     });
   });
@@ -124,11 +124,35 @@ describe('orchestrator runtime', () => {
       runtime.validateCandidate({
         ...evidence('a', 'head'),
         auditProvider: 'claude',
-        observedModel: 'claude-sonnet-5',
+        observedModel: 'claude-opus-5-5',
       }),
     ).toBe(false);
     expect(() => new OrchestratorRuntime('codex', 'gpt-5.6-luna' as Model)).toThrow(
       'not valid for provider codex',
+    );
+  });
+
+  it('pins Claude authors to Sonnet 5.5 and requires an Opus 5.5 audit of the exact SHA', () => {
+    const runtime = new OrchestratorRuntime('claude');
+    runtime.register([task('a')]);
+    const lease = runtime.acquire('a', 'agent-a', 'C:/wt/a', 'base', 0);
+    expect(lease.model).toBe('claude-sonnet-5-5');
+    runtime.complete('a', lease.fencing, 'head', 1, 'event-a');
+
+    const audit = {
+      ...evidence('a', 'head'),
+      auditProvider: 'claude' as const,
+      observedModel: 'claude-opus-5-5' as const,
+    };
+    expect(runtime.validateCandidate(audit)).toBe(true);
+    expect(runtime.validateCandidate({ ...audit, observedModel: 'claude-sonnet-5-5' })).toBe(false);
+    expect(runtime.validateCandidate({ ...audit, observedModel: 'claude-sonnet-5' as Model })).toBe(
+      false,
+    );
+    expect(runtime.validateCandidate({ ...audit, auditSha: 'older-head' })).toBe(false);
+    expect(runtime.validateCandidate({ ...audit, auditProvider: 'codex' })).toBe(false);
+    expect(() => new OrchestratorRuntime('claude', 'claude-opus-5-5')).toThrow(
+      'not valid for provider claude',
     );
   });
 });

@@ -7,6 +7,10 @@
     { "path": "./packages/persistence/tenancy" },
     { "path": "./packages/ui" },
     { "path": "./apps/api/tenants" },
-    { "path": "./e2e" }
+    { "path": "./e2e" },
+    { "path": "./infra/queues" },
+    { "path": "./packages/platform/audit" },
+    { "path": "./packages/platform/outbox" },
+    { "path": "./apps/worker/base" }
   ]
 }

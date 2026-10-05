@@ -1,0 +1,5 @@
+{
+  "name": "@opslog/platform-auth",
+  "private": true,
+  "type": "module"
+}

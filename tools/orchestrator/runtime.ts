@@ -1,4 +1,5 @@
 import {
+  AUDIT_MODEL_BY_PROVIDER,
   Candidate,
   GateStatus,
   Lease,
@@ -130,7 +131,7 @@ export class OrchestratorRuntime {
         candidate.ciPassed &&
         candidate.auditCount === 1 &&
         candidate.independentAudit &&
-        candidate.observedModel === this.model &&
+        candidate.observedModel === AUDIT_MODEL_BY_PROVIDER[this.provider] &&
         candidate.evidenceId.length > 0,
     );
   }
