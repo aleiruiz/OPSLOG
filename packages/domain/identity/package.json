@@ -1,0 +1,5 @@
+{
+  "name": "@opslog/domain-identity",
+  "private": true,
+  "type": "module"
+}
