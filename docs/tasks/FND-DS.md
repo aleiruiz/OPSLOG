@@ -30,4 +30,4 @@ max_repair_cycles: 3
 
 Material UI es la base; IBM Plex Sans/Mono y los valores de SPECS son tokens. Las etiquetas deben ser comprensibles, no exponer IDs técnicos de permisos. No se inicia ninguna pantalla funcional hasta G0.
 
-Provider-lock efectivo: solo Codex está activo, con `gpt-5.6-luna` para autor y auditores. No se lanza Claude concurrentemente; un cambio de proveedor requiere drenaje y nuevo epoch.
+Provider-lock efectivo: solo Codex está activo, con `gpt-6-luna` para autor y auditor. No se lanza Claude concurrentemente; un cambio de proveedor requiere drenaje y nuevo epoch.
