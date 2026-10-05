@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 export type OutboxStatus = 'pending' | 'processing' | 'retry' | 'delivered' | 'dead_letter';
 export interface OutboxRecord<T = unknown> {
   readonly eventId: string;
@@ -6,6 +8,11 @@ export interface OutboxRecord<T = unknown> {
   readonly payload: T;
   readonly occurredAt: string;
   readonly idempotencyKey: string;
+  /** Request correlation and actor of the operation that enqueued the event (SPECS event envelope). */
+  readonly correlationId?: string;
+  readonly actorRef?: { readonly subject: string; readonly kind: 'user' | 'api_key' | 'system' };
+  readonly entityId?: string;
+  readonly schemaVersion?: number;
   status: OutboxStatus;
   attempts: number;
   availableAt: number;
@@ -21,6 +28,13 @@ export interface EventClaim<T = unknown> {
 }
 export interface OutboxTransaction {
   enqueue<T>(record: Omit<OutboxRecord<T>, 'status' | 'attempts' | 'availableAt'>): OutboxRecord<T>;
+}
+export class OutboxConflictError extends Error {
+  readonly code = 'OUTBOX_EVENT_CONFLICT';
+  constructor() {
+    super('Event id was already used with a different event');
+    this.name = 'OutboxConflictError';
+  }
 }
 export interface OutboxStore {
   transaction<T>(work: (tx: OutboxTransaction) => T): T;
@@ -48,8 +62,14 @@ export interface OutboxStore {
 export class InMemoryOutboxStore implements OutboxStore {
   private readonly records = new Map<string, OutboxRecord>();
   private fencing = 0;
-  constructor(private readonly clock: () => number = Date.now) {}
+  private inTransaction = false;
+  constructor(
+    private readonly clock: () => number = Date.now,
+    private readonly random: () => number = Math.random,
+  ) {}
   transaction<T>(work: (tx: OutboxTransaction) => T): T {
+    if (this.inTransaction) throw new Error('nested outbox transactions are not supported');
+    this.inTransaction = true;
     const staged: OutboxRecord[] = [];
     const keys = new Set<string>();
     const store = this;
@@ -64,6 +84,13 @@ export class InMemoryOutboxStore implements OutboxStore {
         const eventKey = `event:${recordKey}`;
         const idempotencyKey = `idempotency:${scopedKey(input.tenantId, tuple(input.eventId, input.idempotencyKey))}`;
         const existing = store.records.get(recordKey);
+        const sameEventStaged = staged.find((r) => scopedKey(r.tenantId, r.eventId) === recordKey);
+        const prior = existing ?? sameEventStaged;
+        if (
+          prior &&
+          (prior.type !== input.type || !isDeepStrictEqual(prior.payload, input.payload))
+        )
+          throw new OutboxConflictError();
         if (existing || keys.has(eventKey) || keys.has(idempotencyKey))
           return structuredClone(
             existing ??
@@ -81,6 +108,10 @@ export class InMemoryOutboxStore implements OutboxStore {
           payload: structuredClone(input.payload),
           occurredAt: input.occurredAt,
           idempotencyKey: input.idempotencyKey,
+          ...(input.correlationId === undefined ? {} : { correlationId: input.correlationId }),
+          ...(input.actorRef === undefined ? {} : { actorRef: structuredClone(input.actorRef) }),
+          ...(input.entityId === undefined ? {} : { entityId: input.entityId }),
+          ...(input.schemaVersion === undefined ? {} : { schemaVersion: input.schemaVersion }),
           status: 'pending',
           attempts: 0,
           availableAt: store.clock(),
@@ -107,6 +138,8 @@ export class InMemoryOutboxStore implements OutboxStore {
       closed = true;
       staged.length = 0;
       throw error;
+    } finally {
+      this.inTransaction = false;
     }
   }
   claim<T>(now: number, leaseMs: number, workerId: string): EventClaim<T> | undefined {
@@ -164,7 +197,7 @@ export class InMemoryOutboxStore implements OutboxStore {
     if (record.attempts >= maxAttempts) record.status = 'dead_letter';
     else {
       record.status = 'retry';
-      record.availableAt = now + backoffMs(record.attempts);
+      record.availableAt = now + backoffMs(record.attempts, this.random);
     }
     return record.status;
   }
@@ -202,6 +235,10 @@ function scopedKey(tenantId: string, key: string): string {
 function tuple(...parts: string[]): string {
   return parts.map((part) => `${part.length}:${part}`).join('');
 }
-export function backoffMs(attempt: number, baseMs = 1000, capMs = 300_000): number {
-  return Math.min(capMs, baseMs * 2 ** Math.max(0, attempt - 1));
+/** SPECS delivery schedule: first try, then retries after 1m/5m/30m/2h/12h (attempt = tries so far). */
+const RETRY_DELAYS_MS = [60_000, 300_000, 1_800_000, 7_200_000, 43_200_000] as const;
+/** Delay before the next try with +/-20% jitter; `random` returns [0, 1), so 0.5 gives the exact schedule. */
+export function backoffMs(attempt: number, random: () => number = () => 0.5): number {
+  const index = Math.min(Math.max(1, attempt), RETRY_DELAYS_MS.length) - 1;
+  return Math.round(RETRY_DELAYS_MS[index]! * (0.8 + 0.4 * random()));
 }

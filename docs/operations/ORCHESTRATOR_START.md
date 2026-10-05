@@ -1,6 +1,6 @@
 # OPSLOG — Guía autocontenida de arranque del orquestador
 
-Fecha: 2026-10-04. Esta guía explica SPEC/ORCH-1.0 y sus sucesoras acotadas 1.1–1.3; no modifica documentos congelados ni constituye evidencia de ejecución.
+Fecha: 2026-10-04. Esta guía explica SPEC/ORCH-1.0 y sus sucesoras acotadas 1.1–1.4; no modifica documentos congelados ni constituye evidencia de ejecución.
 
 ## 1. Encargo concreto
 
@@ -14,8 +14,8 @@ Leer en este orden:
 
 1. AGENTS.md y CLAUDE.md.
 2. docs/operations/SESSION_HANDSHAKE.md. Ninguna sesión hija puede iniciar trabajo real hasta enviar `HANDSHAKE_READY` y recibir del padre un `HANDSHAKE_ACK` explícito, correlacionado con identidad, lease, epoch, baseSHA y paths, que incluya `startAuthorized: true`.
-3. docs/baselines/ACTIVE.md, ADR-0004/0005 y docs/tasks/ORCH-BOOTSTRAP.md; ADR-0003 está supersedido.
-4. SPECS.md y Orchestrator.md completos más docs/baselines/1.1/SPECS.md y Orchestrator.md; verificar manifiestos 1.0/1.1.
+3. docs/baselines/ACTIVE.md, ADR-0004/0005/0006/0007 y docs/tasks/ORCH-BOOTSTRAP.md; ADR-0003 está supersedido.
+4. SPECS.md y Orchestrator.md completos más docs/baselines/1.1/ a 1.4/ (SPECS.md y Orchestrator.md de cada sucesora vigente); verificar manifiestos 1.0–1.4.
 5. docs/adr/0001-environment-assumptions.md, docs/adr/0002-defer-aws-configuration.md e infra/plan/AWS.md.
 6. docs/sources/CLAUDE_ARTIFACT_REFERENCE.md y BRD/SRD de docs/sources, priorizando la sección de cada paquete y conservando etiquetas CONFIRMED/PROPOSED/DECISION REQUIRED.
 7. Tasks.md solo como estado local; consultar GitHub antes de asumir estado durable.

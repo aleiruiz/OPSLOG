@@ -178,4 +178,11 @@ describe('audit safety and tenant isolation', () => {
     store.append({ ...base, eventId: 'e-key-2' });
     expect(store.list('tenant-a')).toHaveLength(2);
   });
+  it('redacts credential pairs and JWT-like values from stored errors', () => {
+    // Built at runtime so secret scanners do not flag the synthetic token.
+    const jwtLike = ['eyJhbGciOiJIUzI1NiJ9', 'payloadpart', 'sigpart'].join('.');
+    const message = redactError(new Error(`upstream 401 api_key=abc123 failed for ${jwtLike}`));
+    expect(message).not.toMatch(/abc123|eyJhbGci/);
+    expect(message).toContain('upstream 401');
+  });
 });

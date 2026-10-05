@@ -179,7 +179,10 @@ describe('worker lease loss, attempts and tenant isolation', () => {
     expect(worker.dlq.receive()?.body).toMatchObject({ reason: 'attempts exhausted' });
   });
   it('retries with backoff before dead-lettering when maxAttempts is greater than one', async () => {
-    const store = new InMemoryOutboxStore(() => 0);
+    const store = new InMemoryOutboxStore(
+      () => 0,
+      () => 0.5,
+    );
     enqueue(store, 'tenant-a');
     const worker = new Worker(
       store,
@@ -193,10 +196,10 @@ describe('worker lease loss, attempts and tenant isolation', () => {
       throw new Error('boom');
     });
     await worker.process(0);
-    expect(store.get('tenant-a', 'e1')).toMatchObject({ status: 'retry', availableAt: 1000 });
+    expect(store.get('tenant-a', 'e1')).toMatchObject({ status: 'retry', availableAt: 60_000 });
     await expect(worker.process(500)).resolves.toBe(false);
-    await worker.process(1000);
-    await worker.process(3000);
+    await worker.process(60_000);
+    await worker.process(360_000);
     expect(store.get('tenant-a', 'e1')?.status).toBe('dead_letter');
     expect(worker.metrics).toMatchObject({ retried: 2, deadLettered: 1, handlerFailures: 3 });
   });
@@ -220,5 +223,61 @@ describe('worker lease loss, attempts and tenant isolation', () => {
     expect(store.get('tenant-b', 'e1')?.status).toBe('dead_letter');
     expect(audit.list('tenant-a')).toHaveLength(1);
     expect(audit.list('tenant-b')).toHaveLength(0);
+  });
+  it('audits with the enqueuing correlation id and the delivery time', async () => {
+    const store = new InMemoryOutboxStore(() => 0);
+    store.transaction((tx) =>
+      tx.enqueue({
+        eventId: 'e1',
+        tenantId: 'tenant-a',
+        type: 'demo',
+        payload: {},
+        occurredAt: '2026-10-04T00:00:00.000Z',
+        idempotencyKey: 'e1',
+        correlationId: 'request-42',
+      }),
+    );
+    const audit = new InMemoryAuditStore();
+    let time = 0;
+    const worker = new Worker(
+      store,
+      { status: () => 'active' },
+      audit,
+      'worker-a',
+      10_000,
+      6,
+      () => time,
+    );
+    worker.register('demo', () => {
+      time = 5_000;
+    });
+    await worker.process();
+    expect(audit.list('tenant-a')[0]).toMatchObject({
+      correlationId: 'request-42',
+      occurredAt: new Date(5_000).toISOString(),
+    });
+  });
+  it('schedules the retry from the failure time, not the claim time', async () => {
+    const store = new InMemoryOutboxStore(
+      () => 0,
+      () => 0.5,
+    );
+    enqueue(store, 'tenant-a');
+    let time = 0;
+    const worker = new Worker(
+      store,
+      { status: () => 'active' },
+      new InMemoryAuditStore(),
+      'worker-a',
+      1_000_000,
+      6,
+      () => time,
+    );
+    worker.register('demo', () => {
+      time = 90_000;
+      throw new Error('slow failure');
+    });
+    await worker.process();
+    expect(store.get('tenant-a', 'e1')?.availableAt).toBe(90_000 + 60_000);
   });
 });

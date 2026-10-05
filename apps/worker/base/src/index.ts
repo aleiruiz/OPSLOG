@@ -39,13 +39,16 @@ export class Worker {
     private readonly audit: AuditStore,
     private readonly workerId: string,
     private readonly leaseMs = 30_000,
-    private readonly maxAttempts = 5,
+    // First try plus five retries (SPECS delivery schedule).
+    private readonly maxAttempts = 6,
+    private readonly clock: () => number = Date.now,
   ) {}
   register(type: string, handler: Handler): void {
     if (this.handlers.has(type)) throw new Error(`handler already registered: ${type}`);
     this.handlers.set(type, handler);
   }
-  async process(now = Date.now()): Promise<boolean> {
+  async process(explicitNow?: number): Promise<boolean> {
+    const now = explicitNow ?? this.clock();
     const claim = this.store.claim(now, this.leaseMs, this.workerId);
     if (!claim) return false;
     this.metrics.claimed += 1;
@@ -118,6 +121,8 @@ export class Worker {
           type: record.type,
         });
       } catch (error) {
+        // Backoff counts from the failure, not from the claim: a slow handler must not retry immediately.
+        const failedAt = explicitNow ?? this.clock();
         this.guarded(() => {
           this.metrics.handlerFailures += 1;
           const status = this.store.retry(
@@ -125,7 +130,7 @@ export class Worker {
             record.eventId,
             fencing,
             redactError(error),
-            now,
+            failedAt,
             this.maxAttempts,
           );
           if (status === 'dead_letter') {
@@ -144,15 +149,16 @@ export class Worker {
       );
       if (!checkpointed) return true;
     }
+    const deliveredAt = explicitNow ?? this.clock();
     const auditEvent: AuditEvent = {
       eventId: `outbox:${record.eventId}`,
       tenantId: record.tenantId,
       action: 'outbox.delivered',
       entityType: 'outbox',
       entityId: record.eventId,
-      occurredAt: new Date(now).toISOString(),
+      occurredAt: new Date(deliveredAt).toISOString(),
       actor: { id: this.workerId, kind: 'system' },
-      correlationId: record.eventId,
+      correlationId: record.correlationId ?? record.eventId,
       data: { type: record.type, attempts: record.attempts },
     };
     try {

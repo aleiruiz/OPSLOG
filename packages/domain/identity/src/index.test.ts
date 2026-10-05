@@ -50,6 +50,22 @@ describe('identity and authentication', () => {
     ).resolves.toMatchObject({ membership: { tenantId: 'tenant-a', status: 'active' } });
   });
 
+  it('supersedes older links when re-inviting after a membership revocation', async () => {
+    const auth = new IdentityService(new InMemoryIdentityStore(), notifier);
+    const identity = await auth.provisionExternal('oidc-test', 'invitee');
+    const first = await auth.issueInvitation('tenant-a', identity.id);
+    await auth.activateInvitation(first.token, 'oidc-test', 'invitee');
+    await auth.revokeMembership('tenant-a', identity.id);
+    const stale = await auth.issueInvitation('tenant-a', identity.id);
+    const fresh = await auth.issueInvitation('tenant-a', identity.id);
+    await expect(
+      auth.activateInvitation(stale.token, 'oidc-test', 'invitee'),
+    ).rejects.toMatchObject({ code: 'unauthorized' });
+    await expect(
+      auth.activateInvitation(fresh.token, 'oidc-test', 'invitee'),
+    ).resolves.toMatchObject({ membership: { status: 'active' } });
+  });
+
   it('answers non-string tokens as unauthorized', async () => {
     const auth = new IdentityService(new InMemoryIdentityStore(), notifier);
     await expect(
@@ -346,16 +362,18 @@ describe('identity and authentication', () => {
     ).rejects.toMatchObject({ code: 'unauthorized' });
   });
 
-  it('throttles recovery per identity and reports background failures', async () => {
-    deliveries.length = 0;
+  it('throttles successful recovery per identity but lets failed deliveries retry', async () => {
     const errors: unknown[] = [];
-    const failing = {
+    let healthy = false;
+    let delivered = 0;
+    const flaky = {
       deliver: async () => {
-        throw new Error('mail down');
+        if (!healthy) throw new Error('mail down');
+        delivered += 1;
       },
     };
     const time = clock();
-    const auth = new IdentityService(new InMemoryIdentityStore(), failing, undefined, time.read, {
+    const auth = new IdentityService(new InMemoryIdentityStore(), flaky, undefined, time.read, {
       recoveryMinIntervalMs: 60_000,
       onBackgroundError: (error) => errors.push(error),
     });
@@ -363,12 +381,16 @@ describe('identity and authentication', () => {
     await auth.requestRecovery(identityId);
     await auth.settled();
     expect(errors).toHaveLength(1);
+    healthy = true;
     await auth.requestRecovery(identityId);
     await auth.settled();
-    expect(errors).toHaveLength(1);
+    expect(delivered).toBe(1);
+    await auth.requestRecovery(identityId);
+    await auth.settled();
+    expect(delivered).toBe(1);
     time.set('2026-10-04T00:02:00.000Z');
     await auth.requestRecovery(identityId);
     await auth.settled();
-    expect(errors).toHaveLength(2);
+    expect(delivered).toBe(2);
   });
 });

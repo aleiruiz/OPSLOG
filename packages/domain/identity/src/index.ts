@@ -117,6 +117,7 @@ export interface IdentityStore {
     identity: Identity,
     membership: Membership,
     invitation: Invitation,
+    supersededAt?: Date,
   ): Promise<void>;
   /**
    * Atomically consume the unexpired invitation, bind the verified subject, and activate identity plus membership.
@@ -143,6 +144,9 @@ export interface IdentityStore {
   /**
    * One transaction: mark the membership revoked and bump the identity authorizationVersion.
    * Returns false when the membership does not exist or is already revoked.
+   * authorizationVersion is per identity, so this also ends the identity's sessions in other tenants (safe but
+   * broad). SPECS §5.3's "last active administrator" rule is not enforced here: the caller or the persistent
+   * adapter must refuse to revoke the final administrator of a tenant.
    */
   revokeMembership(tenantId: string, identityId: string): Promise<boolean>;
   saveSession(session: Session): Promise<void>;
@@ -195,6 +199,7 @@ export class InMemoryIdentityStore implements IdentityStore {
     identity: Identity,
     membership: Membership,
     invitation: Invitation,
+    supersededAt: Date = new Date(),
   ) {
     if (
       membership.identityId !== identity.id ||
@@ -210,7 +215,6 @@ export class InMemoryIdentityStore implements IdentityStore {
     if (currentMembership?.status === 'active') throw new AuthError('conflict');
     if (currentMembership?.status !== 'pending') this.memberships.set(membershipKey, membership);
     // A newer invitation supersedes earlier unconsumed links for the same tenant and identity.
-    const supersededAt = new Date();
     for (const [id, previous] of this.invitations)
       if (
         previous.tenantId === invitation.tenantId &&
@@ -410,7 +414,7 @@ export class IdentityService {
       expiresAt: new Date(now.getTime() + ttlMs),
       consumedAt: null,
     };
-    await this.store.createInvitation(identity, membership, invitation);
+    await this.store.createInvitation(identity, membership, invitation, now);
     return { id: invitation.id, identityId, token, expiresAt: invitation.expiresAt } as const;
   }
   public async activateInvitation(
@@ -455,17 +459,33 @@ export class IdentityService {
     const issuedAt = this.now();
     const last = this.lastRecovery.get(identityId);
     if (last !== undefined && issuedAt.getTime() - last < this.recoveryMinIntervalMs) return;
+    this.pruneRecoveryThrottle(issuedAt.getTime());
+    // Reserve the slot before awaiting so concurrent requests cannot both pass, but release it when
+    // saving or delivering fails so a transient error does not suppress the user's retry.
     this.lastRecovery.set(identityId, issuedAt.getTime());
     const expiresAt = new Date(issuedAt.getTime() + ttlMs);
-    await this.store.saveRecovery({
-      id: randomUUID(),
-      identityId,
-      tokenHash: this.tokens.hash(token),
-      issuedAt,
-      expiresAt,
-      usedAt: null,
-    });
-    await this.recoveryNotifier.deliver(identity.id, token, expiresAt);
+    try {
+      await this.store.saveRecovery({
+        id: randomUUID(),
+        identityId,
+        tokenHash: this.tokens.hash(token),
+        issuedAt,
+        expiresAt,
+        usedAt: null,
+      });
+      await this.recoveryNotifier.deliver(identity.id, token, expiresAt);
+    } catch (error) {
+      if (this.lastRecovery.get(identityId) === issuedAt.getTime()) {
+        if (last === undefined) this.lastRecovery.delete(identityId);
+        else this.lastRecovery.set(identityId, last);
+      }
+      throw error;
+    }
+  }
+  private pruneRecoveryThrottle(nowMs: number): void {
+    if (this.lastRecovery.size < 1000) return;
+    for (const [id, at] of this.lastRecovery)
+      if (nowMs - at >= this.recoveryMinIntervalMs) this.lastRecovery.delete(id);
   }
   public async consumeRecovery(token: string): Promise<Identity> {
     if (!nonEmpty(token)) throw new AuthError('invalid_input');
