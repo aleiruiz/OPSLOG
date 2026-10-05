@@ -14,8 +14,22 @@ export const opslogTheme = createTheme({
   typography: {
     fontFamily: opslogTokens.typography.fontFamily,
     fontSize: opslogTokens.typography.baseSize,
-    h1: { fontSize: `${opslogTokens.typography.sizes.h1}px` },
-    h2: { fontSize: `${opslogTokens.typography.sizes.h2}px` },
+    fontWeightMedium: 600,
+    fontWeightBold: 600,
+    h1: { fontSize: `${opslogTokens.typography.sizes.h1}px`, fontWeight: 600 },
+    // Every heading below H1 uses the H2 size; body-level text uses the 14px base (SPECS §8).
+    ...Object.fromEntries(
+      (['h2', 'h3', 'h4', 'h5', 'h6'] as const).map((variant) => [
+        variant,
+        { fontSize: `${opslogTokens.typography.sizes.h2}px`, fontWeight: 600 },
+      ]),
+    ),
+    ...Object.fromEntries(
+      (['subtitle1', 'subtitle2', 'body1', 'body2', 'button'] as const).map((variant) => [
+        variant,
+        { fontSize: `${opslogTokens.typography.sizes.body}px` },
+      ]),
+    ),
   },
   shape: { borderRadius: opslogTokens.shape.cardRadius },
   spacing: opslogTokens.spacing,
@@ -42,7 +56,21 @@ export const opslogTheme = createTheme({
     MuiChip: { styleOverrides: { root: { borderRadius: opslogTokens.shape.controlRadius } } },
     MuiCssBaseline: {
       styleOverrides: {
-        '*:focus-visible': { outline: `3px solid ${opslogTokens.colors.focus}`, outlineOffset: 2 },
+        '*:focus-visible': {
+          outline: `3px solid ${opslogTokens.colors.focus} !important`,
+          outlineOffset: 2,
+        },
+        '.sr-only': {
+          position: 'absolute',
+          width: 1,
+          height: 1,
+          margin: -1,
+          padding: 0,
+          overflow: 'hidden',
+          clip: 'rect(0 0 0 0)',
+          whiteSpace: 'nowrap',
+          border: 0,
+        },
       },
     },
   },

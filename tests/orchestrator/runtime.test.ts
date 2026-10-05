@@ -160,4 +160,14 @@ describe('orchestrator runtime', () => {
       'not valid for provider claude',
     );
   });
+
+  it('refuses a provider handoff while leases are active and allows it after completion', () => {
+    const runtime = new OrchestratorRuntime();
+    runtime.register([task('a')]);
+    const lease = runtime.acquire('a', 'agent-a', 'C:/wt/a', 'base', 0);
+    expect(() => runtime.handoff('claude')).toThrow('leases are active');
+    runtime.complete('a', lease.fencing, 'head', 1, 'event-a');
+    runtime.handoff('claude');
+    expect(runtime.snapshot()).toMatchObject({ provider: 'claude', epoch: 2 });
+  });
 });
