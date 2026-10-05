@@ -25,6 +25,7 @@ const audits = (sha: string, count = 2): GateAudit[] =>
   Array.from({ length: count }, (_, index) => ({
     auditorId: `auditor-${index + 1}`,
     candidateSha: sha,
+    coveredShas: [sha],
     provider: 'codex' as const,
     observedModel: 'gpt-6-luna' as const,
     verdict: 'approve' as const,
@@ -208,9 +209,13 @@ describe('orchestrator runtime', () => {
     );
     const duplicated = audits('head-a').map((audit) => ({ ...audit, auditorId: 'same' }));
     expect(() => runtime.setGate(0, 'passed', evidenceA, duplicated)).toThrow('two independent');
+    expect(() => runtime.setGate(0, 'passed', evidenceA, audits('unrelated'))).toThrow(
+      'two independent',
+    );
     const split = [
-      ...audits('head-a', 1),
-      { ...audits('other-sha', 2)[1]!, candidateSha: 'other-sha' },
+      audits('head-a', 2)[0]!,
+      { ...audits('head-a', 2)[1]!, candidateSha: 'merge-2', coveredShas: ['head-a'] },
+      { ...audits('head-a', 3)[2]!, candidateSha: 'merge-1', coveredShas: ['head-a'] },
     ];
     expect(() => runtime.setGate(0, 'passed', evidenceA, split)).toThrow('same candidate SHA');
     const byAuthor = audits('head-a').map((audit, index) => ({
@@ -269,6 +274,7 @@ describe('orchestrator runtime', () => {
           ...item,
           status: 'completed' as const,
           candidateSha: 'sha',
+          author: 'agent-x',
         })),
         gates: { 0: 'pending', 1: 'passed' },
       }),
@@ -315,5 +321,62 @@ describe('orchestrator runtime', () => {
     runtime.setGate(1, 'passed', [evidence('b', 'head-b')], audits('head-b'));
     runtime.register([task('late', 0)]);
     expect(runtime.snapshot().gates).toEqual({ 0: 'pending', 1: 'pending' });
+  });
+
+  it('requires audits to cover every task candidate of the stage and blocks renewal after a gate reopens', () => {
+    const runtime = new OrchestratorRuntime();
+    runtime.register([
+      { ...task('a', 0), allowedPaths: ['tools/a/**'] },
+      { ...task('b', 0), allowedPaths: ['tools/b/**'] },
+      task('c', 1),
+    ]);
+    const one = runtime.acquire('a', 'agent-a', 'C:/wt/a', 'base', 0);
+    const two = runtime.acquire('b', 'agent-b', 'C:/wt/b', 'base', 0);
+    runtime.complete('a', one.fencing, 'head-a', 1, 'event-a');
+    runtime.complete('b', two.fencing, 'head-b', 1, 'event-b');
+    const both = [evidence('a', 'head-a'), evidence('b', 'head-b')];
+    expect(() => runtime.setGate(0, 'passed', both, audits('head-a'))).toThrow('two independent');
+    const covering = audits('merge-1').map((audit) => ({
+      ...audit,
+      coveredShas: ['head-a', 'head-b'],
+    }));
+    runtime.setGate(0, 'passed', both, covering);
+    const third = runtime.acquire('c', 'agent-c', 'C:/wt/c', 'base', 2);
+    runtime.setGate(0, 'pending');
+    expect(() => runtime.renew('c', third.fencing, 3)).toThrow('blocked by gate 0');
+  });
+
+  it('invalidates later gates when a task is registered into a gap stage and keeps authors on restore', () => {
+    const runtime = new OrchestratorRuntime();
+    runtime.register([task('a', 0), task('c', 2)]);
+    const first = runtime.acquire('a', 'agent-a', 'C:/wt/a', 'base', 0);
+    runtime.complete('a', first.fencing, 'head-a', 1, 'event-a');
+    runtime.setGate(0, 'passed', [evidence('a', 'head-a')], audits('head-a'));
+    const third = runtime.acquire('c', 'agent-c', 'C:/wt/c', 'base', 2);
+    runtime.complete('c', third.fencing, 'head-c', 3, 'event-c');
+    runtime.setGate(2, 'passed', [evidence('c', 'head-c')], audits('head-c'));
+    runtime.register([task('mid', 1)]);
+    expect(runtime.snapshot().gates).toEqual({ 0: 'passed', 1: 'pending', 2: 'pending' });
+
+    const restored = OrchestratorRuntime.restore(runtime.snapshot());
+    expect(restored.snapshot().tasks.find((item) => item.id === 'a')?.author).toBe('agent-a');
+    const snapshot = runtime.snapshot();
+    expect(() =>
+      OrchestratorRuntime.restore({
+        ...snapshot,
+        gates: { 0: 'passed', 1: 'pending', 2: 'passed' },
+      }),
+    ).toThrow('passed');
+    expect(() =>
+      OrchestratorRuntime.restore({ ...snapshot, gates: { x: 'passed' } as never }),
+    ).toThrow('invalid');
+    expect(() =>
+      OrchestratorRuntime.restore({
+        ...snapshot,
+        tasks: snapshot.tasks.map((item) =>
+          item.id === 'mid' ? { ...item, status: 'leased' as const } : item,
+        ),
+      }),
+    ).toThrow('leased without a lease');
   });
 });

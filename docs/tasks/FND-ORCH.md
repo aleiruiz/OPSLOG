@@ -108,3 +108,5 @@ El runtime implementado (`tools/orchestrator`) cubre con pruebas unitarias lease
 - comandos `lint`/`typecheck` filtrados por orquestador (se ejecutan en el `quality` global).
 
 Fecha límite: al cierre de G1 como máximo. Mientras tanto el estado de Tasks lo escribe únicamente el orquestador (ORCHESTRATOR_START.md y CLAUDE.md).
+
+Limitaciones conocidas del runtime (aceptadas para G0, revisión en G1): la independencia de los auditores de gate se comprueba contra el último titular del lease de cada tarea de la etapa (no contra titulares de leases vencidos ni autores de etapas anteriores) y por comparación exacta de identificadores; `restore` no puede volver a verificar la evidencia de candidatos ni de auditorías porque no forma parte del snapshot.

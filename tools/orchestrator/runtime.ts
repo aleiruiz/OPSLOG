@@ -29,13 +29,18 @@ export class OrchestratorRuntime {
   public register(tasks: Task[]): void {
     for (const task of tasks) {
       if (this.tasks.has(task.id)) throw new Error(`duplicate task ${task.id}`);
-      this.tasks.set(task.id, {
+      const stored: Task = {
         ...task,
         dependencies: [...task.dependencies],
         allowedPaths: [...task.allowedPaths],
-      });
+      };
+      delete stored.author;
+      this.tasks.set(task.id, stored);
       if (this.gates.get(task.stage) === 'passed') this.invalidateFrom(task.stage);
-      else if (!this.gates.has(task.stage)) this.gates.set(task.stage, 'pending');
+      else if (!this.gates.has(task.stage)) {
+        this.gates.set(task.stage, 'pending');
+        this.invalidateFrom(task.stage + 1);
+      }
     }
   }
   public handoff(provider: Provider): void {
@@ -101,6 +106,10 @@ export class OrchestratorRuntime {
     if (!lease || lease.fencing !== fencing || lease.epoch !== this.epoch)
       throw new Error('stale fencing token');
     if (lease.expiresAt <= now) throw new Error('lease expired');
+    const leased = this.tasks.get(taskId);
+    for (let stage = 0; leased && stage < leased.stage; stage += 1)
+      if (this.gates.has(stage) && this.gates.get(stage) !== 'passed')
+        throw new Error(`stage ${leased.stage} is blocked by gate ${stage}`);
     lease.expiresAt = now + ttlMs;
     return { ...lease };
   }
@@ -148,6 +157,8 @@ export class OrchestratorRuntime {
     candidates: Candidate[] = [],
     audits: GateAudit[] = [],
   ): void {
+    if (![...this.tasks.values()].some((task) => task.stage === stage))
+      throw new Error(`stage ${stage} has no tasks`);
     if (status === 'passed') {
       for (let earlier = 0; earlier < stage; earlier += 1)
         if (this.gates.has(earlier) && this.gates.get(earlier) !== 'passed')
@@ -155,7 +166,6 @@ export class OrchestratorRuntime {
       if ([...this.leases.values()].some((lease) => this.tasks.get(lease.taskId)?.stage === stage))
         throw new Error(`cannot pass gate ${stage} with active leases`);
       const stageTasks = [...this.tasks.values()].filter((task) => task.stage === stage);
-      if (stageTasks.length === 0) throw new Error(`stage ${stage} has no tasks`);
       if (stageTasks.some((task) => task.status !== 'completed'))
         throw new Error(`stage ${stage} is incomplete`);
       if (
@@ -180,6 +190,8 @@ export class OrchestratorRuntime {
   private requireGateAudits(stageTasks: Task[], audits: GateAudit[]): void {
     if (audits.some((audit) => audit.verdict !== 'approve'))
       throw new Error('a gate auditor requested changes');
+    if (stageTasks.some((task) => !task.author || !task.candidateSha))
+      throw new Error('stage tasks lack a recorded author or candidate');
     const authors = new Set(stageTasks.map((task) => task.author));
     const valid = audits.filter(
       (audit) =>
@@ -188,17 +200,12 @@ export class OrchestratorRuntime {
         audit.evidenceId.length > 0 &&
         audit.auditorId.length > 0 &&
         audit.candidateSha.length > 0 &&
-        !authors.has(audit.auditorId),
+        !authors.has(audit.auditorId) &&
+        stageTasks.every((task) => audit.coveredShas.includes(task.candidateSha as string)),
     );
-    const bySha = new Map<string, Set<string>>();
-    for (const audit of valid)
-      bySha.set(
-        audit.candidateSha,
-        (bySha.get(audit.candidateSha) ?? new Set()).add(audit.auditorId),
-      );
-    if (new Set(audits.map((audit) => audit.candidateSha)).size > 1)
+    if (new Set(valid.map((audit) => audit.candidateSha)).size > 1)
       throw new Error('gate audits must review the same candidate SHA');
-    if (![...bySha.values()].some((auditors) => auditors.size >= 2))
+    if (new Set(valid.map((audit) => audit.auditorId)).size < 2)
       throw new Error('a gate needs two independent approving auditors');
   }
   /**
@@ -233,28 +240,47 @@ export class OrchestratorRuntime {
     runtime.epoch = snapshot.epoch;
     runtime.fencing = snapshot.fencing;
     runtime.register(snapshot.tasks);
+    for (const task of snapshot.tasks) {
+      const restored = runtime.tasks.get(task.id);
+      if (restored && task.author) restored.author = task.author;
+    }
     runtime.leases.clear();
     for (const lease of snapshot.leases) {
       const leased = runtime.tasks.get(lease.taskId);
-      if (!leased || leased.status !== 'leased' || lease.epoch !== snapshot.epoch)
+      if (
+        !leased ||
+        leased.status !== 'leased' ||
+        lease.epoch !== snapshot.epoch ||
+        lease.fencing > snapshot.fencing ||
+        lease.provider !== snapshot.provider ||
+        lease.model !== snapshot.model
+      )
         throw new Error(`snapshot lease for ${lease.taskId} is inconsistent`);
     }
+    if (new Set(snapshot.leases.map((lease) => lease.taskId)).size !== snapshot.leases.length)
+      throw new Error('snapshot has duplicate leases');
+    for (const task of snapshot.tasks)
+      if (task.status === 'leased' && !snapshot.leases.some((lease) => lease.taskId === task.id))
+        throw new Error(`snapshot task ${task.id} is leased without a lease`);
     for (const lease of snapshot.leases)
       runtime.leases.set(lease.taskId, { ...lease, requestedPaths: [...lease.requestedPaths] });
     for (const [stage, status] of Object.entries(snapshot.gates)) {
       const number = Number(stage);
-      if (status === 'passed') {
-        const stageTasks = snapshot.tasks.filter((task) => task.stage === number);
-        if (
-          stageTasks.length === 0 ||
-          stageTasks.some((task) => task.status !== 'completed' || !task.candidateSha)
-        )
-          throw new Error(`snapshot gate ${stage} passed without completed tasks`);
-        for (let earlier = 0; earlier < number; earlier += 1)
-          if (earlier in snapshot.gates && snapshot.gates[earlier] !== 'passed')
-            throw new Error(`snapshot gate ${stage} passed before gate ${earlier}`);
-      }
+      if (!Number.isInteger(number) || number < 0)
+        throw new Error(`snapshot gate ${stage} is invalid`);
       runtime.gates.set(number, status);
+    }
+    for (const [stage, status] of runtime.gates) {
+      if (status !== 'passed') continue;
+      const stageTasks = [...runtime.tasks.values()].filter((task) => task.stage === stage);
+      if (
+        stageTasks.length === 0 ||
+        stageTasks.some((task) => task.status !== 'completed' || !task.candidateSha || !task.author)
+      )
+        throw new Error(`snapshot gate ${stage} passed without completed tasks`);
+      for (let earlier = 0; earlier < stage; earlier += 1)
+        if (runtime.gates.has(earlier) && runtime.gates.get(earlier) !== 'passed')
+          throw new Error(`snapshot gate ${stage} passed before gate ${earlier}`);
     }
     for (const eventId of snapshot.eventIds) runtime.eventIds.add(eventId);
     return runtime;

@@ -38,6 +38,8 @@ export interface Candidate {
 export interface GateAudit {
   auditorId: string;
   candidateSha: string;
+  /** Task candidate SHAs contained in the audited cumulative candidate. */
+  coveredShas: string[];
   provider: Provider;
   observedModel: Model;
   verdict: 'approve' | 'request_changes';
