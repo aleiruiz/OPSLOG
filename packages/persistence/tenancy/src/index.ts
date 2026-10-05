@@ -666,6 +666,7 @@ export class TypeOrmTenantStore implements TenantStore, TenantProvisioner {
     const owner = opaqueId();
     const claim = await this.claimJob(target, hash, owner);
     if (claim.kind === 'succeeded') return claim.tenant;
+    if (claim.kind === 'exhausted') throw new ProvisioningFailedError('ATTEMPTS_EXHAUSTED');
     if (claim.kind === 'busy') return this.waitForProvisioning(target, hash, adapter);
     return this.runProvisioning(this.fencedTarget(target, claim.attempt, owner), hash, adapter);
   }
@@ -767,7 +768,10 @@ export class TypeOrmTenantStore implements TenantStore, TenantProvisioner {
     hash: string,
     owner: string,
   ): Promise<
-    { kind: 'claimed'; attempt: number } | { kind: 'busy' } | { kind: 'succeeded'; tenant: Tenant }
+    | { kind: 'claimed'; attempt: number }
+    | { kind: 'busy' }
+    | { kind: 'exhausted' }
+    | { kind: 'succeeded'; tenant: Tenant }
   > {
     return this.dataSource.transaction(async (manager) => {
       const jobs = manager.getRepository(ProvisioningJobEntity);
@@ -785,8 +789,18 @@ export class TypeOrmTenantStore implements TenantStore, TenantProvisioner {
       if (job.leaseOwner && job.leaseExpiresAt && job.leaseExpiresAt > now) return { kind: 'busy' };
       // Every attempt provisions its own database and credential; cap them so a persistent failure
       // cannot create unbounded orphaned resources.
-      if (job.attempt >= MAX_PROVISIONING_ATTEMPTS)
-        throw new ProvisioningFailedError('ATTEMPTS_EXHAUSTED');
+      if (job.attempt >= MAX_PROVISIONING_ATTEMPTS) {
+        job.status = 'failed';
+        job.errorCode = 'ATTEMPTS_EXHAUSTED';
+        job.leaseOwner = null;
+        job.leaseExpiresAt = null;
+        job.updatedAt = now;
+        await jobs.save(job);
+        await manager
+          .getRepository(TenantEntity)
+          .update({ id: target.tenantId }, { status: 'failed' });
+        return { kind: 'exhausted' };
+      }
       job.status = 'running';
       job.attempt += 1;
       job.leaseOwner = owner;
@@ -820,6 +834,7 @@ export class TypeOrmTenantStore implements TenantStore, TenantProvisioner {
       const owner = opaqueId();
       const result = await this.claimJob(target, hash, owner);
       if (result.kind === 'succeeded') return result.tenant;
+      if (result.kind === 'exhausted') throw new ProvisioningFailedError('ATTEMPTS_EXHAUSTED');
       if (result.kind === 'claimed') {
         return this.runProvisioning(
           this.fencedTarget(target, result.attempt, owner),
@@ -845,10 +860,12 @@ export class TypeOrmTenantStore implements TenantStore, TenantProvisioner {
         });
         if (job?.attempt !== attempt || job.status !== 'succeeded')
           return { kind: 'not_succeeded' } as const;
+        // This attempt's commit landed. Decide on job state alone: even if an operator has since
+        // changed the tenant status, its database and credential are live and must not be dropped.
         const row = await manager.getRepository(TenantEntity).findOneBy({ id: target.tenantId });
         return row?.status === 'active'
           ? ({ kind: 'succeeded', tenant: toTenant(row) } as const)
-          : ({ kind: 'not_succeeded' } as const);
+          : ({ kind: 'unknown' } as const);
       });
     } catch {
       return { kind: 'unknown' };

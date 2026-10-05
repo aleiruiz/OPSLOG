@@ -89,3 +89,10 @@ Leer instrucciones, baselines, ADR-0001/0002/0004/0005, SESSION_HANDSHAKE, AUTON
 - Decisiones/pendientes que no se cambiaron: `authorizationVersion` sigue siendo por tenant (revocar a un miembro invalida las sesiones de todo el tenant; el miembro revocado ya se deniega por su estado de membresía, por lo que mover la versión a la membresía es una decisión de diseño de SPECS §4.2); suspensión sin `evictTenant` automático; sin cola por capacidad de data sources; migraciones MySQL no transaccionales; idempotencia global (no por actor); sin guardia de transición en `setTenantStatus`; igualdad exacta de `migrationVersion`.
 - Alcance: este PR modifica `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `tsconfig.json`, `packages/domain/tenants` y `apps/api/tenants`, fuera de `write_paths` original; el usuario autorizó ampliar el alcance el 2026-10-05.
 - PR #15 también edita `package.json` (`format:check`, `test:unit`) y `tsconfig.json`: resolver ese conflicto al fusionar el segundo PR.
+
+### Segunda ronda (re-revisión Opus 5.5 de 5aba0dc)
+
+- `attemptOutcome` decide solo por el estado del job: si el intento propio quedó `succeeded` nunca se hace rollback, aunque el tenant ya no esté `active` (p. ej. suspensión manual entre medias); en ese caso falla sin borrar la base ni el usuario.
+- Al agotar los 5 intentos, `claimJob` ahora persiste job y tenant como `failed` con `ATTEMPTS_EXHAUSTED` en vez de lanzar dentro de la transacción y dejar el tenant en `provisioning` para siempre.
+- Límites conocidos, no cambiados: las entradas desvinculadas dejan de contar contra `maxDataSources` antes de cerrar su pool (cota práctica `maxDataSources + maxActiveLeases`) y un cold acquire espera la liberación de lo que desalojó; `close()` no espera disposiciones iniciadas por otras rutas. Un contexto confiable no expira ni se invalida por suspensión: debe mantenerse con alcance de petición.
+- Compuerta antes de fusionar: ejecutar `pnpm test:integration` (MySQL 8.0.45 sintético) y añadir una prueba de integración del acuse de commit perdido; este entorno no tiene MySQL ni Docker, por lo que esas rutas no se ejercitaron localmente.
