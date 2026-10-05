@@ -537,9 +537,11 @@ describe('TypeORM tenancy against synthetic MySQL 8', () => {
     expect(tenantA.id).toBe(tenantB.id);
     expect(slowAdapter.calls + unusedAdapter.calls).toBe(1);
     expect((await secondStore.getJob(tenantA.id, key))?.status).toBe('succeeded');
+    // Either store may win the claim, so compare against the count before the retry rather than 0.
+    const callsBeforeRetry = unusedAdapter.calls;
     const retry = await secondStore.createAndProvision({ name: 'Tenant A' }, key, unusedAdapter);
     expect(retry.id).toBe(tenantA.id);
-    expect(unusedAdapter.calls).toBe(0);
+    expect(unusedAdapter.calls).toBe(callsBeforeRetry);
 
     const tenantBResult = await firstStore.createAndProvision(
       { name: 'Tenant B' },
