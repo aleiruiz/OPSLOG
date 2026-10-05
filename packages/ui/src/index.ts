@@ -1,3 +1,4 @@
+import './fonts';
 export { opslogTheme } from './theme';
 export { opslogTokens, statusColors } from './tokens';
 export type { StatusTone } from './tokens';

@@ -42,8 +42,12 @@ export function Field({ id, label, description, helperText, error, ...props }: F
       {...(helperText === undefined && description === undefined
         ? {}
         : { helperText: helperText ?? description })}
-      FormHelperTextProps={{ id: helperId }}
-      inputProps={{ 'aria-describedby': helperId, ...props.inputProps }}
+      {...(helperText === undefined && description === undefined
+        ? {}
+        : {
+            FormHelperTextProps: { id: helperId },
+            inputProps: { 'aria-describedby': helperId, ...props.inputProps },
+          })}
     />
   );
 }
@@ -189,13 +193,13 @@ export function PageHeader({
       sx={{ mb: 3 }}
     >
       <Box>
-        <Typography component="h1" variant="h4">
+        <Typography component="h1" variant="h1">
           {title}
         </Typography>
         {description && <Typography color="text.secondary">{description}</Typography>}
       </Box>
       {actions && (
-        <Stack direction="row" gap={1}>
+        <Stack direction="row" gap={1} flexWrap="wrap" sx={{ minWidth: 0 }}>
           {actions}
         </Stack>
       )}
@@ -256,7 +260,12 @@ export function Wizard({
   onStepChange?: (step: number) => void;
 }) {
   return (
-    <Stepper activeStep={activeStep} alternativeLabel aria-label="Progreso del formulario">
+    <Stepper
+      activeStep={activeStep}
+      alternativeLabel
+      aria-label="Progreso del formulario"
+      sx={{ '& .MuiStepButton-root': { px: 0, minWidth: 0 }, '& .MuiStep-root': { px: 0.5 } }}
+    >
       {steps.map((label, index) => (
         <Step key={label} completed={index < activeStep}>
           <StepButton onClick={() => onStepChange?.(index)}>{label}</StepButton>

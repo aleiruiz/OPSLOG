@@ -77,4 +77,73 @@ test.describe('OPSLOG UI components in a real browser', () => {
   test('keeps the accessibility tree of the component gallery stable', async ({ page }) => {
     await expect(page.locator('body')).toMatchAriaSnapshot({ name: 'gallery.aria.yml' });
   });
+
+  test('applies the SPECS type scale to rendered text', async ({ page }) => {
+    const size = (selector: string) =>
+      page
+        .locator(selector)
+        .first()
+        .evaluate((node) => getComputedStyle(node).fontSize);
+    expect(await size('h1')).toBe('22px');
+    expect(await size('h2')).toBe('16px');
+    expect(await size('body')).toBe('14px');
+    expect(
+      await page
+        .locator('p')
+        .first()
+        .evaluate((node) => getComputedStyle(node).fontSize),
+    ).toBe('14px');
+  });
+
+  test('does not overflow horizontally at 360px or 1280px', async ({ page }) => {
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    for (const width of [360, 1280]) {
+      await page.setViewportSize({ width, height: 800 });
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflow, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(0);
+    }
+  });
+
+  test('supports real keyboard navigation with a visible focus indicator', async ({ page }) => {
+    const filter = page.getByRole('textbox', { name: 'Filtrar' });
+    await filter.focus();
+    await page.keyboard.type('tenant');
+    await expect(page.getByText('Filtro actual: tenant')).toBeVisible();
+    await expect(filter).toBeFocused();
+    await expect(filter).toHaveCSS('outline-style', 'solid');
+    await expect(filter).toHaveCSS('outline-width', '3px');
+
+    const checkbox = page.getByRole('checkbox', { name: 'Seleccionar tenant-a' });
+    await checkbox.focus();
+    await page.keyboard.press('Space');
+    await expect(page.getByText('Seleccionados: tenant-a')).toBeVisible();
+
+    const tabs = page.getByRole('tab', { name: 'Resumen' });
+    await tabs.focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(page.getByRole('tab', { name: 'Historial' })).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page.getByText('Historial visible')).toBeVisible();
+
+    const button = page.getByRole('button', { name: 'Limpiar filtros' });
+    await button.focus();
+    await expect(button).toHaveCSS('outline-style', 'solid');
+    await page.keyboard.press('Enter');
+    await expect(page.getByText('Filtro actual: ninguno')).toBeVisible();
+  });
+});
+
+test.describe('OPSLOG stories render and pass accessibility checks', () => {
+  test('renders every story and has no WCAG 2.1 A/AA violations', async ({ page }) => {
+    await page.goto('/stories.html');
+    await expect(page.getByRole('heading', { name: 'Stories OPSLOG' })).toBeVisible();
+    // Foundations: StatusBadge, UiState and the base components each contribute stories.
+    expect(await page.locator('main > section').count()).toBe(17);
+    const results = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .analyze();
+    expect(results.violations).toEqual([]);
+  });
 });

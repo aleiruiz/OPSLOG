@@ -160,4 +160,24 @@ describe('orchestrator runtime', () => {
       'not valid for provider claude',
     );
   });
+
+  it('refuses a provider handoff while leases are active and allows it after completion', () => {
+    const runtime = new OrchestratorRuntime();
+    runtime.register([task('a')]);
+    const lease = runtime.acquire('a', 'agent-a', 'C:/wt/a', 'base', 0);
+    expect(() => runtime.handoff('claude')).toThrow('leases are active');
+    runtime.complete('a', lease.fencing, 'head', 1, 'event-a');
+    runtime.handoff('claude');
+    expect(runtime.snapshot()).toMatchObject({ provider: 'claude', epoch: 2 });
+  });
+
+  it('renews a live lease and rejects stale or expired renewals', () => {
+    const runtime = new OrchestratorRuntime();
+    runtime.register([task('a')]);
+    const lease = runtime.acquire('a', 'agent-a', 'C:/wt/a', 'base', 0, 10);
+    expect(runtime.renew('a', lease.fencing, 5, 100).expiresAt).toBe(105);
+    expect(() => runtime.renew('a', lease.fencing + 1, 6)).toThrow('stale fencing');
+    expect(() => runtime.renew('missing', 1, 6)).toThrow('stale fencing');
+    expect(() => runtime.renew('a', lease.fencing, 200)).toThrow('lease expired');
+  });
 });

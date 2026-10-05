@@ -7,9 +7,9 @@ Compatible con SPEC-1.0 / ORCH-1.0, cuyos archivos se conservan sin cambios.
 ## Política obligatoria
 
 | Proveedor / entorno | Modelo solicitado | Identificador explícito |
-|---|---|---|
-| OpenAI / Codex | GPT-5.6 Luna | `gpt-5.6-luna` |
-| Anthropic / Claude | Claude Sonnet 5 | `claude-sonnet-5` |
+| ------------------- | ----------------- | ----------------------- |
+| OpenAI / Codex      | GPT-5.6 Luna      | `gpt-5.6-luna`          |
+| Anthropic / Claude  | Claude Sonnet 5   | `claude-sonnet-5`       |
 
 Aplica a orquestador, implementadores, integradores, subagentes y auditores. El orquestador inicial de la sesión Codex usa Luna. Un agente Claude y sus subagentes usan Sonnet 5. No cambiar automáticamente a modelos más nuevos, más costosos o de otro proveedor; no usar alias `sonnet` que pueda apuntar a otra versión.
 

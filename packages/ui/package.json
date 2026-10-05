@@ -2,7 +2,7 @@
   "name": "@opslog/ui",
   "private": true,
   "scripts": {
-    "test": "vitest run --environment jsdom --coverage.enabled --coverage.include=src/components/StatusBadge.tsx --coverage.include=src/components/UiState.tsx --coverage.thresholds.lines=80",
+    "test": "vitest run --environment jsdom --coverage.enabled --coverage.include=src/**/*.{ts,tsx} --coverage.exclude=src/**/*.stories.tsx --coverage.exclude=src/**/*.test.* --coverage.exclude=src/index.ts --coverage.exclude=src/fonts.ts --coverage.thresholds.lines=90 --coverage.thresholds.functions=90 --coverage.thresholds.statements=90 --coverage.thresholds.branches=85",
     "axe": "vitest run src/a11y.test.tsx --environment jsdom",
     "lint": "eslint src --max-warnings 0",
     "typecheck": "tsc -b",
