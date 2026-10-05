@@ -86,3 +86,10 @@ Leer instrucciones, baselines, ADR-0001/0002/0004/0005, SESSION_HANDSHAKE, AUTON
 - Fixtures: los actor IDs sintéticos se ensamblan en runtime para que GitGuardian no los confunda con tokens. El hallazgo previo sigue en commits anteriores: marcar el incidente como falso positivo o fusionar con squash.
 - Pruebas nuevas: transacción async y handle cerrado, reloj inyectado, campos extra/PII en append, handler que supera el lease, DLQ por intentos agotados, backoff con `maxAttempts > 1`, A/B con el mismo `eventId` en el worker.
 - `package.json`/`tsconfig.json` de este PR chocan con #16 en `format:check` y `test:unit`; resolver al fusionar el segundo.
+
+### Segunda ronda (re-revisión Opus 5.5 de b164362)
+
+- Audit: `eventId` y `tenantId` (claves de deduplicación) ya no se redactan: un valor no opaco lanza error, de modo que el worker cae en su ruta de fallo de auditoría/DLQ en vez de sobrescribir eventos bajo la clave `[REDACTED]`. También se valida `actor.kind` en runtime.
+- Outbox: `enqueue` rechaza `eventId`/`tenantId` que no sean identificadores opacos (los eventId se usan como clave `outbox:<eventId>` de auditoría).
+- Worker: la rama de handler no registrado queda dentro de `guarded` (lease perdido no aborta `drain`); se eliminó el `throw` inalcanzable.
+- Pruebas nuevas para ambas validaciones. Pendiente: el workflow de CI sigue marcando GitGuardian en rojo por el SHA f3404e8 del historial; marcar el incidente 37876731 como falso positivo en GitGuardian (no se reescribe la historia de la rama).

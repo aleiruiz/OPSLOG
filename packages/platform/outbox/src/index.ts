@@ -57,6 +57,9 @@ export class InMemoryOutboxStore implements OutboxStore {
     const tx: OutboxTransaction = {
       enqueue<T>(input: Omit<OutboxRecord<T>, 'status' | 'attempts' | 'availableAt'>) {
         if (closed) throw new Error('transaction is closed');
+        // Event ids become audit keys (`outbox:<eventId>`), so they must be opaque identifiers.
+        if (!EVENT_ID.test(input.eventId) || !TENANT_ID.test(input.tenantId))
+          throw new Error('event and tenant ids must be opaque identifiers');
         const recordKey = scopedKey(input.tenantId, input.eventId);
         const eventKey = `event:${recordKey}`;
         const idempotencyKey = `idempotency:${scopedKey(input.tenantId, tuple(input.eventId, input.idempotencyKey))}`;
@@ -184,6 +187,8 @@ export class InMemoryOutboxStore implements OutboxStore {
     return [...this.records.values()].map((record) => structuredClone(record));
   }
 }
+const EVENT_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,100}$/;
+const TENANT_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
 function isThenable(value: unknown): boolean {
   return (
     (typeof value === 'object' || typeof value === 'function') &&

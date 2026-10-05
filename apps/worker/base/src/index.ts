@@ -87,29 +87,30 @@ export class Worker {
     }
     const handler = this.handlers.get(record.type);
     if (!record.handlerCompleted && !handler) {
-      this.metrics.handlerFailures += 1;
-      const status = this.store.retry(
-        record.tenantId,
-        record.eventId,
-        fencing,
-        'handler not registered',
-        now,
-        this.maxAttempts,
-      );
-      if (status === 'dead_letter') {
-        this.metrics.deadLettered += 1;
-        this.dlq.send({
-          eventId: record.eventId,
-          tenantId: record.tenantId,
-          reason: 'handler not registered',
-          type: record.type,
-          attempts: record.attempts,
-        });
-      } else this.metrics.retried += 1;
+      this.guarded(() => {
+        this.metrics.handlerFailures += 1;
+        const status = this.store.retry(
+          record.tenantId,
+          record.eventId,
+          fencing,
+          'handler not registered',
+          now,
+          this.maxAttempts,
+        );
+        if (status === 'dead_letter') {
+          this.metrics.deadLettered += 1;
+          this.dlq.send({
+            eventId: record.eventId,
+            tenantId: record.tenantId,
+            reason: 'handler not registered',
+            type: record.type,
+            attempts: record.attempts,
+          });
+        } else this.metrics.retried += 1;
+      });
       return true;
     }
-    if (!record.handlerCompleted) {
-      if (!handler) throw new Error('handler not registered');
+    if (!record.handlerCompleted && handler) {
       try {
         await handler(record.payload, {
           eventId: record.eventId,

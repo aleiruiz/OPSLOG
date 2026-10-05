@@ -37,13 +37,21 @@ const opaque = (value: unknown): string =>
   typeof value === 'string' && OPAQUE_ID.test(value) ? value : REDACTED;
 const label = (value: unknown): string =>
   typeof value === 'string' && LABEL.test(value) ? value : REDACTED;
+const ACTOR_KINDS: readonly AuditActorKind[] = ['user', 'api_key', 'system'];
+/** Keys that identify and deduplicate a record cannot be redacted: they are rejected instead. */
+function requireKey(value: unknown, field: string): string {
+  if (typeof value !== 'string' || !OPAQUE_ID.test(value))
+    throw new Error(`invalid audit ${field}`);
+  return value;
+}
 const instant = (value: unknown): string =>
   typeof value === 'string' && ISO_INSTANT.test(value) ? value : REDACTED;
 /** Builds the persisted shape field by field; unknown runtime fields and free-form identifiers never survive. */
 function toPersisted(event: AuditEvent): PersistedAuditEvent {
+  if (!ACTOR_KINDS.includes(event.actor.kind)) throw new Error('invalid audit actor kind');
   return {
-    eventId: opaque(event.eventId),
-    tenantId: event.tenantId,
+    eventId: requireKey(event.eventId, 'eventId'),
+    tenantId: requireKey(event.tenantId, 'tenantId'),
     action: label(event.action),
     entityType: label(event.entityType),
     entityId: opaque(event.entityId),

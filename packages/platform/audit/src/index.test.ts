@@ -156,4 +156,26 @@ describe('audit safety and tenant isolation', () => {
     expect(stored?.correlationId).toBe('[REDACTED]');
     expect(JSON.stringify(stored)).not.toMatch(/jane|ssn|123-45/i);
   });
+  it('rejects, rather than redacts, keys that identify and deduplicate events', () => {
+    const store = new InMemoryAuditStore();
+    const base = {
+      eventId: 'e-key',
+      tenantId: 'tenant-a',
+      action: 'x',
+      entityType: 'x',
+      entityId: 'e',
+      occurredAt: '2026-10-04T00:00:00.000Z',
+      actor: { id: 'system', kind: 'system' as const },
+      correlationId: 'c',
+      data: {},
+    };
+    expect(() => store.append({ ...base, eventId: 'order/1' })).toThrow('eventId');
+    expect(() => store.append({ ...base, tenantId: '' })).toThrow('tenantId');
+    expect(() => store.append({ ...base, actor: { id: 'system', kind: 'root' as never } })).toThrow(
+      'actor kind',
+    );
+    store.append(base);
+    store.append({ ...base, eventId: 'e-key-2' });
+    expect(store.list('tenant-a')).toHaveLength(2);
+  });
 });

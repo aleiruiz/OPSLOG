@@ -124,4 +124,11 @@ describe('outbox atomicity and fencing', () => {
     expect(store.claim(4_999, 10, 'w')).toBeUndefined();
     expect(store.claim(5_000, 10, 'w')?.record.eventId).toBe('clocked');
   });
+  it('rejects event and tenant ids that are not opaque identifiers', () => {
+    const store = new InMemoryOutboxStore();
+    for (const eventId of ['order/1', 'jane@example.test', '', 'x'.repeat(200)])
+      expect(() => store.transaction((tx) => tx.enqueue(input(eventId)))).toThrow('opaque');
+    expect(() => store.transaction((tx) => tx.enqueue(input('ok', ' ')))).toThrow('opaque');
+    expect(store.all()).toHaveLength(0);
+  });
 });
