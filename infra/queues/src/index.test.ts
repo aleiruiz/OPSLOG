@@ -19,3 +19,27 @@ describe('in-memory queue message IDs', () => {
     expectMonotonicEnqueueIds(new DeadLetterQueue<string>(), 'dlq');
   });
 });
+
+describe('in-memory queue size and ordering', () => {
+  it('reports the number of pending messages and drains FIFO', () => {
+    const queue = new InMemoryQueue<string>();
+    expect(queue.size()).toBe(0);
+    expect(queue.receive()).toBeUndefined();
+    queue.send('a');
+    queue.send('b');
+    expect(queue.size()).toBe(2);
+    expect(queue.receive()?.body).toBe('a');
+    expect(queue.size()).toBe(1);
+    expect(queue.receive()?.body).toBe('b');
+    expect(queue.size()).toBe(0);
+  });
+
+  it('isolates stored messages from caller mutation', () => {
+    const queue = new InMemoryQueue<{ n: number }>();
+    const body = { n: 1 };
+    const sent = queue.send(body);
+    body.n = 2;
+    (sent.body as { n: number }).n = 3;
+    expect(queue.receive()?.body).toEqual({ n: 1 });
+  });
+});

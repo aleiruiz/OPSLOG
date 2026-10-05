@@ -181,3 +181,78 @@ describe('outbox atomicity and fencing', () => {
     expect(backoffMs(1, () => 0.999999)).toBeLessThanOrEqual(72_000);
   });
 });
+
+describe('outbox store edge cases', () => {
+  it('rejects invalid lease or worker on claim', () => {
+    const store = new InMemoryOutboxStore();
+    expect(() => store.claim(0, 0, 'w1')).toThrow('valid lease and worker');
+    expect(() => store.claim(0, -5, 'w1')).toThrow('valid lease and worker');
+    expect(() => store.claim(0, 10, '   ')).toThrow('valid lease and worker');
+  });
+  it('rejects mutations for unknown events and for non-processing records', () => {
+    const store = new InMemoryOutboxStore(() => 0);
+    expect(() => store.markHandlerCompleted('tenant-a', 'nope', 1)).toThrow(
+      'outbox event not found',
+    );
+    store.transaction((tx) => tx.enqueue(input('e1')));
+    const claim = store.claim(0, 10, 'w1')!;
+    expect(() => store.acknowledge('tenant-a', 'e1', claim.fencing)).toThrow(
+      'handler not completed',
+    );
+    store.reconcile(10);
+    expect(store.get('tenant-a', 'e1')).toMatchObject({
+      status: 'retry',
+      lastError: 'lease expired',
+    });
+    expect(() => store.markHandlerCompleted('tenant-a', 'e1', claim.fencing)).toThrow(
+      'stale fencing',
+    );
+    expect(() => store.acknowledge('tenant-a', 'e1', claim.fencing)).toThrow('stale fencing');
+    expect(store.retry('tenant-a', 'e1', claim.fencing, 'again', 10, 3)).toBe('retry');
+  });
+  it('does not reclaim a processing record before its lease expires or before availableAt', () => {
+    const store = new InMemoryOutboxStore(() => 100);
+    store.transaction((tx) => tx.enqueue(input('e1')));
+    expect(store.claim(99, 10, 'w1')).toBeUndefined();
+    const first = store.claim(100, 10, 'w1')!;
+    expect(first.leaseUntil).toBe(110);
+    expect(store.claim(109, 10, 'w2')).toBeUndefined();
+    expect(store.claim(110, 10, 'w2')?.record.attempts).toBe(2);
+  });
+  it('reconcile only touches processing records with an expired lease', () => {
+    const store = new InMemoryOutboxStore(() => 0);
+    store.transaction((tx) => {
+      tx.enqueue(input('e1'));
+      tx.enqueue(input('e2'));
+      tx.enqueue(input('e3'));
+    });
+    store.claim(0, 100, 'w1');
+    store.claim(0, 5, 'w1');
+    expect(store.reconcile(10)).toBe(1);
+    expect(store.reconcile(10)).toBe(0);
+    expect(store.all().map((r) => r.status)).toEqual(['processing', 'retry', 'pending']);
+  });
+  it('truncates stored errors to 500 characters and keeps dead letters terminal', () => {
+    const store = new InMemoryOutboxStore(() => 0);
+    store.transaction((tx) => tx.enqueue(input('e1')));
+    const claim = store.claim(0, 10, 'w1')!;
+    expect(store.retry('tenant-a', 'e1', claim.fencing, 'x'.repeat(900), 0, 1)).toBe('dead_letter');
+    expect(store.get('tenant-a', 'e1')?.lastError).toHaveLength(500);
+    expect(store.retry('tenant-a', 'e1', claim.fencing, 'other', 0, 5)).toBe('dead_letter');
+    expect(store.get('tenant-a', 'e1')?.lastError).toHaveLength(500);
+  });
+  it('returns undefined for unknown events and isolated clones from get and all', () => {
+    const store = new InMemoryOutboxStore(() => 0);
+    expect(store.get('tenant-a', 'missing')).toBeUndefined();
+    store.transaction((tx) => tx.enqueue(input('e1')));
+    store.get('tenant-a', 'e1')!.status = 'delivered';
+    store.all()[0]!.attempts = 99;
+    expect(store.get('tenant-a', 'e1')).toMatchObject({ status: 'pending', attempts: 0 });
+  });
+  it('clamps backoff attempts below one and above the schedule length', () => {
+    expect(backoffMs(0)).toBe(60_000);
+    expect(backoffMs(-3)).toBe(60_000);
+    expect(backoffMs(99)).toBe(43_200_000);
+    expect(backoffMs(1, () => 0)).toBe(48_000);
+  });
+});

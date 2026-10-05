@@ -44,6 +44,11 @@ export const opslogTheme = createTheme({
         },
       },
     },
+    MuiOutlinedInput: {
+      styleOverrides: {
+        notchedOutline: { borderColor: opslogTokens.colors.inputBorder },
+      },
+    },
     MuiTextField: { defaultProps: { variant: 'outlined', size: 'small' } },
     MuiCard: {
       styleOverrides: {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Model } from '../../tools/orchestrator/domain.js';
+import type { GateAudit, Model } from '../../tools/orchestrator/domain.js';
 import { OrchestratorRuntime } from '../../tools/orchestrator/runtime.js';
 
 const task = (id: string, stage = 0, dependencies: string[] = []) => ({
@@ -20,6 +20,16 @@ const evidence = (taskId: string, sha: string) => ({
   observedModel: 'gpt-6-luna' as const,
   evidenceId: `audit-${taskId}`,
 });
+
+const audits = (sha: string, count = 2): GateAudit[] =>
+  Array.from({ length: count }, (_, index) => ({
+    auditorId: `auditor-${index + 1}`,
+    candidateSha: sha,
+    provider: 'codex' as const,
+    observedModel: 'gpt-6-luna' as const,
+    verdict: 'approve' as const,
+    evidenceId: `gate-audit-${sha}-${index + 1}`,
+  }));
 
 describe('orchestrator runtime', () => {
   it('assigns explicit lease/fencing and enforces allowed paths', () => {
@@ -82,11 +92,16 @@ describe('orchestrator runtime', () => {
     const lease = runtime.acquire('a', 'agent-a', 'C:/wt/a', 'base', 0);
     runtime.complete('a', lease.fencing, 'head-a', 1, 'event-a');
     expect(() => runtime.setGate(0, 'passed', [])).toThrow('lacks candidate evidence');
-    runtime.setGate(0, 'passed', [evidence('a', 'head-a')]);
+    runtime.setGate(0, 'passed', [evidence('a', 'head-a')], audits('head-a'));
     const next = runtime.acquire('b', 'agent-b', 'C:/wt/b', 'base-b', 1);
     runtime.complete('b', next.fencing, 'head-b', 2, 'event-b');
     expect(() =>
-      runtime.setGate(1, 'passed', [{ ...evidence('b', 'head-b'), auditCount: 1 }]),
+      runtime.setGate(
+        1,
+        'passed',
+        [{ ...evidence('b', 'head-b'), auditCount: 1 }],
+        audits('head-b'),
+      ),
     ).not.toThrow();
     expect(runtime.validateCandidate({ ...evidence('b', 'head-b'), auditSha: 'old' })).toBe(false);
   });
@@ -179,5 +194,73 @@ describe('orchestrator runtime', () => {
     expect(() => runtime.renew('a', lease.fencing + 1, 6)).toThrow('stale fencing');
     expect(() => runtime.renew('missing', 1, 6)).toThrow('stale fencing');
     expect(() => runtime.renew('a', lease.fencing, 200)).toThrow('lease expired');
+  });
+
+  it('requires two distinct approving gate auditors on the completed candidate', () => {
+    const runtime = new OrchestratorRuntime();
+    runtime.register([task('a')]);
+    const lease = runtime.acquire('a', 'agent-a', 'C:/wt/a', 'base', 0);
+    runtime.complete('a', lease.fencing, 'head-a', 1, 'event-a');
+    const evidenceA = [evidence('a', 'head-a')];
+    expect(() => runtime.setGate(0, 'passed', evidenceA)).toThrow('two independent');
+    expect(() => runtime.setGate(0, 'passed', evidenceA, audits('head-a', 1))).toThrow(
+      'two independent',
+    );
+    const duplicated = audits('head-a').map((audit) => ({ ...audit, auditorId: 'same' }));
+    expect(() => runtime.setGate(0, 'passed', evidenceA, duplicated)).toThrow('two independent');
+    expect(() => runtime.setGate(0, 'passed', evidenceA, audits('other-sha'))).toThrow(
+      'two independent',
+    );
+    const wrongModel = audits('head-a').map((audit) => ({
+      ...audit,
+      observedModel: 'claude-opus-5-5' as Model,
+    }));
+    expect(() => runtime.setGate(0, 'passed', evidenceA, wrongModel)).toThrow('two independent');
+    const rejecting = audits('head-a');
+    rejecting[1] = { ...rejecting[1]!, verdict: 'request_changes' };
+    expect(() => runtime.setGate(0, 'passed', evidenceA, rejecting)).toThrow('requested changes');
+    runtime.setGate(0, 'passed', evidenceA, audits('head-a'));
+    expect(runtime.snapshot().gates[0]).toBe('passed');
+  });
+
+  it('keeps gates cumulative when an earlier gate fails or is reopened', () => {
+    const runtime = new OrchestratorRuntime();
+    runtime.register([task('a', 0), task('b', 1), task('c', 2)]);
+    const first = runtime.acquire('a', 'agent-a', 'C:/wt/a', 'base', 0);
+    runtime.complete('a', first.fencing, 'head-a', 1, 'event-a');
+    runtime.setGate(0, 'passed', [evidence('a', 'head-a')], audits('head-a'));
+    const second = runtime.acquire('b', 'agent-b', 'C:/wt/b', 'base', 1);
+    runtime.complete('b', second.fencing, 'head-b', 2, 'event-b');
+    runtime.setGate(1, 'passed', [evidence('b', 'head-b')], audits('head-b'));
+    runtime.setGate(0, 'failed');
+    expect(runtime.snapshot().gates).toMatchObject({ 0: 'failed', 1: 'pending' });
+    expect(() => runtime.acquire('c', 'agent-c', 'C:/wt/c', 'base', 2)).toThrow(
+      'blocked by gate 0',
+    );
+
+    const reopen = new OrchestratorRuntime();
+    reopen.register([task('a', 0)]);
+    const lease = reopen.acquire('a', 'agent-a', 'C:/wt/a', 'base', 0);
+    reopen.complete('a', lease.fencing, 'head-a', 1, 'event-a');
+    reopen.setGate(0, 'passed', [evidence('a', 'head-a')], audits('head-a'));
+    reopen.register([{ ...task('late', 0) }]);
+    expect(reopen.snapshot().gates[0]).toBe('pending');
+  });
+
+  it('does not pass an empty stage and rejects inconsistent snapshots', () => {
+    const runtime = new OrchestratorRuntime();
+    runtime.register([task('a', 1)]);
+    expect(() => runtime.setGate(0, 'passed', [])).toThrow('has no tasks');
+    const snapshot = runtime.snapshot();
+    expect(() =>
+      OrchestratorRuntime.restore({ ...snapshot, gates: { 0: 'passed', 1: 'pending' } }),
+    ).toThrow('without completed tasks');
+    expect(() =>
+      OrchestratorRuntime.restore({
+        ...snapshot,
+        tasks: snapshot.tasks.map((item) => ({ ...item, status: 'completed' as const })),
+        gates: { 1: 'passed' },
+      }),
+    ).toThrow('before gate 0');
   });
 });

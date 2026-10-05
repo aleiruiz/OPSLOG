@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryAuditStore } from '../../../../packages/platform/audit/src/index.js';
 import { InMemoryOutboxStore } from '../../../../packages/platform/outbox/src/index.js';
-import { Worker } from './index.js';
+import { Worker, drain } from './index.js';
 
 const setup = (status: 'active' | 'missing' | 'suspended') => {
   const store = new InMemoryOutboxStore();
@@ -279,5 +279,149 @@ describe('worker lease loss, attempts and tenant isolation', () => {
     });
     await worker.process();
     expect(store.get('tenant-a', 'e1')?.availableAt).toBe(90_000 + 60_000);
+  });
+});
+
+describe('worker registration, exhaustion and drain', () => {
+  const enqueueMany = (store: InMemoryOutboxStore, ids: string[]) =>
+    store.transaction((tx) => {
+      for (const eventId of ids)
+        tx.enqueue({
+          eventId,
+          tenantId: 'tenant-a',
+          type: 'demo',
+          payload: {},
+          occurredAt: '2026-10-04T00:00:00.000Z',
+          idempotencyKey: eventId,
+        });
+    });
+  const active = { status: () => 'active' as const };
+
+  it('rejects registering the same event type twice', () => {
+    const { worker } = setup('active');
+    worker.register('demo', () => undefined);
+    expect(() => worker.register('demo', () => undefined)).toThrow(
+      'handler already registered: demo',
+    );
+  });
+  it('returns false when nothing is claimable', async () => {
+    const worker = new Worker(
+      new InMemoryOutboxStore(() => 0),
+      active,
+      new InMemoryAuditStore(),
+      'worker-a',
+    );
+    await expect(worker.process(0)).resolves.toBe(false);
+    expect(worker.metrics.claimed).toBe(0);
+  });
+  it('retries with backoff when the handler is missing and attempts remain', async () => {
+    const store = new InMemoryOutboxStore(
+      () => 0,
+      () => 0.5,
+    );
+    enqueueMany(store, ['e1']);
+    const worker = new Worker(store, active, new InMemoryAuditStore(), 'worker-a', 10, 3);
+    await worker.process(0);
+    expect(store.get('tenant-a', 'e1')).toMatchObject({
+      status: 'retry',
+      lastError: 'handler not registered',
+      availableAt: 60_000,
+    });
+    expect(worker.metrics).toMatchObject({ handlerFailures: 1, retried: 1, deadLettered: 0 });
+    expect(worker.dlq.size()).toBe(0);
+  });
+  it('dead-letters a record reclaimed beyond maxAttempts without invoking the handler', async () => {
+    const store = new InMemoryOutboxStore(() => 0);
+    enqueueMany(store, ['e1']);
+    const worker = new Worker(store, active, new InMemoryAuditStore(), 'worker-a', 10, 1);
+    let calls = 0;
+    worker.register('demo', () => {
+      calls += 1;
+    });
+    // Two claims whose leases expire without a terminal state push attempts past maxAttempts.
+    store.claim(0, 10, 'crashed-1');
+    store.reconcile(11);
+    store.claim(11, 10, 'crashed-2');
+    await expect(worker.process(22)).resolves.toBe(true);
+    expect(calls).toBe(0);
+    expect(store.get('tenant-a', 'e1')?.status).toBe('dead_letter');
+    expect(worker.dlq.receive()?.body).toMatchObject({
+      reason: 'attempts exhausted',
+      type: 'demo',
+      attempts: 3,
+    });
+    expect(worker.metrics.deadLettered).toBe(1);
+  });
+  it('counts a stale lease instead of throwing when the record is gone or re-fenced', async () => {
+    const store = new InMemoryOutboxStore(() => 0);
+    enqueueMany(store, ['e1']);
+    const worker = new Worker(store, active, new InMemoryAuditStore(), 'worker-a', 10, 1);
+    // Tenant rejection path: another claimant re-fences before this worker writes.
+    const rejecting = new Worker(
+      store,
+      { status: () => 'suspended' },
+      new InMemoryAuditStore(),
+      'worker-b',
+      10,
+      1,
+    );
+    const retry = store.retry.bind(store);
+    store.retry = () => {
+      throw new Error('stale fencing');
+    };
+    await expect(rejecting.process(0)).resolves.toBe(true);
+    expect(rejecting.metrics.staleLeases).toBe(1);
+    expect(rejecting.dlq.size()).toBe(0);
+    store.retry = retry;
+    expect(worker.metrics.staleLeases).toBe(0);
+  });
+  it('rethrows unexpected store errors instead of swallowing them', async () => {
+    const store = new InMemoryOutboxStore(() => 0);
+    enqueueMany(store, ['e1']);
+    const worker = new Worker(store, active, new InMemoryAuditStore(), 'worker-a', 10, 5);
+    worker.register('demo', () => undefined);
+    store.markHandlerCompleted = () => {
+      throw new Error('disk on fire');
+    };
+    await expect(worker.process(0)).rejects.toThrow('disk on fire');
+    store.markHandlerCompleted = () => {
+      throw 'not an error';
+    };
+    await expect(worker.process(100)).rejects.toBe('not an error');
+    expect(worker.metrics.staleLeases).toBe(0);
+  });
+  it('drops the claim when the handler checkpoint lost its lease', async () => {
+    const store = new InMemoryOutboxStore(() => 0);
+    enqueueMany(store, ['e1']);
+    const audit = new InMemoryAuditStore();
+    const worker = new Worker(store, active, audit, 'worker-a', 10, 5);
+    worker.register('demo', () => undefined);
+    store.markHandlerCompleted = () => {
+      throw new Error('outbox event not found');
+    };
+    await expect(worker.process(0)).resolves.toBe(true);
+    expect(worker.metrics.staleLeases).toBe(1);
+    expect(worker.metrics.delivered).toBe(0);
+    expect(audit.list('tenant-a')).toHaveLength(0);
+  });
+  it('drain processes until empty and returns the number handled', async () => {
+    const store = new InMemoryOutboxStore(() => 0);
+    enqueueMany(store, ['e1', 'e2', 'e3']);
+    const worker = new Worker(store, active, new InMemoryAuditStore(), 'worker-a', 10, 2, () => 0);
+    worker.register('demo', () => undefined);
+    await expect(drain(worker)).resolves.toBe(3);
+    expect(worker.metrics.delivered).toBe(3);
+    await expect(drain(worker)).resolves.toBe(0);
+  });
+  it('drain stops at max and leaves the rest for the next call', async () => {
+    const store = new InMemoryOutboxStore(() => 0);
+    enqueueMany(store, ['e1', 'e2', 'e3']);
+    const worker = new Worker(store, active, new InMemoryAuditStore(), 'worker-a', 10, 2, () => 0);
+    worker.register('demo', () => undefined);
+    await expect(drain(worker, 2)).resolves.toBe(2);
+    expect(worker.metrics.delivered).toBe(2);
+    await expect(drain(worker, 0)).resolves.toBe(0);
+    await expect(drain(worker, 5)).resolves.toBe(1);
+    expect(worker.metrics.delivered).toBe(3);
   });
 });

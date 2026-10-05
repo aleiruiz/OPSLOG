@@ -33,6 +33,15 @@ export interface Candidate {
   observedModel: Model;
   evidenceId: string;
 }
+/** Independent milestone audit of a gate candidate (ORCH-1.1 §2: two auditors per gate). */
+export interface GateAudit {
+  auditorId: string;
+  candidateSha: string;
+  provider: Provider;
+  observedModel: Model;
+  verdict: 'approve' | 'request_changes';
+  evidenceId: string;
+}
 export interface RuntimeSnapshot {
   epoch: number;
   fencing: number;

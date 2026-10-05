@@ -202,4 +202,98 @@ describe('audit safety and tenant isolation', () => {
     redactError(new Error('_'.repeat(100_000)));
     expect(Date.now() - started).toBeLessThan(500);
   });
+  it('redacts invalid labels and timestamps but keeps well-formed ones', () => {
+    const context = {
+      tenantId: 'tenant-a',
+      actorId: 'system',
+      actorKind: 'system' as const,
+      correlationId: 'corr-a',
+    };
+    const input = {
+      eventId: 'label-e',
+      action: 'order.created',
+      entityType: 'order',
+      entityId: 'e',
+      occurredAt: '2026-10-04T00:00:00Z',
+    };
+    const good = createAuditEvent(context, input);
+    expect(good.action).toBe('order.created');
+    expect(good.occurredAt).toBe('2026-10-04T00:00:00Z');
+    const bad = createAuditEvent(context, {
+      ...input,
+      action: 'Jane Doe did it',
+      entityType: 5 as never,
+      entityId: 'a b',
+      occurredAt: 'yesterday',
+    });
+    expect(bad.action).toBe('[REDACTED]');
+    expect(bad.entityType).toBe('[REDACTED]');
+    expect(bad.entityId).toBe('[REDACTED]');
+    expect(bad.occurredAt).toBe('[REDACTED]');
+    expect(createAuditEvent(context, { ...input, occurredAt: 12 as never }).occurredAt).toBe(
+      '[REDACTED]',
+    );
+  });
+  it('rejects a blank tenant in createAuditEvent', () => {
+    expect(() =>
+      createAuditEvent(
+        { tenantId: '  ', actorId: 'system', actorKind: 'system', correlationId: 'c' },
+        { eventId: 'e', action: 'x', entityType: 'x', entityId: 'e', occurredAt: 'x' },
+      ),
+    ).toThrow('tenant is required');
+  });
+  it('treats a missing data object as empty on append', () => {
+    const store = new InMemoryAuditStore();
+    store.append({
+      eventId: 'no-data',
+      tenantId: 'tenant-a',
+      action: 'x',
+      entityType: 'x',
+      entityId: 'e',
+      occurredAt: '2026-10-04T00:00:00.000Z',
+      actor: { id: 'system', kind: 'system' },
+      correlationId: 'c',
+      data: undefined,
+    } as never);
+    expect(store.list('tenant-a')[0]?.data).toEqual({});
+  });
+  it('keeps only valid non-negative safe-integer attempts', () => {
+    expect(redactAuditData({ attempts: 0 })).toEqual({ attempts: 0 });
+    for (const attempts of [-1, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1, '3', null])
+      expect(redactAuditData({ attempts })).toEqual({});
+    expect(redactAuditData({})).toEqual({});
+  });
+  it('validates actor id shape per actor kind', () => {
+    const make = (actorId: string, actorKind: 'user' | 'api_key' | 'system') =>
+      createAuditEvent(
+        { tenantId: 'tenant-a', actorId, actorKind, correlationId: 'c' },
+        { eventId: 'e', action: 'x', entityType: 'x', entityId: 'e', occurredAt: 'x' },
+      ).actor.id;
+    expect(make('system', 'system')).toBe('system');
+    expect(make('worker-outbox_1', 'system')).toBe('worker-outbox_1');
+    expect(make('worker-', 'system')).toBe('[REDACTED]');
+    expect(make('someone', 'system')).toBe('[REDACTED]');
+    // An actor id valid for one kind is not valid for another.
+    expect(make(SYNTHETIC_USER_ACTOR, 'api_key')).toBe('[REDACTED]');
+    expect(make(SYNTHETIC_API_ACTOR, 'user')).toBe('[REDACTED]');
+    expect(make(SYNTHETIC_USER_ACTOR, 'system')).toBe('[REDACTED]');
+  });
+  it('returns a generic message for non-Error values and truncates long messages', () => {
+    expect(redactError('boom password=abc')).toBe('handler failed');
+    expect(redactError(undefined)).toBe('handler failed');
+    expect(redactError(new Error('x'.repeat(5000)))).toHaveLength(500);
+    expect(redactError(new Error('plain failure'))).toBe('plain failure');
+  });
+  it('redacts secret-looking values in error messages', () => {
+    const awsKey = ['AKIA', 'ABCDEFGHIJKLMNOP'].join('');
+    const hex = 'a'.repeat(40);
+    for (const text of [
+      'sent Bearer abc.def.ghi upstream',
+      'key sk-live12345 rejected',
+      `creds ${awsKey} rejected`,
+      `hash ${hex} mismatch`,
+      '-----BEGIN PRIVATE KEY-----',
+    ])
+      expect(redactError(new Error(text))).toBe('[REDACTED]');
+  });
 });

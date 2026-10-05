@@ -1,6 +1,7 @@
 import {
   AUDIT_MODEL_BY_PROVIDER,
   Candidate,
+  GateAudit,
   GateStatus,
   Lease,
   MODEL_BY_PROVIDER,
@@ -33,7 +34,8 @@ export class OrchestratorRuntime {
         dependencies: [...task.dependencies],
         allowedPaths: [...task.allowedPaths],
       });
-      if (!this.gates.has(task.stage)) this.gates.set(task.stage, 'pending');
+      if (this.gates.get(task.stage) === 'passed') this.invalidateFrom(task.stage);
+      else if (!this.gates.has(task.stage)) this.gates.set(task.stage, 'pending');
     }
   }
   public handoff(provider: Provider): void {
@@ -61,8 +63,9 @@ export class OrchestratorRuntime {
       task.status = 'ready';
     }
     if (task.status !== 'ready') throw new Error(`task ${taskId} is not ready`);
-    if (task.stage > 0 && this.gates.get(task.stage - 1) !== 'passed')
-      throw new Error(`stage ${task.stage} is blocked by gate ${task.stage - 1}`);
+    for (let stage = 0; stage < task.stage; stage += 1)
+      if (this.gates.get(stage) !== 'passed')
+        throw new Error(`stage ${task.stage} is blocked by gate ${stage}`);
     for (const dependency of task.dependencies)
       if (this.tasks.get(dependency)?.status !== 'completed')
         throw new Error(`dependency ${dependency} is not completed`);
@@ -135,13 +138,20 @@ export class OrchestratorRuntime {
         candidate.evidenceId.length > 0,
     );
   }
-  public setGate(stage: number, status: GateStatus, candidates: Candidate[] = []): void {
+  public setGate(
+    stage: number,
+    status: GateStatus,
+    candidates: Candidate[] = [],
+    audits: GateAudit[] = [],
+  ): void {
     if (status === 'passed') {
-      if (stage > 0 && this.gates.get(stage - 1) !== 'passed')
-        throw new Error(`gate ${stage - 1} must pass before gate ${stage}`);
+      for (let earlier = 0; earlier < stage; earlier += 1)
+        if (this.gates.get(earlier) !== 'passed')
+          throw new Error(`gate ${earlier} must pass before gate ${stage}`);
       if ([...this.leases.values()].some((lease) => this.tasks.get(lease.taskId)?.stage === stage))
         throw new Error(`cannot pass gate ${stage} with active leases`);
       const stageTasks = [...this.tasks.values()].filter((task) => task.stage === stage);
+      if (stageTasks.length === 0) throw new Error(`stage ${stage} has no tasks`);
       if (stageTasks.some((task) => task.status !== 'completed'))
         throw new Error(`stage ${stage} is incomplete`);
       if (
@@ -153,8 +163,32 @@ export class OrchestratorRuntime {
         )
       )
         throw new Error(`stage ${stage} lacks candidate evidence`);
+      this.requireGateAudits(stageTasks, audits);
+    } else {
+      this.invalidateFrom(stage + 1);
     }
     this.gates.set(stage, status);
+  }
+  private requireGateAudits(stageTasks: Task[], audits: GateAudit[]): void {
+    const shas = new Set(stageTasks.map((task) => task.candidateSha));
+    const valid = audits.filter(
+      (audit) =>
+        audit.verdict === 'approve' &&
+        audit.provider === this.provider &&
+        audit.observedModel === AUDIT_MODEL_BY_PROVIDER[this.provider] &&
+        audit.evidenceId.length > 0 &&
+        audit.auditorId.length > 0 &&
+        shas.has(audit.candidateSha),
+    );
+    if (audits.some((audit) => audit.verdict !== 'approve'))
+      throw new Error('a gate auditor requested changes');
+    if (new Set(valid.map((audit) => audit.auditorId)).size < 2)
+      throw new Error('a gate needs two independent approving auditors');
+  }
+  /** A gate that fails or reopens invalidates every later gate (gates are cumulative). */
+  private invalidateFrom(stage: number): void {
+    for (const [known, status] of this.gates)
+      if (known >= stage && status === 'passed') this.gates.set(known, 'pending');
   }
   public snapshot(): RuntimeSnapshot {
     return {
@@ -183,8 +217,18 @@ export class OrchestratorRuntime {
     runtime.leases.clear();
     for (const lease of snapshot.leases)
       runtime.leases.set(lease.taskId, { ...lease, requestedPaths: [...lease.requestedPaths] });
-    for (const [stage, status] of Object.entries(snapshot.gates))
-      runtime.gates.set(Number(stage), status);
+    for (const [stage, status] of Object.entries(snapshot.gates)) {
+      const number = Number(stage);
+      if (status === 'passed') {
+        const stageTasks = snapshot.tasks.filter((task) => task.stage === number);
+        if (stageTasks.length === 0 || stageTasks.some((task) => task.status !== 'completed'))
+          throw new Error(`snapshot gate ${stage} passed without completed tasks`);
+        for (let earlier = 0; earlier < number; earlier += 1)
+          if (snapshot.gates[earlier] !== 'passed')
+            throw new Error(`snapshot gate ${stage} passed before gate ${earlier}`);
+      }
+      runtime.gates.set(number, status);
+    }
     for (const eventId of snapshot.eventIds) runtime.eventIds.add(eventId);
     return runtime;
   }
