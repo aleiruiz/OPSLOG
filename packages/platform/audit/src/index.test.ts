@@ -190,7 +190,16 @@ describe('audit safety and tenant isolation', () => {
       'db_password=hunter2xyz',
       'Authorization: Basic dXNlcjpwYXNz',
       'password = "hunter 2"',
+      '{"password":"hunter2xyz"}',
+      'password: "unterminated hunter value',
     ])
-      expect(redactError(new Error(text))).not.toMatch(/abc123|s3cr3t|hunter|dXNlcjpwYXNz/);
+      expect(redactError(new Error(text))).not.toMatch(
+        /abc123|s3cr3t|hunter|dXNlcjpwYXNz|unterminated/,
+      );
+  });
+  it('scans long error messages in bounded time', () => {
+    const started = Date.now();
+    redactError(new Error('_'.repeat(100_000)));
+    expect(Date.now() - started).toBeLessThan(500);
   });
 });

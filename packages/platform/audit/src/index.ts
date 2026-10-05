@@ -93,11 +93,12 @@ function sanitizeActorId(actorId: string, actorKind: AuditActorKind): string {
   return isOpaque ? actorId : REDACTED;
 }
 const CREDENTIAL_PAIR =
-  /(?<![A-Za-z0-9])[\w-]*(?:password|passwd|secret|token|api[_-]?key|authorization|cookie|credential)s?\s*[=:]\s*(?:"[^"]*"|'[^']*'|(?:(?:bearer|basic|digest|token)\s+)?\S+)/gi;
+  /(?<![A-Za-z0-9])[\w-]{0,32}(?:password|passwd|secret|token|api[_-]?key|authorization|cookie|credential)s?["']?\s*[=:]\s*(?:"[^"]*(?:"|$)|'[^']*(?:'|$)|(?:(?:bearer|basic|digest|token)\s+)?\S+)/gi;
 const JWT = /\beyJ[A-Za-z0-9_-]{6,}(?:\.[A-Za-z0-9_-]+){0,2}/g;
 /** Only the message is kept, with credential-like and PII-like text removed; names in free text cannot be detected. */
 export function redactError(error: unknown): string {
-  const message = error instanceof Error ? error.message : 'handler failed';
+  // Cap before scanning so a huge upstream message cannot stall the event loop.
+  const message = (error instanceof Error ? error.message : 'handler failed').slice(0, 2000);
   return String(scrub(message.replace(CREDENTIAL_PAIR, REDACTED).replace(JWT, REDACTED), 'error'))
     .replace(FREE_FORM_PII, '[REDACTED]')
     .slice(0, 500);
