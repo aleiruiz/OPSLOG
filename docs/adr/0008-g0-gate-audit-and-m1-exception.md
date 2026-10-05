@@ -12,10 +12,10 @@ La revisión independiente de G0 sobre `main@776abce` (informe en `docs/audits/G
 
 ## Decisiones
 
-- **Segundo auditor de G0.** El usuario autorizó expresamente que G0 sea evaluado por dos auditores independientes `claude-opus-5-5`, con contexto limpio y distintos del autor. La autorización cubre solo auditorías de hito G0; no cambia la regla de exactamente una auditoría por PR/headSHA.
-- **Excepción de M1 (ratificación posterior).** La fusión de #15, #16, #17 y #20 ocurrió antes de esta decisión y de G0; el usuario la ratificó después del hecho el 2026-10-05, tras la primera revisión de G0. Las fusiones las ejecutó la misma sesión autora de las PR tras CI verde y revisión Opus, sin revisión formal de GitHub. El usuario aceptó que la fusión de #15, #16, #17 y #20 antes de G0 quede registrada como excepción aprobada por él. No convierte a G0 en aprobado: el código M1 fusionado queda dentro del alcance acumulativo del candidato G0 (CI, regresión y auditoría).
+- **Segundo auditor de G0.** El usuario autorizó expresamente que G0 sea evaluado por dos auditores independientes `claude-opus-5-5`, con contexto limpio y distintos del autor. La autorización cubre solo auditorías de hito G0 (la exigencia de dos auditores por gate proviene de ORCH-1.1 §2 y SPEC-1.3, no de esta autorización); no cambia la regla de exactamente una auditoría por PR/headSHA.
+- **Excepción de M1 (ratificación posterior).** La fusión de #15, #16, #17 y #20 ocurrió antes de esta decisión y de G0; el usuario la ratificó después del hecho el 2026-10-05, tras la primera revisión de G0. Las fusiones las ejecutó la misma sesión autora de las PR tras CI verde y revisión Opus, sin revisión formal de GitHub. Queda registrada como excepción aprobada por él. No convierte a G0 en aprobado: el código M1 fusionado queda dentro del alcance acumulativo del candidato G0 (CI, regresión y auditoría).
 - **Gates posteriores.** G1 y los demás gates conservan dos auditores independientes por hito; esta autorización no los exime ni se extiende a PR individuales.
-- **Decisión de aprobación.** La sesión que redactó las PR de cierre de G0 (#19–#22) no declara G0 aprobado; la decisión final corresponde al usuario o a los auditores independientes.
+- **Decisión de aprobación.** La sesión que redactó las PR de cierre de G0 (#21 y #22) no declara G0 aprobado; la decisión final corresponde al usuario o a los auditores independientes.
 - No se modifican las baselines congeladas ni sus manifests. Esta decisión no autoriza dispatch de nuevas tareas M1 posteriores a las ya fusionadas, ni AWS ni producción.
 
 ## Verificación

@@ -98,10 +98,13 @@ Provider-lock efectivo: solo Codex está activo en esta ronda; autor y auditor r
 
 ## Diferido explícitamente (registro de G0, 2026-10-05)
 
-El runtime implementado (`tools/orchestrator`) cubre leases, fencing, epochs, gates acumulativos, pines de modelo y handoff con pruebas unitarias (cobertura ≥90/85). Los siguientes componentes de FND-ORCH **no están construidos** y no se declaran como cumplidos:
+El runtime implementado (`tools/orchestrator`) cubre con pruebas unitarias leases, fencing, epochs, gates acumulativos, pines de modelo y handoff (cobertura ≥90/85). Los siguientes componentes y casos de FND-ORCH **no están construidos o probados** y no se declaran como cumplidos:
 
-- reconstrucción del estado desde un fake de GitHub,
-- store de estado persistente y proyección de Tasks,
-- comando `simulate` y simulación de dispatch.
+- reconstrucción del estado desde un fake de GitHub, store de estado persistente y proyección de Tasks,
+- comando `simulate` y simulación de dispatch,
+- caso unitario de heartbeat/timeout (`renew()` se cubre solo parcialmente),
+- integración con fake de git/worktree,
+- e2e: bootstrap M0, recuperación, gate que bloquea M1 e invalidación por SHA candidato,
+- comandos `lint`/`typecheck` filtrados por orquestador (se ejecutan en el `quality` global).
 
-Fecha límite: antes de que el orquestador despache tareas de G1 y, como máximo, al cierre de G1. Mientras tanto el estado de Tasks lo escribe únicamente el orquestador humano/sesión coordinadora, como indica AGENTS.md.
+Fecha límite: al cierre de G1 como máximo. Mientras tanto el estado de Tasks lo escribe únicamente el orquestador (ORCHESTRATOR_START.md y CLAUDE.md).

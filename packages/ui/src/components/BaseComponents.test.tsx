@@ -117,6 +117,7 @@ describe('interactive components', () => {
     expect(onSelectedChange).toHaveBeenLastCalledWith([]);
     rerender(<DataTable columns={[{ key: 'name', label: 'Nombre' }]} rows={rows} selectable />);
     fireEvent.click(screen.getByRole('checkbox', { name: 'Seleccionar b' }));
+    expect(screen.getByRole('checkbox', { name: 'Seleccionar b' })).not.toBeChecked();
     rerender(<DataTable columns={[{ key: 'name', label: 'Nombre' }]} rows={rows} />);
     expect(screen.queryByRole('checkbox')).toBeNull();
   });
@@ -138,7 +139,7 @@ describe('interactive components', () => {
     expect(screen.queryByRole('button')).toBeNull();
   });
 
-  it('switches tab panels and notifies the parent', () => {
+  it('renders the active tab panel and notifies the parent on selection', () => {
     const onChange = vi.fn();
     render(
       <DetailTabs
@@ -164,6 +165,7 @@ describe('interactive components', () => {
     expect(onStepChange).toHaveBeenCalledWith(0);
     rerender(<Wizard steps={['Uno', 'Dos']} activeStep={0} />);
     fireEvent.click(screen.getByRole('button', { name: /Dos/ }));
+    expect(screen.getByRole('button', { name: /Dos/ })).toBeInTheDocument();
   });
 
   it('requires a reason before confirming and trims it', () => {
@@ -171,6 +173,8 @@ describe('interactive components', () => {
     const onCancel = vi.fn();
     const { rerender } = render(<ConfirmWithReason onConfirm={onConfirm} onCancel={onCancel} />);
     const confirm = screen.getByRole('button', { name: 'Confirmar' });
+    expect(confirm).toBeDisabled();
+    fireEvent.change(screen.getByLabelText(/Motivo/), { target: { value: '   ' } });
     expect(confirm).toBeDisabled();
     fireEvent.change(screen.getByLabelText(/Motivo/), { target: { value: '  porque  ' } });
     fireEvent.click(confirm);

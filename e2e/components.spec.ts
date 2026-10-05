@@ -140,7 +140,7 @@ test.describe('OPSLOG stories render and pass accessibility checks', () => {
     await page.goto('/stories.html');
     await expect(page.getByRole('heading', { name: 'Stories OPSLOG' })).toBeVisible();
     // Foundations: StatusBadge, UiState and the base components each contribute stories.
-    expect(await page.locator('main > section').count()).toBeGreaterThanOrEqual(17);
+    expect(await page.locator('main > section').count()).toBe(17);
     const results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
       .analyze();
