@@ -13,6 +13,7 @@ export interface WorkerMetrics {
   deadLettered: number;
   rejectedTenants: number;
   handlerFailures: number;
+  auditFailures: number;
 }
 export type Handler = (
   payload: unknown,
@@ -26,6 +27,7 @@ export class Worker {
     deadLettered: 0,
     rejectedTenants: 0,
     handlerFailures: 0,
+    auditFailures: 0,
   };
   readonly dlq = new DeadLetterQueue<unknown>();
   private readonly handlers = new Map<string, Handler>();
@@ -49,6 +51,7 @@ export class Worker {
     if (this.tenants.status(record.tenantId) !== 'active') {
       this.metrics.rejectedTenants += 1;
       this.store.retry(record.eventId, fencing, 'tenant unavailable', now, 1);
+      this.metrics.deadLettered += 1;
       this.dlq.send({
         eventId: record.eventId,
         tenantId: record.tenantId,
@@ -68,7 +71,13 @@ export class Worker {
       );
       if (status === 'dead_letter') {
         this.metrics.deadLettered += 1;
-        this.dlq.send(record);
+        this.dlq.send({
+          eventId: record.eventId,
+          tenantId: record.tenantId,
+          reason: 'handler not registered',
+          type: record.type,
+          attempts: record.attempts,
+        });
       } else this.metrics.retried += 1;
       return true;
     }
@@ -78,8 +87,6 @@ export class Worker {
         tenantId: record.tenantId,
         type: record.type,
       });
-      this.store.acknowledge(record.eventId, fencing);
-      this.metrics.delivered += 1;
       const auditEvent: AuditEvent = {
         eventId: `outbox:${record.eventId}`,
         tenantId: record.tenantId,
@@ -91,7 +98,16 @@ export class Worker {
         correlationId: record.eventId,
         data: { type: record.type, attempts: record.attempts },
       };
-      this.audit.append(auditEvent);
+      try {
+        this.audit.append(auditEvent);
+      } catch {
+        // Keep the claim processing until lease expiry. The handler must be idempotent
+        // because it may be invoked again after the claim is reconciled.
+        this.metrics.auditFailures += 1;
+        return true;
+      }
+      this.store.acknowledge(record.eventId, fencing);
+      this.metrics.delivered += 1;
       return true;
     } catch (error) {
       this.metrics.handlerFailures += 1;

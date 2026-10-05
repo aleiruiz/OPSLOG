@@ -20,6 +20,8 @@ export interface AuditEvent {
 const SENSITIVE_KEY =
   /(password|secret|token|authorization|cookie|credential|private.?key|access.?key|refresh.?token|ssn|tax.?id|license|phone|email|address|birth|dob|national.?id)/i;
 const SECRET_VALUE = /(?:bearer\s+|sk-[A-Za-z0-9]|AKIA[A-Z0-9]{16}|-----BEGIN|[A-Fa-f0-9]{32,})/i;
+const FREE_FORM_PII =
+  /[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}|\b(?:\+?\d[\d .()-]{7,}\d)\b|\b\d{3}-\d{2}-\d{4}\b/g;
 function scrub(value: unknown, key = ''): unknown {
   if (SENSITIVE_KEY.test(key)) return '[REDACTED]';
   if (typeof value === 'string')
@@ -38,7 +40,7 @@ export function redactAuditData(
 }
 export function redactError(error: unknown): string {
   const message = error instanceof Error ? error.message : 'handler failed';
-  return String(scrub(message, 'error')).slice(0, 500);
+  return String(scrub(message, 'error')).replace(FREE_FORM_PII, '[REDACTED]').slice(0, 500);
 }
 export function createAuditEvent(
   context: AuditContext,

@@ -22,9 +22,15 @@ describe('outbox atomicity and fencing', () => {
     store.transaction((tx) => {
       tx.enqueue(input('e1'));
       tx.enqueue(input('e1'));
-      tx.enqueue(input('e2', 'tenant-b', 'e1'));
+      tx.enqueue(input('e1', 'tenant-b', 'e1'));
     });
-    expect(store.all()).toHaveLength(1);
+    expect(store.all()).toHaveLength(2);
+    expect(
+      store
+        .all()
+        .map((record) => record.tenantId)
+        .sort(),
+    ).toEqual(['tenant-a', 'tenant-b']);
   });
   it('claims each event once, reclaims expired leases, and rejects stale fences', () => {
     const store = new InMemoryOutboxStore();
@@ -49,5 +55,16 @@ describe('outbox atomicity and fencing', () => {
     expect(store.get('e1')?.availableAt).toBe(now + backoffMs(1));
     const second = store.claim(now + backoffMs(1), 10, 'w')!;
     expect(store.retry('e1', second.fencing, 'x', now + backoffMs(1), 2)).toBe('dead_letter');
+  });
+  it('makes acknowledgement and retry idempotent for the same fencing token', () => {
+    const store = new InMemoryOutboxStore();
+    store.transaction((tx) => tx.enqueue(input('e1')));
+    const now = Date.now();
+    const claim = store.claim(now, 10, 'w')!;
+    expect(store.retry('e1', claim.fencing, 'temporary', now, 5)).toBe('retry');
+    expect(store.retry('e1', claim.fencing, 'temporary', now, 5)).toBe('retry');
+    const next = store.claim(now + 1000, 10, 'w')!;
+    store.acknowledge('e1', next.fencing);
+    expect(() => store.acknowledge('e1', next.fencing)).not.toThrow();
   });
 });

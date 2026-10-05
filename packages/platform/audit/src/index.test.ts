@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { InMemoryAuditStore, createAuditEvent, redactAuditData } from './index.js';
+import { InMemoryAuditStore, createAuditEvent, redactAuditData, redactError } from './index.js';
 
 describe('audit safety and tenant isolation', () => {
   it('redacts PII and secrets recursively while preserving safe fields', () => {
@@ -9,6 +9,11 @@ describe('audit safety and tenant isolation', () => {
       safe: 'ok',
     });
     expect(data).toEqual({ email: '[REDACTED]', nested: { token: '[REDACTED]' }, safe: 'ok' });
+  });
+  it('redacts free form email, phone and government identifier errors', () => {
+    expect(
+      redactError(new Error('contact ana@example.test or call +1 (415) 555-2671; SSN 123-45-6789')),
+    ).not.toMatch(/ana@example\.test|415|123-45-6789/);
   });
   it('keeps A/B tenants isolated and deduplicates event ids', () => {
     const store = new InMemoryAuditStore();
