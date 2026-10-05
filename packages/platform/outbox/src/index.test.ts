@@ -53,6 +53,26 @@ describe('outbox atomicity and fencing', () => {
     store.acknowledge('tenant-a', 'e1', second.fencing);
     expect(store.get('tenant-a', 'e1')?.status).toBe('delivered');
   });
+  it('ignores caller supplied delivery, lease and fencing fields during enqueue', () => {
+    const store = new InMemoryOutboxStore();
+    store.transaction((tx) =>
+      tx.enqueue({
+        ...input('forged'),
+        status: 'delivered',
+        attempts: 99,
+        availableAt: 0,
+        leaseUntil: Number.MAX_SAFE_INTEGER,
+        fencing: 900,
+        handlerCompleted: true,
+      } as never),
+    );
+    const claimed = store.claim(Date.now(), 100, 'worker');
+    expect(claimed?.record.status).toBe('processing');
+    expect(claimed?.record.attempts).toBe(1);
+    expect(claimed?.record.fencing).toBe(1);
+    expect(claimed?.record).not.toHaveProperty('handlerCompleted');
+    expect(claimed?.record.leaseUntil).toBe(claimed?.leaseUntil);
+  });
   it('backs off and moves repeated failures to dead letter', () => {
     const store = new InMemoryOutboxStore();
     store.transaction((tx) => tx.enqueue(input('e1')));

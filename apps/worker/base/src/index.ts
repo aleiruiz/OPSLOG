@@ -48,7 +48,7 @@ export class Worker {
     if (!claim) return false;
     this.metrics.claimed += 1;
     const { record, fencing } = claim;
-    if (this.tenants.status(record.tenantId) !== 'active') {
+    if (!record.handlerCompleted && this.tenants.status(record.tenantId) !== 'active') {
       this.metrics.rejectedTenants += 1;
       this.store.retry(record.tenantId, record.eventId, fencing, 'tenant unavailable', now, 1);
       this.metrics.deadLettered += 1;
@@ -60,7 +60,7 @@ export class Worker {
       return true;
     }
     const handler = this.handlers.get(record.type);
-    if (!handler) {
+    if (!record.handlerCompleted && !handler) {
       this.metrics.handlerFailures += 1;
       const status = this.store.retry(
         record.tenantId,
@@ -84,6 +84,7 @@ export class Worker {
     }
     try {
       if (!record.handlerCompleted) {
+        if (!handler) throw new Error('handler not registered');
         await handler(record.payload, {
           eventId: record.eventId,
           tenantId: record.tenantId,

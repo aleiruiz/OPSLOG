@@ -69,7 +69,12 @@ export class InMemoryOutboxStore implements OutboxStore {
               )!,
           ) as OutboxRecord<T>;
         const record: OutboxRecord = {
-          ...structuredClone(input),
+          eventId: input.eventId,
+          tenantId: input.tenantId,
+          type: input.type,
+          payload: structuredClone(input.payload),
+          occurredAt: input.occurredAt,
+          idempotencyKey: input.idempotencyKey,
           status: 'pending',
           attempts: 0,
           availableAt: Date.now(),

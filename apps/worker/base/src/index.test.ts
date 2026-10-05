@@ -85,7 +85,8 @@ describe('worker tenant, handler and DLQ controls', () => {
       },
       list: (tenantId: string) => persisted.list(tenantId),
     };
-    const worker = new Worker(store, { status: () => 'active' }, audit, 'worker-b', 10);
+    let tenantStatus: 'active' | 'suspended' = 'active';
+    const worker = new Worker(store, { status: () => tenantStatus }, audit, 'worker-b', 10);
     worker.register('demo', () => {
       calls += 1;
     });
@@ -99,6 +100,7 @@ describe('worker tenant, handler and DLQ controls', () => {
     expect(worker.metrics.delivered).toBe(0);
     expect(calls).toBe(1);
     failAudit = false;
+    tenantStatus = 'suspended';
     await worker.process(now + 11);
     expect(calls).toBe(1);
     expect(store.get('tenant-a', 'e1')?.status).toBe('delivered');

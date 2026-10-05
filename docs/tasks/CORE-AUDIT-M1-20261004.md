@@ -30,3 +30,10 @@ Leer instrucciones, baselines, ADR-0001/0002/0004/0005, SESSION_HANDSHAKE, AUTON
 - Validado con Node `24.19.0` y pnpm `11.25.0`: typechecks strict/noUnused de audit, outbox, queues y worker (incluye tests); Vitest del slice: 14 tests / 3 archivos PASS; ESLint del scope PASS; Prettier de los archivos TypeScript del scope PASS; `git diff --check` PASS.
 - Calidad de paquete: `pnpm run lint`, `pnpm run typecheck`, `pnpm run build` y `pnpm run test:unit` PASS. `pnpm run format:check` falla en 41 archivos enumerados por el script, todos fuera del pathScope; no se reformatearon. El format check dedicado a los archivos del slice pasa.
 - Integración MySQL no ejecutada: `OPSLOG_TEST_MYSQL_ADMIN_URL` no está configurada y el harness crea/elimina bases y usuarios; los adaptadores de este slice siguen siendo en memoria. No se validó persistencia real/MySQL.
+
+## Seguimiento de auditoría del SHA a3cee15
+
+- `enqueue` reconstruye el registro con una lista de campos permitidos; ignora valores suministrados por quien llama para status, attempts, lease, fencing y `handlerCompleted`. Prueba de regresión verifica que el worker debe reclamar e invocar el handler.
+- El rechazo por tenant no activo aplica antes de ejecutar un handler. Cuando `handlerCompleted` ya está guardado, el worker permite completar solo el append de auditoría aun si el tenant está suspendido; una prueba provoca el fallo inicial de append, suspende el tenant y confirma que el reintento no vuelve a ejecutar el handler.
+- Prettier dirigido a los siete archivos TypeScript del scope: PASS. Typechecks strict del audit/outbox/worker, ESLint del scope, Vitest 15/15 y `git diff --check`: PASS.
+- La verificación dirigida no está incluida todavía en `pnpm quality`; editar `package.json` requiere una lease adicional por ser configuración compartida. No se hizo commit ni push de esta tranche mientras se espera esa asignación.
