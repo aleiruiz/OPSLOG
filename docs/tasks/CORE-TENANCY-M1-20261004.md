@@ -68,4 +68,12 @@ La auditoría reportó brechas en persistencia durable, MySQL real, leases, evid
 - `pnpm quality` completo se ejecutó; se detuvo en `format:check` por 38 archivos preexistentes ajenos al scope. Ninguno de los cuatro paths modificados aparece en el reporte tras formatear esta nota. No se reformatearon archivos ajenos.
 - La validación remota CI/GitGuardian sobre el SHA que publique esta reparación y la auditoría independiente siguen pendientes; no declarar gate ni auditoría aprobados.
 
+### Reparación de concurrencia de pools — base e82bd18 (auditoría independiente pendiente)
+
+- `TenantDataSourceFactory` serializa las decisiones que mutan el pool. La entrada y su lease de reserva se registran antes de esperar `initialize()`: adquisiciones frías del mismo tenant/version comparten el mismo `ready`, y adquisiciones de claves distintas cuentan inmediatamente contra `maxDataSources`.
+- La misma exclusión coordina lectura/caché, eviction por versión, creación, liberación, `evictTenant` y `close`; una reserva fallida no deja una fuente huérfana. Se mantiene la comprobación de tenant, versión, base, referencia y fingerprint de contraseña para entradas concurrentes.
+- Se añadieron pruebas deterministas con resolvers sincronizados: dos adquisiciones frías de la misma clave crean una sola fuente; dos tenants distintos con límite 1 producen exactamente un lease y un rechazo de capacidad. En ambos casos el cierre destruye la única fuente creada; la prueba existente cubre liberación, rotación/eviction y rechazo de cierre con leases activos.
+- Verificación de esta reparación: `pnpm lint`, `pnpm test:unit` (incluye 9 unitarias de tenancy), `pnpm test:integration` (harness sintético 1 y tenancy/MySQL 8 sintético 4), `pnpm build`, typecheck de tenancy, Prettier scoped y `git diff --check` pasaron. jsdom/axe emitió avisos conocidos de `HTMLCanvasElement.getContext`, pero sus pruebas pasaron.
+- No se declara aprobado el gate ni la auditoría. CI/escaneo remoto y la única auditoría independiente requerida para el SHA final siguen pendientes.
+
 Leer instrucciones, baselines, ADR-0001/0002/0004/0005, SESSION_HANDSHAKE, AUTONOMOUS_ORCHESTRATOR y SPECS §4–§7. Usar solo fixtures sintéticos/locales. El autor no audita ni fusiona. Si se necesita contrato compartido o lockfile, detenerse y pedir reasignación.

@@ -214,6 +214,7 @@ export class TenantDataSourceFactory {
   private readonly entries = new Map<string, TenantDataSourceEntry>();
   private readonly waiters: LeaseWaiter[] = [];
   private readonly limits: Required<TenantDataSourcePoolOptions>;
+  private poolLock: Promise<void> = Promise.resolve();
   private activeLeases = 0;
   private closed = false;
 
@@ -252,10 +253,38 @@ export class TenantDataSourceFactory {
     return this.waiters.length;
   }
 
+  private async withPoolLock<T>(operation: () => T | Promise<T>): Promise<T> {
+    const previous = this.poolLock;
+    let unlock!: () => void;
+    this.poolLock = new Promise<void>((resolve) => {
+      unlock = resolve;
+    });
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      unlock();
+    }
+  }
+
+  private assertEntryMatches(
+    entry: TenantDataSourceEntry,
+    context: TenantContext,
+    databaseName: string,
+    credentialRef: string,
+  ): void {
+    if (
+      entry.tenantId !== context.tenantId ||
+      entry.secretVersion !== context.database.secretVersion ||
+      entry.databaseName !== databaseName ||
+      entry.credentialRef !== credentialRef
+    )
+      throw new TenantAccessDeniedError();
+  }
+
   async acquire(context: TenantContext): Promise<TenantDataSourceLease> {
     await this.reserveLeaseSlot();
     try {
-      if (this.closed) throw new TenantDataSourceCapacityError();
       const location = context.database;
       if (
         location.tenantId !== context.tenantId ||
@@ -267,16 +296,17 @@ export class TenantDataSourceFactory {
         throw new TenantAccessDeniedError();
 
       const key = `${context.tenantId}:${location.secretVersion}`;
-      let entry = this.entries.get(key);
-      if (entry) {
-        if (
-          entry.databaseName !== location.databaseName ||
-          entry.credentialRef !== location.credentialRef
-        )
-          throw new TenantAccessDeniedError();
-        entry.leases += 1;
-        entry.lastUsedAt = Date.now();
-      } else {
+      let entry = await this.withPoolLock(() => {
+        if (this.closed) throw new TenantDataSourceCapacityError();
+        const cached = this.entries.get(key);
+        if (!cached) return undefined;
+        this.assertEntryMatches(cached, context, location.databaseName, location.credentialRef);
+        cached.leases += 1;
+        cached.lastUsedAt = Date.now();
+        return cached;
+      });
+
+      if (!entry) {
         const resolved = await this.credentials.resolve(
           location.credentialRef,
           location.secretVersion,
@@ -291,19 +321,27 @@ export class TenantDataSourceFactory {
         )
           throw new TenantAccessDeniedError();
 
-        // Another concurrent acquire may have populated this key while credentials resolved.
-        await this.evictOlderTenantVersions(context.tenantId, location.secretVersion);
-        entry = this.entries.get(key);
-        if (entry) {
-          if (
-            entry.databaseName !== location.databaseName ||
-            entry.credentialRef !== location.credentialRef ||
-            entry.passwordFingerprint !== fingerprintPassword(resolved.password)
-          )
-            throw new TenantAccessDeniedError();
-          entry.leases += 1;
-          entry.lastUsedAt = Date.now();
-        } else {
+        entry = await this.withPoolLock(async () => {
+          if (this.closed) throw new TenantDataSourceCapacityError();
+
+          // The entry is inserted under the lock before initialize() is awaited, so
+          // same-key cold acquires share its in-flight promise and count toward capacity.
+          const concurrent = this.entries.get(key);
+          if (concurrent) {
+            this.assertEntryMatches(
+              concurrent,
+              context,
+              location.databaseName,
+              location.credentialRef,
+            );
+            if (concurrent.passwordFingerprint !== fingerprintPassword(resolved.password))
+              throw new TenantAccessDeniedError();
+            concurrent.leases += 1;
+            concurrent.lastUsedAt = Date.now();
+            return concurrent;
+          }
+
+          await this.evictOlderTenantVersions(context.tenantId, location.secretVersion);
           await this.makeRoom();
           const dataSource = this.createDataSource({
             type: 'mysql',
@@ -321,6 +359,13 @@ export class TenantDataSourceFactory {
             charset: 'utf8mb4',
             extra: { connectionLimit: this.limits.maxConnectionsPerDataSource },
           });
+          let ready: Promise<DataSource>;
+          try {
+            ready = dataSource.initialize();
+          } catch (error) {
+            if (dataSource.isInitialized) await dataSource.destroy();
+            throw error;
+          }
           const created: TenantDataSourceEntry = {
             key,
             tenantId: context.tenantId,
@@ -329,21 +374,25 @@ export class TenantDataSourceFactory {
             credentialRef: location.credentialRef,
             passwordFingerprint: fingerprintPassword(resolved.password),
             dataSource,
-            ready: dataSource.initialize(),
+            ready,
             leases: 1,
             lastUsedAt: Date.now(),
           };
           this.entries.set(key, created);
-          entry = created;
-        }
+          return created;
+        });
       }
 
       try {
         await entry.ready;
       } catch (error) {
-        if (this.entries.get(entry.key) === entry) this.entries.delete(entry.key);
-        entry.leases = Math.max(0, entry.leases - 1);
-        if (entry.dataSource.isInitialized) await entry.dataSource.destroy();
+        await this.withPoolLock(async () => {
+          entry!.leases = Math.max(0, entry!.leases - 1);
+          if (entry!.leases === 0) {
+            if (this.entries.get(entry!.key) === entry) this.entries.delete(entry!.key);
+            if (entry!.dataSource.isInitialized) await entry!.dataSource.destroy();
+          }
+        });
         throw error;
       }
       return this.createLease(entry);
@@ -354,19 +403,26 @@ export class TenantDataSourceFactory {
   }
 
   async evictTenant(tenantId: TenantId): Promise<void> {
-    const tenantEntries = [...this.entries.values()].filter((entry) => entry.tenantId === tenantId);
-    if (tenantEntries.some((entry) => entry.leases > 0)) throw new TenantDataSourceCapacityError();
-    await Promise.all(tenantEntries.map((entry) => this.destroyEntry(entry)));
+    await this.withPoolLock(async () => {
+      const tenantEntries = [...this.entries.values()].filter(
+        (entry) => entry.tenantId === tenantId,
+      );
+      if (tenantEntries.some((entry) => entry.leases > 0))
+        throw new TenantDataSourceCapacityError();
+      await Promise.all(tenantEntries.map((entry) => this.destroyEntry(entry)));
+    });
   }
 
   async close(): Promise<void> {
-    if (this.activeLeases > 0) throw new TenantDataSourceCapacityError();
-    this.closed = true;
-    for (const waiter of this.waiters.splice(0)) {
-      clearTimeout(waiter.timer);
-      waiter.reject(new TenantDataSourceCapacityError());
-    }
-    await Promise.all([...this.entries.values()].map((entry) => this.destroyEntry(entry)));
+    await this.withPoolLock(async () => {
+      if (this.activeLeases > 0) throw new TenantDataSourceCapacityError();
+      this.closed = true;
+      for (const waiter of this.waiters.splice(0)) {
+        clearTimeout(waiter.timer);
+        waiter.reject(new TenantDataSourceCapacityError());
+      }
+      await Promise.all([...this.entries.values()].map((entry) => this.destroyEntry(entry)));
+    });
   }
 
   private async reserveLeaseSlot(): Promise<void> {
@@ -432,15 +488,17 @@ export class TenantDataSourceFactory {
       release: async () => {
         if (released) return;
         released = true;
-        entry.leases = Math.max(0, entry.leases - 1);
-        entry.lastUsedAt = Date.now();
         try {
-          const hasNewerVersion = [...this.entries.values()].some(
-            (candidate) =>
-              candidate.tenantId === entry.tenantId &&
-              candidate.secretVersion > entry.secretVersion,
-          );
-          if (entry.leases === 0 && hasNewerVersion) await this.destroyEntry(entry);
+          await this.withPoolLock(async () => {
+            entry.leases = Math.max(0, entry.leases - 1);
+            entry.lastUsedAt = Date.now();
+            const hasNewerVersion = [...this.entries.values()].some(
+              (candidate) =>
+                candidate.tenantId === entry.tenantId &&
+                candidate.secretVersion > entry.secretVersion,
+            );
+            if (entry.leases === 0 && hasNewerVersion) await this.destroyEntry(entry);
+          });
         } finally {
           this.releaseLeaseSlot();
         }

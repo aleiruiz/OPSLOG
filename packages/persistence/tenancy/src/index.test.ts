@@ -202,6 +202,119 @@ describe('trusted tenant context and data source selection', () => {
     expect(source.isInitialized).toBe(false);
   });
 
+  it('shares one data source for simultaneous cold acquires of the same tenant version', async () => {
+    const { resolver, session } = fixture();
+    const context = await resolver.resolve({ sessionId: session.id });
+    let resolveCount = 0;
+    let releaseResolvers!: () => void;
+    const bothResolversStarted = new Promise<void>((resolve) => {
+      releaseResolvers = resolve;
+    });
+    const created: DataSource[] = [];
+    const factory = new TenantDataSourceFactory(
+      { host: '127.0.0.1', port: 3306 },
+      {
+        async resolve(_ref, version) {
+          resolveCount += 1;
+          if (resolveCount === 2) releaseResolvers();
+          await bothResolversStarted;
+          return {
+            tenantId,
+            databaseName: location.databaseName,
+            username: 'opslog_u_synthetic',
+            password: 'synthetic-test-only',
+            secretVersion: version,
+          };
+        },
+      },
+      { maxDataSources: 1 },
+      (options) => {
+        const source = fakeDataSource(options);
+        created.push(source);
+        return source;
+      },
+    );
+
+    const [first, second] = await Promise.all([factory.acquire(context), factory.acquire(context)]);
+    expect(first.dataSource).toBe(second.dataSource);
+    expect(resolveCount).toBe(2);
+    expect(created).toHaveLength(1);
+    expect(factory.poolSize).toBe(1);
+    await Promise.all([first.release(), second.release()]);
+    await factory.close();
+    expect(created[0]!.isInitialized).toBe(false);
+  });
+
+  it('reserves the strict pool cap for simultaneous cold acquires of distinct tenants', async () => {
+    const { resolver, session } = fixture();
+    const firstContext = await resolver.resolve({ sessionId: session.id });
+    const secondTenantId = opaqueTenantId();
+    const secondContext = {
+      ...firstContext,
+      tenantId: secondTenantId,
+      database: {
+        ...firstContext.database,
+        tenantId: secondTenantId,
+        databaseName: `opslog_t_${secondTenantId.replaceAll('-', '')}`,
+        credentialRef: `tenant/${secondTenantId}/runtime`,
+      },
+    } as TenantContext;
+    let resolveCount = 0;
+    let releaseResolvers!: () => void;
+    const bothResolversStarted = new Promise<void>((resolve) => {
+      releaseResolvers = resolve;
+    });
+    const created: DataSource[] = [];
+    const factory = new TenantDataSourceFactory(
+      { host: '127.0.0.1', port: 3306 },
+      {
+        async resolve(ref, version) {
+          resolveCount += 1;
+          if (resolveCount === 2) releaseResolvers();
+          await bothResolversStarted;
+          const resolvedTenantId = ref === location.credentialRef ? tenantId : secondTenantId;
+          const resolvedDatabaseName =
+            resolvedTenantId === tenantId
+              ? location.databaseName
+              : secondContext.database.databaseName;
+          return {
+            tenantId: resolvedTenantId,
+            databaseName: resolvedDatabaseName,
+            username: 'opslog_u_synthetic',
+            password: 'synthetic-test-only',
+            secretVersion: version,
+          };
+        },
+      },
+      { maxDataSources: 1 },
+      (options) => {
+        const source = fakeDataSource(options);
+        created.push(source);
+        return source;
+      },
+    );
+
+    const results = await Promise.allSettled([
+      factory.acquire(firstContext),
+      factory.acquire(secondContext),
+    ]);
+    const leases = results.flatMap((result) =>
+      result.status === 'fulfilled' ? [result.value] : [],
+    );
+    const failures = results.filter((result) => result.status === 'rejected');
+    expect(leases).toHaveLength(1);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]!.status).toBe('rejected');
+    if (failures[0]!.status === 'rejected')
+      expect(failures[0]!.reason).toBeInstanceOf(TenantDataSourceCapacityError);
+    expect(resolveCount).toBe(2);
+    expect(factory.poolSize).toBe(1);
+    expect(created).toHaveLength(1);
+    await leases[0]!.release();
+    await factory.close();
+    expect(created[0]!.isInitialized).toBe(false);
+  });
+
   it('caches per tenant and secret version, evicts idle pools, and closes its lifecycle', async () => {
     const { resolver, session } = fixture();
     const context = await resolver.resolve({ sessionId: session.id });
