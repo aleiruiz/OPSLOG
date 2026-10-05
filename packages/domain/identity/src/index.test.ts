@@ -37,6 +37,26 @@ describe('identity and authentication', () => {
     expect(new Set(linked.map(({ id }) => id)).size).toBe(1);
   });
 
+  it('supersedes earlier invitations when one is reissued for the same identity and tenant', async () => {
+    const auth = new IdentityService(new InMemoryIdentityStore(), notifier);
+    const identity = await auth.provisionExternal('oidc-test', 'invitee');
+    const first = await auth.issueInvitation('tenant-a', identity.id);
+    const second = await auth.issueInvitation('tenant-a', identity.id);
+    await expect(
+      auth.activateInvitation(first.token, 'oidc-test', 'attacker'),
+    ).rejects.toMatchObject({ code: 'unauthorized' });
+    await expect(
+      auth.activateInvitation(second.token, 'oidc-test', 'invitee'),
+    ).resolves.toMatchObject({ membership: { tenantId: 'tenant-a', status: 'active' } });
+  });
+
+  it('answers non-string tokens as unauthorized', async () => {
+    const auth = new IdentityService(new InMemoryIdentityStore(), notifier);
+    await expect(
+      auth.activateInvitation(undefined as unknown as string, 'oidc-test', 'invitee'),
+    ).rejects.toMatchObject({ code: 'unauthorized' });
+  });
+
   it('consumes invitations once and rejects replay and expiry', async () => {
     let now = new Date('2026-10-04T00:00:00.000Z');
     const auth = new IdentityService(new InMemoryIdentityStore(), notifier, undefined, () => now);

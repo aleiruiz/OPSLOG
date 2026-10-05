@@ -108,7 +108,11 @@ export interface IdentityStore {
   findIdentity(id: string): Promise<Identity | null>;
   findExternal(provider: string, subject: string): Promise<ExternalIdentity | null>;
   findMembership(tenantId: string, identityId: string): Promise<Membership | null>;
-  /** Atomically create the invitation and pending identity/membership, preserving existing non-revoked identities. */
+  /**
+   * Atomically create the invitation and pending identity/membership, preserving existing non-revoked identities.
+   * Earlier unconsumed invitations for the same tenant and identity must be superseded (marked consumed) in the same
+   * transaction so a leaked older link cannot activate the account after a reissue.
+   */
   createInvitation(
     identity: Identity,
     membership: Membership,
@@ -205,6 +209,15 @@ export class InMemoryIdentityStore implements IdentityStore {
     const currentMembership = this.memberships.get(membershipKey);
     if (currentMembership?.status === 'active') throw new AuthError('conflict');
     if (currentMembership?.status !== 'pending') this.memberships.set(membershipKey, membership);
+    // A newer invitation supersedes earlier unconsumed links for the same tenant and identity.
+    const supersededAt = new Date();
+    for (const [id, previous] of this.invitations)
+      if (
+        previous.tenantId === invitation.tenantId &&
+        previous.identityId === invitation.identityId &&
+        !previous.consumedAt
+      )
+        this.invitations.set(id, { ...previous, consumedAt: supersededAt });
     this.invitations.set(invitation.id, invitation);
   }
   public async activateInvitation(
@@ -304,7 +317,8 @@ export class InMemoryIdentityStore implements IdentityStore {
   }
 }
 
-const nonEmpty = (value: string): boolean => value.trim().length > 0 && value.length <= 200;
+const nonEmpty = (value: unknown): value is string =>
+  typeof value === 'string' && value.trim().length > 0 && value.length <= 200;
 export interface IdentityServiceOptions {
   /** Minimum time between recovery deliveries for one identity; extra requests get the same public answer. */
   readonly recoveryMinIntervalMs?: number;
