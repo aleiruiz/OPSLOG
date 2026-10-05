@@ -21,11 +21,12 @@ describe('audit safety and tenant isolation', () => {
       createAuditEvent(
         { tenantId, actorId: 'opaque-actor', actorKind: 'system', correlationId: `${tenantId}-c` },
         {
-          eventId: `${tenantId}-e`,
+          eventId: 'local-e',
           action: 'x',
           entityType: 'x',
           entityId: 'e',
           occurredAt: '2026-10-04T00:00:00.000Z',
+          data: { contact: 'person@example.test', nested: { phone: '+1 415 555 2671' } },
         },
       );
     store.append(event('tenant-a'));
@@ -34,5 +35,10 @@ describe('audit safety and tenant isolation', () => {
     expect(store.list('tenant-a')).toHaveLength(1);
     expect(store.list('tenant-b')).toHaveLength(1);
     expect(store.list('tenant-a')[0]?.tenantId).toBe('tenant-a');
+    expect(store.list('tenant-b')[0]?.eventId).toBe(store.list('tenant-a')[0]?.eventId);
+    expect(store.list('tenant-a')[0]?.data).toEqual({
+      contact: '[REDACTED]',
+      nested: { phone: '[REDACTED]' },
+    });
   });
 });

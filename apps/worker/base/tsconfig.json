@@ -1,1 +1,10 @@
-{"extends":"../../../tsconfig.base.json","compilerOptions":{"rootDir":"../../../","outDir":"dist"},"include":["src/**/*.ts"]}
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": { "rootDir": "../../../", "outDir": "dist" },
+  "include": [
+    "src/**/*.ts",
+    "../../../packages/platform/audit/src/**/*.ts",
+    "../../../packages/platform/outbox/src/**/*.ts",
+    "../../../infra/queues/src/**/*.ts"
+  ]
+}

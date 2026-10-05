@@ -31,7 +31,7 @@ describe('worker tenant, handler and DLQ controls', () => {
       });
       await worker.process(Date.now());
       expect(called).toBe(false);
-      expect(store.get('e1')?.status).toBe('dead_letter');
+      expect(store.get('tenant-a', 'e1')?.status).toBe('dead_letter');
       expect(worker.dlq.receive()?.body).toEqual({
         eventId: 'e1',
         tenantId: 'tenant-a',
@@ -46,7 +46,9 @@ describe('worker tenant, handler and DLQ controls', () => {
       throw new Error('token=Bearer secret-value; email private@example.test');
     });
     await worker.process(Date.now());
-    expect(store.get('e1')?.lastError).not.toMatch(/secret-value|private@example\.test/);
+    expect(store.get('tenant-a', 'e1')?.lastError).not.toMatch(
+      /secret-value|private@example\.test/,
+    );
     const dlqEntry = worker.dlq.receive()?.body as Record<string, unknown>;
     expect(dlqEntry).toEqual({ eventId: 'e1', tenantId: 'tenant-a', reason: 'handler failed' });
     expect(JSON.stringify(dlqEntry)).not.toMatch(/not-for-dlq|private@example\.test/);
@@ -68,27 +70,39 @@ describe('worker tenant, handler and DLQ controls', () => {
     const { worker, store, audit } = setup('active');
     worker.register('demo', () => undefined);
     await worker.process(Date.now());
-    expect(store.get('e1')?.status).toBe('delivered');
+    expect(store.get('tenant-a', 'e1')?.status).toBe('delivered');
     expect(audit.list('tenant-a')).toHaveLength(1);
   });
-  it('keeps a claim processing when audit persistence fails', async () => {
+  it('does not redeliver a completed handler after audit append failure', async () => {
     const { store } = setup('active');
-    const worker = new Worker(
-      store,
-      { status: () => 'active' },
-      {
-        append: () => {
-          throw new Error('unavailable');
-        },
-        list: () => [],
+    const persisted = new InMemoryAuditStore();
+    let failAudit = true;
+    let calls = 0;
+    const audit = {
+      append: (event: Parameters<typeof persisted.append>[0]) => {
+        if (failAudit) throw new Error('unavailable');
+        persisted.append(event);
       },
-      'worker-b',
-    );
-    worker.register('demo', () => undefined);
-    await worker.process(Date.now());
-    expect(store.all()[0]?.status).toBe('processing');
+      list: (tenantId: string) => persisted.list(tenantId),
+    };
+    const worker = new Worker(store, { status: () => 'active' }, audit, 'worker-b', 10);
+    worker.register('demo', () => {
+      calls += 1;
+    });
+    const now = Date.now();
+    await worker.process(now);
+    expect(store.get('tenant-a', 'e1')).toMatchObject({
+      status: 'processing',
+      handlerCompleted: true,
+    });
     expect(worker.metrics.auditFailures).toBe(1);
     expect(worker.metrics.delivered).toBe(0);
+    expect(calls).toBe(1);
+    failAudit = false;
+    await worker.process(now + 11);
+    expect(calls).toBe(1);
+    expect(store.get('tenant-a', 'e1')?.status).toBe('delivered');
+    expect(persisted.list('tenant-a')).toHaveLength(1);
   });
   it('allows only one concurrent worker claim for an event', async () => {
     const { store, audit } = setup('active');

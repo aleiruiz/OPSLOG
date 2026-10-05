@@ -18,14 +18,16 @@ export interface AuditEvent {
   readonly data: Readonly<Record<string, unknown>>;
 }
 const SENSITIVE_KEY =
-  /(password|secret|token|authorization|cookie|credential|private.?key|access.?key|refresh.?token|ssn|tax.?id|license|phone|email|address|birth|dob|national.?id)/i;
+  /(password|secret|token|authorization|cookie|credential|private.?key|access.?key|refresh.?token|ssn|tax.?id|rfc|curp|license|phone|email|address|birth|dob|national.?id)/i;
 const SECRET_VALUE = /(?:bearer\s+|sk-[A-Za-z0-9]|AKIA[A-Z0-9]{16}|-----BEGIN|[A-Fa-f0-9]{32,})/i;
 const FREE_FORM_PII =
   /[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}|\b(?:\+?\d[\d .()-]{7,}\d)\b|\b\d{3}-\d{2}-\d{4}\b/g;
 function scrub(value: unknown, key = ''): unknown {
   if (SENSITIVE_KEY.test(key)) return '[REDACTED]';
-  if (typeof value === 'string')
-    return SECRET_VALUE.test(value) ? '[REDACTED]' : value.slice(0, 2000);
+  if (typeof value === 'string') {
+    if (SECRET_VALUE.test(value)) return '[REDACTED]';
+    return value.replace(FREE_FORM_PII, '[REDACTED]').slice(0, 2000);
+  }
   if (Array.isArray(value)) return value.map((item) => scrub(item, key));
   if (value && typeof value === 'object')
     return Object.fromEntries(
@@ -62,14 +64,17 @@ export interface AuditStore {
   list(tenantId: string): readonly AuditEvent[];
 }
 export class InMemoryAuditStore implements AuditStore {
-  private readonly events: AuditEvent[] = [];
+  private readonly events = new Map<string, AuditEvent>();
   append(event: AuditEvent): void {
-    if (!this.events.some((existing) => existing.eventId === event.eventId))
-      this.events.push(structuredClone(event));
+    const key = scopedKey(event.tenantId, event.eventId);
+    if (!this.events.has(key)) this.events.set(key, structuredClone(event));
   }
   list(tenantId: string): readonly AuditEvent[] {
-    return this.events
+    return [...this.events.values()]
       .filter((event) => event.tenantId === tenantId)
       .map((event) => structuredClone(event));
   }
+}
+function scopedKey(tenantId: string, eventId: string): string {
+  return `${tenantId.length}:${tenantId}${eventId.length}:${eventId}`;
 }

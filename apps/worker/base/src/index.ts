@@ -50,7 +50,7 @@ export class Worker {
     const { record, fencing } = claim;
     if (this.tenants.status(record.tenantId) !== 'active') {
       this.metrics.rejectedTenants += 1;
-      this.store.retry(record.eventId, fencing, 'tenant unavailable', now, 1);
+      this.store.retry(record.tenantId, record.eventId, fencing, 'tenant unavailable', now, 1);
       this.metrics.deadLettered += 1;
       this.dlq.send({
         eventId: record.eventId,
@@ -63,6 +63,7 @@ export class Worker {
     if (!handler) {
       this.metrics.handlerFailures += 1;
       const status = this.store.retry(
+        record.tenantId,
         record.eventId,
         fencing,
         'handler not registered',
@@ -82,11 +83,14 @@ export class Worker {
       return true;
     }
     try {
-      await handler(record.payload, {
-        eventId: record.eventId,
-        tenantId: record.tenantId,
-        type: record.type,
-      });
+      if (!record.handlerCompleted) {
+        await handler(record.payload, {
+          eventId: record.eventId,
+          tenantId: record.tenantId,
+          type: record.type,
+        });
+        this.store.markHandlerCompleted(record.tenantId, record.eventId, fencing);
+      }
       const auditEvent: AuditEvent = {
         eventId: `outbox:${record.eventId}`,
         tenantId: record.tenantId,
@@ -106,12 +110,13 @@ export class Worker {
         this.metrics.auditFailures += 1;
         return true;
       }
-      this.store.acknowledge(record.eventId, fencing);
+      this.store.acknowledge(record.tenantId, record.eventId, fencing);
       this.metrics.delivered += 1;
       return true;
     } catch (error) {
       this.metrics.handlerFailures += 1;
       const status = this.store.retry(
+        record.tenantId,
         record.eventId,
         fencing,
         redactError(error),

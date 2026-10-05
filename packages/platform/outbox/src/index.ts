@@ -12,6 +12,7 @@ export interface OutboxRecord<T = unknown> {
   leaseUntil?: number;
   fencing?: number;
   lastError?: string;
+  handlerCompleted?: boolean;
 }
 export interface EventClaim<T = unknown> {
   readonly record: OutboxRecord<T>;
@@ -24,8 +25,10 @@ export interface OutboxTransaction {
 export interface OutboxStore {
   transaction<T>(work: (tx: OutboxTransaction) => T): T;
   claim<T>(now: number, leaseMs: number, workerId: string): EventClaim<T> | undefined;
-  acknowledge(eventId: string, fencing: number): void;
+  markHandlerCompleted(tenantId: string, eventId: string, fencing: number): void;
+  acknowledge(tenantId: string, eventId: string, fencing: number): void;
   retry(
+    tenantId: string,
     eventId: string,
     fencing: number,
     error: string,
@@ -33,9 +36,15 @@ export interface OutboxStore {
     maxAttempts: number,
   ): OutboxStatus;
   reconcile(now: number): number;
-  get(eventId: string): OutboxRecord | undefined;
+  get(tenantId: string, eventId: string): OutboxRecord | undefined;
   all(): readonly OutboxRecord[];
 }
+/**
+ * In-memory reference adapter. Durable adapters must persist handlerCompleted with
+ * the lease/fencing state so an audit retry cannot repeat a completed side effect.
+ * Handlers must also be idempotent by (tenantId, eventId) across a crash between
+ * the external side effect and this completion checkpoint.
+ */
 export class InMemoryOutboxStore implements OutboxStore {
   private readonly records = new Map<string, OutboxRecord>();
   private fencing = 0;
@@ -45,20 +54,18 @@ export class InMemoryOutboxStore implements OutboxStore {
     const store = this;
     const tx: OutboxTransaction = {
       enqueue<T>(input: Omit<OutboxRecord<T>, 'status' | 'attempts' | 'availableAt'>) {
-        const eventKey = scopedKey(input.tenantId, input.eventId);
-        const idempotencyKey = scopedKey(input.tenantId, input.idempotencyKey);
-        const existing =
-          store.records.get(eventKey) ??
-          [...store.records.values()].find(
-            (r) => scopedKey(r.tenantId, r.idempotencyKey) === idempotencyKey,
-          );
+        const recordKey = scopedKey(input.tenantId, input.eventId);
+        const eventKey = `event:${recordKey}`;
+        const idempotencyKey = `idempotency:${scopedKey(input.tenantId, tuple(input.eventId, input.idempotencyKey))}`;
+        const existing = store.records.get(recordKey);
         if (existing || keys.has(eventKey) || keys.has(idempotencyKey))
           return structuredClone(
             existing ??
               staged.find(
                 (r) =>
-                  scopedKey(r.tenantId, r.eventId) === eventKey ||
-                  scopedKey(r.tenantId, r.idempotencyKey) === idempotencyKey,
+                  `event:${scopedKey(r.tenantId, r.eventId)}` === eventKey ||
+                  `idempotency:${scopedKey(r.tenantId, tuple(r.eventId, r.idempotencyKey))}` ===
+                    idempotencyKey,
               )!,
           ) as OutboxRecord<T>;
         const record: OutboxRecord = {
@@ -106,31 +113,33 @@ export class InMemoryOutboxStore implements OutboxStore {
       leaseUntil,
     };
   }
-  private checked(eventId: string, fencing: number): OutboxRecord {
-    const record = [...this.records.values()].find(
-      (candidate) => candidate.eventId === eventId && candidate.fencing === fencing,
-    );
-    if (!record) {
-      if (![...this.records.values()].some((candidate) => candidate.eventId === eventId))
-        throw new Error('outbox event not found');
-      throw new Error('stale fencing');
-    }
+  private checked(tenantId: string, eventId: string, fencing: number): OutboxRecord {
+    const record = this.records.get(scopedKey(tenantId, eventId));
+    if (!record) throw new Error('outbox event not found');
+    if (record.fencing !== fencing) throw new Error('stale fencing');
     return record;
   }
-  acknowledge(eventId: string, fencing: number): void {
-    const record = this.checked(eventId, fencing);
+  markHandlerCompleted(tenantId: string, eventId: string, fencing: number): void {
+    const record = this.checked(tenantId, eventId, fencing);
+    if (record.status !== 'processing') throw new Error('stale fencing');
+    record.handlerCompleted = true;
+  }
+  acknowledge(tenantId: string, eventId: string, fencing: number): void {
+    const record = this.checked(tenantId, eventId, fencing);
     if (record.status === 'delivered') return;
     if (record.status !== 'processing') throw new Error('stale fencing');
+    if (!record.handlerCompleted) throw new Error('handler not completed');
     record.status = 'delivered';
   }
   retry(
+    tenantId: string,
     eventId: string,
     fencing: number,
     error: string,
     now: number,
     maxAttempts: number,
   ): OutboxStatus {
-    const record = this.checked(eventId, fencing);
+    const record = this.checked(tenantId, eventId, fencing);
     if (record.status === 'retry' || record.status === 'dead_letter') return record.status;
     if (record.status !== 'processing') throw new Error('stale fencing');
     record.lastError = error.slice(0, 500);
@@ -152,8 +161,8 @@ export class InMemoryOutboxStore implements OutboxStore {
       }
     return count;
   }
-  get(eventId: string): OutboxRecord | undefined {
-    const record = [...this.records.values()].find((candidate) => candidate.eventId === eventId);
+  get(tenantId: string, eventId: string): OutboxRecord | undefined {
+    const record = this.records.get(scopedKey(tenantId, eventId));
     return record && structuredClone(record);
   }
   all(): readonly OutboxRecord[] {
@@ -162,6 +171,9 @@ export class InMemoryOutboxStore implements OutboxStore {
 }
 function scopedKey(tenantId: string, key: string): string {
   return `${tenantId.length}:${tenantId}${key.length}:${key}`;
+}
+function tuple(...parts: string[]): string {
+  return parts.map((part) => `${part.length}:${part}`).join('');
 }
 export function backoffMs(attempt: number, baseMs = 1000, capMs = 300_000): number {
   return Math.min(capMs, baseMs * 2 ** Math.max(0, attempt - 1));
