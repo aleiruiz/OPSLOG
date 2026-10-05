@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { DataSource, type DataSourceOptions } from 'typeorm';
 import {
   type Membership,
   type Session,
   type SubjectId,
   type Tenant,
   type TenantDatabaseLocation,
+  type TenantContext,
   type TenantId,
   type SessionId,
   opaqueTenantId,
@@ -13,6 +15,7 @@ import {
 import { TenantAccessDeniedError } from '@opslog/domain-tenants';
 import {
   TenantContextResolver,
+  TenantDataSourceCapacityError,
   TenantDataSourceFactory,
   createControlPlaneDataSource,
   type TenantCredentialResolver,
@@ -24,7 +27,7 @@ const tenantId = opaqueTenantId();
 const actorId = subjectId('synthetic-subject');
 const location: TenantDatabaseLocation = {
   tenantId,
-  databaseName: 'opslog_t_019b5b3343a07eaa9e58319c8d8ec321',
+  databaseName: `opslog_t_${tenantId.replaceAll('-', '')}`,
   credentialRef: `tenant/${tenantId}/runtime`,
   secretVersion: 1,
   migrationVersion: '2026100400020',
@@ -32,6 +35,24 @@ const location: TenantDatabaseLocation = {
   isolationProbeVerified: true,
   verifiedAt: new Date(),
 };
+
+function fakeDataSource(options: DataSourceOptions): DataSource {
+  let initialized = false;
+  const fake = {
+    options,
+    get isInitialized() {
+      return initialized;
+    },
+    async initialize() {
+      initialized = true;
+      return fake;
+    },
+    async destroy() {
+      initialized = false;
+    },
+  } as unknown as DataSource;
+  return fake;
+}
 
 class TestTenantStore implements TenantStore {
   constructor(
@@ -154,16 +175,117 @@ describe('trusted tenant context and data source selection', () => {
         };
       },
     };
-    const source = await new TenantDataSourceFactory(
+    const created: DataSource[] = [];
+    const factory = new TenantDataSourceFactory(
       { host: '127.0.0.1', port: 3306 },
       credentialResolver,
-    ).create(context);
+      { maxConnectionsPerDataSource: 2 },
+      (options) => {
+        const source = fakeDataSource(options);
+        created.push(source);
+        return source;
+      },
+    );
+    const lease = await factory.acquire(context);
+    const source = lease.dataSource;
     expect(source.options.database).toBe(location.databaseName);
     expect(source.options).toMatchObject({
       username: 'opslog_u_synthetic',
       synchronize: false,
       password: 'synthetic-test-only',
+      extra: { connectionLimit: 2 },
     });
+    expect(source.isInitialized).toBe(true);
+    expect(created).toHaveLength(1);
+    await lease.release();
+    await factory.close();
+    expect(source.isInitialized).toBe(false);
+  });
+
+  it('caches per tenant and secret version, evicts idle pools, and closes its lifecycle', async () => {
+    const { resolver, session } = fixture();
+    const context = await resolver.resolve({ sessionId: session.id });
+    const created: DataSource[] = [];
+    const resolvedVersions: number[] = [];
+    const factory = new TenantDataSourceFactory(
+      { host: '127.0.0.1', port: 3306 },
+      {
+        async resolve(_ref, version) {
+          resolvedVersions.push(version);
+          return {
+            tenantId,
+            databaseName: location.databaseName,
+            username: 'opslog_u_synthetic',
+            password: `synthetic-test-${version}`,
+            secretVersion: version,
+          };
+        },
+      },
+      { maxDataSources: 4, maxActiveLeases: 2 },
+      (options) => {
+        const source = fakeDataSource(options);
+        created.push(source);
+        return source;
+      },
+    );
+
+    const first = await factory.acquire(context);
+    const shared = await factory.acquire(context);
+    expect(shared.dataSource).toBe(first.dataSource);
+    expect(resolvedVersions).toEqual([location.secretVersion]);
+    await first.release();
+    await shared.release();
+
+    const rotatedContext = {
+      ...context,
+      database: {
+        ...context.database,
+        credentialRef: `${context.database.credentialRef}/rotated`,
+        secretVersion: context.database.secretVersion + 1,
+      },
+    } as TenantContext;
+    const rotated = await factory.acquire(rotatedContext);
+    expect(resolvedVersions).toEqual([location.secretVersion, location.secretVersion + 1]);
+    expect(created).toHaveLength(2);
+    expect(created[0]!.isInitialized).toBe(false);
+    expect(rotated.dataSource).toBe(created[1]);
+    expect(factory.poolSize).toBe(1);
+    await expect(factory.close()).rejects.toBeInstanceOf(TenantDataSourceCapacityError);
+    await rotated.release();
+    await factory.close();
+    expect(factory.poolSize).toBe(0);
+    expect(created[1]!.isInitialized).toBe(false);
+    await expect(factory.acquire(context)).rejects.toBeInstanceOf(TenantDataSourceCapacityError);
+  });
+
+  it('queues bounded acquire backpressure and rejects overflow', async () => {
+    const { resolver, session } = fixture();
+    const context = await resolver.resolve({ sessionId: session.id });
+    const factory = new TenantDataSourceFactory(
+      { host: '127.0.0.1', port: 3306 },
+      {
+        async resolve() {
+          return {
+            tenantId,
+            databaseName: location.databaseName,
+            username: 'opslog_u_synthetic',
+            password: 'synthetic-test-only',
+            secretVersion: location.secretVersion,
+          };
+        },
+      },
+      { maxActiveLeases: 1, maxQueuedAcquires: 1, acquireTimeoutMs: 2_000 },
+      fakeDataSource,
+    );
+    const active = await factory.acquire(context);
+    const queued = factory.acquire(context);
+    expect(factory.queuedAcquireCount).toBe(1);
+    await expect(factory.acquire(context)).rejects.toBeInstanceOf(TenantDataSourceCapacityError);
+    await active.release();
+    const resumed = await queued;
+    expect(resumed.dataSource).toBe(active.dataSource);
+    await resumed.release();
+    await factory.close();
   });
 
   it('refuses an unverified directory entry before credential resolution', async () => {

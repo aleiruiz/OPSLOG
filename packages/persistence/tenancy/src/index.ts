@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { createHash } from 'node:crypto';
 import {
   IdempotencyConflictError,
   immutableContext,
@@ -20,7 +21,7 @@ import {
   type TenantStatus,
   type SessionId,
 } from '@opslog/domain-tenants';
-import { DataSource, type DataSourceOptions, type Repository } from 'typeorm';
+import { DataSource, MoreThan, type DataSourceOptions, type Repository } from 'typeorm';
 import {
   CONTROL_PLANE_MIGRATION_VERSION,
   CreateTenancyControlPlane2026100400010,
@@ -73,19 +74,24 @@ export interface ProvisioningEvidence {
   readonly verifiedAt: Date;
 }
 
+export interface FencedTenantProvisioningTarget extends TenantProvisioningTarget {
+  readonly attempt: number;
+  readonly leaseOwner: string;
+}
+
 export interface TenantProvisioningBackend {
-  createIsolatedDatabase(target: TenantProvisioningTarget): Promise<void>;
-  createLeastPrivilegeRuntimeCredential(target: TenantProvisioningTarget): Promise<void>;
-  runTenantMigrations(target: TenantProvisioningTarget): Promise<string>;
-  verifyRuntimeRole(target: TenantProvisioningTarget): Promise<boolean>;
-  verifyCrossTenantIsolation(target: TenantProvisioningTarget): Promise<boolean>;
-  rollback(target: TenantProvisioningTarget): Promise<void>;
+  createIsolatedDatabase(target: FencedTenantProvisioningTarget): Promise<void>;
+  createLeastPrivilegeRuntimeCredential(target: FencedTenantProvisioningTarget): Promise<void>;
+  runTenantMigrations(target: FencedTenantProvisioningTarget): Promise<string>;
+  verifyRuntimeRole(target: FencedTenantProvisioningTarget): Promise<boolean>;
+  verifyCrossTenantIsolation(target: FencedTenantProvisioningTarget): Promise<boolean>;
+  rollback(target: FencedTenantProvisioningTarget): Promise<void>;
 }
 
 export class VerifiedTenantProvisioningAdapter {
   constructor(private readonly backend: TenantProvisioningBackend) {}
 
-  async provision(target: TenantProvisioningTarget): Promise<ProvisioningEvidence> {
+  async provision(target: FencedTenantProvisioningTarget): Promise<ProvisioningEvidence> {
     await this.backend.createIsolatedDatabase(target);
     await this.backend.createLeastPrivilegeRuntimeCredential(target);
     const migrationVersion = await this.backend.runTenantMigrations(target);
@@ -102,7 +108,7 @@ export class VerifiedTenantProvisioningAdapter {
     };
   }
 
-  rollback(target: TenantProvisioningTarget): Promise<void> {
+  rollback(target: FencedTenantProvisioningTarget): Promise<void> {
     return this.backend.rollback(target);
   }
 }
@@ -155,48 +161,296 @@ export function createControlPlaneDataSource(config: ControlPlaneDatabaseConfig)
   });
 }
 
+export interface TenantDataSourcePoolOptions {
+  readonly maxDataSources?: number;
+  readonly maxActiveLeases?: number;
+  readonly maxQueuedAcquires?: number;
+  readonly acquireTimeoutMs?: number;
+  readonly maxConnectionsPerDataSource?: number;
+}
+
+export interface TenantDataSourceLease {
+  readonly dataSource: DataSource;
+  release(): Promise<void>;
+}
+
+export class TenantDataSourceCapacityError extends Error {
+  constructor() {
+    super('tenant data source capacity is temporarily exhausted');
+    this.name = 'TenantDataSourceCapacityError';
+  }
+}
+
+type TenantDataSourceEntry = {
+  readonly key: string;
+  readonly tenantId: TenantId;
+  readonly secretVersion: number;
+  readonly databaseName: string;
+  readonly credentialRef: string;
+  readonly passwordFingerprint: string;
+  readonly dataSource: DataSource;
+  readonly ready: Promise<DataSource>;
+  leases: number;
+  lastUsedAt: number;
+};
+
+type LeaseWaiter = {
+  readonly resolve: () => void;
+  readonly reject: (error: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+};
+
+type TenantDataSourceCreator = (options: DataSourceOptions) => DataSource;
+
+const DEFAULT_TENANT_DATA_SOURCE_POOL: Required<TenantDataSourcePoolOptions> = {
+  maxDataSources: 16,
+  maxActiveLeases: 64,
+  maxQueuedAcquires: 128,
+  acquireTimeoutMs: 5_000,
+  maxConnectionsPerDataSource: 4,
+};
+
 export class TenantDataSourceFactory {
+  private readonly entries = new Map<string, TenantDataSourceEntry>();
+  private readonly waiters: LeaseWaiter[] = [];
+  private readonly limits: Required<TenantDataSourcePoolOptions>;
+  private activeLeases = 0;
+  private closed = false;
+
   constructor(
     private readonly host: TenantDatabaseHost,
     private readonly credentials: TenantCredentialResolver,
-  ) {}
-
-  async create(context: TenantContext): Promise<DataSource> {
-    const location = context.database;
+    options: TenantDataSourcePoolOptions = {},
+    private readonly createDataSource: TenantDataSourceCreator = (dataSourceOptions) =>
+      new DataSource(dataSourceOptions),
+  ) {
+    this.limits = { ...DEFAULT_TENANT_DATA_SOURCE_POOL, ...options };
     if (
-      location.tenantId !== context.tenantId ||
-      !location.runtimeRoleVerified ||
-      !location.isolationProbeVerified ||
-      location.migrationVersion !== TENANT_DATABASE_MIGRATION_VERSION
+      !Number.isSafeInteger(this.limits.maxDataSources) ||
+      this.limits.maxDataSources < 1 ||
+      !Number.isSafeInteger(this.limits.maxActiveLeases) ||
+      this.limits.maxActiveLeases < 1 ||
+      !Number.isSafeInteger(this.limits.maxQueuedAcquires) ||
+      this.limits.maxQueuedAcquires < 0 ||
+      !Number.isSafeInteger(this.limits.acquireTimeoutMs) ||
+      this.limits.acquireTimeoutMs < 1 ||
+      !Number.isSafeInteger(this.limits.maxConnectionsPerDataSource) ||
+      this.limits.maxConnectionsPerDataSource < 1
     )
-      throw new TenantAccessDeniedError();
-    const resolved = await this.credentials.resolve(location.credentialRef, location.secretVersion);
-    if (
-      resolved.tenantId !== context.tenantId ||
-      resolved.databaseName !== location.databaseName ||
-      resolved.secretVersion !== location.secretVersion ||
-      !resolved.username ||
-      !/^opslog_u_[a-z0-9_]+$/i.test(resolved.username) ||
-      !resolved.password
-    ) {
-      throw new TenantAccessDeniedError();
+      throw new Error('invalid tenant data source pool limits');
+  }
+
+  get poolSize(): number {
+    return this.entries.size;
+  }
+
+  get activeLeaseCount(): number {
+    return this.activeLeases;
+  }
+
+  get queuedAcquireCount(): number {
+    return this.waiters.length;
+  }
+
+  async acquire(context: TenantContext): Promise<TenantDataSourceLease> {
+    await this.reserveLeaseSlot();
+    try {
+      if (this.closed) throw new TenantDataSourceCapacityError();
+      const location = context.database;
+      if (
+        location.tenantId !== context.tenantId ||
+        location.secretVersion < 1 ||
+        !location.runtimeRoleVerified ||
+        !location.isolationProbeVerified ||
+        location.migrationVersion !== TENANT_DATABASE_MIGRATION_VERSION
+      )
+        throw new TenantAccessDeniedError();
+
+      const key = `${context.tenantId}:${location.secretVersion}`;
+      let entry = this.entries.get(key);
+      if (entry) {
+        if (
+          entry.databaseName !== location.databaseName ||
+          entry.credentialRef !== location.credentialRef
+        )
+          throw new TenantAccessDeniedError();
+        entry.leases += 1;
+        entry.lastUsedAt = Date.now();
+      } else {
+        const resolved = await this.credentials.resolve(
+          location.credentialRef,
+          location.secretVersion,
+        );
+        if (
+          resolved.tenantId !== context.tenantId ||
+          resolved.databaseName !== location.databaseName ||
+          resolved.secretVersion !== location.secretVersion ||
+          !resolved.username ||
+          !/^opslog_u_[a-z0-9_]+$/i.test(resolved.username) ||
+          !resolved.password
+        )
+          throw new TenantAccessDeniedError();
+
+        // Another concurrent acquire may have populated this key while credentials resolved.
+        await this.evictOlderTenantVersions(context.tenantId, location.secretVersion);
+        entry = this.entries.get(key);
+        if (entry) {
+          if (
+            entry.databaseName !== location.databaseName ||
+            entry.credentialRef !== location.credentialRef ||
+            entry.passwordFingerprint !== fingerprintPassword(resolved.password)
+          )
+            throw new TenantAccessDeniedError();
+          entry.leases += 1;
+          entry.lastUsedAt = Date.now();
+        } else {
+          await this.makeRoom();
+          const dataSource = this.createDataSource({
+            type: 'mysql',
+            host: this.host.host,
+            port: this.host.port,
+            database: location.databaseName,
+            username: resolved.username,
+            password: resolved.password,
+            entities: [...TENANT_DATA_ENTITIES],
+            migrations: [CreateTenantDatabase2026100400020],
+            synchronize: false,
+            migrationsRun: false,
+            logging: false,
+            timezone: 'Z',
+            charset: 'utf8mb4',
+            extra: { connectionLimit: this.limits.maxConnectionsPerDataSource },
+          });
+          const created: TenantDataSourceEntry = {
+            key,
+            tenantId: context.tenantId,
+            secretVersion: location.secretVersion,
+            databaseName: location.databaseName,
+            credentialRef: location.credentialRef,
+            passwordFingerprint: fingerprintPassword(resolved.password),
+            dataSource,
+            ready: dataSource.initialize(),
+            leases: 1,
+            lastUsedAt: Date.now(),
+          };
+          this.entries.set(key, created);
+          entry = created;
+        }
+      }
+
+      try {
+        await entry.ready;
+      } catch (error) {
+        if (this.entries.get(entry.key) === entry) this.entries.delete(entry.key);
+        entry.leases = Math.max(0, entry.leases - 1);
+        if (entry.dataSource.isInitialized) await entry.dataSource.destroy();
+        throw error;
+      }
+      return this.createLease(entry);
+    } catch (error) {
+      this.releaseLeaseSlot();
+      throw error;
     }
-    return new DataSource({
-      type: 'mysql',
-      host: this.host.host,
-      port: this.host.port,
-      database: location.databaseName,
-      username: resolved.username,
-      password: resolved.password,
-      entities: [...TENANT_DATA_ENTITIES],
-      migrations: [CreateTenantDatabase2026100400020],
-      synchronize: false,
-      migrationsRun: false,
-      logging: false,
-      timezone: 'Z',
-      charset: 'utf8mb4',
+  }
+
+  async evictTenant(tenantId: TenantId): Promise<void> {
+    const tenantEntries = [...this.entries.values()].filter((entry) => entry.tenantId === tenantId);
+    if (tenantEntries.some((entry) => entry.leases > 0)) throw new TenantDataSourceCapacityError();
+    await Promise.all(tenantEntries.map((entry) => this.destroyEntry(entry)));
+  }
+
+  async close(): Promise<void> {
+    if (this.activeLeases > 0) throw new TenantDataSourceCapacityError();
+    this.closed = true;
+    for (const waiter of this.waiters.splice(0)) {
+      clearTimeout(waiter.timer);
+      waiter.reject(new TenantDataSourceCapacityError());
+    }
+    await Promise.all([...this.entries.values()].map((entry) => this.destroyEntry(entry)));
+  }
+
+  private async reserveLeaseSlot(): Promise<void> {
+    if (this.closed) throw new TenantDataSourceCapacityError();
+    if (this.activeLeases < this.limits.maxActiveLeases) {
+      this.activeLeases += 1;
+      return;
+    }
+    if (this.waiters.length >= this.limits.maxQueuedAcquires)
+      throw new TenantDataSourceCapacityError();
+    await new Promise<void>((resolve, reject) => {
+      const waiter: LeaseWaiter = {
+        resolve,
+        reject,
+        timer: setTimeout(() => {
+          const index = this.waiters.indexOf(waiter);
+          if (index >= 0) this.waiters.splice(index, 1);
+          reject(new TenantDataSourceCapacityError());
+        }, this.limits.acquireTimeoutMs),
+      };
+      this.waiters.push(waiter);
     });
   }
+
+  private releaseLeaseSlot(): void {
+    const waiter = this.waiters.shift();
+    if (waiter) {
+      clearTimeout(waiter.timer);
+      waiter.resolve();
+      return;
+    }
+    this.activeLeases = Math.max(0, this.activeLeases - 1);
+  }
+
+  private async makeRoom(): Promise<void> {
+    if (this.entries.size < this.limits.maxDataSources) return;
+    const idle = [...this.entries.values()]
+      .filter((entry) => entry.leases === 0)
+      .sort((left, right) => left.lastUsedAt - right.lastUsedAt)[0];
+    if (!idle) throw new TenantDataSourceCapacityError();
+    await this.destroyEntry(idle);
+  }
+
+  private async evictOlderTenantVersions(tenantId: TenantId, secretVersion: number): Promise<void> {
+    const staleEntries = [...this.entries.values()].filter(
+      (entry) =>
+        entry.tenantId === tenantId && entry.secretVersion < secretVersion && entry.leases === 0,
+    );
+    await Promise.all(staleEntries.map((entry) => this.destroyEntry(entry)));
+  }
+
+  private async destroyEntry(entry: TenantDataSourceEntry): Promise<void> {
+    if (entry.leases > 0) throw new TenantDataSourceCapacityError();
+    if (this.entries.get(entry.key) === entry) this.entries.delete(entry.key);
+    await entry.ready.catch(() => undefined);
+    if (entry.dataSource.isInitialized) await entry.dataSource.destroy();
+  }
+
+  private createLease(entry: TenantDataSourceEntry): TenantDataSourceLease {
+    let released = false;
+    return Object.freeze({
+      dataSource: entry.dataSource,
+      release: async () => {
+        if (released) return;
+        released = true;
+        entry.leases = Math.max(0, entry.leases - 1);
+        entry.lastUsedAt = Date.now();
+        try {
+          const hasNewerVersion = [...this.entries.values()].some(
+            (candidate) =>
+              candidate.tenantId === entry.tenantId &&
+              candidate.secretVersion > entry.secretVersion,
+          );
+          if (entry.leases === 0 && hasNewerVersion) await this.destroyEntry(entry);
+        } finally {
+          this.releaseLeaseSlot();
+        }
+      },
+    });
+  }
+}
+
+function fingerprintPassword(password: string): string {
+  return createHash('sha256').update(password).digest('hex');
 }
 
 export class TypeOrmTenantStore implements TenantStore, TenantProvisioner {
@@ -326,7 +580,7 @@ export class TypeOrmTenantStore implements TenantStore, TenantProvisioner {
     const claim = await this.claimJob(target, hash, owner);
     if (claim.kind === 'succeeded') return claim.tenant;
     if (claim.kind === 'busy') return this.waitForProvisioning(target, hash, adapter);
-    return this.runProvisioning(target, hash, owner, adapter);
+    return this.runProvisioning(this.fencedTarget(target, claim.attempt, owner), hash, adapter);
   }
 
   private async ensureProvisioningRecord(
@@ -404,11 +658,30 @@ export class TypeOrmTenantStore implements TenantStore, TenantProvisioner {
     };
   }
 
+  private fencedTarget(
+    target: TenantProvisioningTarget,
+    attempt: number,
+    leaseOwner: string,
+  ): FencedTenantProvisioningTarget {
+    if (!Number.isSafeInteger(attempt) || attempt < 1) throw new ProvisioningFailedError();
+    const tenantKey = target.tenantId.replaceAll('-', '');
+    return {
+      ...target,
+      databaseName: `opslog_t_${tenantKey}_a${attempt}`,
+      credentialRef: `tenant/${target.tenantId}/attempt/${attempt}/runtime`,
+      secretVersion: attempt,
+      attempt,
+      leaseOwner,
+    };
+  }
+
   private async claimJob(
     target: TenantProvisioningTarget,
     hash: string,
     owner: string,
-  ): Promise<{ kind: 'claimed' } | { kind: 'busy' } | { kind: 'succeeded'; tenant: Tenant }> {
+  ): Promise<
+    { kind: 'claimed'; attempt: number } | { kind: 'busy' } | { kind: 'succeeded'; tenant: Tenant }
+  > {
     return this.dataSource.transaction(async (manager) => {
       const jobs = manager.getRepository(ProvisioningJobEntity);
       const job = await jobs.findOne({
@@ -433,7 +706,7 @@ export class TypeOrmTenantStore implements TenantStore, TenantProvisioner {
       await manager
         .getRepository(TenantEntity)
         .update({ id: target.tenantId }, { status: 'provisioning' });
-      return { kind: 'claimed' };
+      return { kind: 'claimed', attempt: job.attempt };
     });
   }
 
@@ -453,31 +726,38 @@ export class TypeOrmTenantStore implements TenantStore, TenantProvisioner {
         const tenant = await this.getTenant(target.tenantId);
         if (tenant?.status === 'active') return tenant;
       }
-      const result = await this.claimJob(target, hash, opaqueId());
+      const owner = opaqueId();
+      const result = await this.claimJob(target, hash, owner);
       if (result.kind === 'succeeded') return result.tenant;
       if (result.kind === 'claimed') {
-        const current = await this.dataSource
-          .getRepository(ProvisioningJobEntity)
-          .findOneBy({ tenantId: target.tenantId });
-        if (!current?.leaseOwner) throw new ProvisioningFailedError();
-        return this.runProvisioning(target, hash, current.leaseOwner, adapter);
+        return this.runProvisioning(
+          this.fencedTarget(target, result.attempt, owner),
+          hash,
+          adapter,
+        );
       }
     }
     throw new ProvisioningFailedError();
   }
 
   private async runProvisioning(
-    target: TenantProvisioningTarget,
+    target: FencedTenantProvisioningTarget,
     hash: string,
-    owner: string,
     adapter: VerifiedTenantProvisioningAdapter,
   ): Promise<Tenant> {
+    const { leaseOwner: owner, attempt } = target;
     const timer = setInterval(
       () => {
         void this.dataSource
           .getRepository(ProvisioningJobEntity)
           .update(
-            { tenantId: target.tenantId, leaseOwner: owner },
+            {
+              tenantId: target.tenantId,
+              leaseOwner: owner,
+              attempt,
+              status: 'running',
+              leaseExpiresAt: MoreThan(new Date()),
+            },
             { leaseExpiresAt: new Date(Date.now() + this.leaseMs), updatedAt: new Date() },
           )
           .catch(() => undefined);
@@ -497,6 +777,9 @@ export class TypeOrmTenantStore implements TenantStore, TenantProvisioner {
         if (
           !job ||
           job.leaseOwner !== owner ||
+          job.attempt !== attempt ||
+          !job.leaseExpiresAt ||
+          job.leaseExpiresAt.getTime() <= Date.now() ||
           job.payloadHash !== hash ||
           job.status !== 'running'
         )
@@ -505,6 +788,9 @@ export class TypeOrmTenantStore implements TenantStore, TenantProvisioner {
         await location.update(
           { tenantId: target.tenantId },
           {
+            databaseName: target.databaseName,
+            credentialRef: target.credentialRef,
+            secretVersion: target.secretVersion,
             migrationVersion: evidence.migrationVersion,
             runtimeRoleVerified: evidence.runtimeRoleVerified,
             isolationProbeVerified: evidence.isolationProbeVerified,
@@ -537,7 +823,7 @@ export class TypeOrmTenantStore implements TenantStore, TenantProvisioner {
           where: { tenantId: target.tenantId },
           lock: { mode: 'pessimistic_write' },
         });
-        if (job?.leaseOwner === owner) {
+        if (job?.leaseOwner === owner && job.attempt === attempt && job.status === 'running') {
           job.status = 'failed';
           job.errorCode = failureCode;
           job.leaseOwner = null;

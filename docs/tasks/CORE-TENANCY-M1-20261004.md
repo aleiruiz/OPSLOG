@@ -2,23 +2,12 @@
 
 ```yaml
 id: CORE-TENANCY-M1-20261004
-baseline: [SPEC-1.2, ORCH-1.2, inherited: SPEC-1.0/ORCH-1.0, SPEC-1.1/ORCH-1.1]
+baseline: [SPEC-1.3, ORCH-1.3, inherited: SPEC-1.0/ORCH-1.0, SPEC-1.1/ORCH-1.1, SPEC-1.2/ORCH-1.2]
 milestone: M1
 kind: implementation
-baseSHA: 810e1e3d842ac6c8aa1cb7816a0bbe8f77b95f71
+baseSHA: 2cb37c66e57a8d63662706a9cb454196203411a6
 depends_on: [G0-human-reaffirmed]
-write_paths:
-  [
-    apps/api/tenants/**,
-    packages/domain/tenants/**,
-    packages/persistence/tenancy/**,
-    infra/database/**,
-    docs/tasks/CORE-TENANCY-M1-20261004.md,
-    package.json,
-    pnpm-lock.yaml,
-    pnpm-workspace.yaml,
-    tsconfig.json,
-  ]
+write_paths: [packages/persistence/tenancy/src/**, docs/tasks/CORE-TENANCY-M1-20261004.md]
 forbidden_paths:
   [
     SPECS.md,
@@ -54,7 +43,7 @@ Archivos principales: `packages/persistence/tenancy/src/index.ts`, `entities.ts`
 
 La auditoría reportó brechas en persistencia durable, MySQL real, leases, evidencia de activación, UUIDv7 y registro del paquete en CI. Esta continuación debe cerrar cada punto en este PR y dejar los comandos/resultados reales aquí. No declarar el gate ni la auditoría como aprobados.
 
-### Resultados de validación de esta continuación
+### Evidencia del checkpoint anterior (no corresponde al SHA de esta reparación)
 
 - `pnpm lint`: pasó (ejecutado como primer paso de `pnpm quality`).
 - `pnpm exec prettier --check` sobre todos los archivos modificados de esta tarea: pasó.
@@ -66,5 +55,17 @@ La auditoría reportó brechas en persistencia durable, MySQL real, leases, evid
 - Revisión de alerta de fixture: se eliminaron los UUID literales del test; las identidades se generan en runtime mediante el generador UUIDv7 del dominio. Son valores efímeros usados solo en memoria por pruebas y no representan credenciales ni recursos externos. Conteo local de UUID estáticos en el archivo: 0.
 - Entorno de esta remediación: Node 24.19.0 y pnpm 11.25.0. Typecheck, todas las pruebas unitarias, integración MySQL sintética (harness 1 y tenancy 2), build y Prettier scoped pasaron. `pnpm quality` sigue limitado por los mismos 38 archivos preexistentes listados por `format:check` global.
 - `git diff --check`: pendiente de verificación final. El escaneo remoto/CI y la auditoría independiente del SHA final quedan pendientes; no se declara ningún gate aprobado.
+
+## Remediación posterior al informe de auditoría única — base 2cb37c6 (SPEC/ORCH-1.3)
+
+- Fencing/rollback: cada claim incrementa `attempt`; el backend recibe `attempt` y `leaseOwner`. Base, referencia de credencial y versión son específicas por intento; la activación y mutaciones de fallo comparan owner+attempt+estado vigente. Un rollback viejo no puede borrar recursos del intento ganador.
+- Pools: `TenantDataSourceFactory.acquire` comparte fuentes por tenant+secretVersion, limita fuentes/conexiones/leases/cola, aplica backpressure acotado, eviction LRU solo de fuentes idle y lifecycle explícito (`release`, `evictTenant`, `close`).
+- URL admin de integración: se acepta solo `localhost`, `127.0.0.1` o `::1`; la validación ocurre antes de crear conexión y antes de cualquier DDL. El test remoto verifica que el callback de conexión/DDL no se invoca.
+- Fixtures: todos los IDs de tenant, cabecera hostil y registro local A/B se generan al ejecutar tests; A y B comparten en memoria el mismo ID local requerido por la prueba de aislamiento. No hay UUID literal ni credenciales/recursos externos en fixtures.
+- MySQL 8.0.45 sintético: `pnpm --filter @opslog/persistence-tenancy test:integration` pasó 4 tests, incluyendo lease expirado/reasignado con ganador activo, ausencia de borrado del DB ganador, caché/rotación de secretVersion/eviction y rechazo de host remoto antes de DDL.
+- Unitarias de tenancy: 7 tests pasaron, incluyendo límites, cola/backpressure, pooling por versión y cierre.
+- Con Node 24.19.0/pnpm 11.25.0: lint, typecheck, `pnpm test:unit` (contratos 7, UI/accesibilidad 2+2, dominio 2, tenancy 7, harness 4), `pnpm test:integration` (harness MySQL 1, tenancy MySQL 4), build y Prettier scoped pasaron.
+- `pnpm quality` completo se ejecutó; se detuvo en `format:check` por 38 archivos preexistentes ajenos al scope. Ninguno de los cuatro paths modificados aparece en el reporte tras formatear esta nota. No se reformatearon archivos ajenos.
+- La validación remota CI/GitGuardian sobre el SHA que publique esta reparación y la auditoría independiente siguen pendientes; no declarar gate ni auditoría aprobados.
 
 Leer instrucciones, baselines, ADR-0001/0002/0004/0005, SESSION_HANDSHAKE, AUTONOMOUS_ORCHESTRATOR y SPECS §4–§7. Usar solo fixtures sintéticos/locales. El autor no audita ni fusiona. Si se necesita contrato compartido o lockfile, detenerse y pedir reasignación.

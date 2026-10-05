@@ -16,6 +16,7 @@ import {
 import { DataSource, QueryFailedError, Table } from 'typeorm';
 import {
   createControlPlaneDataSource,
+  type FencedTenantProvisioningTarget,
   TenantContextResolver,
   TenantDataSourceFactory,
   TypeOrmTenantStore,
@@ -40,13 +41,24 @@ import {
 const adminUrlValue = process.env.OPSLOG_TEST_MYSQL_ADMIN_URL;
 if (!adminUrlValue)
   throw new Error('OPSLOG_TEST_MYSQL_ADMIN_URL is required; MySQL integration must not be skipped');
-const adminUrl = new URL(adminUrlValue);
-const adminConfig = {
-  host: adminUrl.hostname,
-  port: Number(adminUrl.port || 3306),
-  user: decodeURIComponent(adminUrl.username),
-  password: decodeURIComponent(adminUrl.password),
-};
+
+function withLoopbackAdminConfig<T>(
+  value: string,
+  action: (config: { host: string; port: number; user: string; password: string }) => T,
+): T {
+  const url = new URL(value);
+  const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (url.protocol !== 'mysql:' || !['localhost', '127.0.0.1', '::1'].includes(host))
+    throw new Error('synthetic MySQL admin URL must use a loopback host');
+  return action({
+    host,
+    port: Number(url.port || 3306),
+    user: decodeURIComponent(url.username),
+    password: decodeURIComponent(url.password),
+  });
+}
+
+const adminConfig = withLoopbackAdminConfig(adminUrlValue, (config) => config);
 const typeormAdminConfig = {
   host: adminConfig.host,
   port: adminConfig.port,
@@ -228,6 +240,7 @@ class SyntheticMySqlBackend implements TenantProvisioningBackend {
 
 class SyntheticMySqlProvisioner extends VerifiedTenantProvisioningAdapter {
   readonly steps: string[];
+  readonly targets: FencedTenantProvisioningTarget[] = [];
   calls = 0;
 
   constructor(
@@ -246,9 +259,32 @@ class SyntheticMySqlProvisioner extends VerifiedTenantProvisioningAdapter {
     this.steps = backend.steps;
   }
 
-  override provision(target: TenantProvisioningTarget) {
+  override provision(target: FencedTenantProvisioningTarget) {
     this.calls += 1;
+    this.targets.push(target);
     return super.provision(target);
+  }
+}
+
+class PausedAfterProvisioningAdapter extends SyntheticMySqlProvisioner {
+  private signalStarted!: () => void;
+  private resumeProvisioning!: () => void;
+  readonly started = new Promise<void>((resolve) => {
+    this.signalStarted = resolve;
+  });
+  private readonly resumed = new Promise<void>((resolve) => {
+    this.resumeProvisioning = resolve;
+  });
+
+  release(): void {
+    this.resumeProvisioning();
+  }
+
+  override async provision(target: FencedTenantProvisioningTarget) {
+    const evidence = await super.provision(target);
+    this.signalStarted();
+    await this.resumed;
+    return evidence;
   }
 }
 
@@ -324,6 +360,21 @@ async function makeContext(store: TypeOrmTenantStore, tenant: Tenant) {
   };
 }
 
+describe('synthetic MySQL admin URL guard', () => {
+  it('rejects non-loopback hosts before the connection or DDL callback can run', () => {
+    let ddlCalls = 0;
+    expect(() =>
+      withLoopbackAdminConfig('mysql://fixture@db.example.invalid/mysql', () => {
+        ddlCalls += 1;
+      }),
+    ).toThrow('loopback host');
+    expect(ddlCalls).toBe(0);
+    expect(withLoopbackAdminConfig('mysql://fixture@127.0.0.1/mysql', ({ host }) => host)).toBe(
+      '127.0.0.1',
+    );
+  });
+});
+
 describe('TypeORM tenancy against synthetic MySQL 8', () => {
   beforeAll(async () => {
     const admin = await adminDatabase;
@@ -394,7 +445,7 @@ describe('TypeORM tenancy against synthetic MySQL 8', () => {
     });
     expect(await firstStore.getLocation(failedJob!.tenantId as Tenant['id'])).toBeUndefined();
     const failedTenant = await firstStore.getTenant(failedJob!.tenantId as Tenant['id']);
-    const failedDatabaseName = `opslog_t_${failedTenant!.id.replaceAll('-', '')}`;
+    const failedDatabaseName = `opslog_t_${failedTenant!.id.replaceAll('-', '')}_a1`;
     const [failedDatabaseRows] = await (
       await adminDatabase
     ).execute('SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = ?', [
@@ -500,14 +551,14 @@ describe('TypeORM tenancy against synthetic MySQL 8', () => {
       { host: adminConfig.host, port: adminConfig.port },
       credentialResolver,
     );
-    const dataSourceA = await factory.create(ctxA.context);
-    const dataSourceB = await factory.create(ctxB.context);
-    await dataSourceA.initialize();
-    await dataSourceB.initialize();
+    const leaseA = await factory.acquire(ctxA.context);
+    const leaseB = await factory.acquire(ctxB.context);
+    const dataSourceA = leaseA.dataSource;
+    const dataSourceB = leaseB.dataSource;
     try {
       const repoA = tenantScopedRepository(ctxA.context, dataSourceA);
       const repoB = tenantScopedRepository(ctxB.context, dataSourceB);
-      const sameLocalId = '019b5b33-43a0-7eaa-9e58-319c8d8ec321';
+      const sameLocalId = opaqueId();
       await repoA.insert({ id: sameLocalId, value: 'A-only' });
       await repoB.insert({ id: sameLocalId, value: 'B-only' });
       expect((await repoA.findById(sameLocalId))?.value).toBe('A-only');
@@ -539,9 +590,67 @@ describe('TypeORM tenancy against synthetic MySQL 8', () => {
       expect((await repoA.findById(sameLocalId))?.value).toBe('A-only');
       expect((await repoB.findById(sameLocalId))?.value).toBe('B-only');
     } finally {
-      await dataSourceA.destroy();
-      await dataSourceB.destroy();
+      await leaseA.release();
+      await leaseB.release();
+      await factory.close();
     }
+
+    const boundedFactory = new TenantDataSourceFactory(
+      { host: adminConfig.host, port: adminConfig.port },
+      credentialResolver,
+      {
+        maxDataSources: 1,
+        maxActiveLeases: 1,
+        maxQueuedAcquires: 1,
+        acquireTimeoutMs: 2_000,
+        maxConnectionsPerDataSource: 2,
+      },
+    );
+    const boundedLeaseA = await boundedFactory.acquire(ctxA.context);
+    const queuedLeaseBPromise = boundedFactory.acquire(ctxB.context);
+    expect(boundedFactory.queuedAcquireCount).toBe(1);
+    await expect(boundedFactory.acquire(ctxA.context)).rejects.toThrow(
+      'capacity is temporarily exhausted',
+    );
+    await boundedLeaseA.release();
+    const boundedLeaseB = await queuedLeaseBPromise;
+    expect(boundedLeaseA.dataSource.isInitialized).toBe(false);
+    expect(boundedLeaseB.dataSource.options.extra).toMatchObject({ connectionLimit: 2 });
+    await boundedLeaseB.release();
+    await boundedFactory.close();
+
+    const sourceForVersionCheck = new TenantDataSourceFactory(
+      { host: adminConfig.host, port: adminConfig.port },
+      credentialResolver,
+      { maxDataSources: 1 },
+    );
+    const versionOne = await sourceForVersionCheck.acquire(ctxA.context);
+    const versionOneShared = await sourceForVersionCheck.acquire(ctxA.context);
+    expect(versionOne.dataSource).toBe(versionOneShared.dataSource);
+    await versionOne.release();
+    await versionOneShared.release();
+    const currentCredential = credentialDirectory.get(ctxA.context.database.credentialRef)!;
+    const rotatedRef = `${ctxA.context.database.credentialRef}/version-check`;
+    credentialDirectory.set(rotatedRef, {
+      ...currentCredential,
+      secretVersion: ctxA.context.database.secretVersion + 1,
+    });
+    const rotatedContext = {
+      ...ctxA.context,
+      database: {
+        ...ctxA.context.database,
+        credentialRef: rotatedRef,
+        secretVersion: ctxA.context.database.secretVersion + 1,
+      },
+    } as typeof ctxA.context;
+    const versionTwo = await sourceForVersionCheck.acquire(rotatedContext);
+    expect(versionTwo.dataSource).not.toBe(versionOne.dataSource);
+    expect(versionOne.dataSource.isInitialized).toBe(false);
+    expect(versionTwo.dataSource.isInitialized).toBe(true);
+    await versionTwo.release();
+    await sourceForVersionCheck.evictTenant(tenantA.id);
+    expect(sourceForVersionCheck.poolSize).toBe(0);
+    await sourceForVersionCheck.close();
 
     const subject = ctxA.membership.subjectId;
     await Promise.all([
@@ -565,5 +674,60 @@ describe('TypeORM tenancy against synthetic MySQL 8', () => {
     await expect(
       new TenantContextResolver(secondStore).resolve({ sessionId: ctxA.session.id }),
     ).rejects.toBeInstanceOf(TenantAccessDeniedError);
+  }, 90_000);
+
+  it('fences expired lease attempts so stale rollback cannot delete the active winner', async () => {
+    const key = `fenced-reassign-${suffix}`;
+    const slowStore = new TypeOrmTenantStore(controlSource, 60_000, 5_000);
+    const winningStore = new TypeOrmTenantStore(secondControlSource, 60_000, 5_000);
+    const staleAdapter = new PausedAfterProvisioningAdapter();
+    const staleAttempt = slowStore.createAndProvision({ name: 'Fenced tenant' }, key, staleAdapter);
+
+    await staleAdapter.started;
+    await controlSource
+      .getRepository(ProvisioningJobEntity)
+      .update({ idempotencyKey: key }, { leaseExpiresAt: new Date(0) });
+
+    const winningAdapter = new SyntheticMySqlProvisioner();
+    const winner = await winningStore.createAndProvision(
+      { name: 'Fenced tenant' },
+      key,
+      winningAdapter,
+    );
+    const winningTarget = winningAdapter.targets[0];
+    const staleTarget = staleAdapter.targets[0];
+    if (!winningTarget || !staleTarget)
+      throw new Error('synthetic attempt targets were not recorded');
+    expect(winner.status).toBe('active');
+    expect(staleTarget.attempt).toBe(1);
+    expect(winningTarget.attempt).toBe(2);
+    expect(staleTarget.databaseName).not.toBe(winningTarget.databaseName);
+    expect(await winningStore.getLocation(winner.id)).toMatchObject({
+      databaseName: winningTarget.databaseName,
+      credentialRef: winningTarget.credentialRef,
+      secretVersion: winningTarget.secretVersion,
+    });
+
+    staleAdapter.release();
+    await expect(staleAttempt).rejects.toBeInstanceOf(ProvisioningFailedError);
+    expect((await winningStore.getTenant(winner.id))?.status).toBe('active');
+    expect(await winningStore.getJob(winner.id, key)).toMatchObject({ status: 'succeeded' });
+    expect(await winningStore.getLocation(winner.id)).toMatchObject({
+      databaseName: winningTarget.databaseName,
+      credentialRef: winningTarget.credentialRef,
+    });
+    expect(credentialDirectory.has(winningTarget.credentialRef)).toBe(true);
+
+    const admin = await adminDatabase;
+    const [staleRows] = await admin.execute(
+      'SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = ?',
+      [staleTarget.databaseName],
+    );
+    const [winnerRows] = await admin.execute(
+      'SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = ?',
+      [winningTarget.databaseName],
+    );
+    expect((staleRows as unknown[]).length).toBe(0);
+    expect((winnerRows as unknown[]).length).toBe(1);
   }, 90_000);
 });
