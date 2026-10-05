@@ -21,7 +21,7 @@ import {
   type TenantStatus,
   type SessionId,
 } from '@opslog/domain-tenants';
-import { DataSource, MoreThan, type DataSourceOptions, type Repository } from 'typeorm';
+import { DataSource, In, MoreThan, type DataSourceOptions, type Repository } from 'typeorm';
 import {
   CONTROL_PLANE_MIGRATION_VERSION,
   CreateTenancyControlPlane2026100400010,
@@ -204,6 +204,8 @@ type LeaseWaiter = {
 };
 
 const MAX_PROVISIONING_ATTEMPTS = 5;
+// Provisioning paths may only move a tenant between these states, so an operator's suspension is never overwritten.
+const PROVISIONABLE_STATUSES: TenantStatus[] = ['provisioning', 'failed'];
 
 type TenantDataSourceCreator = (options: DataSourceOptions) => DataSource;
 
@@ -642,7 +644,7 @@ export class TypeOrmTenantStore implements TenantStore, TenantProvisioner {
           return { tenantId, subjectId, version, status };
         });
       } catch (error) {
-        if (!isDuplicateKey(error) || attempt === 2) throw error;
+        if (!(isDuplicateKey(error) || isLockContention(error)) || attempt === 2) throw error;
       }
     }
     throw new Error('membership projection retry exhausted');
@@ -662,6 +664,7 @@ export class TypeOrmTenantStore implements TenantStore, TenantProvisioner {
     const claim = await this.claimJob(target, hash, owner);
     if (claim.kind === 'succeeded') return claim.tenant;
     if (claim.kind === 'exhausted') throw new ProvisioningFailedError('ATTEMPTS_EXHAUSTED');
+    if (claim.kind === 'blocked') throw new ProvisioningFailedError('TENANT_NOT_PROVISIONABLE');
     if (claim.kind === 'busy') return this.waitForProvisioning(target, hash, adapter);
     return this.runProvisioning(this.fencedTarget(target, claim.attempt, owner), hash, adapter);
   }
@@ -765,6 +768,7 @@ export class TypeOrmTenantStore implements TenantStore, TenantProvisioner {
     | { kind: 'claimed'; attempt: number }
     | { kind: 'busy' }
     | { kind: 'exhausted' }
+    | { kind: 'blocked' }
     | { kind: 'succeeded'; tenant: Tenant }
   > {
     return this.dataSource.transaction(async (manager) => {
@@ -781,6 +785,12 @@ export class TypeOrmTenantStore implements TenantStore, TenantProvisioner {
       }
       const now = new Date();
       if (job.leaseOwner && job.leaseExpiresAt && job.leaseExpiresAt > now) return { kind: 'busy' };
+      // A tenant an operator suspended is not provisioned further: no attempt is consumed and no resources are created.
+      const tenantRow = await manager
+        .getRepository(TenantEntity)
+        .findOneBy({ id: target.tenantId });
+      if (tenantRow && !PROVISIONABLE_STATUSES.includes(tenantRow.status))
+        return { kind: 'blocked' };
       // Every attempt provisions its own database and credential; cap them so a persistent failure
       // cannot create unbounded orphaned resources.
       if (job.attempt >= MAX_PROVISIONING_ATTEMPTS) {
@@ -792,7 +802,10 @@ export class TypeOrmTenantStore implements TenantStore, TenantProvisioner {
         await jobs.save(job);
         await manager
           .getRepository(TenantEntity)
-          .update({ id: target.tenantId }, { status: 'failed' });
+          .update(
+            { id: target.tenantId, status: In(PROVISIONABLE_STATUSES) },
+            { status: 'failed' },
+          );
         return { kind: 'exhausted' };
       }
       job.status = 'running';
@@ -804,7 +817,10 @@ export class TypeOrmTenantStore implements TenantStore, TenantProvisioner {
       await jobs.save(job);
       await manager
         .getRepository(TenantEntity)
-        .update({ id: target.tenantId }, { status: 'provisioning' });
+        .update(
+          { id: target.tenantId, status: In(PROVISIONABLE_STATUSES) },
+          { status: 'provisioning' },
+        );
       return { kind: 'claimed', attempt: job.attempt };
     });
   }
@@ -829,6 +845,7 @@ export class TypeOrmTenantStore implements TenantStore, TenantProvisioner {
       const result = await this.claimJob(target, hash, owner);
       if (result.kind === 'succeeded') return result.tenant;
       if (result.kind === 'exhausted') throw new ProvisioningFailedError('ATTEMPTS_EXHAUSTED');
+      if (result.kind === 'blocked') throw new ProvisioningFailedError('TENANT_NOT_PROVISIONABLE');
       if (result.kind === 'claimed') {
         return this.runProvisioning(
           this.fencedTarget(target, result.attempt, owner),
@@ -964,7 +981,10 @@ export class TypeOrmTenantStore implements TenantStore, TenantProvisioner {
           await jobs.save(job);
           await manager
             .getRepository(TenantEntity)
-            .update({ id: target.tenantId }, { status: 'failed' });
+            .update(
+              { id: target.tenantId, status: In(PROVISIONABLE_STATUSES) },
+              { status: 'failed' },
+            );
           await manager.getRepository(TenantDatabaseLocationEntity).update(
             { tenantId: target.tenantId },
             {
@@ -1118,6 +1138,24 @@ function toJob(row: ProvisioningJobEntity): ProvisioningJob {
     attempt: Number(row.attempt),
     ...(row.errorCode ? { errorCode: row.errorCode } : {}),
   });
+}
+function isLockContention(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const candidate = error as {
+    code?: unknown;
+    errno?: unknown;
+    driverError?: { code?: unknown; errno?: unknown };
+  };
+  return (
+    candidate.code === 'ER_LOCK_DEADLOCK' ||
+    candidate.code === 'ER_LOCK_WAIT_TIMEOUT' ||
+    candidate.errno === 1213 ||
+    candidate.errno === 1205 ||
+    candidate.driverError?.code === 'ER_LOCK_DEADLOCK' ||
+    candidate.driverError?.code === 'ER_LOCK_WAIT_TIMEOUT' ||
+    candidate.driverError?.errno === 1213 ||
+    candidate.driverError?.errno === 1205
+  );
 }
 function isDuplicateKey(error: unknown): boolean {
   if (typeof error !== 'object' || error === null) return false;

@@ -18,6 +18,7 @@ import {
   TenantContextResolver,
   TenantDataSourceCapacityError,
   TenantDataSourceFactory,
+  TypeOrmTenantStore,
   createControlPlaneDataSource,
   type TenantCredentialResolver,
   type TenantStore,
@@ -521,5 +522,47 @@ describe('trusted tenant context and data source selection', () => {
     await other.release();
     await (await rotation).release();
     await factory.close();
+  });
+});
+
+describe('membership projection lock contention', () => {
+  function storeWithTransaction(transaction: (work: unknown) => Promise<unknown>) {
+    const dataSource = {
+      options: { type: 'mysql', username: 'opslog_control_synthetic' },
+      transaction,
+    } as unknown as DataSource;
+    return new TypeOrmTenantStore(dataSource);
+  }
+  const manager = {
+    getRepository: () => ({
+      findOne: async () => null,
+      insert: async () => undefined,
+    }),
+  };
+
+  it('retries a deadlocked projection and applies it', async () => {
+    let calls = 0;
+    const store = storeWithTransaction(async (work) => {
+      calls += 1;
+      if (calls === 1) throw Object.assign(new Error('deadlock'), { errno: 1213 });
+      return (work as (m: unknown) => Promise<unknown>)(manager);
+    });
+    await expect(store.projectMembership(tenantId, actorId, 1, 'active')).resolves.toMatchObject({
+      version: 1,
+      status: 'active',
+    });
+    expect(calls).toBe(2);
+  });
+
+  it('gives up after bounded lock-contention retries', async () => {
+    let calls = 0;
+    const store = storeWithTransaction(async () => {
+      calls += 1;
+      throw Object.assign(new Error('timeout'), { driverError: { code: 'ER_LOCK_WAIT_TIMEOUT' } });
+    });
+    await expect(store.projectMembership(tenantId, actorId, 1, 'active')).rejects.toThrow(
+      'timeout',
+    );
+    expect(calls).toBe(3);
   });
 });

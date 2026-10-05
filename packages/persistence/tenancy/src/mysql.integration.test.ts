@@ -675,6 +675,31 @@ describe('TypeORM tenancy against synthetic MySQL 8', () => {
     ).rejects.toBeInstanceOf(TenantAccessDeniedError);
   }, 90_000);
 
+  it('never lets provisioning retries overwrite an operator suspension', async () => {
+    const key = `suspended-retry-${suffix}`;
+    await expect(
+      firstStore.createAndProvision(
+        { name: 'Suspended tenant' },
+        key,
+        new SyntheticMySqlProvisioner(true),
+      ),
+    ).rejects.toBeInstanceOf(ProvisioningFailedError);
+    const job = await controlSource
+      .getRepository(ProvisioningJobEntity)
+      .findOneBy({ idempotencyKey: key });
+    const tenantId = job!.tenantId as Tenant['id'];
+    await firstStore.setTenantStatus(tenantId, 'suspended');
+    await secondStore
+      .createAndProvision({ name: 'Suspended tenant' }, key, new SyntheticMySqlProvisioner())
+      .catch(() => undefined);
+    expect(await firstStore.getTenant(tenantId)).toMatchObject({ status: 'suspended' });
+    // The blocked retry consumed no attempt and created no resources.
+    expect(
+      (await controlSource.getRepository(ProvisioningJobEntity).findOneBy({ idempotencyKey: key }))
+        ?.attempt,
+    ).toBe(1);
+  }, 60_000);
+
   it('fences expired lease attempts so stale rollback cannot delete the active winner', async () => {
     const key = `fenced-reassign-${suffix}`;
     const slowStore = new TypeOrmTenantStore(controlSource, 60_000, 5_000);

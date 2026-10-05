@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { InMemoryOutboxStore, backoffMs } from './index.js';
+import { InMemoryOutboxStore, OutboxConflictError, backoffMs } from './index.js';
 
 const input = (eventId: string, tenantId = 'tenant-a', key = eventId) => ({
   eventId,
@@ -74,7 +74,7 @@ describe('outbox atomicity and fencing', () => {
     expect(claimed?.record.leaseUntil).toBe(claimed?.leaseUntil);
   });
   it('backs off and moves repeated failures to dead letter', () => {
-    const store = new InMemoryOutboxStore();
+    const store = new InMemoryOutboxStore(Date.now, () => 0.5);
     store.transaction((tx) => tx.enqueue(input('e1')));
     const now = Date.now();
     const first = store.claim(now, 10, 'w')!;
@@ -86,13 +86,13 @@ describe('outbox atomicity and fencing', () => {
     );
   });
   it('makes acknowledgement and retry idempotent for the same fencing token', () => {
-    const store = new InMemoryOutboxStore();
+    const store = new InMemoryOutboxStore(Date.now, () => 0.5);
     store.transaction((tx) => tx.enqueue(input('e1')));
     const now = Date.now();
     const claim = store.claim(now, 10, 'w')!;
     expect(store.retry('tenant-a', 'e1', claim.fencing, 'temporary', now, 5)).toBe('retry');
     expect(store.retry('tenant-a', 'e1', claim.fencing, 'temporary', now, 5)).toBe('retry');
-    const next = store.claim(now + 1000, 10, 'w')!;
+    const next = store.claim(now + backoffMs(1), 10, 'w')!;
     store.markHandlerCompleted('tenant-a', 'e1', next.fencing);
     store.acknowledge('tenant-a', 'e1', next.fencing);
     expect(() => store.acknowledge('tenant-a', 'e1', next.fencing)).not.toThrow();
@@ -130,5 +130,54 @@ describe('outbox atomicity and fencing', () => {
       expect(() => store.transaction((tx) => tx.enqueue(input(eventId)))).toThrow('opaque');
     expect(() => store.transaction((tx) => tx.enqueue(input('ok', ' ')))).toThrow('opaque');
     expect(store.all()).toHaveLength(0);
+  });
+  it('rejects reusing an event id for a different type or payload', () => {
+    const store = new InMemoryOutboxStore();
+    store.transaction((tx) => tx.enqueue(input('e1')));
+    expect(() =>
+      store.transaction((tx) => tx.enqueue({ ...input('e1'), payload: { value: 'other' } })),
+    ).toThrow(OutboxConflictError);
+    expect(() => store.transaction((tx) => tx.enqueue({ ...input('e1'), type: 'other' }))).toThrow(
+      OutboxConflictError,
+    );
+    expect(() => store.transaction((tx) => tx.enqueue(input('e1')))).not.toThrow();
+    expect(store.all()).toHaveLength(1);
+  });
+  it('treats an identical replay with a non-plain payload as the same event', () => {
+    const store = new InMemoryOutboxStore();
+    const payload = Object.assign(Object.create(null) as object, { value: 'e1' });
+    store.transaction((tx) => tx.enqueue({ ...input('e1'), payload }));
+    expect(() => store.transaction((tx) => tx.enqueue({ ...input('e1'), payload }))).not.toThrow();
+  });
+  it('rejects nested transactions so an inner commit cannot outlive an outer rollback', () => {
+    const store = new InMemoryOutboxStore();
+    expect(() =>
+      store.transaction((tx) => {
+        tx.enqueue(input('outer'));
+        store.transaction((inner) => inner.enqueue(input('inner')));
+      }),
+    ).toThrow('nested');
+    expect(store.all()).toHaveLength(0);
+    expect(() => store.transaction((tx) => tx.enqueue(input('after')))).not.toThrow();
+  });
+  it('carries correlation and actor references through the record', () => {
+    const store = new InMemoryOutboxStore();
+    store.transaction((tx) =>
+      tx.enqueue({
+        ...input('e1'),
+        correlationId: 'corr-1',
+        actorRef: { subject: 'user-1', kind: 'user' },
+      }),
+    );
+    expect(store.get('tenant-a', 'e1')).toMatchObject({
+      correlationId: 'corr-1',
+      actorRef: { subject: 'user-1', kind: 'user' },
+    });
+  });
+  it('follows the 1m/5m/30m/2h/12h schedule with bounded jitter', () => {
+    const exact = [1, 2, 3, 4, 5, 6].map((attempt) => backoffMs(attempt));
+    expect(exact).toEqual([60_000, 300_000, 1_800_000, 7_200_000, 43_200_000, 43_200_000]);
+    expect(backoffMs(1, () => 0)).toBe(48_000);
+    expect(backoffMs(1, () => 0.999999)).toBeLessThanOrEqual(72_000);
   });
 });
