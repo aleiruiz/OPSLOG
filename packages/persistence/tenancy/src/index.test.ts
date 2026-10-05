@@ -103,7 +103,6 @@ function fixture(
     id: tenantId,
     name: 'Synthetic tenant',
     status,
-    authorizationVersion: 4,
     createdAt: new Date(),
   };
   const membership: Membership = {
@@ -116,7 +115,7 @@ function fixture(
     id: 'synthetic-session' as SessionId,
     tenantId,
     subjectId: actorId,
-    authorizationVersion: 4,
+    authorizationVersion: 7,
     expiresAt: new Date(Date.now() + 60_000),
     revoked: false,
   };
@@ -159,6 +158,21 @@ describe('trusted tenant context and data source selection', () => {
     await expect(
       new TenantContextResolver(store).resolve({ sessionId: expired.session.id }),
     ).rejects.toBeInstanceOf(TenantAccessDeniedError);
+  });
+
+  it('denies a session issued under an older membership version', async () => {
+    const { tenant, membership, session } = fixture();
+    const resolver = new TenantContextResolver(
+      new TestTenantStore(
+        tenant,
+        { ...membership, version: membership.version + 1 },
+        session,
+        location,
+      ),
+    );
+    await expect(resolver.resolve({ sessionId: session.id })).rejects.toBeInstanceOf(
+      TenantAccessDeniedError,
+    );
   });
 
   it('creates a MySQL data source only for the verified directory location and resolved credential', async () => {

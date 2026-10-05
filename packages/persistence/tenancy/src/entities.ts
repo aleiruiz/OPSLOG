@@ -5,7 +5,6 @@ export class TenantEntity {
   id!: string;
   name!: string;
   status!: TenantStatus;
-  authorizationVersion!: number;
   createdAt!: Date;
 }
 
@@ -65,7 +64,6 @@ export const TenantEntitySchema = new EntitySchema<TenantEntity>({
     id: { type: 'char', length: 36, primary: true },
     name: { type: 'varchar', length: 160 },
     status: { type: 'varchar', length: 24 },
-    authorizationVersion: { name: 'authorization_version', type: 'int', unsigned: true },
     createdAt: { name: 'created_at', type: 'datetime', precision: 6 },
   },
 });

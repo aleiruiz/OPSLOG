@@ -11,7 +11,6 @@ export interface Tenant {
   readonly id: TenantId;
   readonly name: string;
   readonly status: TenantStatus;
-  readonly authorizationVersion: number;
   readonly createdAt: Date;
 }
 export interface TenantDatabaseLocation {

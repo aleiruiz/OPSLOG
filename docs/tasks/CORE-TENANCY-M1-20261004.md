@@ -33,7 +33,7 @@ Aceptación mínima: tenant A no puede resolver ni consultar B; tenant inexisten
 - El runtime control-plane usa cuenta dedicada `opslog_control_*`; el runtime operativo usa usuario dedicado `opslog_u_*`, contraseña resuelta por referencia/versionado confiable y base del `TenantContext`. El request no provee host, database ni credenciales.
 - El backend de aprovisionamiento crea la base aislada y credencial con privilegios DML mínimos, aplica migraciones y verifica DDL denegado e inaccesibilidad cross-database. Evidencia incompleta deja el tenant inactivo y activa compensación.
 - El job de provisión guarda clave idempotente única, hash de payload, intentos, owner y vencimiento de lease en MySQL. El reclamo usa bloqueo transaccional de fila, compatible con múltiples procesos.
-- Proyecciones de membresía toman bloqueo de fila y comparan versión en la misma transacción que incrementa authorizationVersion ante revocación.
+- Proyecciones de membresía toman bloqueo de fila y comparan versión en la misma transacción; la versión de autorización es por membresía (la versión de la proyección): una sesión solo vale mientras su versión coincida con la de la membresía activa.
 - Identificadores generados por esta capa son UUIDv7 de aplicación; el motor MySQL no los genera.
 - `pnpm quality` incluye workspace, format, typecheck, pruebas unitarias e integración. El test admin URL solo se configura para el harness sintético.
 
@@ -86,7 +86,7 @@ Leer instrucciones, baselines, ADR-0001/0002/0004/0005, SESSION_HANDSHAKE, AUTON
 - `destroy()` ya no se espera dentro del bloqueo del pool: las entradas se desvinculan bajo el bloqueo y se liberan después, así un `pool.end` lento no bloquea a otros tenants.
 - Pruebas nuevas (unitarias): contexto no emitido por el resolver es rechazado sin resolver credenciales; adquirir otro tenant mientras un `destroy` está colgado.
 - Sin MySQL local (no hay Docker/mysqld en este entorno) no se ejecutaron las pruebas de integración; las rutas nuevas de acuse perdido y tope de intentos no tienen prueba de integración todavía y quedan cubiertas solo por la revisión.
-- Decisiones/pendientes que no se cambiaron: `authorizationVersion` sigue siendo por tenant (revocar a un miembro invalida las sesiones de todo el tenant; el miembro revocado ya se deniega por su estado de membresía, por lo que mover la versión a la membresía es una decisión de diseño de SPECS §4.2); suspensión sin `evictTenant` automático; sin cola por capacidad de data sources; migraciones MySQL no transaccionales; idempotencia global (no por actor); sin guardia de transición en `setTenantStatus`; igualdad exacta de `migrationVersion`.
+- Decisiones/pendientes que no se cambiaron: suspensión sin `evictTenant` automático; sin cola por capacidad de data sources; migraciones MySQL no transaccionales; idempotencia global (no por actor); sin guardia de transición en `setTenantStatus`; igualdad exacta de `migrationVersion`.
 - Alcance: este PR modifica `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `tsconfig.json`, `packages/domain/tenants` y `apps/api/tenants`, fuera de `write_paths` original; el usuario autorizó ampliar el alcance el 2026-10-05.
 - PR #15 también edita `package.json` (`format:check`, `test:unit`) y `tsconfig.json`: resolver ese conflicto al fusionar el segundo PR.
 

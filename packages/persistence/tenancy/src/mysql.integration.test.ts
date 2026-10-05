@@ -349,7 +349,7 @@ async function makeContext(store: TypeOrmTenantStore, tenant: Tenant) {
     id: opaqueId() as SessionId,
     tenantId: tenant.id,
     subjectId: subject,
-    authorizationVersion: tenant.authorizationVersion,
+    authorizationVersion: membership.version,
     expiresAt: new Date(Date.now() + 60_000),
     revoked: false,
   };
@@ -664,16 +664,12 @@ describe('TypeORM tenancy against synthetic MySQL 8', () => {
       version: 3,
       status: 'active',
     });
-    const beforeRevocation = (await secondStore.getTenant(tenantA.id))!.authorizationVersion;
     await firstStore.projectMembership(tenantA.id, subject, 4, 'revoked');
     await secondStore.projectMembership(tenantA.id, subject, 4, 'active');
     expect(await firstStore.getMembership(tenantA.id, subject)).toMatchObject({
       version: 4,
       status: 'revoked',
     });
-    expect((await secondStore.getTenant(tenantA.id))?.authorizationVersion).toBe(
-      beforeRevocation + 1,
-    );
     await expect(
       new TenantContextResolver(secondStore).resolve({ sessionId: ctxA.session.id }),
     ).rejects.toBeInstanceOf(TenantAccessDeniedError);

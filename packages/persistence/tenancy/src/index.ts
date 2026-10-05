@@ -639,11 +639,6 @@ export class TypeOrmTenantStore implements TenantStore, TenantProvisioner {
           } else {
             await memberships.insert({ tenantId, subjectId, version, status });
           }
-          if (status === 'revoked' && current?.status !== 'revoked') {
-            await manager
-              .getRepository(TenantEntity)
-              .increment({ id: tenantId }, 'authorizationVersion', 1);
-          }
           return { tenantId, subjectId, version, status };
         });
       } catch (error) {
@@ -700,7 +695,6 @@ export class TypeOrmTenantStore implements TenantStore, TenantProvisioner {
           id,
           name,
           status: 'provisioning',
-          authorizationVersion: 1,
           createdAt: now,
         });
         await manager.getRepository(TenantDatabaseLocationEntity).insert({
@@ -1006,7 +1000,7 @@ export class TenantContextResolver {
       tenant.status !== 'active' ||
       !membership ||
       membership.status !== 'active' ||
-      session.authorizationVersion !== tenant.authorizationVersion ||
+      session.authorizationVersion !== membership.version ||
       !database ||
       database.tenantId !== session.tenantId ||
       !database.runtimeRoleVerified ||
@@ -1018,7 +1012,7 @@ export class TenantContextResolver {
       immutableContext({
         tenantId: session.tenantId,
         actor: { subjectId: session.subjectId, membershipVersion: membership.version },
-        authorizationVersion: tenant.authorizationVersion,
+        authorizationVersion: membership.version,
         correlationId: opaqueId() as TenantContext['correlationId'],
         database,
       }),
@@ -1074,7 +1068,6 @@ function toTenant(row: TenantEntity): Tenant {
     id: row.id as TenantId,
     name: row.name,
     status: row.status,
-    authorizationVersion: Number(row.authorizationVersion),
     createdAt: row.createdAt,
   });
 }

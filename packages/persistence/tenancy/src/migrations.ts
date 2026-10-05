@@ -14,7 +14,6 @@ export class CreateTenancyControlPlane2026100400010 implements MigrationInterfac
           { name: 'id', type: 'char', length: '36', isPrimary: true },
           { name: 'name', type: 'varchar', length: '160' },
           { name: 'status', type: 'varchar', length: '24' },
-          { name: 'authorization_version', type: 'int', unsigned: true, default: 1 },
           { name: 'created_at', type: 'datetime', precision: 6 },
         ],
       }),
