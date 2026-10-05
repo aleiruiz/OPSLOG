@@ -2,12 +2,12 @@
 
 ```yaml
 id: FND-ORCH
-baseline: [SPEC-1.1, ORCH-1.1, inherited: SPEC-1.0/ORCH-1.0]
+baseline: [SPEC-1.3, ORCH-1.3, inherited: SPEC-1.0/ORCH-1.0 and SPEC/ORCH-1.1–1.2]
 milestone: M0
 kind: foundation
 purpose: Implementar runtime/CLI TypeScript para paquetes, leases, fencing, proveedores y gates con fakes sintéticos.
 requirements: [U-07, U-08, U-09, U-10, "ORCH §2", "ORCH §4", "ORCH §6", "ORCH §7"]
-source_decisions: ["ADR-0005 single active provider", "SPECS §10", "Orchestrator §2.2"]
+source_decisions: ["ADR-0005 single active provider", "ADR-0006 Codex model pin", "SPECS §10", "Orchestrator §2.2"]
 depends_on: [FND-REPO, FND-CONTRACTS]
 consumes: ["workspace-v1", "contracts-v1"]
 produces: ["orchestrator-runtime-v1", "lease-state-v1", "gate-evidence-validator-v1"]
@@ -28,4 +28,4 @@ max_repair_cycles: 3
 
 ## Política de proveedores
 
-Provider-lock efectivo: solo Codex está activo en esta ronda; autor y auditores reciben `gpt-5.6-luna` explícito. Claude queda inactivo, no es un bloqueo. Un handoff futuro debe drenar los agentes/leases Codex, incrementar epoch y fijar `claude-sonnet-5`; si la herramienta no permite fijar/observar el modelo del proveedor activo, el estado es `blocked`. No se implementan adaptadores para secretos reales.
+Provider-lock efectivo: solo Codex está activo en esta ronda; autor y auditor reciben `gpt-6-luna` explícito. Claude queda inactivo, no es un bloqueo. Un handoff futuro debe drenar los agentes/leases Codex, incrementar epoch y fijar `claude-sonnet-5`; si la herramienta no permite fijar/observar el modelo del proveedor activo, el estado es `blocked`. No se implementan adaptadores para secretos reales.
