@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { IdentityService, InMemoryIdentityStore } from './index.js';
+import { IdentityService, InMemoryIdentityStore, opaqueTokenGenerator } from './index.js';
 
 const deliveries: Array<{ identityId: string; token: string; expiresAt: Date }> = [];
 const notifier = {
@@ -194,7 +194,9 @@ describe('identity and authentication', () => {
   it('rejects recovery replay, expiry and a superseded token, and revokes sessions on success', async () => {
     deliveries.length = 0;
     const time = clock();
-    const auth = new IdentityService(new InMemoryIdentityStore(), notifier, undefined, time.read);
+    const auth = new IdentityService(new InMemoryIdentityStore(), notifier, undefined, time.read, {
+      recoveryMinIntervalMs: 0,
+    });
     const identityId = await enroll(auth, 'tenant-a', 'recovering-user');
     const session = await auth.createSession(identityId, 'tenant-a');
 
@@ -256,5 +258,97 @@ describe('identity and authentication', () => {
     await expect(service().revoke(undefined as unknown as string)).rejects.toMatchObject({
       code: 'invalid_input',
     });
+  });
+
+  it('checks the current membership on every authenticate, independent of the version bump', async () => {
+    const store = new InMemoryIdentityStore();
+    const auth = new IdentityService(store, notifier);
+    const identityId = await enroll(auth, 'tenant-a', 'member-check-user');
+    const session = await auth.createSession(identityId, 'tenant-a');
+    await expect(auth.authenticate(session.token, 'corr')).resolves.toBeDefined();
+    const original = store.findMembership.bind(store);
+    store.findMembership = async (tenantId, id) => {
+      const membership = await original(tenantId, id);
+      return membership && { ...membership, status: 'revoked' };
+    };
+    await expect(auth.authenticate(session.token, 'corr')).rejects.toMatchObject({
+      code: 'unauthorized',
+    });
+  });
+
+  it('enforces the port-level recovery conditions without the service pre-checks', async () => {
+    const store = new InMemoryIdentityStore();
+    const now = new Date('2026-10-04T00:00:00.000Z');
+    const request = {
+      id: 'recovery-1',
+      identityId: 'identity-1',
+      tokenHash: 'ab',
+      issuedAt: now,
+      expiresAt: new Date(now.getTime() + 1_000),
+      usedAt: null,
+    };
+    await store.saveRecovery(request);
+    await expect(
+      store.consumeRecovery('recovery-1', new Date(now.getTime() + 2_000)),
+    ).resolves.toBe(false);
+    await store.saveRecovery({ ...request, id: 'recovery-2', tokenHash: 'cd' });
+    await expect(store.consumeRecovery('recovery-1', now)).resolves.toBe(false);
+    await expect(store.consumeRecovery('recovery-2', now)).resolves.toBe(true);
+    await expect(store.consumeRecovery('recovery-2', now)).resolves.toBe(false);
+  });
+
+  it('refuses to activate an active identity that has no external link', async () => {
+    const store = new InMemoryIdentityStore();
+    const auth = new IdentityService(store, notifier);
+    const createdAt = new Date('2026-10-04T00:00:00.000Z');
+    const identityId = 'unlinked-active-identity';
+    await store.createInvitation(
+      { id: identityId, status: 'active', mfa: 'disabled', authorizationVersion: 1, createdAt },
+      {
+        id: 'membership-1',
+        tenantId: 'tenant-a',
+        identityId,
+        status: 'pending',
+        createdAt,
+        activatedAt: null,
+      },
+      {
+        id: 'invitation-1',
+        tenantId: 'tenant-a',
+        identityId,
+        tokenHash: opaqueTokenGenerator.hash('known-token'),
+        expiresAt: new Date('2099-01-01T00:00:00.000Z'),
+        consumedAt: null,
+      },
+    );
+    await expect(
+      auth.activateInvitation('known-token', 'oidc-test', 'anyone'),
+    ).rejects.toMatchObject({ code: 'unauthorized' });
+  });
+
+  it('throttles recovery per identity and reports background failures', async () => {
+    deliveries.length = 0;
+    const errors: unknown[] = [];
+    const failing = {
+      deliver: async () => {
+        throw new Error('mail down');
+      },
+    };
+    const time = clock();
+    const auth = new IdentityService(new InMemoryIdentityStore(), failing, undefined, time.read, {
+      recoveryMinIntervalMs: 60_000,
+      onBackgroundError: (error) => errors.push(error),
+    });
+    const identityId = await enroll(auth, 'tenant-a', 'throttled-user');
+    await auth.requestRecovery(identityId);
+    await auth.settled();
+    expect(errors).toHaveLength(1);
+    await auth.requestRecovery(identityId);
+    await auth.settled();
+    expect(errors).toHaveLength(1);
+    time.set('2026-10-04T00:02:00.000Z');
+    await auth.requestRecovery(identityId);
+    await auth.settled();
+    expect(errors).toHaveLength(2);
   });
 });

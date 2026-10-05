@@ -70,8 +70,10 @@ export interface RecoveryRequest {
   readonly id: string;
   readonly identityId: string;
   readonly tokenHash: string;
+  readonly issuedAt: Date;
   readonly expiresAt: Date;
   readonly usedAt: Date | null;
+  readonly supersededAt?: Date | null;
 }
 export interface Session {
   readonly id: string;
@@ -116,6 +118,8 @@ export interface IdentityStore {
    * Atomically consume the unexpired invitation, bind the verified subject, and activate identity plus membership.
    * An identity that already has an external link, or is not pending, may only be activated by that same
    * provider+subject; a different subject must be rejected (returns null) so a leaked token cannot take over an account.
+   * Concurrent activations of one pending identity must serialize: lock the identity row (`SELECT ... FOR UPDATE`) or
+   * enforce a UNIQUE constraint on the external link's identity id, otherwise two subjects could both bind to it.
    */
   activateInvitation(
     tokenHash: string,
@@ -124,14 +128,19 @@ export interface IdentityStore {
     activatedAt: Date,
   ): Promise<InvitationActivation | null>;
   findRecovery(tokenHash: string): Promise<RecoveryRequest | null>;
-  /** Persist the request and invalidate any older unused recovery requests of the same identity. */
+  /** Persist the request and mark older unused requests of the same identity as superseded (`supersededAt = request.issuedAt`). */
   saveRecovery(request: RecoveryRequest): Promise<void>;
-  /** Conditional atomic update: only when `usedAt IS NULL AND expiresAt > usedAt`. */
+  /**
+   * One transaction: consume the request only when `used_at IS NULL AND superseded_at IS NULL AND expires_at > :usedAt`,
+   * and in the same transaction bump the identity authorizationVersion so every existing session is invalidated.
+   * Returns false when the conditional update matches no row.
+   */
   consumeRecovery(id: string, usedAt: Date): Promise<boolean>;
-  /** Mark the membership revoked; returns false when it does not exist or is already revoked. */
+  /**
+   * One transaction: mark the membership revoked and bump the identity authorizationVersion.
+   * Returns false when the membership does not exist or is already revoked.
+   */
   revokeMembership(tenantId: string, identityId: string): Promise<boolean>;
-  /** Atomically increment the identity authorizationVersion, invalidating its existing sessions. */
-  bumpAuthorizationVersion(identityId: string): Promise<Identity | null>;
   saveSession(session: Session): Promise<void>;
   findSession(tokenHash: string): Promise<Session | null>;
   revokeSession(id: string, revokedAt: Date): Promise<boolean>;
@@ -252,14 +261,15 @@ export class InMemoryIdentityStore implements IdentityStore {
   }
   public async saveRecovery(request: RecoveryRequest) {
     for (const [id, item] of this.recoveries)
-      if (item.identityId === request.identityId && !item.usedAt)
-        this.recoveries.set(id, { ...item, usedAt: request.expiresAt });
+      if (item.identityId === request.identityId && !item.usedAt && !item.supersededAt)
+        this.recoveries.set(id, { ...item, supersededAt: request.issuedAt });
     this.recoveries.set(request.id, request);
   }
   public async consumeRecovery(id: string, usedAt: Date) {
     const item = this.recoveries.get(id);
-    if (!item || item.usedAt || item.expiresAt <= usedAt) return false;
+    if (!item || item.usedAt || item.supersededAt || item.expiresAt <= usedAt) return false;
     this.recoveries.set(id, { ...item, usedAt });
+    this.bump(item.identityId);
     return true;
   }
   public async revokeMembership(tenantId: string, identityId: string) {
@@ -267,14 +277,16 @@ export class InMemoryIdentityStore implements IdentityStore {
     const item = this.memberships.get(key);
     if (!item || item.status === 'revoked') return false;
     this.memberships.set(key, { ...item, status: 'revoked' });
+    this.bump(identityId);
     return true;
   }
-  public async bumpAuthorizationVersion(identityId: string) {
+  private bump(identityId: string): void {
     const item = this.identities.get(identityId);
-    if (!item) return null;
-    const next: Identity = { ...item, authorizationVersion: item.authorizationVersion + 1 };
-    this.identities.set(identityId, next);
-    return next;
+    if (item)
+      this.identities.set(identityId, {
+        ...item,
+        authorizationVersion: item.authorizationVersion + 1,
+      });
   }
   public async saveSession(session: Session) {
     this.sessions.set(session.id, session);
@@ -293,14 +305,25 @@ export class InMemoryIdentityStore implements IdentityStore {
 }
 
 const nonEmpty = (value: string): boolean => value.trim().length > 0 && value.length <= 200;
+export interface IdentityServiceOptions {
+  /** Minimum time between recovery deliveries for one identity; extra requests get the same public answer. */
+  readonly recoveryMinIntervalMs?: number;
+  /** Receives store/notifier failures of background recovery work (never contains the token). */
+  readonly onBackgroundError?: (error: unknown) => void;
+}
 export class IdentityService {
   private readonly pending = new Set<Promise<void>>();
+  private readonly lastRecovery = new Map<string, number>();
+  private readonly recoveryMinIntervalMs: number;
   public constructor(
     private readonly store: IdentityStore,
     private readonly recoveryNotifier: RecoveryNotifier,
     private readonly tokens: TokenGenerator = opaqueTokenGenerator,
     private readonly now: () => Date = () => new Date(),
-  ) {}
+    private readonly options: IdentityServiceOptions = {},
+  ) {
+    this.recoveryMinIntervalMs = options.recoveryMinIntervalMs ?? 60_000;
+  }
   /** Resolve an already-linked external subject. Never provisions: identities are created only by invitations. */
   public async resolveExternal(provider: string, subject: string): Promise<Identity> {
     if (!nonEmpty(provider) || !nonEmpty(subject)) throw new AuthError('invalid_input');
@@ -400,7 +423,9 @@ export class IdentityService {
       throw new AuthError('invalid_input');
     // Existing and unknown identities run the same foreground path; all lookups and delivery
     // happen in the background so response time does not reveal whether the account exists.
-    const work = this.deliverRecovery(identityId, ttlMs).catch(() => undefined);
+    const work = this.deliverRecovery(identityId, ttlMs).catch((error: unknown) =>
+      this.options.onBackgroundError?.(error),
+    );
     this.pending.add(work);
     void work.finally(() => this.pending.delete(work));
     return { accepted: true };
@@ -413,11 +438,16 @@ export class IdentityService {
     const token = this.tokens.create();
     const identity = await this.store.findIdentity(identityId);
     if (identity?.status !== 'active') return;
-    const expiresAt = new Date(this.now().getTime() + ttlMs);
+    const issuedAt = this.now();
+    const last = this.lastRecovery.get(identityId);
+    if (last !== undefined && issuedAt.getTime() - last < this.recoveryMinIntervalMs) return;
+    this.lastRecovery.set(identityId, issuedAt.getTime());
+    const expiresAt = new Date(issuedAt.getTime() + ttlMs);
     await this.store.saveRecovery({
       id: randomUUID(),
       identityId,
       tokenHash: this.tokens.hash(token),
+      issuedAt,
       expiresAt,
       usedAt: null,
     });
@@ -426,23 +456,22 @@ export class IdentityService {
   public async consumeRecovery(token: string): Promise<Identity> {
     if (!nonEmpty(token)) throw new AuthError('invalid_input');
     const request = await this.store.findRecovery(this.tokens.hash(token));
-    if (!request || request.usedAt || request.expiresAt <= this.now())
+    if (!request || request.usedAt || request.supersededAt || request.expiresAt <= this.now())
       throw new AuthError('unauthorized');
     if (!(await this.store.consumeRecovery(request.id, this.now())))
       throw new AuthError('conflict');
     const identity = await this.store.findIdentity(request.identityId);
     if (!identity || identity.status !== 'active') throw new AuthError('unauthorized');
-    // Recovery means the credential may be compromised: invalidate every existing session.
-    const bumped = await this.store.bumpAuthorizationVersion(identity.id);
-    if (!bumped) throw new AuthError('unauthorized');
-    return bumped;
+    // The port bumped authorizationVersion in the same transaction (every session is now invalid).
+    const refreshed = await this.store.findIdentity(identity.id);
+    if (!refreshed) throw new AuthError('unauthorized');
+    return refreshed;
   }
   /** Revoke a tenant membership and invalidate the identity's sessions. Callers must authorize `manage_users` first. */
   public async revokeMembership(tenantId: string, identityId: string): Promise<void> {
     if (!nonEmpty(tenantId) || !nonEmpty(identityId)) throw new AuthError('invalid_input');
     if (!(await this.store.revokeMembership(tenantId, identityId)))
       throw new AuthError('not_found');
-    await this.store.bumpAuthorizationVersion(identityId);
   }
   public async createSession(identityId: string, tenantId: string, ttlMs = 8 * 60 * 60 * 1000) {
     if (!nonEmpty(identityId) || !nonEmpty(tenantId) || !Number.isFinite(ttlMs) || ttlMs <= 0)
