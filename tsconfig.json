@@ -3,7 +3,10 @@
   "references": [
     { "path": "./tests/harness" },
     { "path": "./packages/contracts" },
+    { "path": "./packages/domain/tenants" },
+    { "path": "./packages/persistence/tenancy" },
     { "path": "./packages/ui" },
+    { "path": "./apps/api/tenants" },
     { "path": "./e2e" }
   ]
 }

@@ -1,0 +1,25 @@
+{
+  "name": "@opslog/persistence-tenancy",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "test:unit": "vitest run src/index.test.ts",
+    "test:integration": "vitest run src/mysql.integration.test.ts",
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "@opslog/domain-tenants": "workspace:*",
+    "mysql2": "3.22.0",
+    "reflect-metadata": "0.2.2",
+    "typeorm": "1.1.1"
+  },
+  "devDependencies": {
+    "vitest": "3.2.6"
+  }
+}
