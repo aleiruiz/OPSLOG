@@ -1,0 +1,5 @@
+{
+  "name": "@opslog/api-auth",
+  "private": true,
+  "type": "module"
+}
