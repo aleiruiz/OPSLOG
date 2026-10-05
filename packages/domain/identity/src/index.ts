@@ -26,6 +26,11 @@ export interface TenantContext {
   readonly authorizationVersion: number;
   readonly correlationId: string;
 }
+/** Resolves tenant membership and effective permissions from trusted server-side state. */
+export interface IdentityAccessResolver {
+  resolveActiveTenant(identityId: string): Promise<string | null>;
+  resolvePermissions(context: TenantContext): Promise<readonly Permission[]>;
+}
 export interface ExternalIdentity {
   readonly id: string;
   readonly provider: string;

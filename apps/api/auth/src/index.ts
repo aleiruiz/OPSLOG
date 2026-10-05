@@ -1,6 +1,7 @@
 import {
   AuthError,
   IdentityService,
+  type IdentityAccessResolver,
   type Permission,
   type TenantContext,
 } from '../../../../packages/domain/identity/src/index.js';
@@ -14,14 +15,18 @@ const errorResponse = (error: unknown): AuthResponse<never> =>
     ? { ok: false, error: { code: error.code, message: error.message } }
     : { ok: false, error: { code: 'internal_error', message: 'Request failed' } };
 export class AuthApi {
-  public constructor(private readonly service: IdentityService) {}
+  public constructor(
+    private readonly service: IdentityService,
+    private readonly accessResolver: IdentityAccessResolver,
+  ) {}
   public async login(
     provider: string,
     subject: string,
-    tenantId: string,
   ): Promise<AuthResponse<{ token: string; expiresAt: Date }>> {
     try {
       const identity = await this.service.linkExternal(provider, subject);
+      const tenantId = await this.accessResolver.resolveActiveTenant(identity.id);
+      if (!tenantId) throw new AuthError('unauthorized');
       return { ok: true, value: await this.service.createSession(identity.id, tenantId) };
     } catch (error) {
       return errorResponse(error);
@@ -45,9 +50,9 @@ export class AuthApi {
   public async authorize(
     context: TenantContext,
     permission: Permission,
-    granted: readonly Permission[],
   ): Promise<AuthResponse<null>> {
     try {
+      const granted = await this.accessResolver.resolvePermissions(context);
       await this.service.requirePermission(context, permission, granted);
       return { ok: true, value: null };
     } catch (error) {
