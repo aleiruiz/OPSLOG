@@ -60,14 +60,18 @@ export function createAuditEvent(
   };
 }
 export interface AuditStore {
+  /** Implementations must redact event data at the append boundary before persisting it. */
   append(event: AuditEvent): void;
   list(tenantId: string): readonly AuditEvent[];
 }
 export class InMemoryAuditStore implements AuditStore {
   private readonly events = new Map<string, AuditEvent>();
   append(event: AuditEvent): void {
-    const key = scopedKey(event.tenantId, event.eventId);
-    if (!this.events.has(key)) this.events.set(key, structuredClone(event));
+    const safeEvent = structuredClone(event);
+    const key = scopedKey(safeEvent.tenantId, safeEvent.eventId);
+    if (!this.events.has(key)) {
+      this.events.set(key, { ...safeEvent, data: redactAuditData(safeEvent.data) });
+    }
   }
   list(tenantId: string): readonly AuditEvent[] {
     return [...this.events.values()]

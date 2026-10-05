@@ -63,3 +63,9 @@ Leer instrucciones, baselines, ADR-0001/0002/0004/0005, SESSION_HANDSHAKE, AUTON
 - Regresión `send → receive → send` verifica IDs distintos y secuenciales para ambas colas.
 - Runtime Node `24.19.0`, pnpm `11.25.0`: Vitest dirigido de cola, 2/2 tests PASS; Prettier dirigido PASS.
 - `pnpm quality` PASS (lint, format, typecheck, unit/axe, MySQL 8.0.45 sintético e integración, build); `git diff --check` PASS.
+
+## Seguimiento de auditoría de redacción de audit store
+
+- `InMemoryAuditStore.append` vuelve a redactar `data` en su propio límite de persistencia; los eventos raw no pueden evitar la sanitización de `createAuditEvent`.
+- Regresión: invocar directamente `append` con correo y token anidados persiste valores redactados sin mutar el objeto original.
+- Runtime Node `24.19.0`, pnpm `11.25.0`: Vitest dirigido de audit, 4/4 PASS; `pnpm quality` completo PASS con MySQL 8.0.45 sintético; `git diff --check` PASS.
