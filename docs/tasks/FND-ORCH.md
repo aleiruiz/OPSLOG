@@ -95,3 +95,13 @@ max_repair_cycles: 3
 ## Política de proveedores
 
 Provider-lock efectivo: solo Codex está activo en esta ronda; autor y auditor reciben `gpt-6-luna` explícito. Claude queda inactivo, no es un bloqueo. Un handoff futuro debe drenar los agentes/leases Codex, incrementar epoch y fijar `claude-sonnet-5-5` para código y `claude-opus-5-5` para auditoría (ADR-0007); si la herramienta no permite fijar/observar el modelo del proveedor activo, el estado es `blocked`. No se implementan adaptadores para secretos reales.
+
+## Diferido explícitamente (registro de G0, 2026-10-05)
+
+El runtime implementado (`tools/orchestrator`) cubre leases, fencing, epochs, gates acumulativos, pines de modelo y handoff con pruebas unitarias (cobertura ≥90/85). Los siguientes componentes de FND-ORCH **no están construidos** y no se declaran como cumplidos:
+
+- reconstrucción del estado desde un fake de GitHub,
+- store de estado persistente y proyección de Tasks,
+- comando `simulate` y simulación de dispatch.
+
+Fecha límite: antes de que el orquestador despache tareas de G1 y, como máximo, al cierre de G1. Mientras tanto el estado de Tasks lo escribe únicamente el orquestador humano/sesión coordinadora, como indica AGENTS.md.
