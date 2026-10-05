@@ -10,10 +10,11 @@ export interface Queue<T = unknown> {
 }
 export class InMemoryQueue<T = unknown> implements Queue<T> {
   private readonly messages: QueueMessage<T>[] = [];
+  private nextMessageId = 1;
   constructor(private readonly id = 'queue') {}
   send(body: T): QueueMessage<T> {
     const message = {
-      messageId: `${this.id}-${this.messages.length + 1}`,
+      messageId: `${this.id}-${this.nextMessageId++}`,
       body: structuredClone(body),
       enqueuedAt: Date.now(),
     };

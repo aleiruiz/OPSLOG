@@ -7,8 +7,27 @@ milestone: M1
 kind: implementation
 baseSHA: 61c35c20f1a68e4eb58802fa42759ca4335051d7
 depends_on: [G0-human-reaffirmed]
-write_paths: [apps/worker/base/**, packages/platform/audit/**, packages/platform/outbox/**, infra/queues/**, docs/tasks/CORE-AUDIT-M1-20261004.md]
-forbidden_paths: [SPECS.md, Orchestrator.md, docs/baselines/**, Tasks.md, .orchestrator/**, .env*, pnpm-lock.yaml, packages/contracts/**, packages/persistence/**, apps/api/**]
+write_paths:
+  [
+    apps/worker/base/**,
+    packages/platform/audit/**,
+    packages/platform/outbox/**,
+    infra/queues/**,
+    docs/tasks/CORE-AUDIT-M1-20261004.md,
+  ]
+forbidden_paths:
+  [
+    SPECS.md,
+    Orchestrator.md,
+    docs/baselines/**,
+    Tasks.md,
+    .orchestrator/**,
+    .env*,
+    pnpm-lock.yaml,
+    packages/contracts/**,
+    packages/persistence/**,
+    apps/api/**,
+  ]
 ```
 
 Implementar completamente desde cero el slice de auditoría/outbox/worker, sin copiar PR11, sus reparaciones ni sus ramas. Cubrir eventos auditados sin PII, outbox transaccional, claim con lease/fencing, retry/backoff, DLQ, métricas, reconciliación y contexto tenant.
@@ -37,3 +56,10 @@ Leer instrucciones, baselines, ADR-0001/0002/0004/0005, SESSION_HANDSHAKE, AUTON
 - El rechazo por tenant no activo aplica antes de ejecutar un handler. Cuando `handlerCompleted` ya está guardado, el worker permite completar solo el append de auditoría aun si el tenant está suspendido; una prueba provoca el fallo inicial de append, suspende el tenant y confirma que el reintento no vuelve a ejecutar el handler.
 - Prettier dirigido a los siete archivos TypeScript del scope: PASS. Typechecks strict del audit/outbox/worker, ESLint del scope, Vitest 15/15 y `git diff --check`: PASS.
 - La verificación dirigida no está incluida todavía en `pnpm quality`; editar `package.json` requiere una lease adicional por ser configuración compartida. No se hizo commit ni push de esta tranche mientras se espera esa asignación.
+
+## Seguimiento de auditoría de IDs de cola
+
+- `InMemoryQueue` asigna IDs mediante un contador monotónico por instancia; consumir mensajes ya no reduce el próximo ID. `DeadLetterQueue` hereda el mismo mecanismo.
+- Regresión `send → receive → send` verifica IDs distintos y secuenciales para ambas colas.
+- Runtime Node `24.19.0`, pnpm `11.25.0`: Vitest dirigido de cola, 2/2 tests PASS; Prettier dirigido PASS.
+- `pnpm quality` PASS (lint, format, typecheck, unit/axe, MySQL 8.0.45 sintético e integración, build); `git diff --check` PASS.
