@@ -14,7 +14,7 @@ Cada enlace usa un `handshakeId` único y conserva `parentThreadId`, `childThrea
 
 ## Handshake obligatorio
 
-1. Crear la hija con `create_thread` sobre el mismo proyecto, fijar `gpt-5.6-luna` y pasarle el `threadId` real del padre en el prompt. `fork_thread` queda reservado para recuperación explícita del canal, no para el flujo normal.
+1. Crear la hija con `create_thread` sobre el mismo proyecto, fijar el pin activo de Codex `gpt-6-luna` (o `claude-sonnet-5` si Claude es el proveedor activo) y pasarle el `threadId` real del padre en el prompt. `fork_thread` queda reservado para recuperación explícita del canal, no para el flujo normal.
 2. Registrar la intención de creación con `taskId`, proveedor, modelo, paths, baseSHA y el identificador recibido. Si solo hay `clientThreadId`, conservarlo únicamente para correlación.
 3. Nunca enviar mensajes al identificador provisional. Para un `create_thread` asíncrono, reconciliar una sola vez `list_threads` usando título, proyecto, worktree y rama; nunca por coincidencia parcial de un identificador provisional.
 4. Aceptar la sesión solo cuando exista un `threadId` real y el `cwd`/worktree correspondan al lease registrado.
@@ -59,7 +59,7 @@ childThreadId: <real-child-uuid>
 taskId: <task-id>
 leaseId: <current-lease>
 epoch: <current-epoch>
-model: gpt-5.6-luna|claude-sonnet-5
+model: gpt-6-luna|claude-sonnet-5
 hostId: <host>
 worktree: <absolute-worktree>
 branch: <assigned-branch>

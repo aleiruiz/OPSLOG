@@ -30,4 +30,4 @@ max_repair_cycles: 3
 
 La falta de acceso remoto no impide preparar documentación, pero impide afirmar compatibilidad, capacidad, IAM, TLS, backups o recuperación sobre AWS. El paquete debe cerrar como documental con esas verificaciones `pending`.
 
-Provider-lock efectivo: Codex es el único proveedor activo de esta ronda y usa `gpt-5.6-luna`; no se bloquea FND-AWS documental por Anthropic. AWS sigue diferido y no se leen secretos.
+Provider-lock efectivo: Codex es el único proveedor activo de esta ronda y usa `gpt-6-luna`; no se bloquea FND-AWS documental por Anthropic. AWS sigue diferido y no se leen secretos.

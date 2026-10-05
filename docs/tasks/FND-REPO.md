@@ -30,4 +30,4 @@ max_repair_cycles: 3
 
 FND-REPO es propietario exclusivo de la raíz de workspace, lockfile, configuración compartida y workflows. Debe solicitar `ContractChangeRequested` para cualquier cambio fuera de `write_paths`. La auditoría local se crea antes del PR y no puede editar el árbol del autor. El CI de AWS/staging queda pendiente y no puede representarse como verde.
 
-Provider-lock efectivo: solo Codex está activo en este repositorio durante esta ronda y todos los agentes/auditores usan `gpt-5.6-luna`; no se requiere revisión Anthropic para este intento. Cambiar a Claude exige drenar leases/agentes y registrar un nuevo epoch.
+Provider-lock efectivo: solo Codex está activo en este repositorio durante esta ronda y los nuevos agentes/auditores usan `gpt-6-luna`; no se requiere revisión Anthropic para este intento. Cambiar a Claude exige drenar leases/agentes y registrar un nuevo epoch.

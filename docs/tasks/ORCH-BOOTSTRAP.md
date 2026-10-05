@@ -1,5 +1,7 @@
 # ORCH-BOOTSTRAP — Activar sesión de orquestación M0
 
+Nota de contexto: paquete histórico de la asignación Luna 5.6; no es una instrucción vigente ni una tarea para repetir. El pin vigente se encuentra en [MODEL-LUNA6](MODEL-LUNA6.md), [ADR-0006](../adr/0006-luna6-model-policy.md) y [ORCH-RESTART](ORCH-RESTART.md). Se conserva el texto siguiente como evidencia de su contexto original.
+
 Tipo: bootstrap de coordinación, previo al runtime FND-ORCH.
 Autorización: petición directa del usuario de iniciar otra sesión con Luna 5.6 para Codex y Sonnet 5 para Claude.
 Baseline efectiva: SPEC-1.1 / ORCH-1.1, enmiendas sobre originales 1.0; modelos `gpt-5.6-luna` (Codex) / `claude-sonnet-5` (Claude), según ADR-0004/0005. Solo un proveedor activo; inicial Codex.
