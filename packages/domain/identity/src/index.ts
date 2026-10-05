@@ -84,10 +84,10 @@ export class AuthError extends Error {
 }
 
 export interface IdentityStore {
+  /** Atomically persist a new identity and its provider+subject key. Enforce a unique constraint on that key and return the winner on conflict. */
+  createExternalIdentity(identity: Identity, external: ExternalIdentity): Promise<ExternalIdentity>;
   findIdentity(id: string): Promise<Identity | null>;
-  saveIdentity(identity: Identity): Promise<void>;
   findExternal(provider: string, subject: string): Promise<ExternalIdentity | null>;
-  saveExternal(identity: ExternalIdentity): Promise<void>;
   findInvitation(tokenHash: string): Promise<Invitation | null>;
   saveInvitation(invitation: Invitation): Promise<void>;
   consumeInvitation(id: string, consumedAt: Date): Promise<boolean>;
@@ -97,6 +97,10 @@ export interface IdentityStore {
   saveSession(session: Session): Promise<void>;
   findSession(tokenHash: string): Promise<Session | null>;
   revokeSession(id: string, revokedAt: Date): Promise<boolean>;
+}
+/** Delivers recovery links through a verified, out-of-band destination owned by the identity. */
+export interface RecoveryNotifier {
+  deliver(identityId: string, token: string, expiresAt: Date): Promise<void>;
 }
 export interface TokenGenerator {
   create(): string;
@@ -121,14 +125,16 @@ export class InMemoryIdentityStore implements IdentityStore {
   public async findIdentity(id: string) {
     return this.identities.get(id) ?? null;
   }
-  public async saveIdentity(identity: Identity) {
-    this.identities.set(identity.id, identity);
-  }
   public async findExternal(provider: string, subject: string) {
     return this.external.get(`${provider}\u0000${subject}`) ?? null;
   }
-  public async saveExternal(identity: ExternalIdentity) {
-    this.external.set(`${identity.provider}\u0000${identity.subject}`, identity);
+  public async createExternalIdentity(identity: Identity, external: ExternalIdentity) {
+    const key = `${external.provider}\u0000${external.subject}`;
+    const winner = this.external.get(key);
+    if (winner) return winner;
+    this.identities.set(identity.id, identity);
+    this.external.set(key, external);
+    return external;
   }
   public async findInvitation(tokenHash: string) {
     return (
@@ -178,6 +184,7 @@ const nonEmpty = (value: string): boolean => value.trim().length > 0 && value.le
 export class IdentityService {
   public constructor(
     private readonly store: IdentityStore,
+    private readonly recoveryNotifier: RecoveryNotifier,
     private readonly tokens: TokenGenerator = opaqueTokenGenerator,
     private readonly now: () => Date = () => new Date(),
   ) {}
@@ -196,16 +203,18 @@ export class IdentityService {
       authorizationVersion: 1,
       createdAt: this.now(),
     };
-    await this.store.saveIdentity(identity);
-    await this.store.saveExternal({
+    const externalIdentity: ExternalIdentity = {
       id: randomUUID(),
       provider,
       subject,
       identityId: identity.id,
       status: identity.status,
       createdAt: identity.createdAt,
-    });
-    return identity;
+    };
+    const winner = await this.store.createExternalIdentity(identity, externalIdentity);
+    const linkedIdentity = await this.store.findIdentity(winner.identityId);
+    if (!linkedIdentity || linkedIdentity.status === 'revoked') throw new AuthError('unauthorized');
+    return linkedIdentity;
   }
   public async issueInvitation(tenantId: string, identityId: string, ttlMs = 72 * 60 * 60 * 1000) {
     if (!nonEmpty(tenantId) || !nonEmpty(identityId) || !Number.isFinite(ttlMs) || ttlMs <= 0)
@@ -233,19 +242,30 @@ export class IdentityService {
     if (!identity || identity.status !== 'active') throw new AuthError('unauthorized');
     return identity;
   }
-  public async requestRecovery(identityId: string, ttlMs = 60 * 60 * 1000) {
+  public async requestRecovery(
+    identityId: string,
+    ttlMs = 60 * 60 * 1000,
+  ): Promise<{ accepted: true }> {
     if (!nonEmpty(identityId) || !Number.isFinite(ttlMs) || ttlMs <= 0)
       throw new AuthError('invalid_input');
     const token = this.tokens.create();
-    if (await this.store.findIdentity(identityId))
+    const identity = await this.store.findIdentity(identityId);
+    if (identity?.status === 'active') {
+      const expiresAt = new Date(this.now().getTime() + ttlMs);
       await this.store.saveRecovery({
         id: randomUUID(),
         identityId,
         tokenHash: this.tokens.hash(token),
-        expiresAt: new Date(this.now().getTime() + ttlMs),
+        expiresAt,
         usedAt: null,
       });
-    return { token, accepted: true } as const;
+      try {
+        await this.recoveryNotifier.deliver(identity.id, token, expiresAt);
+      } catch {
+        // Preserve the same public response for existing and unknown identities.
+      }
+    }
+    return { accepted: true };
   }
   public async consumeRecovery(token: string): Promise<Identity> {
     if (!nonEmpty(token)) throw new AuthError('invalid_input');

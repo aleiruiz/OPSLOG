@@ -13,10 +13,23 @@ export interface ExternalClaims {
   readonly emailVerified?: boolean;
 }
 export interface OidcVerifier {
-  verify(code: string, expectedNonce: string): Promise<ExternalClaims>;
+  verify(code: string, expectedIssuer: string, expectedNonce: string): Promise<ExternalClaims>;
 }
-export const assertClaims = (claims: ExternalClaims): ExternalClaims => {
-  if (!claims.issuer.trim() || !claims.subject.trim() || claims.subject.length > 200)
-    throw new Error('invalid identity claims');
+export const assertClaims = (
+  claims: ExternalClaims,
+  expectedIssuer: string,
+  expectedNonce: string,
+): ExternalClaims => {
+  if (
+    !expectedIssuer.trim() ||
+    !expectedNonce.trim() ||
+    !claims.issuer.trim() ||
+    claims.issuer !== expectedIssuer ||
+    !claims.subject.trim() ||
+    claims.subject.length > 200 ||
+    !claims.nonce ||
+    claims.nonce !== expectedNonce
+  )
+    throw new Error('identity verification failed');
   return Object.freeze({ ...claims });
 };
