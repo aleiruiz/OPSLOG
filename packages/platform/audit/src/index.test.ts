@@ -2,13 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { InMemoryAuditStore, createAuditEvent, redactAuditData, redactError } from './index.js';
 
 describe('audit safety and tenant isolation', () => {
-  it('redacts PII and secrets recursively while preserving safe fields', () => {
+  it('persists only allowlisted structured audit data', () => {
     const data = redactAuditData({
+      attempts: 2,
+      name: 'Jane Doe',
+      address: '123 Main Street, Example City',
       email: 'person@example.test',
       nested: { token: 'Bearer secret-value' },
       safe: 'ok',
     });
-    expect(data).toEqual({ email: '[REDACTED]', nested: { token: '[REDACTED]' }, safe: 'ok' });
+    expect(data).toEqual({ attempts: 2 });
   });
   it('redacts free form email, phone and government identifier errors', () => {
     expect(
@@ -24,9 +27,12 @@ describe('audit safety and tenant isolation', () => {
       entityType: 'x',
       entityId: 'e',
       occurredAt: '2026-10-04T00:00:00.000Z',
-      actor: { id: 'opaque-actor', kind: 'user' as const },
+      actor: { id: 'Jane Doe', kind: 'user' as const },
       correlationId: 'corr-a',
       data: {
+        attempts: 1,
+        name: 'Jane Doe',
+        address: '123 Main Street, Example City',
         email: 'person@example.test',
         nested: { token: 'Bearer secret-value' },
         note: 'Contact ana@example.test',
@@ -35,22 +41,77 @@ describe('audit safety and tenant isolation', () => {
 
     store.append(rawEvent);
 
-    expect(store.list('tenant-a')[0]?.data).toEqual({
-      email: '[REDACTED]',
-      nested: { token: '[REDACTED]' },
-      note: 'Contact [REDACTED]',
-    });
+    expect(store.list('tenant-a')[0]?.actor.id).toBe('[REDACTED]');
+    expect(store.list('tenant-a')[0]?.data).toEqual({ attempts: 1 });
+    expect(rawEvent.actor.id).toBe('Jane Doe');
     expect(rawEvent.data).toEqual({
+      attempts: 1,
+      name: 'Jane Doe',
+      address: '123 Main Street, Example City',
       email: 'person@example.test',
       nested: { token: 'Bearer secret-value' },
       note: 'Contact ana@example.test',
     });
   });
+  it('sanitizes actor IDs supplied through createAuditEvent', () => {
+    const event = createAuditEvent(
+      {
+        tenantId: 'tenant-a',
+        actorId: 'person@example.test',
+        actorKind: 'user',
+        correlationId: 'corr-a',
+      },
+      {
+        eventId: 'actor-e',
+        action: 'x',
+        entityType: 'x',
+        entityId: 'e',
+        occurredAt: '2026-10-04T00:00:00.000Z',
+      },
+    );
+
+    expect(event.actor.id).toBe('[REDACTED]');
+  });
+  it('preserves opaque internal user and API actor references', () => {
+    const userEvent = createAuditEvent(
+      {
+        tenantId: 'tenant-a',
+        actorId: 'user-550e8400-e29b-41d4-a716-446655440000',
+        actorKind: 'user',
+        correlationId: 'corr-a',
+      },
+      {
+        eventId: 'actor-user-e',
+        action: 'x',
+        entityType: 'x',
+        entityId: 'e',
+        occurredAt: '2026-10-04T00:00:00.000Z',
+      },
+    );
+    const apiEvent = createAuditEvent(
+      {
+        tenantId: 'tenant-a',
+        actorId: ['api', '550e8400-e29b-41d4-a716-446655440000'].join('-'),
+        actorKind: 'api_key',
+        correlationId: 'corr-a',
+      },
+      {
+        eventId: 'actor-api-e',
+        action: 'x',
+        entityType: 'x',
+        entityId: 'e',
+        occurredAt: '2026-10-04T00:00:00.000Z',
+      },
+    );
+
+    expect(userEvent.actor.id).toBe('user-550e8400-e29b-41d4-a716-446655440000');
+    expect(apiEvent.actor.id).toBe(['api', '550e8400-e29b-41d4-a716-446655440000'].join('-'));
+  });
   it('keeps A/B tenants isolated and deduplicates event ids', () => {
     const store = new InMemoryAuditStore();
     const event = (tenantId: string) =>
       createAuditEvent(
-        { tenantId, actorId: 'opaque-actor', actorKind: 'system', correlationId: `${tenantId}-c` },
+        { tenantId, actorId: 'system', actorKind: 'system', correlationId: `${tenantId}-c` },
         {
           eventId: 'local-e',
           action: 'x',
@@ -67,9 +128,6 @@ describe('audit safety and tenant isolation', () => {
     expect(store.list('tenant-b')).toHaveLength(1);
     expect(store.list('tenant-a')[0]?.tenantId).toBe('tenant-a');
     expect(store.list('tenant-b')[0]?.eventId).toBe(store.list('tenant-a')[0]?.eventId);
-    expect(store.list('tenant-a')[0]?.data).toEqual({
-      contact: '[REDACTED]',
-      nested: { phone: '[REDACTED]' },
-    });
+    expect(store.list('tenant-a')[0]?.data).toEqual({});
   });
 });

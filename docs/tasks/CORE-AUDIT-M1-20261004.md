@@ -69,3 +69,10 @@ Leer instrucciones, baselines, ADR-0001/0002/0004/0005, SESSION_HANDSHAKE, AUTON
 - `InMemoryAuditStore.append` vuelve a redactar `data` en su propio límite de persistencia; los eventos raw no pueden evitar la sanitización de `createAuditEvent`.
 - Regresión: invocar directamente `append` con correo y token anidados persiste valores redactados sin mutar el objeto original.
 - Runtime Node `24.19.0`, pnpm `11.25.0`: Vitest dirigido de audit, 4/4 PASS; `pnpm quality` completo PASS con MySQL 8.0.45 sintético; `git diff --check` PASS.
+
+## Seguimiento de auditoría de identidad y datos libres
+
+- Actor IDs persistidos se aceptan solo como UUID interno prefijado `user-`/`api-`, referencias de worker de sistema `worker-<slug>` o el actor `system`; los demás se sustituyen por `[REDACTED]` tanto al construir como al almacenar eventos raw.
+- El payload persistido tiene tipo `AuditData` y allowlist estructurada: conserva solo `attempts` entero no negativo; nombres, direcciones y demás texto/campos desconocidos se descartan, no se intenta adivinar PII con regex.
+- Regresiones cubren actor.email, nombre/dirección libres, append raw, campos admitidos y no mutación del objeto original.
+- Runtime Node `24.19.0`, pnpm `11.25.0`: Vitest dirigido de audit, 6/6 PASS; `pnpm quality` completo PASS con MySQL 8.0.45 sintético; ESLint/Prettier dirigidos y `git diff --check` PASS.
