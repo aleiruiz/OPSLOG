@@ -30,4 +30,4 @@ max_repair_cycles: 3
 
 Los conflictos del BRD (por ejemplo referencias documentales a FR-120) se registran por texto y se resuelven con SPECS, sin editar la fuente. El paquete debe separar `CONFIRMED`, `PROPOSED`, `ASSUMPTION` y `DECISION REQUIRED`; no convertir una propuesta en regla sin decisión compatible.
 
-Provider-lock efectivo: Codex es el único proveedor activo de esta ronda, con `gpt-5.6-luna` explícito para autor y auditores. No se espera adaptador Anthropic ni se bloquea el paquete por su ausencia.
+Provider-lock efectivo: Codex es el único proveedor activo de esta ronda, con `gpt-6-luna` explícito para autor y auditor. No se espera adaptador Anthropic ni se bloquea el paquete por su ausencia.

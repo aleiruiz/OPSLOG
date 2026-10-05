@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { Model } from '../../tools/orchestrator/domain.js';
 import { OrchestratorRuntime } from '../../tools/orchestrator/runtime.js';
 
 const task = (id: string, stage = 0, dependencies: string[] = []) => ({
@@ -16,7 +17,7 @@ const evidence = (taskId: string, sha: string) => ({
   ciPassed: true,
   auditCount: 1 as const,
   independentAudit: true,
-  observedModel: 'gpt-5.6-luna' as const,
+  observedModel: 'gpt-6-luna' as const,
   evidenceId: `audit-${taskId}`,
 });
 
@@ -36,7 +37,7 @@ describe('orchestrator runtime', () => {
     expect(lease).toMatchObject({
       owner: 'agent-a',
       baseSha: 'base',
-      model: 'gpt-5.6-luna',
+      model: 'gpt-6-luna',
       fencing: 1,
     });
     expect(() => runtime.acquire('a', 'agent-b', 'C:/wt/b', 'base', 10)).toThrow('already leased');
@@ -103,5 +104,31 @@ describe('orchestrator runtime', () => {
       model: 'claude-sonnet-5',
       eventIds: ['event-a'],
     });
+  });
+
+  it('accepts the Codex Luna 6 pin and rejects Luna 5.6, model mismatches and inactive-provider audits', () => {
+    const runtime = new OrchestratorRuntime();
+    runtime.register([task('a')]);
+    const lease = runtime.acquire('a', 'agent-a', 'C:/wt/a', 'base', 0);
+    expect(lease.model).toBe('gpt-6-luna');
+    runtime.complete('a', lease.fencing, 'head', 1, 'event-a');
+
+    expect(runtime.validateCandidate(evidence('a', 'head'))).toBe(true);
+    expect(
+      runtime.validateCandidate({
+        ...evidence('a', 'head'),
+        observedModel: 'gpt-5.6-luna' as Model,
+      }),
+    ).toBe(false);
+    expect(
+      runtime.validateCandidate({
+        ...evidence('a', 'head'),
+        auditProvider: 'claude',
+        observedModel: 'claude-sonnet-5',
+      }),
+    ).toBe(false);
+    expect(() => new OrchestratorRuntime('codex', 'gpt-5.6-luna' as Model)).toThrow(
+      'not valid for provider codex',
+    );
   });
 });
