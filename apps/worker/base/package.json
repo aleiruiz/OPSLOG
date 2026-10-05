@@ -1,0 +1,8 @@
+{
+  "name": "@opslog/worker-base",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js"
+  }
+}

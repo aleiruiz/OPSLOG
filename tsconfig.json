@@ -1,9 +1,29 @@
 {
   "files": [],
   "references": [
-    { "path": "./tests/harness" },
-    { "path": "./packages/contracts" },
-    { "path": "./packages/ui" },
-    { "path": "./e2e" }
+    {
+      "path": "./tests/harness"
+    },
+    {
+      "path": "./packages/contracts"
+    },
+    {
+      "path": "./packages/ui"
+    },
+    {
+      "path": "./e2e"
+    },
+    {
+      "path": "./infra/queues"
+    },
+    {
+      "path": "./packages/platform/audit"
+    },
+    {
+      "path": "./packages/platform/outbox"
+    },
+    {
+      "path": "./apps/worker/base"
+    }
   ]
 }
