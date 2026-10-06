@@ -7,7 +7,10 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "noEmit": true,
-    "paths": { "@opslog/ui": ["packages/ui/src/index.ts"] },
+    "paths": {
+      "@opslog/ui": ["packages/ui/src/index.ts"],
+      "@opslog/contracts": ["packages/contracts/src/index.ts"]
+    },
     "rootDir": "..",
     "types": ["node", "@playwright/test", "react", "react-dom"]
   },
@@ -15,7 +18,18 @@
     "./**/*.ts",
     "./**/*.tsx",
     "../packages/ui/src/**/*.ts",
-    "../packages/ui/src/**/*.tsx"
+    "../packages/ui/src/**/*.tsx",
+    "../packages/contracts/src/index.ts",
+    "../apps/web/app/**/*.ts",
+    "../apps/web/app/**/*.tsx",
+    "../apps/web/auth/**/*.tsx",
+    "../apps/web/settings/**/*.tsx"
   ],
-  "exclude": ["../packages/ui/src/**/*.stories.tsx", "../packages/ui/src/**/*.test.tsx"]
+  "exclude": [
+    "../packages/ui/src/**/*.stories.tsx",
+    "../packages/ui/src/**/*.test.tsx",
+    "../apps/web/**/*.test.ts",
+    "../apps/web/**/*.test.tsx",
+    "../apps/web/app/test/**"
+  ]
 }
