@@ -8,8 +8,14 @@ import {
   type BffResponseOf,
   type BffRouteId,
   type BffSession,
+  type BffVehicle,
+  type BffVehicleInput,
+  type BffVehiclePatch,
+  type BffVehicleStatus,
+  type BffVehicleStatusEntry,
+  type BffVehiclesQuery,
 } from './bff.js';
-import type { ApiError } from './index.js';
+import type { ApiError, Page } from './index.js';
 
 /** Outcome of a call: failures are values (uniform `ApiError`), never exceptions. */
 export type BffResult<T> =
@@ -56,6 +62,7 @@ function failure(
   code: string,
   message: string,
   correlationId: string,
+  field?: string,
 ): BffResult<never> {
   // The shared ApiError type has no 405/413/415: those are caller bugs and read as a bad request.
   const normalized = KNOWN_STATUSES.includes(status) ? status : status >= 500 ? 500 : 400;
@@ -64,6 +71,7 @@ function failure(
     status: normalized as ApiError['status'],
     message,
     correlationId,
+    ...(field === undefined ? {} : { fieldErrors: [{ field, code, message }] }),
   };
   return { ok: false, error };
 }
@@ -123,7 +131,13 @@ export function createBffClient(options: BffClientOptions = {}): BffClient {
     }
     if (response.status !== definition.status) {
       if (isBffErrorBody(parsed))
-        return failure(parsed.status, parsed.code, parsed.message, parsed.correlationId);
+        return failure(
+          parsed.status,
+          parsed.code,
+          parsed.message,
+          parsed.correlationId,
+          parsed.field,
+        );
       return failure(
         response.status,
         'invalid_response',
@@ -224,4 +238,42 @@ export function createBffClient(options: BffClientOptions = {}): BffClient {
   }
 
   return { call };
+}
+
+/**
+ * Typed vehicle calls over any `BffClient`. Each method is one route of the contract; the
+ * `version` of the last read travels with every change, and a lost race comes back as the
+ * `stale_version` error value (never an exception).
+ */
+export interface VehiclesClient {
+  list(query?: BffVehiclesQuery): Promise<BffResult<Page<BffVehicle>>>;
+  get(id: string): Promise<BffResult<BffVehicle>>;
+  create(input: BffVehicleInput): Promise<BffResult<BffVehicle>>;
+  update(id: string, patch: BffVehiclePatch): Promise<BffResult<BffVehicle>>;
+  changeStatus(
+    id: string,
+    change: { version: number; status: BffVehicleStatus; reason: string },
+  ): Promise<BffResult<BffVehicle>>;
+  recordOdometer(
+    id: string,
+    reading: { version: number; odometerKm: number },
+  ): Promise<BffResult<BffVehicle>>;
+  archive(id: string, version: number): Promise<BffResult<BffVehicle>>;
+  history(id: string): Promise<BffResult<{ items: readonly BffVehicleStatusEntry[] }>>;
+}
+
+export function createVehiclesClient(client: BffClient): VehiclesClient {
+  return {
+    list: (query) =>
+      query ? client.call('vehicles.list', { query }) : client.call('vehicles.list'),
+    get: (id) => client.call('vehicles.get', { params: { id } }),
+    create: (input) => client.call('vehicles.create', { body: input }),
+    update: (id, patch) => client.call('vehicles.update', { params: { id }, body: patch }),
+    changeStatus: (id, change) => client.call('vehicles.status', { params: { id }, body: change }),
+    recordOdometer: (id, reading) =>
+      client.call('vehicles.odometer', { params: { id }, body: reading }),
+    archive: (id, version) =>
+      client.call('vehicles.archive', { params: { id }, body: { version } }),
+    history: (id) => client.call('vehicles.history', { params: { id } }),
+  };
 }

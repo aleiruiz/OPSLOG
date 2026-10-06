@@ -12,6 +12,7 @@ export { InMemoryAuditStore } from '../../../../packages/platform/audit/src/inde
 export { InMemoryOutboxStore } from '../../../../packages/platform/outbox/src/index.js';
 export { InMemoryIdentityStore } from '../../../../packages/domain/identity/src/index.js';
 export { InMemoryFileRecordStore } from '../../../../packages/domain/files/src/index.js';
+export { InMemoryVehicleStore } from '../../../../packages/domain/vehicles/src/index.js';
 
 /**
  * Synthetic OIDC verifier: codes are issued by the test and are single use. It stands in for the

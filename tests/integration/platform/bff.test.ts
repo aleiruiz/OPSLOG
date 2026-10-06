@@ -22,6 +22,16 @@ afterEach(async () => {
 });
 
 const HOUR = 3_600_000;
+const VEHICLE_NEW = {
+  economicNumber: 'U-002',
+  plate: 'XYZ987',
+  vin: null,
+  make: 'Nissan',
+  model: 'NP300',
+  year: 2021,
+  areaId: 'area-1',
+  odometerKm: 10,
+};
 const SETTINGS = { name: 'Nombre nuevo', mfa: 'disabled', sessionIdleHours: 8 };
 
 interface Fixture {
@@ -32,6 +42,7 @@ interface Fixture {
   readonly viewerA: Browser;
   readonly viewerAId: string;
   readonly memberB: { identityId: string };
+  readonly vehicleId: string;
 }
 
 async function fixture(options: Parameters<typeof createBffWorld>[0] = {}): Promise<Fixture> {
@@ -40,11 +51,26 @@ async function fixture(options: Parameters<typeof createBffWorld>[0] = {}): Prom
   const b = await world.tenant('Empresa Beta', 'subject-admin-b');
   const viewer = await world.member('subject-admin-a', 'viewer', 'subject-viewer-a');
   const memberB = await world.member('subject-admin-b', 'editor', 'subject-editor-b');
+  const adminA = await world.loginAs('subject-admin-a');
+  const vehicle = await adminA.post('/api/vehicles', {
+    json: {
+      economicNumber: 'U-001',
+      plate: 'ABC123',
+      vin: null,
+      make: 'Toyota',
+      model: 'Hilux',
+      year: 2022,
+      areaId: 'area-1',
+      odometerKm: 1000,
+    },
+  });
+  if (vehicle.status !== 201) throw new Error('vehicle fixture failed');
   return {
     a,
     b,
-    adminA: await world.loginAs('subject-admin-a'),
+    adminA,
     adminB: await world.loginAs('subject-admin-b'),
+    vehicleId: vehicle.json.id as string,
     viewerA: await world.loginAs('subject-viewer-a'),
     viewerAId: viewer.identityId,
     memberB,
@@ -63,6 +89,15 @@ function writes(f: Fixture): [string, string, unknown?][] {
     ['POST', '/api/roles/viewer/copy', { name: 'Copia' }],
     ['PUT', '/api/drafts/form', { values: { a: 'b' } }],
     ['DELETE', '/api/drafts/form'],
+    ['POST', '/api/vehicles', VEHICLE_NEW],
+    ['PUT', `/api/vehicles/${f.vehicleId}`, { version: 1, make: 'Ford' }],
+    [
+      'POST',
+      `/api/vehicles/${f.vehicleId}/status`,
+      { version: 1, status: 'inactive', reason: 'x' },
+    ],
+    ['POST', `/api/vehicles/${f.vehicleId}/odometer`, { version: 1, odometerKm: 2000 }],
+    ['POST', `/api/vehicles/${f.vehicleId}/archive`, { version: 1 }],
   ];
 }
 
@@ -73,6 +108,8 @@ async function snapshot(f: Fixture) {
     users: (await get(f.adminA, '/api/users?limit=100')).items,
     roles: (await get(f.adminA, '/api/roles')).items,
     draft: await get(f.adminA, '/api/drafts/form'),
+    vehicles: await get(f.adminA, '/api/vehicles?includeArchived=true&limit=100'),
+    vehiclesB: await get(f.adminB, '/api/vehicles?includeArchived=true&limit=100'),
     settingsB: await get(f.adminB, '/api/company/settings'),
     usersB: (await get(f.adminB, '/api/users?limit=100')).items,
   };
@@ -514,6 +551,11 @@ describe('request limits through HTTP', () => {
       ['POST', `/api/users/${f.viewerAId}/deactivate`],
       ['POST', '/api/roles/viewer/copy'],
       ['PUT', '/api/drafts/form'],
+      ['POST', '/api/vehicles'],
+      ['PUT', `/api/vehicles/${f.vehicleId}`],
+      ['POST', `/api/vehicles/${f.vehicleId}/status`],
+      ['POST', `/api/vehicles/${f.vehicleId}/odometer`],
+      ['POST', `/api/vehicles/${f.vehicleId}/archive`],
     ];
     for (const [method, path] of targets) {
       const reply = await f.adminA.send(method, path, { json: { big } });

@@ -4,6 +4,7 @@ import {
   BFF_ROUTES,
   bffRouteIds,
   createBffClient,
+  createVehiclesClient,
   type BffClient,
   type BffRouteId,
   type FetchLike,
@@ -178,6 +179,68 @@ describe('typed client against the real BFF', () => {
     expect(
       await client.call('users.deactivate', { params: { id: target }, body: { reason: 'Baja' } }),
     ).toEqual({ ok: true, value: { id: target, status: 'inactive' } });
+
+    // Vehicles through the typed client.
+    const vehicles = createVehiclesClient(client);
+    const input = {
+      economicNumber: 'U-001',
+      plate: 'abc 123',
+      vin: null,
+      make: 'Toyota',
+      model: 'Hilux',
+      year: 2022,
+      areaId: 'area-1',
+      odometerKm: 100,
+    };
+    const car = await vehicles.create(input);
+    if (!car.ok) throw new Error('vehicle create failed');
+    expect(car.value).toMatchObject({ plate: 'ABC 123', status: 'active', version: 1 });
+    expect(await vehicles.create({ ...input, plate: 'OTRA1' })).toMatchObject({
+      ok: false,
+      error: {
+        code: 'duplicate',
+        status: 409,
+        fieldErrors: [expect.objectContaining({ field: 'economic_number' })],
+      },
+    });
+    const edited = await vehicles.update(car.value.id, { version: 1, make: 'Ford' });
+    expect(edited).toMatchObject({ ok: true, value: { make: 'Ford', version: 2 } });
+    expect(await vehicles.update(car.value.id, { version: 1, make: 'Stale' })).toMatchObject({
+      ok: false,
+      error: { code: 'stale_version', status: 409 },
+    });
+    expect(
+      await vehicles.changeStatus(car.value.id, {
+        version: 2,
+        status: 'restricted',
+        reason: 'Revisión',
+      }),
+    ).toMatchObject({ ok: true, value: { status: 'restricted', version: 3 } });
+    expect(
+      await vehicles.recordOdometer(car.value.id, { version: 3, odometerKm: 50 }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: 'odometer_decrease', status: 422 },
+    });
+    expect(
+      await vehicles.recordOdometer(car.value.id, { version: 3, odometerKm: 250 }),
+    ).toMatchObject({
+      ok: true,
+      value: { odometerKm: 250, version: 4 },
+    });
+    expect(await vehicles.get(car.value.id)).toMatchObject({ ok: true, value: { version: 4 } });
+    const listed = await vehicles.list({ status: 'restricted' });
+    expect(listed.ok && listed.value.total).toBe(1);
+    const trail = await vehicles.history(car.value.id);
+    expect(trail.ok && trail.value.items.map((entry) => entry.to)).toEqual([
+      'active',
+      'restricted',
+    ]);
+    expect(await vehicles.archive(car.value.id, 4)).toMatchObject({
+      ok: true,
+      value: { archivedAt: expect.any(String) },
+    });
+    expect(await vehicles.get('desconocido')).toMatchObject({ ok: false, error: { status: 404 } });
 
     // Drafts
     expect(await client.call('drafts.load', { params: { scope: 'form:a' } })).toEqual({

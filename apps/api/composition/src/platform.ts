@@ -12,6 +12,11 @@ import {
   type TenantContext,
 } from '../../../../packages/domain/identity/src/index.js';
 import {
+  InMemoryVehicleStore,
+  VehicleService,
+  type VehicleStore,
+} from '../../../../packages/domain/vehicles/src/index.js';
+import {
   createAuditEvent,
   InMemoryAuditStore,
   type AuditStore,
@@ -70,6 +75,7 @@ import {
   type RoleDirectoryStore,
 } from './directory.js';
 import { InMemoryTenantStore } from './tenancy.js';
+import { VehiclesApi } from './vehicles.js';
 
 export type PlatformErrorCode =
   | 'invalid_input'
@@ -89,7 +95,13 @@ export class PlatformError extends Error {
 export interface PlatformResponse<T> {
   readonly ok: boolean;
   readonly value?: T;
-  readonly error?: { readonly code: string; readonly status: number; readonly message: string };
+  readonly error?: {
+    readonly code: string;
+    readonly status: number;
+    readonly message: string;
+    /** Only for a vehicle duplicate: which unique field collided (never its value). */
+    readonly field?: string;
+  };
 }
 
 const STATUS: Readonly<Record<PlatformErrorCode | 'internal_error', number>> = {
@@ -184,6 +196,8 @@ export interface PlatformAdapters {
   readonly scanner?: VirusScanner;
   readonly scanQueue?: ScanQueue;
   readonly records?: FileRecordStore;
+  /** Persistent vehicle store (the TypeORM adapter of `packages/persistence/vehicles`); in-memory by default. */
+  readonly vehicles?: VehicleStore;
   readonly audit?: AuditStore;
   readonly outbox?: OutboxStore;
   readonly tenants?: InMemoryTenantStore;
@@ -272,6 +286,7 @@ export class Platform {
   private readonly identityOnly: IdentityService;
   public readonly auth: AuthApi;
   public readonly files: FilesApi;
+  public readonly vehicles: VehiclesApi;
   public readonly access: AccessDirectory;
   public readonly tenants: InMemoryTenantStore;
   public readonly audit: AuditStore;
@@ -349,6 +364,14 @@ export class Platform {
       grants: new DownloadGrants(options.grantSecret, this.now),
       audit: this.audit,
       now: this.now,
+    });
+    this.vehicles = new VehiclesApi({
+      service: new VehicleService(adapters.vehicles ?? new InMemoryVehicleStore(), {
+        now: this.now,
+      }),
+      authorize: (token, correlationId, required) => this.authorize(token, correlationId, required),
+      audit: (context, action, entityId, correlationId) =>
+        this.auditNow(this.userActor(context), action, 'vehicle', entityId, correlationId),
     });
     this.runtime = createWorkerRuntime({
       outbox: this.outbox,
