@@ -181,6 +181,32 @@ describe('worker jobs and the outbox', () => {
     );
   });
 
+  it('still scans an active tenant behind a suspended-tenant backlog larger than the batch', async () => {
+    world = createWorld({ pipeline: { batchSize: 2 } });
+    const { platform } = world;
+    const a = await world.tenant('Empresa Alfa', 'subject-admin-a');
+    const b = await world.tenant('Empresa Beta', 'subject-admin-b');
+    for (let i = 0; i < 5; i += 1)
+      await platform.files.upload(a.admin.token, corr(), {
+        name: `a${i}.jpg`,
+        contentType: 'image/jpeg',
+        bytes: jpeg(`a${i}`),
+      });
+    const fileB = (
+      await platform.files.upload(b.admin.token, corr(), {
+        name: 'b.jpg',
+        contentType: 'image/jpeg',
+        bytes: jpeg('b'),
+      })
+    ).value!;
+    await platform.suspendTenant(a.tenantId);
+    expect(await platform.runtime.runScans()).toMatchObject({ released: 1 });
+    expect(platform.scanQueue.heldBack).toBe(5);
+    expect((await platform.files.status(b.admin.token, corr(), fileB.id)).value?.status).toBe(
+      'clean',
+    );
+  });
+
   it('keeps files in quarantine while the scanner is down and never serves them', async () => {
     world = createWorld();
     const { platform } = world;

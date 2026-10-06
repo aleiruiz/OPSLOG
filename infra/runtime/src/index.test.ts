@@ -110,6 +110,18 @@ describe('startup guard', () => {
       'OPSLOG_ENV must be staging',
     );
   });
+  it('checks the built-in forbidden names even when the descriptor omits them', () => {
+    const weak = { forbiddenEnv: ['EXTRA_FORBIDDEN'] };
+    expect(() => assertStagingOnly({ ...ok, AWS_ACCESS_KEY_ID: 'x' }, weak)).toThrow(
+      'AWS_ACCESS_KEY_ID',
+    );
+    expect(() => assertStagingOnly({ ...ok, OPSLOG_ALLOW_PRODUCTION: '1' }, weak)).toThrow(
+      'OPSLOG_ALLOW_PRODUCTION',
+    );
+    expect(() => assertStagingOnly({ ...ok, EXTRA_FORBIDDEN: '1' }, weak)).toThrow(
+      'EXTRA_FORBIDDEN',
+    );
+  });
   it('refuses production mode, production switches and cloud credentials', () => {
     expect(() => assertStagingOnly({ ...ok, NODE_ENV: 'production' }, descriptor)).toThrow(
       'production mode is not authorized',

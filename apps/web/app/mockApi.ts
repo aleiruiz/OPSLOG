@@ -176,6 +176,7 @@ export function createMockApi(): MockApi {
     sessionIdleHours: 8,
   };
   // Mock credential store (email -> password). Only active users may authenticate.
+  const usedInvitations = new Set<string>();
   const credentials = new Map<string, string>(
     Object.values(demoCredentials).map((item) => [item.email, item.password]),
   );
@@ -305,7 +306,8 @@ export function createMockApi(): MockApi {
       acceptInvitation: (token, input) => {
         const failed = injected('acceptInvitation');
         if (failed) return Promise.resolve(failed);
-        if (token !== demoInvitations.valid) return Promise.resolve(invitationUnavailable());
+        if (token !== demoInvitations.valid || usedInvitations.has(token))
+          return Promise.resolve(invitationUnavailable());
         if (input.password.length < 12)
           return Promise.resolve(
             apiError(422, 'weak_password', 'La contraseña no cumple los requisitos.', [
@@ -324,9 +326,11 @@ export function createMockApi(): MockApi {
           roleLabel: roleName('role-fleet'),
           status: 'active',
         };
-        const existing = users.findIndex((item) => item.email === user.email);
-        if (existing >= 0) users[existing] = user;
-        else users.push(user);
+        // Never replace an existing account.
+        if (users.some((item) => item.email === user.email))
+          return Promise.resolve(invitationUnavailable());
+        users.push(user);
+        usedInvitations.add(token);
         credentials.set(user.email, input.password);
         signedInAs = user.id;
         return Promise.resolve(ok(sessionFor(user.id)));

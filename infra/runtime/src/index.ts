@@ -41,7 +41,7 @@ export const REQUIRED_GUARDS: readonly string[] = [
   'not production',
 ];
 
-const REQUIRED_FORBIDDEN_ENV: readonly string[] = [
+export const REQUIRED_FORBIDDEN_ENV: readonly string[] = [
   'OPSLOG_ALLOW_PRODUCTION',
   'AWS_ACCESS_KEY_ID',
   'AWS_SECRET_ACCESS_KEY',
@@ -118,6 +118,6 @@ export function assertStagingOnly(
     throw new Error('refusing to start: OPSLOG_ENV must be staging');
   if (env.NODE_ENV === 'production')
     throw new Error('refusing to start: production mode is not authorized');
-  for (const name of descriptor.forbiddenEnv)
+  for (const name of new Set([...REQUIRED_FORBIDDEN_ENV, ...descriptor.forbiddenEnv]))
     if (env[name]) throw new Error(`refusing to start: ${name} must not be set in staging`);
 }

@@ -194,6 +194,31 @@ describe('forged principals, invitations and bootstrap', () => {
     expect((await platform.signIn(await world.principal('subject-direct'))).ok).toBe(false);
   });
 
+  it('validates the tenant name after authorization and before provisioning', async () => {
+    world = createWorld();
+    const { platform } = world;
+    const adminPrincipal = await world.principal('subject-admin-a');
+    for (const name of [
+      '',
+      '   ',
+      'x'.repeat(161),
+      `  ${'x'.repeat(161)}  `,
+      42,
+      null,
+      undefined,
+    ]) {
+      const result = await platform.bootstrapTenant({ name: name as string, adminPrincipal });
+      expect(result.error?.code).toBe('invalid_input');
+    }
+    expect(world.tenants.all()).toHaveLength(0);
+    // Authorization comes first: a forged principal is unauthorized even with a bad name.
+    expect((await platform.bootstrapTenant({ name: '', adminPrincipal: {} })).error?.code).toBe(
+      'unauthorized',
+    );
+    const edge = await platform.bootstrapTenant({ name: `  ${'x'.repeat(160)}  `, adminPrincipal });
+    expect(edge.ok).toBe(true);
+  });
+
   it('marks a tenant failed and never serves it when its administrator cannot be activated', async () => {
     world = createWorld();
     const { platform } = world;

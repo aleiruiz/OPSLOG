@@ -347,6 +347,8 @@ export class Platform {
     try {
       if (!isVerifiedExternalPrincipal(input.adminPrincipal))
         throw new PlatformError('unauthorized');
+      if (typeof input.name !== 'string' || !input.name.trim() || input.name.trim().length > 160)
+        throw new PlatformError('invalid_input');
       const tenant = this.tenants.provisionVerified(input.name);
       try {
         const invitation = await this.identity.issueInvitation(tenant.id);

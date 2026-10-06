@@ -10,6 +10,8 @@ import type {
 
 export type { TenantDirectory };
 
+const MAX_REFILL_ROUNDS = 1000;
+
 /**
  * Scan queue decorator that never hands a job of a missing or non-active tenant to the pipeline.
  * Such jobs are deferred (not completed, not dropped), so the file stays `pending_scan` and
@@ -30,14 +32,27 @@ export class TenantAwareScanQueue implements ScanQueue {
     return this.inner.enqueue(tenantId, fileId, at);
   }
   public async claimDue(now: number, leaseMs: number, limit: number): Promise<readonly ScanJob[]> {
-    const claimed = await this.inner.claimDue(now, leaseMs, limit);
     const runnable: ScanJob[] = [];
-    for (const job of claimed) {
-      if (this.tenants.status(job.tenantId) === 'active') runnable.push(job);
-      else {
+    const held = new Set<string>();
+    // Keep refilling after deferring inactive-tenant jobs, so a backlog of them cannot starve
+    // active tenants. Termination: each round either fills the batch, finds no due job, repeats
+    // an already deferred job, or hits the round cap.
+    for (let round = 0; runnable.length < limit && round < MAX_REFILL_ROUNDS; round += 1) {
+      const claimed = await this.inner.claimDue(now, leaseMs, limit - runnable.length);
+      if (claimed.length === 0) break;
+      let repeated = false;
+      for (const job of claimed) {
+        if (this.tenants.status(job.tenantId) === 'active') {
+          runnable.push(job);
+          continue;
+        }
+        const key = `${job.tenantId.length}:${job.tenantId}${job.fileId}`;
+        if (held.has(key)) repeated = true;
+        held.add(key);
         this.heldBack += 1;
         await this.inner.defer(job.tenantId, job.fileId, now + this.holdMs);
       }
+      if (repeated) break;
     }
     return runnable;
   }
