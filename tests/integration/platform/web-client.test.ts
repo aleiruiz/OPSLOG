@@ -5,6 +5,7 @@ import {
   bffRouteIds,
   createAreasClient,
   createBffClient,
+  createEmployeesClient,
   createVehiclesClient,
   type BffClient,
   type BffRouteId,
@@ -311,6 +312,73 @@ describe('typed client against the real BFF', () => {
       value: { nextCursor: null },
     });
     expect(await areas.get('desconocido')).toMatchObject({ ok: false, error: { status: 404 } });
+
+    // Employees through the typed client.
+    const employees = createEmployeesClient(client);
+    const worker = await employees.create({
+      kind: 'driver',
+      firstName: 'Ana',
+      lastName: 'Perez',
+      areaId: fleet.value.id,
+      employeeNumber: 'E-001',
+      idType: 'ine',
+      nationalId: 'SYNTH-ID-0001',
+      licenseNumber: 'LIC-0001',
+      licenseType: 'c',
+      licenseExpiresOn: '2099-01-31',
+    });
+    if (!worker.ok) throw new Error('employee create failed');
+    expect(worker.value).toMatchObject({
+      status: 'active',
+      version: 1,
+      piiPresent: { nationalId: true },
+    });
+    expect(JSON.stringify(worker.value)).not.toContain('SYNTH-ID-0001');
+    expect(
+      await employees.create({ kind: 'other', firstName: 'X', lastName: 'Y', areaId: 'nope' }),
+    ).toMatchObject({
+      ok: false,
+      error: {
+        code: 'invalid_area',
+        status: 422,
+        fieldErrors: [expect.objectContaining({ field: 'area_id' })],
+      },
+    });
+    expect(await employees.get(worker.value.id)).toMatchObject({
+      ok: true,
+      value: { pii: { nationalId: 'SYNTH-ID-0001' } },
+    });
+    expect(await employees.update(worker.value.id, { version: 1, position: 'Jefe' })).toMatchObject(
+      {
+        ok: true,
+        value: { version: 2 },
+      },
+    );
+    expect(
+      await employees.update(worker.value.id, { version: 1, position: 'Viejo' }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: 'stale_version', status: 409 },
+    });
+    expect(
+      await employees.changeStatus(worker.value.id, {
+        version: 2,
+        status: 'inactive',
+        reason: 'Licencia',
+      }),
+    ).toMatchObject({ ok: true, value: { status: 'inactive', version: 3 } });
+    expect(await employees.list({ status: 'inactive' })).toMatchObject({
+      ok: true,
+      value: { total: 1 },
+    });
+    expect(await employees.list()).toMatchObject({ ok: true, value: { total: 1 } });
+    const staffTrail = await employees.history(worker.value.id, { limit: 25 });
+    expect(staffTrail).toMatchObject({ ok: true, value: { total: 2 } });
+    expect(await employees.archive(worker.value.id, 3)).toMatchObject({
+      ok: true,
+      value: { version: 4 },
+    });
+    expect(await employees.get('desconocido')).toMatchObject({ ok: false, error: { status: 404 } });
 
     // Drafts
     expect(await client.call('drafts.load', { params: { scope: 'form:a' } })).toEqual({

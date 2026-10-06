@@ -15,6 +15,14 @@ import {
   type BffAreaPatch,
   type BffAreasQuery,
   type BffSession,
+  type BffEmployee,
+  type BffEmployeeDetail,
+  type BffEmployeeHistoryEntry,
+  type BffEmployeeHistoryQuery,
+  type BffEmployeeInput,
+  type BffEmployeePatch,
+  type BffEmployeesQuery,
+  type BffEmployeeStatus,
   type BffVehicle,
   type BffVehicleInput,
   type BffVehiclePatch,
@@ -313,5 +321,45 @@ export function createAreasClient(client: BffClient): AreasClient {
       query
         ? client.call('areas.history', { params: { id }, query })
         : client.call('areas.history', { params: { id } }),
+  };
+}
+
+/**
+ * Typed employee calls over any `BffClient`. Each method is one route of the contract; the
+ * `version` of the last read travels with every change, and a lost race comes back as the
+ * `stale_version` error value (never an exception). Moving an employee to another area is an
+ * `update` with a new `areaId`. Only `get` can carry personal data (`pii`), and only for a session
+ * with the PII permission.
+ */
+export interface EmployeesClient {
+  list(query?: BffEmployeesQuery): Promise<BffResult<Page<BffEmployee>>>;
+  get(id: string): Promise<BffResult<BffEmployeeDetail>>;
+  create(input: BffEmployeeInput): Promise<BffResult<BffEmployee>>;
+  update(id: string, patch: BffEmployeePatch): Promise<BffResult<BffEmployee>>;
+  changeStatus(
+    id: string,
+    change: { version: number; status: BffEmployeeStatus; reason: string },
+  ): Promise<BffResult<BffEmployee>>;
+  archive(id: string, version: number): Promise<BffResult<BffEmployee>>;
+  history(
+    id: string,
+    query?: BffEmployeeHistoryQuery,
+  ): Promise<BffResult<Page<BffEmployeeHistoryEntry>>>;
+}
+
+export function createEmployeesClient(client: BffClient): EmployeesClient {
+  return {
+    list: (query) =>
+      query ? client.call('employees.list', { query }) : client.call('employees.list'),
+    get: (id) => client.call('employees.get', { params: { id } }),
+    create: (input) => client.call('employees.create', { body: input }),
+    update: (id, patch) => client.call('employees.update', { params: { id }, body: patch }),
+    changeStatus: (id, change) => client.call('employees.status', { params: { id }, body: change }),
+    archive: (id, version) =>
+      client.call('employees.archive', { params: { id }, body: { version } }),
+    history: (id, query) =>
+      query
+        ? client.call('employees.history', { params: { id }, query })
+        : client.call('employees.history', { params: { id } }),
   };
 }

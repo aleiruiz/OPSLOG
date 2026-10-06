@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createAreasClient,
   createBffClient,
+  createEmployeesClient,
   createVehiclesClient,
   CSRF_HEADER,
   type FetchLike,
@@ -484,6 +485,44 @@ describe('areas client', () => {
       'PUT /api/areas/a1',
       'POST /api/areas/a1/deactivate',
       'POST /api/areas/a1/activate',
+    ]);
+  });
+});
+
+describe('employees client', () => {
+  it('maps each method to its route, method and path, and exposes the colliding field', async () => {
+    const { fetch, seen } = transport((request) => {
+      if (request.url === '/api/auth/csrf') return { status: 200, body: { csrfToken: 'tok' } };
+      if (request.url === '/api/auth/session') return { status: 200, body: session('tok') };
+      if (request.method === 'POST' && request.url === '/api/employees/e1/archive')
+        return { status: 409, body: { ...errorBody('duplicate', 409), field: 'national_id' } };
+      return { status: 200, body: { items: [], total: 0 } };
+    });
+    const employees = createEmployeesClient(createBffClient({ fetch }));
+    await employees.list();
+    await employees.list({ status: 'inactive' });
+    await employees.get('e1');
+    await employees.history('e1');
+    await employees.history('e1', { limit: 25 });
+    await employees.create({ kind: 'other', firstName: 'A', lastName: 'B', areaId: 'a' });
+    await employees.update('e1', { version: 1, position: 'x' });
+    await employees.changeStatus('e1', { version: 1, status: 'inactive', reason: 'x' });
+    const clash = await employees.archive('e1', 1);
+    expect(clash).toMatchObject({
+      ok: false,
+      error: { code: 'duplicate', fieldErrors: [{ field: 'national_id' }] },
+    });
+    const calls = seen.filter((entry) => !entry.url.startsWith('/api/auth/'));
+    expect(calls.map((entry) => `${entry.method} ${entry.url}`)).toEqual([
+      'GET /api/employees',
+      'GET /api/employees?status=inactive',
+      'GET /api/employees/e1',
+      'GET /api/employees/e1/history',
+      'GET /api/employees/e1/history?limit=25',
+      'POST /api/employees',
+      'PUT /api/employees/e1',
+      'POST /api/employees/e1/status',
+      'POST /api/employees/e1/archive',
     ]);
   });
 });
