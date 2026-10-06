@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FilesApi } from './index.js';
+import { AuthError } from '../../../../packages/domain/identity/src/index.js';
 import { InMemoryFileRecordStore } from '../../../../packages/domain/files/src/index.js';
 import {
   IdentityService,
@@ -501,5 +502,31 @@ describe('audit trail', () => {
       },
     );
     expect((await api.status(token, 'c', 'file-404')).error?.code).toBe('not_found');
+    // The denial audit uses the default clock.
+    expect((await api.createDownloadGrant(token, 'c', 'file-404')).error?.code).toBe('not_found');
+  });
+  it('maps other authentication failures to invalid_input and expiry to a safe payload', async () => {
+    const w = await world();
+    const failing = (code: 'expired' | 'conflict' | 'not_found' | 'forbidden') =>
+      new FilesApi(
+        { authenticate: async () => Promise.reject(new AuthError(code)) } as never,
+        { resolveActiveTenant: async () => null, resolvePermissions: async () => [] },
+        {
+          records: w.records,
+          storage: w.storage,
+          pipeline: w.pipeline,
+          grants: w.grants,
+          audit: w.audit,
+        },
+      );
+    for (const code of ['expired', 'conflict', 'not_found'] as const) {
+      const result = await failing(code).status('t', 'c', 'file-1');
+      expect(result.error).toEqual({
+        code: 'invalid_input',
+        status: 400,
+        message: 'File request rejected: invalid_input',
+      });
+    }
+    expect((await failing('forbidden').status('t', 'c', 'file-1')).error?.code).toBe('forbidden');
   });
 });

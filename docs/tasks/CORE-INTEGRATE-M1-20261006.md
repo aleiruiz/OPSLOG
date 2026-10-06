@@ -71,13 +71,15 @@ Comprobaciones de mutación hechas a mano (no versionadas): quitar la llamada a 
 
 ## Límites y pendientes (no se declaran cumplidos)
 
+**Estado tras los PR #33, #34 y #35 (base `3eabccb`).** Hecho: capa HTTP BFF con sesiones y CSRF (#33), directorio de roles persistente en `packages/persistence/identity` sincronizado con la composición (#34), cliente tipado del BFF y contrato único de rutas en `packages/contracts` (#35). Siguen diferidos, sin cambio: todo lo de AWS (S3/KMS/IAM reales, cola y cómputo, ADR-0002), el proveedor OIDC real y el correo, cola de escaneo, outbox y audit durables, y el staging real. Las viñetas siguientes conservan el detalle histórico; donde dicen «pendiente» y el Slice 2, 3, 4 o 5 lo entrega, vale el slice. Los pendientes no bloqueantes de las revisiones Opus están en el apartado «Pendientes abiertos de las revisiones Opus».
+
 - **Operaciones de operador sin autorización propia.** `bootstrapTenant`, `suspendTenant` y `reactivateTenant` no autorizan por sí mismas: restringirlas a operadores es tarea del BFF. `reactivateTenant` puede reactivar un tenant cuyo bootstrap falló y que no tiene administrador.
 - **`publish` deja elegir el permiso comprobado** al llamador (parámetro `permission`); el BFF debe fijarlo por ruta.
 - **Relojes distintos.** `TenantContextResolver` usa `Date.now()` mientras identidad usa el reloj inyectado; solo coinciden con `Date` simulado global o reloj real.
 - **Último administrador solo dentro de un proceso.** El bloqueo por tenant es en memoria; con varios procesos exige bloqueo de fila o restricción en el adaptador persistente. (El Slice 2 entrega ese adaptador con bloqueo de fila; el Slice 4 sincroniza los roles de la composición hacia él, ver abajo.)
 - La guarda `assertStagingOnly` existe y está probada pero no está cableada a ningún entrypoint (no hay proceso de API/worker).
 - **MySQL real: no ejecutado en este entorno.** No hay `mysqld` ni daemon de Docker, y `OPSLOG_TEST_MYSQL_ADMIN_URL` no está definido; `pnpm test:integration` completo (harness MySQL y `persistence/tenancy`) no pudo correr aquí. Solo se ejecutó `pnpm test:platform` (en memoria). No se añadió código MySQL sin poder probarlo: el uso de `TypeOrmTenantStore` detrás de la composición queda pendiente.
-- Adaptador **TypeORM persistente de autenticación** (`IdentityStore`: identidad+vínculo único, invitación atómica, activación serializada, recuperación, revocación, membresías/roles) bajo `packages/persistence`. Entregado en el Slice 2 (abajo); su ejecución contra MySQL real queda a cargo de CI y el cableado por defecto sigue pendiente.
+- Adaptador **TypeORM persistente de autenticación** (`IdentityStore`: identidad+vínculo único, invitación atómica, activación serializada, recuperación, revocación, membresías/roles) bajo `packages/persistence`. Entregado en el Slice 2 (abajo) y con directorio de roles persistente en el Slice 4; su ejecución contra MySQL real queda a cargo de CI y el cableado por defecto sigue pendiente.
 - **OIDC real** (código de autorización + PKCE, firma, audiencia, nonce/state) y entrega de recuperación/invitación por correo; la invitación se devuelve hoy al administrador que la emite. `FakeOidcVerifier` es sintético.
 - **BFF HTTP**: entregado en el Slice 3 (abajo) salvo límites de tasa, `lastSeenAt`/inactividad (SPECS §5.4), MFA/TOTP, reautenticación para cambios de seguridad y OIDC real, que siguen pendientes.
 - **Cliente web**: entregado en el Slice 5 (abajo).
@@ -206,6 +208,32 @@ Base: `main` en `778d482` (fusionado con `2764319`); rama `claude/core-integrate
 - Las pantallas de usuarios no ordenan ni paginan por cursor más allá de «Cargar más»; no se usa `sort`/`direction` desde la UI. El nombre visible de las personas no existe en el BFF: la UI muestra identificadores opacos.
 - Playwright no se ejecutó.
 
+## Nivel de cobertura 95/95/95/90 (cierre previo a la auditoría G1)
+
+Rama `claude/core-integrate-coverage-tier`, base `3eabccb`. Se sube al nivel de identidad, `platform/auth` y BFF (líneas, funciones y sentencias 95, ramas 90; indicadores de CLI, sin exclusiones ni comentarios de ignorar cobertura) a:
+
+- `apps/api/composition` y `apps/worker/composition`: `pnpm test:platform` (umbral agregado sobre ambas, como el PR #31 hizo con los demás). Resultado: 99,6 % líneas / 98,3 % funciones / 99,6 % sentencias / 97,7 % ramas.
+- `packages/domain/files` (`test:unit` del paquete): 100 / 100 / 100 / 100. Se sustituyó `split(...).pop() ?? ''` en `sanitizeFilename` por un corte con `lastIndexOf` (mismo resultado; la rama `?? ''` era inalcanzable porque `split` siempre devuelve al menos un elemento).
+- `apps/api/files` (`test:unit` del paquete): 100 / 98,6 de ramas / 100 / 100.
+
+`platform/files`, `infra/storage`, `infra/runtime`, `apps/worker/base`, audit, outbox y colas siguen en 90/85 (fuera de este alcance). Pruebas añadidas por comportamiento real sin cubrir: `tests/integration/platform/composition-units.test.ts` (membresías inexistentes o revocadas en `AccessDirectory`, invitación de otro tenant, nombre de tenant vacío o largo, proyección de membresía monótona y versión inválida, `setTenantStatus` sobre tenant desconocido y activación sin ubicación, `TenantAwareScanQueue` con `holdMs` inválido y job repetido, reversión de la sesión de identidad cuando la membresía reflejada no está activa, cierre de sesión repetido) y dos pruebas en `apps/api/files` (reloj por defecto en la auditoría de denegaciones; códigos de autenticación que no son `unauthorized` ni `forbidden` se devuelven como `invalid_input`).
+
+Sin cubrir en composición (justificado, sin ignorar): el notificador de recuperación por defecto de `platform.ts` (lanza «not configured»; ninguna ruta de la composición pide recuperación) y la rama de error de `signOut` (fallo del almacén al revocar); su ejecución se añadirá con el flujo de recuperación y el BFF de recuperación.
+
+## Pendientes abiertos de las revisiones Opus (no bloqueantes)
+
+Ninguno bloquea la auditoría G1 según las revisiones; quedan abiertos y no se declaran cumplidos:
+
+1. **Operaciones de operador sin autorización propia**: `bootstrapTenant`, `suspendTenant` y `reactivateTenant` no autorizan por sí mismas ni tienen ruta; hace falta un plano de operador autenticado.
+2. **Permiso de `publish` elegido por el llamador** (parámetro `permission`): fijarlo por ruta o eliminar el parámetro.
+3. **`TenantContextResolver` usa `Date.now()`** mientras identidad usa el reloj inyectado; unificar con un reloj inyectado.
+4. **CHECK de expiración en base y `issued_at`** en las tablas de identidad (hoy la expiración se valida en el adaptador).
+5. **Nombres de cookie `__Host-`** (`__Host-opslog_session`/`__Host-opslog_csrf`, `Path=/`): hoy `opslog_session` con `Path=/api`.
+6. **`name_key` no impuesto por la base**: la unicidad del nombre de rol por tenant depende de la normalización en el adaptador, no de una restricción o columna generada.
+7. **Normalización Unicode de los nombres de rol** (NFC/NFKC y confusables) antes de calcular `name_key`.
+8. **Líneas `Cookie` partidas**: varias cabeceras `Cookie` ahora fallan cerradas (401); el comportamiento es deliberado pero hay que confirmarlo con un navegador y proxy reales (Playwright no se ejecutó).
+9. **`import-meta.d.ts` frente a los tipos de `vite/client`** en `apps/web`: la declaración local de `import.meta.env` duplica a `vite/client`; unificar para no divergir.
+
 ## Verificación
 
-Node `22.22.0`, pnpm `11.25.0`. Resultados del SHA publicado en el informe del PR; comandos: `pnpm install --frozen-lockfile`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm format:check`, `pnpm baseline:check`, `pnpm test:unit` (umbrales 90/90/90/85 por paquete), `pnpm test:platform` (umbrales 90/90/90/85 sobre las composiciones) y 15 repeticiones de `tests/integration/platform`, `infra/runtime` y `mockApi.test.ts` (más 3 con orden aleatorio) sin fallos.
+Node `22.22.0`, pnpm `11.25.0`. Resultados del SHA publicado en el informe del PR; comandos: `pnpm install --frozen-lockfile`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm format:check`, `pnpm baseline:check`, `pnpm test:unit` (umbrales 90/90/90/85 por paquete, 95/95/95/90 en identidad, `platform/auth`, BFF, `domain/files` y `api/files`), `pnpm test:platform` (umbrales 95/95/95/90 sobre las composiciones desde el cierre de cobertura) y 15 repeticiones de `tests/integration/platform`, `infra/runtime` y `mockApi.test.ts` (más 3 con orden aleatorio) sin fallos.

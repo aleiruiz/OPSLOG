@@ -116,7 +116,7 @@ const WINDOWS_RESERVED = /^(?:con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\..*)?$/i;
 export function sanitizeFilename(name: unknown, contentType: AllowedContentType): string {
   const extension = FILE_TYPES[contentType].extension;
   const raw = typeof name === 'string' ? name : '';
-  const base = raw.split(/[\\/]/).pop() ?? '';
+  const base = raw.slice(Math.max(raw.lastIndexOf('/'), raw.lastIndexOf('\\')) + 1);
   const stem = base
     .replace(/\.[A-Za-z0-9]{1,5}$/, '')
     .replace(/[\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, '')
