@@ -50,8 +50,8 @@ export function createWorld(overrides: Partial<Omit<PlatformOptions, 'verifier' 
     verifier,
     issuer: verifier.issuer,
     grantSecret: 'synthetic-grant-secret-for-tests-0123456789',
-    adapters: { scanner, storage, audit, outbox, tenants },
     ...overrides,
+    adapters: { scanner, storage, audit, outbox, tenants, ...overrides.adapters },
   });
   let subjects = 0;
 

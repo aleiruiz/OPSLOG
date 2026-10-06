@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FilesApi } from './index.js';
+import { AuthError } from '../../../../packages/domain/identity/src/index.js';
 import { InMemoryFileRecordStore } from '../../../../packages/domain/files/src/index.js';
 import {
   IdentityService,
@@ -501,5 +502,39 @@ describe('audit trail', () => {
       },
     );
     expect((await api.status(token, 'c', 'file-404')).error?.code).toBe('not_found');
+    // Without an injected clock the denial audit is stamped with the real current time.
+    const before = Date.now();
+    expect((await api.createDownloadGrant(token, 'c', 'file-404')).error?.code).toBe('not_found');
+    const denied = w.audit.list('tenant-a').filter((e) => e.action === 'file.access_denied');
+    expect(denied).toHaveLength(1);
+    const stamped = Date.parse(denied[0]?.occurredAt ?? '');
+    expect(stamped).toBeGreaterThanOrEqual(before);
+    expect(stamped).toBeLessThanOrEqual(Date.now());
+  });
+  it('documents the current mapping: non-unauthorized/forbidden auth errors (including expired) become 400 invalid_input', async () => {
+    const w = await world();
+    // Characterizes existing behavior only: composition maps `expired` to 401 unauthorized, so this
+    // 400 is an open inconsistency (see CORE-INTEGRATE open item 10), not a decision.
+    const failing = (code: 'expired' | 'conflict' | 'not_found' | 'forbidden') =>
+      new FilesApi(
+        { authenticate: async () => Promise.reject(new AuthError(code)) } as never,
+        { resolveActiveTenant: async () => null, resolvePermissions: async () => [] },
+        {
+          records: w.records,
+          storage: w.storage,
+          pipeline: w.pipeline,
+          grants: w.grants,
+          audit: w.audit,
+        },
+      );
+    for (const code of ['expired', 'conflict', 'not_found'] as const) {
+      const result = await failing(code).status('t', 'c', 'file-1');
+      expect(result.error).toEqual({
+        code: 'invalid_input',
+        status: 400,
+        message: 'File request rejected: invalid_input',
+      });
+    }
+    expect((await failing('forbidden').status('t', 'c', 'file-1')).error?.code).toBe('forbidden');
   });
 });
