@@ -119,6 +119,12 @@ describe('leak scan', () => {
       scan({ 'a.ts': `const x = '${aws}'; // secret-scan:allow ok\nconst y = '${second}';\n` })
         .status,
     ).toBe(1);
+    // A second secret placed AFTER the marker is not covered by it, even when the first (before
+    // the marker) is allowed: checking only the first match of a pattern would let it through.
+    const late = scan({ 'a.ts': `const x = '${aws}'; // secret-scan:allow ok ${second}\n` });
+    expect(late.status).toBe(1);
+    expect(late.out).toContain('a.ts:1: AWS access key id');
+    expect(late.out).not.toContain(second);
     const reasonSecret = `reason-${'zzTOPSECRETzz'}`;
     const result = scan({ 'a.ts': `const x = '${aws}'; // secret-scan:allow ${reasonSecret}\n` });
     expect(result.status).toBe(0);

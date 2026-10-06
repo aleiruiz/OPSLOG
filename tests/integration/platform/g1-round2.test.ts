@@ -93,18 +93,48 @@ describe('isolation matrix: cambio de permisos con trabajo pendiente', () => {
     expect(world.outbox.get(a.tenantId, 'evt-cfg')?.status).toBe('dead_letter');
   });
 
-  it('does not let another tenant with the same role names affect the job', async () => {
+  it('does not let the same identity in another tenant, with a different role, affect the job', async () => {
     world = createWorld();
     const a = await world.tenant('Empresa Alfa', 'subject-admin-a');
     const b = await world.tenant('Empresa Beta', 'subject-admin-b');
-    const editorA = await world.member(a.admin, 'editor', 'subject-editor-a');
+    // One identity: editor (may publish) in A and viewer (may not) in B. Sign-in keeps an identity
+    // in a single tenant, so the second membership is seeded in the role directory the worker reads.
+    const editorA = await world.member(a.admin, 'editor', 'subject-shared');
+    world.platform.access.grant(b.tenantId, editorA.identityId, 'viewer');
+    expect(world.platform.access.roleOf(a.tenantId, editorA.identityId)).toBe('editor');
+    expect(world.platform.access.roleOf(b.tenantId, editorA.identityId)).toBe('viewer');
     const handled: string[] = [];
     await pendingJob(world, editorA.token, handled);
-    // Revoking an unrelated tenant's administrator-level member has no effect on A's job.
-    const editorB = await world.member(b.admin, 'editor', 'subject-editor-b');
-    await world.platform.removeMember(b.admin.token, corr(), editorB.identityId);
+    // Revoking that identity in B must not stop A's job, and a check that read B's viewer role
+    // instead of A's editor role would have refused it.
+    expect(world.platform.access.revoke(b.tenantId, editorA.identityId)).toBe(true);
     await world.platform.runtime.drainOutbox();
     expect(handled).toEqual(['evt-pending']);
+    expect(world.outbox.get(a.tenantId, 'evt-pending')?.status).toBe('delivered');
+  });
+
+  it('refuses an actor reference that lacks the platform prefix even if it embeds a valid identity id', async () => {
+    world = createWorld();
+    const a = await world.tenant('Empresa Alfa', 'subject-admin-a');
+    const handled: string[] = [];
+    world.platform.runtime.worker.register('demo.created', (_p, event) => {
+      handled.push(event.eventId);
+    });
+    world.outbox.transaction((tx) =>
+      tx.enqueue({
+        eventId: 'evt-prefix',
+        tenantId: a.tenantId,
+        type: 'demo.created',
+        payload: {},
+        occurredAt: new Date().toISOString(),
+        idempotencyKey: 'prefix',
+        // Same length as `user-`: without the prefix guard, slicing it off would yield a valid id.
+        actorRef: { subject: `xuser${a.admin.identityId}`, kind: 'user' },
+      }),
+    );
+    await world.platform.runtime.drainOutbox();
+    expect(handled).toEqual([]);
+    expect(world.outbox.get(a.tenantId, 'evt-prefix')?.status).toBe('dead_letter');
   });
 
   it('refuses an event whose actor reference is not a platform user reference', async () => {

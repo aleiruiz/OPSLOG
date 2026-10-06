@@ -89,7 +89,8 @@ export function singleHeader(
 export function normalizeHeaders(
   headers: Readonly<Record<string, HeaderValue>>,
 ): Record<string, HeaderValue> {
-  const result: Record<string, HeaderValue> = {};
+  // No prototype: a header named `__proto__` is an ordinary key, never a prototype assignment.
+  const result: Record<string, HeaderValue> = Object.create(null) as Record<string, HeaderValue>;
   for (const [name, value] of Object.entries(headers)) {
     const key = name.toLowerCase();
     const previous = result[key];

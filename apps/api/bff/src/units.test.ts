@@ -255,6 +255,22 @@ describe('http helpers', () => {
     expect(normalizeHeaders({ A: '1', a: '2' })).toEqual({ a: ['1', '2'] });
     expect(normalizeHeaders({ A: ['1'], a: ['2'] })).toEqual({ a: ['1', '2'] });
     expect(normalizeHeaders({ A: '1', a: undefined })).toEqual({ a: ['1'] });
+  });
+
+  it('keeps a header named __proto__ as a plain entry without touching any prototype', () => {
+    const incoming = JSON.parse('{"__proto__": ["polluted"], "X-A": "1"}') as Record<
+      string,
+      string | string[]
+    >;
+    const result = normalizeHeaders(incoming);
+    expect(Object.getPrototypeOf(result)).toBeNull();
+    expect(Object.keys(result).sort()).toEqual(['__proto__', 'x-a']);
+    expect(Object.getOwnPropertyDescriptor(result, '__proto__')?.value).toEqual(['polluted']);
+    expect(Object.getPrototypeOf({})).toBe(Object.prototype);
+    expect(singleHeader(result, 'x-a')).toBe('1');
+    expect(normalizeHeaders(JSON.parse('{"__PROTO__": "a", "__proto__": "b"}'))).toEqual(
+      JSON.parse('{"__proto__": ["a", "b"]}'),
+    );
     expect(singleHeader({ a: 'x' }, 'a')).toBe('x');
     expect(singleHeader({ a: ['x'] }, 'a')).toBe('x');
     expect(singleHeader({ a: ['x', 'y'] }, 'a')).toBeUndefined();
