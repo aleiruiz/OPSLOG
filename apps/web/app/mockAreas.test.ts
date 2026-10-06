@@ -16,7 +16,8 @@ const store = (seed?: readonly Area[]) => {
     seed,
   );
 };
-const code = <T>(result: Result<T>) => (result.ok ? 'ok' : `${result.error.status} ${result.error.code}`);
+const code = <T>(result: Result<T>) =>
+  result.ok ? 'ok' : `${result.error.status} ${result.error.code}`;
 const field = <T>(result: Result<T>) => (result.ok ? null : result.error.fieldErrors?.[0]?.field);
 const value = <T>(result: Result<T>): T => {
   if (!result.ok) throw new Error(`unexpected ${result.error.code}`);
@@ -29,17 +30,32 @@ describe('mock areas: reads', () => {
     const { port } = store();
     const all = value(await port.list({ limit: 100 }));
     expect(all.total).toBe(12);
-    expect(all.items.map((a) => a.name).slice(0, 3)).toEqual(['Base Apodaca', 'Base Cuautitlán', 'Centro']);
-    expect(value(await port.list({ includeInactive: 'true', limit: 100 })).total).toBe(13);
-    expect(value(await port.list({ parentId: 'root' })).items.map((a) => a.id).sort()).toEqual([
-      'area-centro',
-      'area-norte',
-      'area-sur',
+    expect(all.items.map((a) => a.name).slice(0, 3)).toEqual([
+      'Base Apodaca',
+      'Base Cuautitlán',
+      'Centro',
     ]);
-    expect(value(await port.list({ parentId: 'area-norte-mty', includeInactive: 'true' })).total).toBe(2);
+    expect(value(await port.list({ includeInactive: 'true', limit: 100 })).total).toBe(13);
+    expect(
+      value(await port.list({ parentId: 'root' }))
+        .items.map((a) => a.id)
+        .sort(),
+    ).toEqual(['area-centro', 'area-norte', 'area-sur']);
+    expect(
+      value(await port.list({ parentId: 'area-norte-mty', includeInactive: 'true' })).total,
+    ).toBe(2);
     const first = value(await port.list({ limit: 25 }));
     expect(first.nextCursor).toBeNull();
-    const small = store(Array.from({ length: 30 }, (_, i) => makeArea({ id: `a${i}`, name: `A${String(i).padStart(2, '0')}`, code: null, parentId: null })));
+    const small = store(
+      Array.from({ length: 30 }, (_, i) =>
+        makeArea({
+          id: `a${i}`,
+          name: `A${String(i).padStart(2, '0')}`,
+          code: null,
+          parentId: null,
+        }),
+      ),
+    );
     const page1 = value(await small.port.list({ limit: 25 }));
     expect(page1.items).toHaveLength(25);
     const page2 = value(await small.port.list({ limit: 25, cursor: page1.nextCursor as string }));
@@ -57,8 +73,14 @@ describe('mock areas: reads', () => {
     const mock = store();
     vehicles['area-norte'] = 3;
     mock.setPeople('area-norte', 2);
-    expect(value(await mock.port.get('area-norte')).resourceCounts).toEqual({ vehicles: 3, people: 2 });
-    expect(value(await mock.port.get('area-sur')).resourceCounts).toEqual({ vehicles: 0, people: 0 });
+    expect(value(await mock.port.get('area-norte')).resourceCounts).toEqual({
+      vehicles: 3,
+      people: 2,
+    });
+    expect(value(await mock.port.get('area-sur')).resourceCounts).toEqual({
+      vehicles: 0,
+      people: 0,
+    });
     expect(code(await mock.port.get('x'))).toBe('404 not_found');
   });
 
@@ -67,21 +89,34 @@ describe('mock areas: reads', () => {
     const first = value(await mock.port.history('area-norte'));
     expect(first.items).toHaveLength(25);
     expect(first.items[0]?.version).toBe(28);
-    const second = value(await mock.port.history('area-norte', { cursor: first.nextCursor as string }));
+    const second = value(
+      await mock.port.history('area-norte', { cursor: first.nextCursor as string }),
+    );
     expect(second.items.map((e) => e.version)).toEqual([3, 2, 1]);
     expect(second.items[2]).toMatchObject({ action: 'created', fromParentId: null });
     const closed = value(await mock.port.history('area-mty-guadalupe'));
     expect(closed.items[0]).toMatchObject({ action: 'deactivated', fields: [] });
     expect(code(await mock.port.history('x'))).toBe('404 not_found');
-    expect(code(await mock.port.history('area-norte', { limit: 3 as never }))).toBe('400 bad_request');
+    expect(code(await mock.port.history('area-norte', { limit: 3 as never }))).toBe(
+      '400 bad_request',
+    );
   });
 });
 
 describe('mock areas: create', () => {
   it('creates a root area and a child, normalizing values and recording the history', async () => {
     const mock = store();
-    const root = value(await mock.port.create({ name: '  Oeste  ', code: 'oes', responsibleIds: ['user-dispatch'] }));
-    expect(root).toMatchObject({ name: 'Oeste', code: 'OES', depth: 1, parentId: null, version: 1, active: true });
+    const root = value(
+      await mock.port.create({ name: '  Oeste  ', code: 'oes', responsibleIds: ['user-dispatch'] }),
+    );
+    expect(root).toMatchObject({
+      name: 'Oeste',
+      code: 'OES',
+      depth: 1,
+      parentId: null,
+      version: 1,
+      active: true,
+    });
     const child = value(await mock.port.create({ name: 'Base', parentId: root.id }));
     expect(child).toMatchObject({ depth: 2, parentId: root.id, code: null, responsibleIds: [] });
     expect(value(await mock.port.history(child.id)).items[0]).toMatchObject({
@@ -106,10 +141,18 @@ describe('mock areas: create', () => {
       { name: 7 } as never,
     ])
       expect(code(await port.create(input))).toBe('400 bad_request');
-    expect(code(await port.create({ name: 'x', parentId: 'no-existe' }))).toBe('422 invalid_hierarchy');
-    expect(code(await port.create({ name: 'x', parentId: 'area-mty-guadalupe' }))).toBe('422 invalid_hierarchy');
-    expect(code(await port.create({ name: 'x', parentId: 'area-apodaca-taller' }))).toBe('422 invalid_hierarchy');
-    expect(code(await port.create({ name: 'x', responsibleIds: ['desconocido'] }))).toBe('422 invalid_responsible');
+    expect(code(await port.create({ name: 'x', parentId: 'no-existe' }))).toBe(
+      '422 invalid_hierarchy',
+    );
+    expect(code(await port.create({ name: 'x', parentId: 'area-mty-guadalupe' }))).toBe(
+      '422 invalid_hierarchy',
+    );
+    expect(code(await port.create({ name: 'x', parentId: 'area-apodaca-taller' }))).toBe(
+      '422 invalid_hierarchy',
+    );
+    expect(code(await port.create({ name: 'x', responsibleIds: ['desconocido'] }))).toBe(
+      '422 invalid_responsible',
+    );
   });
 
   it('rejects a repeated sibling name (any case) and a repeated code, naming the field', async () => {
@@ -140,19 +183,29 @@ describe('mock areas: update and move', () => {
       fields: ['name', 'code', 'responsibles'],
     });
     // A no-op keeps the version and the history.
-    const same = value(await mock.port.update('area-sur', { version: next.version, name: 'Sureste' }));
+    const same = value(
+      await mock.port.update('area-sur', { version: next.version, name: 'Sureste' }),
+    );
     expect(same.version).toBe(next.version);
     expect(value(await mock.port.history('area-sur')).total).toBe(next.version);
   });
 
   it('refuses stale versions, inactive areas, unknown areas and malformed patches', async () => {
     const { port } = store();
-    expect(code(await port.update('area-sur', { version: 99, name: 'x' }))).toBe('409 stale_version');
-    expect(code(await port.update('area-mty-guadalupe', { version: 5, name: 'x' }))).toBe('409 immutable');
+    expect(code(await port.update('area-sur', { version: 99, name: 'x' }))).toBe(
+      '409 stale_version',
+    );
+    expect(code(await port.update('area-mty-guadalupe', { version: 5, name: 'x' }))).toBe(
+      '409 immutable',
+    );
     expect(code(await port.update('x', { version: 1, name: 'x' }))).toBe('404 not_found');
     expect(code(await port.update('area-sur', { version: 1 }))).toBe('400 bad_request');
-    expect(code(await port.update('area-sur', { version: 0, name: 'x' } as never))).toBe('400 bad_request');
-    expect(code(await port.update('area-sur', { version: 1, nombre: 'x' } as never))).toBe('400 bad_request');
+    expect(code(await port.update('area-sur', { version: 0, name: 'x' } as never))).toBe(
+      '400 bad_request',
+    );
+    expect(code(await port.update('area-sur', { version: 1, nombre: 'x' } as never))).toBe(
+      '400 bad_request',
+    );
   });
 
   it('rejects duplicates on rename, on code and when a move lands among a same-named sibling', async () => {
@@ -169,7 +222,9 @@ describe('mock areas: update and move', () => {
   it('moves a subtree, shifting the depth of every descendant', async () => {
     const mock = store();
     const monterrey = value(await mock.port.get('area-norte-mty'));
-    const moved = value(await mock.port.update('area-norte-mty', { version: monterrey.version, parentId: null }));
+    const moved = value(
+      await mock.port.update('area-norte-mty', { version: monterrey.version, parentId: null }),
+    );
     expect(moved).toMatchObject({ parentId: null, depth: 1 });
     const depths = Object.fromEntries(mock.snapshot().map((a) => [a.id, a.depth]));
     expect(depths['area-mty-apodaca']).toBe(2);
@@ -185,15 +240,34 @@ describe('mock areas: update and move', () => {
     const { port } = store();
     const v = (await port.get('area-norte-mty')) as { ok: true; value: Area };
     const version = v.value.version;
-    expect(code(await port.update('area-norte-mty', { version, parentId: 'area-norte-mty' }))).toBe('422 invalid_hierarchy');
-    expect(code(await port.update('area-norte-mty', { version, parentId: 'area-apodaca-taller' }))).toBe('422 invalid_hierarchy');
-    expect(code(await port.update('area-norte-mty', { version, parentId: 'area-sur-mer' }))).toBe('422 invalid_hierarchy');
-    expect(code(await port.update('area-norte-mty', { version, parentId: 'x' }))).toBe('422 invalid_hierarchy');
-    expect(code(await port.update('area-sur-mer', { version: 1, parentId: 'area-mty-guadalupe' }))).toBe('422 invalid_hierarchy');
-    expect(code(await port.update('area-sur', { version: 1, responsibleIds: ['otro'] }))).toBe('422 invalid_responsible');
+    expect(code(await port.update('area-norte-mty', { version, parentId: 'area-norte-mty' }))).toBe(
+      '422 invalid_hierarchy',
+    );
+    expect(
+      code(await port.update('area-norte-mty', { version, parentId: 'area-apodaca-taller' })),
+    ).toBe('422 invalid_hierarchy');
+    expect(code(await port.update('area-norte-mty', { version, parentId: 'area-sur-mer' }))).toBe(
+      '422 invalid_hierarchy',
+    );
+    expect(code(await port.update('area-norte-mty', { version, parentId: 'x' }))).toBe(
+      '422 invalid_hierarchy',
+    );
+    expect(
+      code(await port.update('area-sur-mer', { version: 1, parentId: 'area-mty-guadalupe' })),
+    ).toBe('422 invalid_hierarchy');
+    expect(code(await port.update('area-sur', { version: 1, responsibleIds: ['otro'] }))).toBe(
+      '422 invalid_responsible',
+    );
     // Already-assigned responsibles are not revalidated, so a departed member can always be removed.
     members.delete('user-admin');
-    expect(code(await port.update('area-norte', { version: 28, responsibleIds: ['user-admin', 'user-dispatch'] }))).toBe('ok');
+    expect(
+      code(
+        await port.update('area-norte', {
+          version: 28,
+          responsibleIds: ['user-admin', 'user-dispatch'],
+        }),
+      ),
+    ).toBe('ok');
     members.add('user-admin');
   });
 });
@@ -213,7 +287,9 @@ describe('mock areas: deactivate and activate', () => {
     const done = value(await mock.port.deactivate('area-sur-mer', 1));
     expect(done).toMatchObject({ active: false, version: 2 });
     expect(done.deactivatedAt).not.toBeNull();
-    expect(value(await mock.port.history('area-sur-mer')).items[0]).toMatchObject({ action: 'deactivated' });
+    expect(value(await mock.port.history('area-sur-mer')).items[0]).toMatchObject({
+      action: 'deactivated',
+    });
   });
 
   it('answers 404, 400, 409 stale and 409 invalid_transition', async () => {
@@ -232,12 +308,16 @@ describe('mock areas: deactivate and activate', () => {
     const mock = store();
     const activated = value(await mock.port.activate('area-mty-guadalupe', 5));
     expect(activated).toMatchObject({ active: true, deactivatedAt: null, version: 6 });
-    expect(value(await mock.port.history('area-mty-guadalupe')).items[0]).toMatchObject({ action: 'activated' });
+    expect(value(await mock.port.history('area-mty-guadalupe')).items[0]).toMatchObject({
+      action: 'activated',
+    });
     mock.deactivateExternally('area-mty-guadalupe');
     mock.deactivateExternally('area-norte-mty');
     // Monterrey is inactive now (a test control skips the rules): its child cannot come back first.
     const child = value(await mock.port.get('area-mty-guadalupe'));
-    expect(code(await mock.port.activate('area-mty-guadalupe', child.version))).toBe('422 invalid_hierarchy');
+    expect(code(await mock.port.activate('area-mty-guadalupe', child.version))).toBe(
+      '422 invalid_hierarchy',
+    );
   });
 
   it('simulates other actors: a rename moves the version on and ignores unknown ids', async () => {
@@ -245,9 +325,16 @@ describe('mock areas: deactivate and activate', () => {
     mock.changeExternally('area-sur', { name: 'Sur 2' });
     mock.changeExternally('x', { name: 'nada' });
     mock.deactivateExternally('x');
-    expect(mock.snapshot().find((a) => a.id === 'area-sur')).toMatchObject({ name: 'Sur 2', version: 2 });
-    expect(code(await mock.port.update('area-sur', { version: 1, name: 'Mío' }))).toBe('409 stale_version');
-    expect(value(await mock.port.history('area-sur')).items[0]).toMatchObject({ actorId: 'user-dispatch' });
+    expect(mock.snapshot().find((a) => a.id === 'area-sur')).toMatchObject({
+      name: 'Sur 2',
+      version: 2,
+    });
+    expect(code(await mock.port.update('area-sur', { version: 1, name: 'Mío' }))).toBe(
+      '409 stale_version',
+    );
+    expect(value(await mock.port.history('area-sur')).items[0]).toMatchObject({
+      actorId: 'user-dispatch',
+    });
   });
 
   it('starts with the demo tree when no seed is given', () => {

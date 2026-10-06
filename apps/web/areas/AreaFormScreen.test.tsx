@@ -11,7 +11,10 @@ import {
   within,
 } from '../app/test/utils';
 
-async function create(path = '/plantilla/areas/nueva', options: Parameters<typeof renderApp>[0] = {}) {
+async function create(
+  path = '/plantilla/areas/nueva',
+  options: Parameters<typeof renderApp>[0] = {},
+) {
   const view = await renderApp({ path, ...options });
   await screen.findByRole('heading', { name: 'Nueva área', level: 1 });
   await screen.findByRole('form', { name: 'Nueva área' });
@@ -62,7 +65,9 @@ describe('create area', () => {
     expect(taller?.textContent).toMatch(/superaría los 4 niveles/);
     const guadalupe = [...parent().options].find((option) => option.value === 'area-mty-guadalupe');
     expect(guadalupe).toBeDisabled();
-    expect([...parent().options].find((option) => option.value === 'area-norte')).not.toBeDisabled();
+    expect(
+      [...parent().options].find((option) => option.value === 'area-norte'),
+    ).not.toBeDisabled();
   });
 
   it('creates the area with normalized values and opens its detail with a confirmation', async () => {
@@ -74,7 +79,9 @@ describe('create area', () => {
     fireEvent.change(parent(), { target: { value: 'area-sur' } });
     addResponsible('user-dispatch');
     click('Crear área');
-    expect(await screen.findByRole('heading', { name: 'Base Oeste', level: 1 })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Base Oeste', level: 1 }),
+    ).toBeInTheDocument();
     expect(spy).toHaveBeenCalledWith({
       name: 'Base Oeste',
       code: 'OES-1',
@@ -161,11 +168,15 @@ describe('create area', () => {
     type('Nombre', 'Nueva');
     api.controls.deactivateAreaExternally('area-norte-chih');
     click('Crear área');
-    expect(await screen.findByRole('heading', { name: 'Esa ubicación no es válida' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Esa ubicación no es válida' }),
+    ).toBeInTheDocument();
     expect(screen.getByText('Elige otra área superior.')).toBeInTheDocument();
     await waitFor(() => expect(parent()).toHaveFocus());
     click('Cargar datos actuales');
-    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Esa ubicación no es válida' })).toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByRole('heading', { name: 'Esa ubicación no es válida' })).toBeNull(),
+    );
     await screen.findByRole('form', { name: 'Nueva área' });
   });
 
@@ -174,8 +185,12 @@ describe('create area', () => {
     type('Nombre', 'Nueva');
     addResponsible('user-fantasma');
     click('Crear área');
-    expect(await screen.findByRole('heading', { name: 'Responsables no válidos' })).toBeInTheDocument();
-    expect(screen.getByText(/Alguno de los identificadores no corresponde a un miembro activo/)).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Responsables no válidos' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Alguno de los identificadores no corresponde a un miembro activo/),
+    ).toBeInTheDocument();
     await waitFor(() => expect(getField('Agregar responsable')).toHaveFocus());
   });
 
@@ -202,7 +217,9 @@ describe('create area', () => {
     expect(screen.queryByRole('heading', { name: 'No pudimos crear el área' })).toBeNull();
     type('Cuenta de prueba', demoSubjects.admin);
     click('Continuar');
-    await waitFor(() => expect(screen.queryByRole('group', { name: 'Sesión expirada' })).toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByRole('group', { name: 'Sesión expirada' })).toBeNull(),
+    );
     await waitFor(() => expect(getField('Nombre')).toHaveValue('Oeste'));
     expect(screen.getByText('user-dispatch')).toBeInTheDocument();
     click('Crear área');
@@ -211,7 +228,10 @@ describe('create area', () => {
 
   it('cancels back to the tree and is not available without the create permission', async () => {
     const dispatch = await create('/plantilla/areas/nueva', { account: 'dispatch' });
-    expect(screen.getByRole('link', { name: 'Cancelar' })).toHaveAttribute('href', '/plantilla/areas');
+    expect(screen.getByRole('link', { name: 'Cancelar' })).toHaveAttribute(
+      'href',
+      '/plantilla/areas',
+    );
     dispatch.unmount();
     const api = createMockApi();
     const spy = vi.spyOn(api.areas, 'list');
@@ -230,7 +250,8 @@ describe('create area', () => {
   });
 });
 
-const dd = (label: string) => screen.getByText(label, { selector: 'dt' }).nextElementSibling as HTMLElement;
+const dd = (label: string) =>
+  screen.getByText(label, { selector: 'dt' }).nextElementSibling as HTMLElement;
 
 async function edit(id = 'area-norte-mty', options: Parameters<typeof renderApp>[0] = {}) {
   const view = await renderApp({ path: `/plantilla/areas/${id}/editar`, ...options });
@@ -246,7 +267,10 @@ describe('edit area', () => {
     expect(getField('Código')).toHaveValue('NTE-MTY');
     expect(screen.getByText('user-admin')).toBeInTheDocument();
     expect(screen.queryByLabelText('Área superior')).toBeNull();
-    expect(screen.getByRole('link', { name: 'Cancelar' })).toHaveAttribute('href', '/plantilla/areas/area-norte-mty');
+    expect(screen.getByRole('link', { name: 'Cancelar' })).toHaveAttribute(
+      'href',
+      '/plantilla/areas/area-norte-mty',
+    );
   });
 
   it('says there is nothing to save when nothing changed', async () => {
@@ -266,7 +290,9 @@ describe('edit area', () => {
     type('Código', '');
     click('Quitar a user-dispatch');
     click('Guardar cambios');
-    expect(await screen.findByRole('heading', { name: 'Monterrey Metropolitano', level: 1 })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Monterrey Metropolitano', level: 1 }),
+    ).toBeInTheDocument();
     expect(spy).toHaveBeenCalledWith('area-norte-mty', {
       version: 4,
       name: 'Monterrey Metropolitano',
@@ -290,7 +316,9 @@ describe('edit area', () => {
     api.controls.changeAreaExternally('area-sur-mer', { name: 'Mérida Norte' });
     type('Código', 'MER');
     click('Guardar cambios');
-    expect(await screen.findByRole('heading', { name: 'Otra persona modificó esta área' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Otra persona modificó esta área' }),
+    ).toBeInTheDocument();
     expect(screen.getByText(/Tus cambios no se guardaron/)).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole('alert').closest('[tabindex="-1"]')).toHaveFocus());
     click('Cargar datos actuales');
@@ -304,13 +332,18 @@ describe('edit area', () => {
     api.controls.deactivateAreaExternally('area-sur-mer');
     type('Nombre', 'Otro');
     click('Guardar cambios');
-    expect(await screen.findByRole('heading', { name: 'El área ya no admite cambios' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'El área ya no admite cambios' }),
+    ).toBeInTheDocument();
   });
 
   it('explains an inactive area instead of showing the form', async () => {
     await renderApp({ path: '/plantilla/areas/area-mty-guadalupe/editar' });
     await screen.findByRole('heading', { name: 'Esta área no se puede modificar' });
-    expect(screen.getByRole('link', { name: 'Volver al área' })).toHaveAttribute('href', '/plantilla/areas/area-mty-guadalupe');
+    expect(screen.getByRole('link', { name: 'Volver al área' })).toHaveAttribute(
+      'href',
+      '/plantilla/areas/area-mty-guadalupe',
+    );
     expect(screen.queryByRole('form')).toBeNull();
   });
 
@@ -338,7 +371,9 @@ describe('edit area', () => {
     await screen.findByRole('group', { name: 'Sesión expirada' });
     type('Cuenta de prueba', demoSubjects.admin);
     click('Continuar');
-    await waitFor(() => expect(screen.queryByRole('group', { name: 'Sesión expirada' })).toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByRole('group', { name: 'Sesión expirada' })).toBeNull(),
+    );
     await waitFor(() => expect(getField('Nombre')).toHaveValue('Mérida Centro'));
     expect(screen.queryByText(/El área cambió desde que empezaste/)).toBeNull();
     click('Guardar cambios');
@@ -356,8 +391,12 @@ describe('edit area', () => {
     api.controls.changeAreaExternally('area-sur-mer', { name: 'Mérida Otra' });
     type('Cuenta de prueba', demoSubjects.admin);
     click('Continuar');
-    await waitFor(() => expect(screen.queryByRole('group', { name: 'Sesión expirada' })).toBeNull());
-    expect(await screen.findByText(/El área cambió desde que empezaste a editar/)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByRole('group', { name: 'Sesión expirada' })).toBeNull(),
+    );
+    expect(
+      await screen.findByText(/El área cambió desde que empezaste a editar/),
+    ).toBeInTheDocument();
     expect(getField('Nombre')).toHaveValue('Mérida Otra');
   });
 });
@@ -374,7 +413,9 @@ describe('move area', () => {
     await move();
     expect(screen.queryByLabelText(/^Nombre/)).toBeNull();
     expect(screen.queryByText('Responsables', { selector: 'legend' })).toBeNull();
-    expect(screen.getByText('Se moverán también sus 4 sub-áreas con la misma estructura.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Se moverán también sus 4 sub-áreas con la misma estructura.'),
+    ).toBeInTheDocument();
     expect(parent()).toHaveValue('area-norte');
     const optionOf = (id: string) => [...parent().options].find((option) => option.value === id);
     expect(optionOf('area-norte-mty')).toBeDisabled();
@@ -385,7 +426,9 @@ describe('move area', () => {
 
   it('says when nothing travels along', async () => {
     await move('area-sur-mer');
-    expect(screen.getByText('Esta área no tiene sub-áreas: solo ella cambia de lugar.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Esta área no tiene sub-áreas: solo ella cambia de lugar.'),
+    ).toBeInTheDocument();
   });
 
   it('moves the whole subtree and opens the detail with the new path and levels', async () => {
@@ -397,7 +440,11 @@ describe('move area', () => {
     expect(await screen.findByRole('heading', { name: 'Monterrey', level: 1 })).toBeInTheDocument();
     expect(spy).toHaveBeenCalledWith('area-norte-mty', { version: 4, parentId: 'area-sur' });
     expect(screen.getByText('Área movida con todas sus sub-áreas.')).toBeInTheDocument();
-    expect(within(screen.getByRole('navigation', { name: 'Ruta del área' })).getByRole('link', { name: 'Sur' })).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('navigation', { name: 'Ruta del área' })).getByRole('link', {
+        name: 'Sur',
+      }),
+    ).toBeInTheDocument();
     const depths = Object.fromEntries(api.controls.areas().map((area) => [area.id, area.depth]));
     expect(depths['area-mty-apodaca']).toBe(3);
     expect(depths['area-apodaca-taller']).toBe(4);
@@ -425,7 +472,9 @@ describe('move area', () => {
     await move();
     fireEvent.change(parent(), { target: { value: 'area-mty-apodaca' } });
     click('Mover área');
-    expect(screen.getByText(/Esa área no está disponible: esta área o una de sus sub-áreas/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Esa área no está disponible: esta área o una de sus sub-áreas/),
+    ).toBeInTheDocument();
   });
 
   it('explains a destination the server refuses (it became inactive meanwhile)', async () => {
@@ -434,7 +483,9 @@ describe('move area', () => {
     fireEvent.change(parent(), { target: { value: 'area-sur' } });
     api.controls.deactivateAreaExternally('area-sur');
     click('Mover área');
-    expect(await screen.findByRole('heading', { name: 'Esa ubicación no es válida' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Esa ubicación no es válida' }),
+    ).toBeInTheDocument();
     await waitFor(() => expect(parent()).toHaveFocus());
   });
 
@@ -444,8 +495,12 @@ describe('move area', () => {
     await api.areas.create({ name: 'Monterrey', parentId: 'area-sur' });
     fireEvent.change(parent(), { target: { value: 'area-sur' } });
     click('Mover área');
-    expect(await screen.findByRole('heading', { name: 'Ya hay un área con ese nombre allí' })).toBeInTheDocument();
-    expect(screen.getByText('Ya existe un área con este nombre dentro de esa área superior.')).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Ya hay un área con ese nombre allí' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Ya existe un área con este nombre dentro de esa área superior.'),
+    ).toBeInTheDocument();
   });
 
   it('reports a version conflict and reloads on request', async () => {
@@ -454,7 +509,9 @@ describe('move area', () => {
     api.controls.changeAreaExternally('area-norte-mty', { name: 'Monterrey 2' });
     fireEvent.change(parent(), { target: { value: 'area-sur' } });
     click('Mover área');
-    expect(await screen.findByRole('heading', { name: 'Otra persona modificó esta área' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Otra persona modificó esta área' }),
+    ).toBeInTheDocument();
     click('Cargar datos actuales');
     await screen.findByRole('form', { name: 'Mover área' });
     expect(parent()).toHaveValue('area-norte');
@@ -471,4 +528,3 @@ describe('move area', () => {
     await screen.findByRole('heading', { name: 'No tienes acceso' });
   });
 });
-

@@ -108,6 +108,27 @@ describe('create vehicle', () => {
     },
   );
 
+  it('puts an unknown or inactive area (422 invalid_area) next to its field and focuses it', async () => {
+    await renderApp({ path: '/flota/vehiculos/nuevo' });
+    await screen.findByRole('heading', { name: 'Nuevo vehículo', level: 1 });
+    for (const area of ['area-inexistente', 'area-mty-guadalupe']) {
+      fillCreate({ 'Identificador de área': area });
+      click('Crear vehículo');
+      expect(await screen.findByText('El área no existe o está inactiva.')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'El área no es válida' })).toBeInTheDocument();
+      await waitFor(() => expect(getField('Identificador de área')).toHaveFocus());
+      expect(getField('Identificador de área')).toHaveAttribute('aria-invalid', 'true');
+    }
+  });
+
+  it('refuses a move to an unknown area when editing', async () => {
+    await renderApp({ path: '/flota/vehiculos/veh-001/editar' });
+    await screen.findByDisplayValue('ECO-001');
+    type('Identificador de área', 'area-inexistente');
+    click('Guardar cambios');
+    expect(await screen.findByText('El área no existe o está inactiva.')).toBeInTheDocument();
+  });
+
   it('reports a duplicate VIN', async () => {
     const api = createMockApi({ vehicles: [makeVehicle({ vin: '3N6PD23W05ZB10005' })] });
     await renderApp({ api, path: '/flota/vehiculos/nuevo' });

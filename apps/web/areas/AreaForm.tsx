@@ -106,7 +106,9 @@ export function AreaForm({
   const setResponsibles = (ids: readonly string[]) => {
     changed.current = true;
     setValues((current) => ({ ...current, responsibleIds: ids }));
-    setClientErrors((current) => (current.responsibles ? { ...current, responsibles: undefined } : current));
+    setClientErrors((current) =>
+      current.responsibles ? { ...current, responsibles: undefined } : current,
+    );
   };
 
   const addResponsible = (text: string) => {
@@ -162,7 +164,9 @@ export function AreaForm({
             title="Datos del área"
             description="Los campos marcados con asterisco son obligatorios."
           >
-            <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' } }}>
+            <Box
+              sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' } }}
+            >
               <Field
                 id={inputId('name')}
                 label="Nombre"
@@ -181,7 +185,9 @@ export function AreaForm({
                 value={values.code}
                 onChange={(event) => setField('code', event.target.value)}
                 error={Boolean(errors.code)}
-                helperText={errors.code ?? 'Opcional. Único en tu empresa; se guarda en mayúsculas.'}
+                helperText={
+                  errors.code ?? 'Opcional. Único en tu empresa; se guarda en mayúsculas.'
+                }
                 sx={{ '& input': { fontFamily: opslogTokens.typography.monoFamily } }}
                 fullWidth
               />
@@ -255,11 +261,20 @@ export function AreaForm({
                     <Box
                       component="li"
                       key={id}
-                      sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', py: 0.25 }}
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                        flexWrap: 'wrap',
+                        py: 0.25,
+                      }}
                     >
                       <Typography
                         component="span"
-                        sx={{ fontFamily: opslogTokens.typography.monoFamily, overflowWrap: 'anywhere' }}
+                        sx={{
+                          fontFamily: opslogTokens.typography.monoFamily,
+                          overflowWrap: 'anywhere',
+                        }}
                       >
                         {id}
                       </Typography>
@@ -297,7 +312,9 @@ export function AreaForm({
                     }
                   }}
                   error={Boolean(responsiblesError)}
-                  helperText={responsiblesError ?? 'Identificador de usuario, por ejemplo user-ana.'}
+                  helperText={
+                    responsiblesError ?? 'Identificador de usuario, por ejemplo user-ana.'
+                  }
                   sx={{
                     flex: '1 1 240px',
                     '& input': { fontFamily: opslogTokens.typography.monoFamily },
@@ -309,11 +326,7 @@ export function AreaForm({
               </Box>
               {currentUserId && !values.responsibleIds.includes(currentUserId) && (
                 <Box>
-                  <Button
-                    variant="text"
-                    size="small"
-                    onClick={() => addResponsible(currentUserId)}
-                  >
+                  <Button variant="text" size="small" onClick={() => addResponsible(currentUserId)}>
                     Agregarme como responsable
                   </Button>
                 </Box>

@@ -67,7 +67,12 @@ export function AreaTree({
   const onKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
     const target = event.target as HTMLElement;
     // Only the item that holds focus reacts: keys typed in a nested control are not tree navigation.
-    if (target.getAttribute('role') !== 'treeitem' || event.altKey || event.ctrlKey || event.metaKey)
+    if (
+      target.getAttribute('role') !== 'treeitem' ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey
+    )
       return;
     const id = target.dataset['areaId'] as string;
     const index = visible.indexOf(id);

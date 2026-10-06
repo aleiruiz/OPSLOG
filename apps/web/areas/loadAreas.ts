@@ -26,7 +26,8 @@ export async function loadAllAreas(
     });
     if (!result.ok) return result;
     items.push(...result.value.items);
-    if (result.value.nextCursor === null) return { ok: true, value: { areas: items, truncated: false } };
+    if (result.value.nextCursor === null)
+      return { ok: true, value: { areas: items, truncated: false } };
     cursor = result.value.nextCursor;
   }
   return { ok: true, value: { areas: items, truncated: true } };

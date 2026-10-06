@@ -14,7 +14,9 @@ const fieldLabels: Record<string, string> = {
 };
 
 const list = (items: readonly string[]): string =>
-  items.length > 1 ? `${items.slice(0, -1).join(', ')} y ${items[items.length - 1]}` : (items[0] ?? '');
+  items.length > 1
+    ? `${items.slice(0, -1).join(', ')} y ${items[items.length - 1]}`
+    : (items[0] ?? '');
 
 export const count = (n: number, one: string, many: string): string =>
   `${n} ${n === 1 ? one : many}`;
@@ -36,7 +38,9 @@ export function describeHistory(
     case 'deactivated':
       return 'Área desactivada';
     case 'updated': {
-      const others = entry.fields.filter((field) => field !== 'parent').map((f) => fieldLabels[f] ?? f);
+      const others = entry.fields
+        .filter((field) => field !== 'parent')
+        .map((f) => fieldLabels[f] ?? f);
       const moved = entry.fields.includes('parent')
         ? `Movida de ${place(entry.fromParentId)} a ${place(entry.toParentId)}`
         : null;

@@ -197,8 +197,7 @@ export const MoveInvalidHierarchy = {
   },
 };
 export const MoveNoChange = {
-  render: () =>
-    move({ alert: { severity: 'info', message: 'El área ya está en esa ubicación.' } }),
+  render: () => move({ alert: { severity: 'info', message: 'El área ya está en esa ubicación.' } }),
 };
 export const MoveVersionConflict = {
   render: () => {

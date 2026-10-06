@@ -116,9 +116,12 @@ export function AreaTreeView({
                   {count(data.areas.length, 'área', 'áreas')}
                 </Box>
               </Box>
-              <Box component="p" sx={{ color: 'text.secondary', typography: 'body2', mt: 0, mb: 1 }}>
-                Con el teclado: flechas arriba y abajo para moverte, derecha e izquierda para abrir o
-                cerrar una rama, Enter para abrir el área.
+              <Box
+                component="p"
+                sx={{ color: 'text.secondary', typography: 'body2', mt: 0, mb: 1 }}
+              >
+                Con el teclado: flechas arriba y abajo para moverte, derecha e izquierda para abrir
+                o cerrar una rama, Enter para abrir el área.
               </Box>
               <AreaTree roots={roots} expanded={expanded} onToggle={onToggle} onOpen={onOpen} />
             </>

@@ -26,7 +26,10 @@ const context = (
   status: 'ready',
   data: { area: makeAreaDetail(area(id), counts), areas, truncated },
 });
-const page = (items = demoHistory(), nextCursor: string | null = null): ResourceState<HistoryPage> => ({
+const page = (
+  items = demoHistory(),
+  nextCursor: string | null = null,
+): ResourceState<HistoryPage> => ({
   status: 'ready',
   data: { items, nextCursor, total: items.length },
 });
@@ -193,13 +196,11 @@ export const HistoryLoading = {
   render: () => view({}, { state: { status: 'loading' } }),
 };
 export const HistoryError = {
-  render: () =>
-    view({}, { state: { status: 'error', error: failure(500, 'internal_error') } }),
+  render: () => view({}, { state: { status: 'error', error: failure(500, 'internal_error') } }),
 };
 export const Loading = { render: () => view({ state: { status: 'loading' } }) };
 export const Error = {
-  render: () =>
-    view({ state: { status: 'error', error: failure(500, 'internal_error') } }),
+  render: () => view({ state: { status: 'error', error: failure(500, 'internal_error') } }),
 };
 export const NotFound = {
   render: () => view({ state: { status: 'error', error: failure(404, 'not_found') } }),

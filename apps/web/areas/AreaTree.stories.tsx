@@ -51,8 +51,7 @@ export const Default = { render: () => view() };
 export const AllExpanded = { render: () => view({ expanded: everything() }) };
 export const Collapsed = { render: () => view({ expanded: new Set<string>() }) };
 export const WithInactive = {
-  render: () =>
-    view({ state: ready(all), includeInactive: true, expanded: everything(all) }),
+  render: () => view({ state: ready(all), includeInactive: true, expanded: everything(all) }),
 };
 export const ReadOnly = { render: () => view({ can: readOnly }) };
 export const Truncated = { render: () => view({ state: ready(active, true) }) };

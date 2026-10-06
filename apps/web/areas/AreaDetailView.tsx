@@ -95,7 +95,10 @@ function Path({ chain }: { chain: readonly Area[] }) {
   if (chain.length === 0) return null;
   return (
     <Box component="nav" aria-label="Ruta del área" sx={{ mb: 2, typography: 'body2' }}>
-      <Box component="ol" sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, listStyle: 'none', p: 0, m: 0 }}>
+      <Box
+        component="ol"
+        sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, listStyle: 'none', p: 0, m: 0 }}
+      >
         {chain.map((area, index) => (
           <li key={area.id}>
             <RouterLink to={areaPath(area.id)} sx={linkSx}>
@@ -258,7 +261,9 @@ function History({
           />
           {props.notice && (
             <Box sx={{ my: 1 }}>
-              <Notifications messages={[{ id: 'history-notice', text: props.notice, severity: 'error' }]} />
+              <Notifications
+                messages={[{ id: 'history-notice', text: props.notice, severity: 'error' }]}
+              />
             </Box>
           )}
           {state.data.nextCursor && (
@@ -283,7 +288,9 @@ function History({
 function blockers(counts: { vehicles: number; people: number }, subAreas: number): string[] {
   return [
     ...(subAreas > 0 ? [count(subAreas, 'sub-área activa', 'sub-áreas activas')] : []),
-    ...(counts.vehicles > 0 ? [count(counts.vehicles, 'vehículo activo', 'vehículos activos')] : []),
+    ...(counts.vehicles > 0
+      ? [count(counts.vehicles, 'vehículo activo', 'vehículos activos')]
+      : []),
     ...(counts.people > 0 ? [count(counts.people, 'persona activa', 'personas activas')] : []),
   ];
 }
@@ -411,7 +418,10 @@ export function AreaDetailView({
                   busy={dialog.busy}
                   {...(dialog.error ? { error: dialog.error } : {})}
                   {...(dialog.errorActionLabel
-                    ? { errorActionLabel: dialog.errorActionLabel, onErrorAction: onDialogErrorAction }
+                    ? {
+                        errorActionLabel: dialog.errorActionLabel,
+                        onErrorAction: onDialogErrorAction,
+                      }
                     : {})}
                   onConfirm={onDialogConfirm}
                   onCancel={onDialogCancel}
@@ -426,7 +436,10 @@ export function AreaDetailView({
                   busy={dialog.busy}
                   {...(dialog.error ? { error: dialog.error } : {})}
                   {...(dialog.errorActionLabel
-                    ? { errorActionLabel: dialog.errorActionLabel, onErrorAction: onDialogErrorAction }
+                    ? {
+                        errorActionLabel: dialog.errorActionLabel,
+                        onErrorAction: onDialogErrorAction,
+                      }
                     : {})}
                   onConfirm={onDialogConfirm}
                   onCancel={onDialogCancel}

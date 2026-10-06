@@ -99,7 +99,10 @@ export function describeFailure(error: ApiError, mode: FormMode): Failure {
     };
   if (error.status === 400)
     return {
-      alert: fail('El servidor rechazó los datos', `Revisa todos los campos e intenta de nuevo. ${kept}`),
+      alert: fail(
+        'El servidor rechazó los datos',
+        `Revisa todos los campos e intenta de nuevo. ${kept}`,
+      ),
       fields: {},
     };
   if (error.status === 403)
@@ -123,8 +126,7 @@ export interface ActionFailure {
 const RELOAD_DATA = 'Recargar datos';
 
 const blockers: Record<string, string> = {
-  sub_areas:
-    'todavía tiene sub-áreas activas. Desactívalas o muévelas a otra área primero.',
+  sub_areas: 'todavía tiene sub-áreas activas. Desactívalas o muévelas a otra área primero.',
   vehicles: 'todavía tiene vehículos activos asignados. Reasígnalos a otra área primero.',
   people: 'todavía tiene personas activas asignadas. Reasígnalas a otra área primero.',
 };

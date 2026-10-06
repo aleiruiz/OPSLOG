@@ -50,9 +50,9 @@ describe('route matching', () => {
     expect(resolveRoute('/plantilla/areas/a-1/editar')?.route.id).toBe('areaEdit');
     expect(resolveRoute('/plantilla/areas/a-1/mover')?.route.id).toBe('areaMove');
     expect(resolveRoute('/plantilla/areas/a/b/c')).toBeNull();
-    expect(routes.filter((route) => route.nav?.group === 'Plantilla').map((route) => route.id)).toEqual([
-      'areas',
-    ]);
+    expect(
+      routes.filter((route) => route.nav?.group === 'Plantilla').map((route) => route.id),
+    ).toEqual(['areas']);
     const byId = Object.fromEntries(routes.map((route) => [route.id, route.access]));
     expect(byId.areas).toEqual({ permission: 'view' });
     expect(byId.areaNew).toEqual({ permission: 'create' });

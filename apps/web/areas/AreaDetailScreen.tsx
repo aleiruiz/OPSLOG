@@ -92,9 +92,10 @@ export function AreaDetailScreen({ id }: { id: string }) {
     const { kind } = dialog;
     const { area, areas } = state.data;
     setDialog({ kind, busy: true });
-    const result: Result<AreaContext['area']> = await (kind === 'deactivate'
-      ? ports.areas.deactivate(id, area.version)
-      : ports.areas.activate(id, area.version)
+    const result: Result<AreaContext['area']> = await (
+      kind === 'deactivate'
+        ? ports.areas.deactivate(id, area.version)
+        : ports.areas.activate(id, area.version)
     ).then((outcome) =>
       outcome.ok
         ? { ok: true as const, value: { ...outcome.value, resourceCounts: area.resourceCounts } }
@@ -117,7 +118,9 @@ export function AreaDetailScreen({ id }: { id: string }) {
       setDialog({
         kind,
         busy: false,
-        ...(kind === 'deactivate' ? deactivateFailure(result.error) : activateFailure(result.error)),
+        ...(kind === 'deactivate'
+          ? deactivateFailure(result.error)
+          : activateFailure(result.error)),
       });
   };
 

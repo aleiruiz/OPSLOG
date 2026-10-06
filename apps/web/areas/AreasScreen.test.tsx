@@ -1,10 +1,12 @@
 import { act } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { makeArea } from './fixtures';
 import { createMockApi } from '../app/mockApi';
-import { click, fireEvent, renderApp, screen, waitFor, within } from '../app/test/utils';
+import { click, fireEvent, renderApp, screen, within } from '../app/test/utils';
 
 const item = (name: string | RegExp) => screen.getByRole('treeitem', { name });
-const names = () => screen.getAllByRole('treeitem').map((node) => node.getAttribute('aria-labelledby'));
+const names = () =>
+  screen.getAllByRole('treeitem').map((node) => node.getAttribute('aria-labelledby'));
 
 async function openTree(options: Parameters<typeof renderApp>[0] = {}) {
   const view = await renderApp({ path: '/plantilla/areas', ...options });
@@ -32,13 +34,18 @@ describe('areas tree screen', () => {
     expect(screen.getAllByText(/2 sub-áreas · 1 responsable/)).toHaveLength(2);
     expect(screen.getAllByText('0 sub-áreas · 0 responsables').length).toBeGreaterThan(0);
     expect(screen.getByText('12 áreas')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Nueva área' })).toHaveAttribute('href', '/plantilla/areas/nueva');
+    expect(screen.getByRole('link', { name: 'Nueva área' })).toHaveAttribute(
+      'href',
+      '/plantilla/areas/nueva',
+    );
   });
 
   it('is reachable from the navigation group "Plantilla" and highlights its entry', async () => {
     await renderApp();
     const nav = await screen.findByRole('navigation', { name: 'Principal' });
-    const link = within(within(nav).getByRole('region', { name: 'Plantilla' })).getByRole('link', { name: 'Áreas' });
+    const link = within(within(nav).getByRole('region', { name: 'Plantilla' })).getByRole('link', {
+      name: 'Áreas',
+    });
     fireEvent.click(link);
     await screen.findByRole('tree');
     expect(link).toHaveAttribute('aria-current', 'page');
@@ -118,7 +125,10 @@ describe('areas tree screen', () => {
     await openTree();
     click('Expandir todo');
     expect(screen.getAllByRole('treeitem')).toHaveLength(12);
-    expect(screen.getByRole('treeitem', { name: /^Patio de maniobras/ })).toHaveAttribute('aria-level', '4');
+    expect(screen.getByRole('treeitem', { name: /^Patio de maniobras/ })).toHaveAttribute(
+      'aria-level',
+      '4',
+    );
     click('Contraer todo');
     expect(screen.getAllByRole('treeitem')).toHaveLength(3);
   });
@@ -158,7 +168,14 @@ describe('areas tree screen', () => {
       return {
         ok: true,
         value: {
-          items: [{ ...(await api.areas.get('area-sur') as { ok: true; value: never }).value, id: `a${pages}`, name: `A${pages}`, parentId: null }],
+          items: [
+            {
+              ...makeArea(),
+              id: `a${pages}`,
+              name: `A${pages}`,
+              parentId: null,
+            },
+          ],
           nextCursor: 'mock:1',
           total: 99,
           sort: { field: 'name', direction: 'asc' },
@@ -176,7 +193,11 @@ describe('areas tree screen', () => {
     await screen.findByRole('heading', { name: 'Aún no hay áreas' });
     expect(screen.getByText(/Crea la primera área/)).toBeInTheDocument();
     view.unmount();
-    await renderApp({ api: createMockApi({ areas: [] }), account: 'viewer', path: '/plantilla/areas' });
+    await renderApp({
+      api: createMockApi({ areas: [] }),
+      account: 'viewer',
+      path: '/plantilla/areas',
+    });
     await screen.findByText('Cuando se creen áreas aparecerán aquí.');
     expect(screen.queryByRole('link', { name: 'Nueva área' })).toBeNull();
   });

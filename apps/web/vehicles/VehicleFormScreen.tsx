@@ -61,6 +61,14 @@ export function describeFailure(error: ApiError, saved: boolean): Failure {
       ),
       fields: duplicateErrors(error),
     };
+  if (error.code === 'invalid_area')
+    return {
+      alert: fail(
+        'El área no es válida',
+        'El área no existe o está inactiva. Elige un área activa de tu empresa.',
+      ),
+      fields: { areaId: 'El área no existe o está inactiva.' },
+    };
   if (error.code === 'odometer_decrease')
     return {
       alert: fail(

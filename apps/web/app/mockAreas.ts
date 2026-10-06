@@ -87,7 +87,9 @@ type Fields = Partial<Pick<Area, 'name' | 'code' | 'parentId' | 'responsibleIds'
 function parseFields(input: Readonly<Record<string, unknown>>): Fields | null {
   const out: { -readonly [K in keyof Fields]?: Fields[K] } = {};
   const has = (key: string) => Object.hasOwn(input, key);
-  if (Object.keys(input).some((key) => !['name', 'code', 'parentId', 'responsibleIds'].includes(key)))
+  if (
+    Object.keys(input).some((key) => !['name', 'code', 'parentId', 'responsibleIds'].includes(key))
+  )
     return null;
   if (has('name')) {
     const value = input['name'];
@@ -220,9 +222,7 @@ export function createMockAreaStore(
   const window = (query: { limit?: number; cursor?: string }) => {
     const limit = query.limit ?? 25;
     const offset = query.cursor === undefined ? 0 : Number(/^mock:(\d+)$/.exec(query.cursor)?.[1]);
-    return [25, 50, 100].includes(limit) && Number.isSafeInteger(offset)
-      ? { limit, offset }
-      : null;
+    return [25, 50, 100].includes(limit) && Number.isSafeInteger(offset) ? { limit, offset } : null;
   };
 
   const port: AreasPort = {
@@ -230,7 +230,9 @@ export function createMockAreaStore(
       const slice = window(query);
       if (
         !slice ||
-        (query.parentId !== undefined && query.parentId !== 'root' && !OPAQUE_ID.test(query.parentId)) ||
+        (query.parentId !== undefined &&
+          query.parentId !== 'root' &&
+          !OPAQUE_ID.test(query.parentId)) ||
         (query.includeInactive !== undefined && !['true', 'false'].includes(query.includeInactive))
       )
         return badRequest();
@@ -295,7 +297,8 @@ export function createMockAreaStore(
       const fields: AreaHistoryEntry['fields'][number][] = [];
       if (parsed.name !== undefined && parsed.name !== current.name) fields.push('name');
       if (parsed.code !== undefined && parsed.code !== current.code) fields.push('code');
-      if (parsed.parentId !== undefined && parsed.parentId !== current.parentId) fields.push('parent');
+      if (parsed.parentId !== undefined && parsed.parentId !== current.parentId)
+        fields.push('parent');
       if (
         parsed.responsibleIds !== undefined &&
         !sameIds(parsed.responsibleIds, current.responsibleIds)
@@ -309,9 +312,13 @@ export function createMockAreaStore(
       if (fields.includes('parent')) {
         const parent = parentId === null ? undefined : find(parentId);
         if (parentId !== null && !parent) return hierarchy();
-        if (parentId === current.id || below.some((node) => node.id === parentId)) return hierarchy();
+        if (parentId === current.id || below.some((node) => node.id === parentId))
+          return hierarchy();
         if (parent && !parent.active) return hierarchy();
-        const height = below.reduce((deepest, node) => Math.max(deepest, node.depth), current.depth);
+        const height = below.reduce(
+          (deepest, node) => Math.max(deepest, node.depth),
+          current.depth,
+        );
         depth = (parent?.depth ?? 0) + 1;
         if (height - current.depth + depth > MAX_AREA_DEPTH) return hierarchy();
       }

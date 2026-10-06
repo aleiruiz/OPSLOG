@@ -1,12 +1,5 @@
 import type { Area, AreaInput, AreaPatch } from '../app/types';
-import {
-  CODE,
-  MAX_RESPONSIBLES,
-  NAME,
-  OPAQUE_ID,
-  normalizeCode,
-  normalizeName,
-} from './rules';
+import { CODE, MAX_RESPONSIBLES, NAME, OPAQUE_ID, normalizeCode, normalizeName } from './rules';
 import type { ParentChoice } from './tree';
 
 /**
@@ -77,8 +70,7 @@ export function validate(values: AreaFormValues, context: Context): FieldErrors 
 export function responsibleProblem(text: string, current: readonly string[]): string | null {
   const id = text.trim();
   if (!id) return 'Escribe el identificador de la persona.';
-  if (!OPAQUE_ID.test(id))
-    return 'Usa letras, números, guion o guion bajo, hasta 64 caracteres.';
+  if (!OPAQUE_ID.test(id)) return 'Usa letras, números, guion o guion bajo, hasta 64 caracteres.';
   if (current.includes(id)) return 'Esa persona ya es responsable.';
   if (current.length >= MAX_RESPONSIBLES)
     return `Una área admite hasta ${MAX_RESPONSIBLES} responsables.`;

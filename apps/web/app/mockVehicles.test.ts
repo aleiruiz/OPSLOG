@@ -298,3 +298,35 @@ describe('mock API vehicle permissions', () => {
     expect(api.controls.vehicles()[0]?.archivedAt).not.toBeNull();
   });
 });
+
+describe('mock vehicles: area validation', () => {
+  it('refuses an area that is not active (422 invalid_area, field area_id) on create and on a change of area', async () => {
+    const { port } = createMockVehicleStore(undefined, undefined, (id) => id === 'area-norte');
+    const input = {
+      economicNumber: 'ECO-777',
+      plate: 'QQ-777',
+      make: 'Ford',
+      model: 'Ranger',
+      year: 2022,
+      areaId: 'area-otra',
+      odometerKm: 1,
+    };
+    const refused = await port.create(input);
+    expect(refused).toMatchObject({
+      ok: false,
+      error: { status: 422, code: 'invalid_area', fieldErrors: [{ field: 'area_id' }] },
+    });
+    expect((await port.create({ ...input, areaId: 'area-norte' })).ok).toBe(true);
+    const current = await port.get('veh-001');
+    if (!current.ok) throw new Error('missing');
+    const { version } = current.value;
+    expect(await port.update('veh-001', { version, areaId: 'area-otra' })).toMatchObject({
+      ok: false,
+      error: { code: 'invalid_area' },
+    });
+    // Keeping the area it already has is not revalidated.
+    expect(
+      (await port.update('veh-001', { version, areaId: current.value.areaId, make: 'Kia' })).ok,
+    ).toBe(true);
+  });
+});

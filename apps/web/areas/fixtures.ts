@@ -58,7 +58,13 @@ export function demoAreas(): Area[] {
     responsibleIds: ['user-dispatch'],
     version: 2,
   });
-  const sur = makeArea({ id: 'area-sur', name: 'Sur', code: 'SUR', responsibleIds: [], version: 1 });
+  const sur = makeArea({
+    id: 'area-sur',
+    name: 'Sur',
+    code: 'SUR',
+    responsibleIds: [],
+    version: 1,
+  });
   const monterrey = child('area-norte-mty', 'Monterrey', 'NTE-MTY', norte, {
     responsibleIds: ['user-admin', 'user-dispatch'],
     version: 4,

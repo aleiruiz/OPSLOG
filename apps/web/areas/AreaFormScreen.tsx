@@ -6,13 +6,7 @@ import { useSession } from '../auth/session';
 import { AreaForm } from './AreaForm';
 import { AreaNotEditable, AreaNotFound } from './AreaMessages';
 import { areaPath, areasPath } from './AreaTreeView';
-import {
-  changes,
-  emptyValues,
-  toInput,
-  valuesOf,
-  type AreaFormValues,
-} from './formModel';
+import { changes, emptyValues, toInput, valuesOf, type AreaFormValues } from './formModel';
 import { loadAllAreas, loadAreaContext, type AreaContext } from './loadAreas';
 import { describeFailure, type Failure } from './messages';
 import { OPAQUE_ID } from './rules';
@@ -46,8 +40,7 @@ export function AreaCreateScreen() {
     if (result.ok) {
       draft.current = null;
       router.navigate(`${areaPath(result.value.id)}?aviso=creada`);
-    }
-    else {
+    } else {
       if (result.error.status === 401) markExpired();
       setFailure(describeFailure(result.error, 'create'));
     }
@@ -63,7 +56,8 @@ export function AreaCreateScreen() {
         {(catalog) => {
           const choices = parentChoices(buildTree(catalog.areas), null);
           const preset = router.search.get('padre') ?? '';
-          const usable = OPAQUE_ID.test(preset) && choices.some((c) => c.id === preset && !c.unavailable);
+          const usable =
+            OPAQUE_ID.test(preset) && choices.some((c) => c.id === preset && !c.unavailable);
           return (
             <AreaForm
               mode="create"
@@ -148,7 +142,8 @@ function EditForm({
       setFailure({
         alert: {
           severity: 'info',
-          message: mode === 'move' ? 'El área ya está en esa ubicación.' : 'No hay cambios que guardar.',
+          message:
+            mode === 'move' ? 'El área ya está en esa ubicación.' : 'No hay cambios que guardar.',
         },
         fields: {},
       });
@@ -191,7 +186,10 @@ function EditForm({
 
 function EditFlow({ id, mode }: { id: string; mode: 'edit' | 'move' }) {
   const { ports } = useSession();
-  const { state, reload, generation } = useResource(() => loadAreaContext(ports.areas, id), [ports, id]);
+  const { state, reload, generation } = useResource(
+    () => loadAreaContext(ports.areas, id),
+    [ports, id],
+  );
   const draft = React.useRef<EditDraft | null>(null);
   return (
     <>

@@ -198,7 +198,9 @@ export interface MockApiOptions {
 }
 
 export function createMockApi(options: MockApiOptions = {}): MockApi {
-  const fleet: MockVehicleStore = createMockVehicleStore(options.vehicles);
+  const fleet: MockVehicleStore = createMockVehicleStore(options.vehicles, undefined, (areaId) =>
+    orgTree.snapshot().some((area) => area.id === areaId && area.active),
+  );
   let signedInAs: string | null = null;
   const orgTree: MockAreaStore = createMockAreaStore(
     {
@@ -528,8 +530,7 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
         guarded('deactivateArea', 'delete', () => orgTree.port.deactivate(id, version)),
       activate: (id, version) =>
         guarded('activateArea', 'edit', () => orgTree.port.activate(id, version)),
-      history: (id, query) =>
-        guarded('areaHistory', 'view', () => orgTree.port.history(id, query)),
+      history: (id, query) => guarded('areaHistory', 'view', () => orgTree.port.history(id, query)),
     },
     drafts: {
       load: (scope) => guarded('loadDraft', null, () => ok(drafts.get(draftKey(scope)) ?? null)),

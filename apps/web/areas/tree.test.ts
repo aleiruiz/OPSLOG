@@ -24,7 +24,12 @@ describe('area tree', () => {
 
   it('shows an area whose parent is not in the list as a root', () => {
     const orphan = buildTree(areas.filter((area) => area.id !== 'area-norte'));
-    expect(orphan.map((node) => node.area.name)).toEqual(['Centro', 'Chihuahua', 'Monterrey', 'Sur']);
+    expect(orphan.map((node) => node.area.name)).toEqual([
+      'Centro',
+      'Chihuahua',
+      'Monterrey',
+      'Sur',
+    ]);
   });
 
   it('lists the visible items in display order, honouring what is expanded', () => {
@@ -63,10 +68,7 @@ describe('area tree', () => {
     ]);
     expect(ancestors(areas, 'area-norte')).toEqual([]);
     expect(ancestors(areas, 'x')).toEqual([]);
-    const loop = [
-      makeArea({ id: 'a', parentId: 'b' }),
-      makeArea({ id: 'b', parentId: 'a' }),
-    ];
+    const loop = [makeArea({ id: 'a', parentId: 'b' }), makeArea({ id: 'b', parentId: 'a' })];
     expect(ancestors(loop, 'a').length).toBeLessThanOrEqual(2);
   });
 });

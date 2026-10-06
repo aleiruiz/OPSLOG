@@ -160,7 +160,10 @@ describe('createHttpApi', () => {
     expect(calls[1]?.input).toEqual({
       query: { limit: 100, includeInactive: 'true', parentId: 'root' },
     });
-    expect(calls[4]?.input).toEqual({ params: { id: 'a-1' }, body: { version: 2, parentId: null } });
+    expect(calls[4]?.input).toEqual({
+      params: { id: 'a-1' },
+      body: { version: 2, parentId: null },
+    });
     expect(calls[5]?.input).toEqual({ params: { id: 'a-1' }, body: { version: 3 } });
     expect(calls[6]?.input).toEqual({ params: { id: 'a-1' }, body: { version: 4 } });
     expect(calls[8]?.input).toEqual({ params: { id: 'a-1' }, query: { limit: 25, cursor: 'c' } });

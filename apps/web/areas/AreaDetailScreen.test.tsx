@@ -19,7 +19,10 @@ describe('area detail: data', () => {
     expect(screen.getByRole('heading', { name: 'Monterrey', level: 1 })).toBeInTheDocument();
     expect(screen.getByText('Código NTE-MTY')).toBeInTheDocument();
     const path = screen.getByRole('navigation', { name: 'Ruta del área' });
-    expect(within(path).getByRole('link', { name: 'Norte' })).toHaveAttribute('href', '/plantilla/areas/area-norte');
+    expect(within(path).getByRole('link', { name: 'Norte' })).toHaveAttribute(
+      'href',
+      '/plantilla/areas/area-norte',
+    );
     expect(dd('Nivel')).toHaveTextContent('2 de 4');
     expect(dd('Área superior')).toHaveTextContent('Norte');
     expect(dd('Estado')).toHaveTextContent('Activa');
@@ -66,7 +69,10 @@ describe('area detail: data', () => {
   it('shows the not-found state for an unknown area, and an error with retry', async () => {
     const view = await renderApp({ path: '/plantilla/areas/no-existe' });
     await screen.findByRole('heading', { name: 'Área no encontrada' });
-    expect(screen.getByRole('link', { name: 'Volver a áreas' })).toHaveAttribute('href', '/plantilla/areas');
+    expect(screen.getByRole('link', { name: 'Volver a áreas' })).toHaveAttribute(
+      'href',
+      '/plantilla/areas',
+    );
     view.unmount();
     const api = createMockApi();
     api.controls.failNext('getArea', 500);
@@ -108,8 +114,14 @@ describe('area detail: data', () => {
 describe('area detail: actions by permission', () => {
   it('offers every action to an administrator on an active area', async () => {
     await open('area-norte-mty');
-    expect(screen.getByRole('link', { name: 'Editar' })).toHaveAttribute('href', '/plantilla/areas/area-norte-mty/editar');
-    expect(screen.getByRole('link', { name: 'Mover' })).toHaveAttribute('href', '/plantilla/areas/area-norte-mty/mover');
+    expect(screen.getByRole('link', { name: 'Editar' })).toHaveAttribute(
+      'href',
+      '/plantilla/areas/area-norte-mty/editar',
+    );
+    expect(screen.getByRole('link', { name: 'Mover' })).toHaveAttribute(
+      'href',
+      '/plantilla/areas/area-norte-mty/mover',
+    );
     expect(screen.getByRole('link', { name: 'Nueva sub-área' })).toHaveAttribute(
       'href',
       '/plantilla/areas/nueva?padre=area-norte-mty',
@@ -185,7 +197,9 @@ describe('area detail: history', () => {
     api.controls.failNext('areaHistory', 500);
     click('Cargar más historial');
     expect(await screen.findByText('No pudimos cargar más historial.')).toBeInTheDocument();
-    expect(within(screen.getByRole('list', { name: 'Línea de tiempo' })).getAllByRole('listitem')).toHaveLength(25);
+    expect(
+      within(screen.getByRole('list', { name: 'Línea de tiempo' })).getAllByRole('listitem'),
+    ).toHaveLength(25);
     click('Cargar más historial');
     await waitFor(() => expect(screen.queryByText('No pudimos cargar más historial.')).toBeNull());
   });
@@ -305,7 +319,9 @@ describe('area detail: deactivate', () => {
     const api = createMockApi({ vehicles: [makeVehicle({ areaId: 'area-sur-mer' })] });
     const dialog = await openDeactivate(api, 'area-sur-mer', 'Desactivar el área Mérida');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Desactivar área' }));
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent(/vehículos activos asignados/);
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      /vehículos activos asignados/,
+    );
   });
 
   it('names people as the blocker even when they were assigned after the page loaded', async () => {
@@ -313,7 +329,9 @@ describe('area detail: deactivate', () => {
     const dialog = await openDeactivate(api, 'area-sur-mer', 'Desactivar el área Mérida');
     api.controls.setAreaPeople('area-sur-mer', 3);
     fireEvent.click(within(dialog).getByRole('button', { name: 'Desactivar área' }));
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent(/personas activas asignadas/);
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      /personas activas asignadas/,
+    );
   });
 
   it('reports a version conflict and reloads the current data on request', async () => {
@@ -321,7 +339,9 @@ describe('area detail: deactivate', () => {
     const dialog = await openDeactivate(api, 'area-sur-mer', 'Desactivar el área Mérida');
     api.controls.changeAreaExternally('area-sur-mer', { name: 'Mérida y Cancún' });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Desactivar área' }));
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Otra persona modificó esta área');
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'Otra persona modificó esta área',
+    );
     fireEvent.click(within(dialog).getByRole('button', { name: 'Recargar datos' }));
     await screen.findByRole('heading', { name: 'Mérida y Cancún', level: 1 });
     expect(screen.queryByRole('dialog')).toBeNull();
@@ -355,14 +375,18 @@ describe('area detail: activate', () => {
     await open('area-mty-guadalupe', { api });
     fireEvent.click(screen.getByRole('button', { name: 'Activar' }));
     const dialog = await confirmDialog('Activar el área Base Guadalupe');
-    expect(within(dialog).getByRole('button', { name: 'Activar área' }).className).toMatch(/colorPrimary/);
+    expect(within(dialog).getByRole('button', { name: 'Activar área' }).className).toMatch(
+      /colorPrimary/,
+    );
     fireEvent.click(within(dialog).getByRole('button', { name: 'Activar área' }));
     expect(await screen.findByText('Área activada.')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Editar' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Desactivar' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Área inactiva' })).toBeNull();
     // The sub-area table of the parent is not affected; this area is back in the tree.
-    expect(api.controls.areas().find((area) => area.id === 'area-mty-guadalupe')?.active).toBe(true);
+    expect(api.controls.areas().find((area) => area.id === 'area-mty-guadalupe')?.active).toBe(
+      true,
+    );
   });
 
   it('explains that the parent must be active first (422 invalid_hierarchy)', async () => {
@@ -384,7 +408,9 @@ describe('area detail: activate', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Activar' }));
     const dialog = await confirmDialog('Activar el área Base Guadalupe');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Activar área' }));
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Otra persona modificó esta área');
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'Otra persona modificó esta área',
+    );
   });
 
   it('is refused for an administrator-less role by the server even if the button were reached (403)', async () => {
@@ -394,6 +420,8 @@ describe('area detail: activate', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Activar' }));
     const dialog = await confirmDialog('Activar el área Base Guadalupe');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Activar área' }));
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent(/No tienes permiso para activar/);
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      /No tienes permiso para activar/,
+    );
   });
 });
