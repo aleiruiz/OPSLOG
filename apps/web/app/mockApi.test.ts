@@ -88,7 +88,7 @@ describe('mock auth port', () => {
 
     const api = await signedIn('viewer');
     expect((await api.auth.getSession()).ok).toBe(true);
-    api.controls.setUserStatus('user-viewer', 'suspended');
+    api.controls.setUserStatus('user-viewer', 'inactive');
     expect(await api.auth.getSession()).toMatchObject({
       ok: false,
       error: { status: 401, code: 'session_expired' },
