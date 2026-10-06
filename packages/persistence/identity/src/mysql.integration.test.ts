@@ -624,6 +624,16 @@ suite('persistent identity store on MySQL', () => {
         blocked = Number(waits[0]?.n);
         if (blocked === 0) await new Promise((resolve) => setTimeout(resolve, 25));
       }
+      if (blocked === 0) {
+        // Self-describing failure: what MySQL saw and how far the waiting operation got.
+        const transactions = await rows(
+          'SELECT trx_state, trx_query FROM information_schema.INNODB_TRX',
+        );
+        const locks = await rows(
+          'SELECT object_name, lock_type, lock_mode, lock_status FROM performance_schema.data_locks',
+        );
+        expect({ finished, failure: summary(failure), transactions, locks }).toBeNull();
+      }
       expect(blocked).toBeGreaterThan(0);
       expect(finished).toBe(false);
       release();
