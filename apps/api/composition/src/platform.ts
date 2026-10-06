@@ -30,6 +30,12 @@ import {
   type DocumentStore,
 } from '../../../../packages/domain/documents/src/index.js';
 import {
+  AssignmentError,
+  AssignmentService,
+  InMemoryAssignmentStore,
+  type AssignmentStore,
+} from '../../../../packages/domain/assignments/src/index.js';
+import {
   PolicyError,
   PolicyService,
   InMemoryPolicyStore,
@@ -107,6 +113,7 @@ import {
 import { InMemoryTenantStore } from './tenancy.js';
 import { AreasApi } from './areas.js';
 import { DocumentsApi } from './documents.js';
+import { AssignmentsApi } from './assignments.js';
 import { InsuranceApi } from './insurance.js';
 import { EmployeesApi } from './employees.js';
 import { VehiclesApi } from './vehicles.js';
@@ -240,6 +247,8 @@ export interface PlatformAdapters {
   readonly documents?: DocumentStore;
   /** Persistent insurance policy store (the TypeORM adapter of `packages/persistence/insurance`); in-memory by default. */
   readonly insurance?: PolicyStore;
+  /** Persistent vehicle assignment store (the TypeORM adapter of `packages/persistence/assignments`); in-memory by default. */
+  readonly assignments?: AssignmentStore;
   /**
    * Personal-data protection (SPECS D23): envelope encryption plus blind indexes. Defaults to the
    * local development KMS with a random per-process key, which refuses production-mode
@@ -344,6 +353,7 @@ export class Platform {
   public readonly employees: EmployeesApi;
   public readonly documents: DocumentsApi;
   public readonly insurance: InsuranceApi;
+  public readonly assignments: AssignmentsApi;
   public readonly access: AccessDirectory;
   public readonly tenants: InMemoryTenantStore;
   public readonly audit: AuditStore;
@@ -537,6 +547,56 @@ export class Platform {
         (await this.access.resolvePermissions(context)).includes(permission),
       audit: (context, action, entityId, correlationId) =>
         this.auditNow(this.userActor(context), action, 'insurance_policy', entityId, correlationId),
+    });
+    this.assignments = new AssignmentsApi({
+      service: new AssignmentService(adapters.assignments ?? new InMemoryAssignmentStore(), {
+        now: this.now,
+        // BR-014: the vehicle must be live and neither inactive nor decommissioned, and the
+        // employee a driver that is active and not archived, both of the same tenant. Unknown,
+        // foreign and ineligible ones are indistinguishable (no tenant oracle). Best effort
+        // (check, then act): see the task document.
+        vehicles: {
+          assertAssignable: async (tenantId, vehicleId) => {
+            const found = await vehicleService.get(tenantId, vehicleId).catch((error: unknown) => {
+              if (error instanceof VehicleError && error.code === 'not_found') return null;
+              throw error;
+            });
+            if (
+              found === null ||
+              found.archivedAt !== null ||
+              found.status === 'inactive' ||
+              found.status === 'decommissioned'
+            )
+              throw new AssignmentError('invalid_vehicle', 'vehicle_id');
+          },
+        },
+        employees: {
+          assertAssignable: async (tenantId, employeeId) => {
+            const found = await employeeService
+              .get(tenantId, employeeId)
+              .catch((error: unknown) => {
+                if (error instanceof EmployeeError && error.code === 'not_found') return null;
+                throw error;
+              });
+            if (
+              found === null ||
+              found.archivedAt !== null ||
+              found.kind !== 'driver' ||
+              found.status !== 'active'
+            )
+              throw new AssignmentError('invalid_employee', 'employee_id');
+          },
+        },
+      }),
+      authorize: (token, correlationId, required) => this.authorize(token, correlationId, required),
+      audit: (context, action, entityId, correlationId) =>
+        this.auditNow(
+          this.userActor(context),
+          action,
+          'vehicle_assignment',
+          entityId,
+          correlationId,
+        ),
     });
     this.areas = new AreasApi({
       service: areaService,

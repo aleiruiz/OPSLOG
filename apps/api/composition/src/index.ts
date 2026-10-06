@@ -1,5 +1,6 @@
 export * from './access.js';
 export * from './areas.js';
+export * from './assignments.js';
 export * from './directory.js';
 export * from './documents.js';
 export * from './employees.js';
