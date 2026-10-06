@@ -79,6 +79,8 @@ importers:
 
   apps/api/auth: {}
 
+  apps/api/composition: {}
+
   apps/api/files: {}
 
   apps/api/tenants:
@@ -136,6 +138,8 @@ importers:
   apps/worker: {}
 
   apps/worker/base: {}
+
+  apps/worker/composition: {}
 
   packages/contracts:
     devDependencies:

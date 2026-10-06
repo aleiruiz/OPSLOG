@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "name": "opslog-platform-staging",
+  "environment": "staging",
+  "production": false,
+  "awsDeferred": true,
+  "realCloudCalls": false,
+  "data": "synthetic-only",
+  "services": [
+    { "name": "api", "composition": "apps/api/composition", "replicas": 1, "exposure": "internal" },
+    {
+      "name": "worker",
+      "composition": "apps/worker/composition",
+      "replicas": 1,
+      "exposure": "none"
+    }
+  ],
+  "adapters": {
+    "identityStore": "in-memory",
+    "tenantStore": "in-memory",
+    "objectStorage": "in-memory",
+    "scanner": "synthetic",
+    "outbox": "in-memory",
+    "audit": "in-memory",
+    "oidcVerifier": "synthetic"
+  },
+  "requiredEnv": ["OPSLOG_ENV"],
+  "forbiddenEnv": [
+    "OPSLOG_ALLOW_PRODUCTION",
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_SESSION_TOKEN",
+    "AWS_PROFILE",
+    "AWS_ROLE_ARN",
+    "AWS_WEB_IDENTITY_TOKEN_FILE",
+    "AWS_CONTAINER_CREDENTIALS_*"
+  ],
+  "guards": [
+    "Staging only: this descriptor is not production and does not authorize a production deployment.",
+    "AWS is deferred (ADR-0002): no cloud resource, account, region, endpoint, role or credential is described here.",
+    "No real cloud calls: every adapter is in-memory or synthetic and state is lost on restart.",
+    "Synthetic data only: no real customer, employee, vehicle or document data."
+  ],
+  "pending": [
+    "persistent TypeORM auth adapter",
+    "OIDC verifier",
+    "BFF HTTP and CSRF",
+    "generated web client",
+    "real S3 and IAM"
+  ]
+}

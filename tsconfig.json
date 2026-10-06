@@ -16,6 +16,14 @@
     { "path": "./packages/domain/identity" },
     { "path": "./packages/platform/auth" },
     { "path": "./apps/api/auth" },
-    { "path": "./apps/web" }
+    { "path": "./apps/web" },
+    { "path": "./packages/domain/files" },
+    { "path": "./packages/platform/files" },
+    { "path": "./apps/api/files" },
+    { "path": "./infra/storage" },
+    { "path": "./infra/runtime" },
+    { "path": "./apps/worker/composition" },
+    { "path": "./apps/api/composition" },
+    { "path": "./tests/integration/platform" }
   ]
 }

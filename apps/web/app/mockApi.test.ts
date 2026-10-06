@@ -76,6 +76,98 @@ describe('mock auth port', () => {
     });
   });
 
+  it('rejects login and session for users whose status is not active', async () => {
+    const admin = await signedIn();
+    await admin.users.deactivateUser('user-viewer', 'baja');
+    await admin.auth.logout();
+    expect(await admin.auth.login(demoCredentials.viewer)).toMatchObject({
+      ok: false,
+      error: { status: 401, code: 'invalid_credentials' },
+    });
+    expect(admin.controls.isSignedIn()).toBe(false);
+
+    const api = await signedIn('viewer');
+    expect((await api.auth.getSession()).ok).toBe(true);
+    api.controls.setUserStatus('user-viewer', 'inactive');
+    expect(await api.auth.getSession()).toMatchObject({
+      ok: false,
+      error: { status: 401, code: 'session_expired' },
+    });
+    expect(api.controls.isSignedIn()).toBe(false);
+    await api.auth.logout();
+    expect((await api.auth.login(demoCredentials.viewer)).ok).toBe(false);
+    api.controls.setUserStatus('user-viewer', 'active');
+    expect((await api.auth.login(demoCredentials.viewer)).ok).toBe(true);
+    api.controls.setUserStatus('nadie', 'active');
+  });
+
+  it('stores the accepted password so the invitee can log in after signing out', async () => {
+    const api = createMockApi();
+    const password = 'contrasena-de-invitada-1';
+    expect(
+      (await api.auth.acceptInvitation(demoInvitations.valid, { displayName: 'Ana', password })).ok,
+    ).toBe(true);
+    await api.auth.logout();
+    expect(
+      await api.auth.login({ email: 'invitada@demo.opslog.test', password: 'otra-contrasena-12' }),
+    ).toMatchObject({ ok: false, error: { status: 401 } });
+    expect((await api.auth.login({ email: 'invitada@demo.opslog.test', password })).ok).toBe(true);
+  });
+
+  it('rejects a used invitation token and keeps the first account and password', async () => {
+    const api = createMockApi();
+    const first = 'primera-contrasena-1';
+    const weak = await api.auth.acceptInvitation(demoInvitations.valid, {
+      displayName: 'Ana',
+      password: 'corta',
+    });
+    expect(weak.ok).toBe(false);
+    expect(
+      (
+        await api.auth.acceptInvitation(demoInvitations.valid, {
+          displayName: 'Ana',
+          password: first,
+        })
+      ).ok,
+    ).toBe(true);
+    await api.auth.logout();
+    const replay = await api.auth.acceptInvitation(demoInvitations.valid, {
+      displayName: 'Intruso',
+      password: 'segunda-contrasena-2',
+    });
+    expect(replay).toMatchObject({
+      ok: false,
+      error: { status: 404, code: 'invitation_unavailable' },
+    });
+    expect(api.controls.isSignedIn()).toBe(false);
+    expect(
+      (
+        await api.auth.login({
+          email: 'invitada@demo.opslog.test',
+          password: 'segunda-contrasena-2',
+        })
+      ).ok,
+    ).toBe(false);
+    expect((await api.auth.login({ email: 'invitada@demo.opslog.test', password: first })).ok).toBe(
+      true,
+    );
+    await api.auth.logout();
+    await api.auth.login(demoCredentials.admin);
+    const listed = await api.users.listUsers({ search: 'invitada' });
+    expect(listed.ok && listed.value.items).toHaveLength(1);
+  });
+
+  it('does not replace an existing account with the same email', async () => {
+    const api = await signedIn();
+    await api.users.inviteUser({ email: 'invitada@demo.opslog.test', roleId: 'role-viewer' });
+    await api.auth.logout();
+    const result = await api.auth.acceptInvitation(demoInvitations.valid, {
+      displayName: 'Ana',
+      password: 'primera-contrasena-1',
+    });
+    expect(result.ok).toBe(false);
+  });
+
   it('enforces the 12 character minimum when accepting an invitation', async () => {
     const api = createMockApi();
     const weak = await api.auth.acceptInvitation(demoInvitations.valid, {

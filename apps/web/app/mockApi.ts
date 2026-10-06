@@ -40,6 +40,8 @@ export interface MockControls {
   /** Makes the next call of `operation` fail with the given status. */
   failNext(operation: MockOperation, status?: ApiError['status']): void;
   isSignedIn(): boolean;
+  /** Simulates a server-side status change of a user (e.g. suspension) without a UI path. */
+  setUserStatus(userId: string, status: UserSummary['status']): void;
   /** Server-side drafts of the current user, for assertions. */
   storedDrafts(): Readonly<Record<string, DraftValues>>;
 }
@@ -173,6 +175,11 @@ export function createMockApi(): MockApi {
     mfa: 'optional',
     sessionIdleHours: 8,
   };
+  // Mock credential store (email -> password). Only active users may authenticate.
+  const usedInvitations = new Set<string>();
+  const credentials = new Map<string, string>(
+    Object.values(demoCredentials).map((item) => [item.email, item.password]),
+  );
   const roles: RoleSummary[] = systemRoles.map((role) => ({ ...role }));
   const users: UserSummary[] = [
     ...people.map((person) => ({
@@ -199,7 +206,8 @@ export function createMockApi(): MockApi {
   function roleName(roleId: string): string {
     return roles.find((role) => role.id === roleId)?.name ?? roleId;
   }
-  const currentUser = () => users.find((user) => user.id === signedInAs);
+  const currentUser = () =>
+    users.find((user) => user.id === signedInAs && user.status === 'active');
   const sessionFor = (userId: string): SessionInfo => {
     const user = users.find((item) => item.id === userId) as UserSummary;
     const role = roles.find((item) => item.id === user.roleId) as RoleSummary;
@@ -251,6 +259,11 @@ export function createMockApi(): MockApi {
       failures.set(operation, status);
     },
     isSignedIn: () => signedInAs !== null,
+    setUserStatus: (userId, status) => {
+      const index = users.findIndex((user) => user.id === userId);
+      const target = users[index];
+      if (target) users[index] = { ...target, status };
+    },
     storedDrafts: () =>
       Object.fromEntries(
         [...drafts.entries()]
@@ -262,16 +275,19 @@ export function createMockApi(): MockApi {
   return {
     controls,
     auth: {
-      getSession: () => guarded('getSession', null, () => ok(sessionFor(signedInAs as string))),
+      getSession: () =>
+        guarded('getSession', null, () => ok(sessionFor(signedInAs as string))).then((result) => {
+          // An inactive user's session is gone, consistent with the 401.
+          if (!result.ok && result.error.status === 401) signedInAs = null;
+          return result;
+        }),
       login: (input) => {
         const failed = injected('login');
         if (failed) return Promise.resolve(failed);
-        const match = Object.values(demoCredentials).find(
-          (item) =>
-            item.email === input.email.trim().toLowerCase() && item.password === input.password,
-        );
-        const user = match && users.find((item) => item.email === match.email);
-        if (!user)
+        const email = input.email.trim().toLowerCase();
+        const user = users.find((item) => item.email === email);
+        const valid = credentials.has(email) && credentials.get(email) === input.password;
+        if (!user || user.status !== 'active' || !valid)
           return Promise.resolve(
             apiError(401, 'invalid_credentials', 'El correo o la contraseña no son correctos.'),
           );
@@ -295,7 +311,8 @@ export function createMockApi(): MockApi {
       acceptInvitation: (token, input) => {
         const failed = injected('acceptInvitation');
         if (failed) return Promise.resolve(failed);
-        if (token !== demoInvitations.valid) return Promise.resolve(invitationUnavailable());
+        if (token !== demoInvitations.valid || usedInvitations.has(token))
+          return Promise.resolve(invitationUnavailable());
         if (input.password.length < 12)
           return Promise.resolve(
             apiError(422, 'weak_password', 'La contraseña no cumple los requisitos.', [
@@ -314,7 +331,12 @@ export function createMockApi(): MockApi {
           roleLabel: roleName('role-fleet'),
           status: 'active',
         };
+        // Never replace an existing account.
+        if (users.some((item) => item.email === user.email))
+          return Promise.resolve(invitationUnavailable());
         users.push(user);
+        usedInvitations.add(token);
+        credentials.set(user.email, input.password);
         signedInAs = user.id;
         return Promise.resolve(ok(sessionFor(user.id)));
       },
