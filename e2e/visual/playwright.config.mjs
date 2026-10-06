@@ -2,17 +2,15 @@ import { defineConfig } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
 
 const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
-const port = 6007;
+const port = Number(process.env.STORYBOOK_STATIC_PORT ?? 6007); // serve.mjs reads the same variable
 
 // Pixel-based visual regression of every Storybook story (SPECS §9.1, ADR-0010). Determinism: fixed
 // viewport/DPR, reduced motion, Playwright-disabled animations, bundled IBM Plex fonts (waited for), fixed
 // locale/timezone/colour profile and no font hinting or LCD antialiasing. Run `pnpm storybook:build` first
 // (the `test:visual` script does).
-// Tolerance: the committed baselines were generated with Chromium 1194 (local /opt/pw-browsers) while CI
-// installs the build pinned by Playwright 1.55.1 (1193); their antialiasing differs by ~1% of pixels on the
-// densest story. The per-pixel colour threshold stays strict (0.1) and the allowed differing ratio is 2%.
-// When feasible, regenerate the baselines with the CI browser version (`pnpm test:visual:update`) and tighten
-// maxDiffPixelRatio again.
+// Baselines must be generated with the Chromium build pinned by @playwright/test (1.56.x -> 1194, the one CI
+// installs with `playwright install`); regenerate them with `pnpm test:visual:update` after any Playwright bump.
+// Tolerance is therefore tight: a strict per-pixel threshold and at most 0.2% differing pixels.
 export default defineConfig({
   testDir: '.',
   testMatch: '*.spec.ts',
@@ -53,9 +51,10 @@ export default defineConfig({
   },
   webServer: {
     command: 'node e2e/visual/serve.mjs',
+    env: { STORYBOOK_STATIC_PORT: String(port) },
     cwd: repositoryRoot,
     url: `http://127.0.0.1:${port}/index.json`,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
   },
   projects: [
     { name: 'desktop', use: { viewport: { width: 1280, height: 800 } } },

@@ -26,17 +26,28 @@ for (const id of stories) {
     await page.goto(`/iframe.html?id=${encodeURIComponent(id)}&viewMode=story`);
     await expect(page.locator('#storybook-root > *').first()).toBeVisible();
     await expect(page.locator('body')).not.toHaveClass(/sb-show-errordisplay/);
-    const fontsReady = await page.evaluate(async () => {
+    const fonts = await page.evaluate(async () => {
       const faces = [
         '400 14px "IBM Plex Sans"',
         '600 14px "IBM Plex Sans"',
         '400 14px "IBM Plex Mono"',
       ];
-      await Promise.all(faces.map((face) => document.fonts.load(face)));
+      const loaded = await Promise.all(faces.map((face) => document.fonts.load(face)));
       await document.fonts.ready;
-      return faces.every((face) => document.fonts.check(face));
+      return loaded.map((list, index) => ({
+        face: faces[index],
+        count: list.length,
+        statuses: list.map((font) => font.status),
+      }));
     });
-    expect(fontsReady, 'bundled IBM Plex fonts are loaded').toBe(true);
+    for (const { face, count, statuses } of fonts) {
+      expect(count, `${face} matches a bundled font face`).toBeGreaterThan(0);
+      expect(statuses, `${face} is loaded`).not.toContain('error');
+      expect(
+        statuses.every((status) => status === 'loaded'),
+        `${face} is loaded`,
+      ).toBe(true);
+    }
     await page.addStyleTag({
       content: '*,*::before,*::after{animation:none!important;transition:none!important}',
     });

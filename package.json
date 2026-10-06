@@ -28,7 +28,7 @@
     "@emotion/react": "11.14.0",
     "@emotion/styled": "11.14.0",
     "@mui/material": "6.4.12",
-    "@playwright/test": "1.55.1",
+    "@playwright/test": "1.56.1",
     "@types/node": "22.15.21",
     "@types/react": "19.1.2",
     "@types/react-dom": "19.1.2",
