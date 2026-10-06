@@ -2236,6 +2236,32 @@ describe('schema definitions', () => {
       expect(mapped, schema.options.name).toEqual(migrated.get(schema.options.tableName!));
     }
   });
+
+  it('builds TypeORM metadata for every entity and hydrates the declared classes and primary keys', async () => {
+    const dataSource = new DataSource({
+      type: 'mysql',
+      database: 'opslog_metadata_only',
+      entities: [...CONTROL_PLANE_ENTITIES, ...TENANT_DATA_ENTITIES],
+    });
+    // Metadata validation (unknown column types, duplicate primary keys, bad indices) needs no connection.
+    await (dataSource as unknown as { buildMetadatas(): Promise<void> }).buildMetadatas();
+    const expectedPrimaryKeys = new Map<unknown, string[]>([
+      [TenantEntity, ['id']],
+      [TenantDatabaseLocationEntity, ['tenantId']],
+      [MembershipProjectionEntity, ['tenantId', 'subjectId']],
+      [TenantSessionEntity, ['sessionIdHash']],
+      [ProvisioningJobEntity, ['idempotencyKey']],
+      [TenantDataRecordEntity, ['id']],
+    ]);
+    expect(dataSource.entityMetadatas).toHaveLength(expectedPrimaryKeys.size);
+    for (const metadata of dataSource.entityMetadatas) {
+      expect(metadata.create(), metadata.tableName).toBeInstanceOf(metadata.target);
+      expect(
+        metadata.primaryColumns.map((column) => column.propertyName),
+        metadata.tableName,
+      ).toEqual(expectedPrimaryKeys.get(metadata.target));
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -2308,6 +2334,19 @@ describe('TenantDataSourceFactory validation and failure paths', () => {
           fakeDataSource,
         ),
     ).toThrow('invalid tenant data source pool limits');
+  });
+
+  it('uses a real TypeORM data source by default and discards it when the connection fails', async () => {
+    const context = contextFor();
+    // Port 1 on loopback refuses connections, so the default creator is exercised without a server.
+    const factory = new TenantDataSourceFactory(
+      { host: '127.0.0.1', port: 1 },
+      credentialsFor(context),
+    );
+    await expect(factory.acquire(context)).rejects.toThrow();
+    expect(factory.poolSize).toBe(0);
+    expect(factory.activeLeaseCount).toBe(0);
+    await factory.close();
   });
 
   it('accepts a zero-length queue', () => {
