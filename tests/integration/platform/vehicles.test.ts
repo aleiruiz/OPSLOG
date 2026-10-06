@@ -401,10 +401,9 @@ describe('business rules through the platform', () => {
     ).toMatchObject({
       code: 'immutable',
     });
-    // Failed operations were not audited; an equal odometer reading (a no-op) still is a recorded reading.
+    // Failed operations were not audited, and neither was the equal odometer reading (a no-op).
     expect(auditOf(world, a.tenantId).map((e) => e.action)).toEqual([
       'vehicle.created',
-      'vehicle.odometer_recorded',
       'vehicle.status_changed',
       'vehicle.archived',
     ]);

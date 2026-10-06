@@ -14,8 +14,7 @@ import {
 
 /**
  * The BFF and the platform on the real MySQL vehicles store (CI: mysql service,
- * OPSLOG_TEST_MYSQL_ADMIN_URL; locally skipped when unset, a hard failure in CI). Two stores on
- * their own pools stand in for two API processes. Only synthetic data.
+ * OPSLOG_TEST_MYSQL_ADMIN_URL; locally skipped when unset, a hard failure in CI). One process and one pool: two signed-in sessions race over the same database. Only synthetic data.
  */
 const suite = adminUrl ? describe : describe.skip;
 
@@ -34,7 +33,6 @@ const input = (over: Record<string, unknown> = {}) => ({
 suite('BFF on a real MySQL vehicles store', () => {
   let database: VehiclesDatabase;
   let world: BffWorld;
-  let secondWorld: BffWorld;
   let adminA: Browser;
   let adminB: Browser;
   let viewerA: Browser;
@@ -46,7 +44,7 @@ suite('BFF on a real MySQL vehicles store', () => {
   beforeAll(async () => {
     database = await startVehiclesDatabase('plat');
     const store = new TypeOrmVehicleStore(await database.openRuntime());
-    // One shared tenant directory, two "processes" (own pool, own handler) over the same database.
+    // One process, one pool; the concurrency tests use two sessions of it.
     const tenants = new InMemoryTenantStore();
     world = createBffWorld({ adapters: { tenants, vehicles: store } });
     tenantA = (await world.tenant('Empresa Alfa', 'subject-admin-a')).tenantId;
@@ -57,10 +55,9 @@ suite('BFF on a real MySQL vehicles store', () => {
     adminB = await world.loginAs('subject-admin-b');
     viewerA = await world.loginAs('subject-viewer-a');
     editorA = await world.loginAs('subject-editor-a');
-    // Second process: same sessions are not shared, so it signs in on its own.
-    secondWorld = world;
-    adminA2 = await secondWorld.loginAs('subject-admin-a');
-  });
+    // A second session of the same administrator (same process, same pool).
+    adminA2 = await world.loginAs('subject-admin-a');
+  }, 120_000);
 
   afterEach(async () => {
     await database.admin.query('DELETE FROM opslog_vehicle_status_history');
@@ -70,7 +67,7 @@ suite('BFF on a real MySQL vehicles store', () => {
   afterAll(async () => {
     world?.dispose();
     await database?.close();
-  });
+  }, 60_000);
 
   it('runs the whole lifecycle and stores the company on every row', async () => {
     const created = await adminA.post('/api/vehicles', { json: input() });

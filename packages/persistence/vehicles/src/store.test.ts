@@ -176,6 +176,18 @@ describe('uniqueness', () => {
     expect(db.committed(VehicleEntity)).toHaveLength(1);
     expect(db.committed(VehicleStatusEntryEntity)).toHaveLength(1);
   });
+  it('names only keys taken in the same company, never one that exists in another', async () => {
+    const { store } = setup();
+    const other = vehicle(B, 'o1', { economicNumber: 'U-001', plate: 'ZZ1', vin: null });
+    const mine = vehicle(A, 'v1', { economicNumber: 'U-002', plate: 'AB123C', vin: null });
+    await store.insert(other, entryOf(other));
+    await store.insert(mine, entryOf(mine));
+    // The economic number exists only in B: the same-company plate clash must be named.
+    const candidate = vehicle(A, 'v2', { economicNumber: 'U-001', plate: 'AB-123C', vin: null });
+    expect(await rejection(store.insert(candidate, entryOf(candidate)))).toEqual(
+      new VehicleError('duplicate', 'plate'),
+    );
+  });
   it('allows the same keys in another company and several vehicles without a VIN', async () => {
     const { store } = setup();
     for (const [tenant, id, n, plate] of [

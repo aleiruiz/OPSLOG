@@ -176,11 +176,12 @@ export class VehiclesApi {
     permissions: readonly Permission[],
     action: VehicleAuditAction,
     work: (context: TenantContext) => Promise<Vehicle>,
+    unchanged: (vehicle: Vehicle) => boolean = () => false,
   ): Promise<PlatformResponse<VehicleView>> {
     try {
       const context = await this.deps.authorize(token, correlationId, permissions);
       const vehicle = await work(context);
-      this.deps.audit(context, action, vehicle.id, correlationId);
+      if (!unchanged(vehicle)) this.deps.audit(context, action, vehicle.id, correlationId);
       return { ok: true, value: view(vehicle) };
     } catch (error) {
       return failure(error);
@@ -242,6 +243,8 @@ export class VehiclesApi {
       VEHICLE_PERMISSIONS.change,
       'vehicle.odometer_recorded',
       (c) => this.deps.service.recordOdometer(c.tenantId, id, version, odometerKm),
+      // An equal reading is a no-op: the version did not move, so nothing is audited.
+      (vehicle) => vehicle.version === version,
     );
   }
 
