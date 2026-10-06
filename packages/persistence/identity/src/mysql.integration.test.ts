@@ -9,7 +9,7 @@ import {
   createIdentityMigrationDataSource,
   runIdentityMigrations,
 } from './data-source.js';
-import { IdentityStoreError, LastAdministratorError } from './errors.js';
+import { LastAdministratorError } from './errors.js';
 import { IDENTITY_CHECKS, IDENTITY_MIGRATION_VERSION } from './migrations.js';
 import { BINARY_COLLATION, IDENTITY_TABLES } from './entities.js';
 import { ADMIN_ROLE, TypeOrmIdentityStore, type StoreErrorEvent } from './store.js';
@@ -150,6 +150,12 @@ suite('persistent identity store on MySQL', () => {
       await admin.end();
     }
   }, 60_000);
+
+  /** Data-free view of a thrown value, for assertions whose failure must explain itself. */
+  function summary(error: unknown): Record<string, unknown> {
+    const e = error as { code?: unknown; errno?: unknown; origin?: unknown; frames?: unknown };
+    return { code: e?.code, errno: e?.errno, origin: e?.origin, frames: e?.frames };
+  }
 
   describe('schema', () => {
     it('is created, reversible and tracked in its own migrations table', async () => {
@@ -654,9 +660,12 @@ suite('persistent identity store on MySQL', () => {
       // A session belongs to one tenant: no membership of the other tenant, no session there (FK).
       const session = await h.login(adminOne.identityId, tenantOne);
       expect((await h.service.authenticate(session.token, 'c')).tenantId).toBe(tenantOne);
-      await expect(h.login(adminOne.identityId, tenantTwo)).rejects.toMatchObject({
-        code: 'unauthorized',
-      });
+      const crossTenant = await h.login(adminOne.identityId, tenantTwo).then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+      // Compared whole so a failure shows the code, driver errno, origin and frames at once.
+      expect(summary(crossTenant)).toEqual({ code: 'unauthorized' });
       expect(await storeA.findMembership(tenantTwo, adminOne.identityId)).toBeNull();
 
       // Removing the shared user from tenant one leaves their tenant-two membership intact.
@@ -763,7 +772,12 @@ suite('persistent identity store on MySQL', () => {
         () => null,
         (caught: unknown) => caught,
       );
-      expect(failure).toBeInstanceOf(IdentityStoreError);
+      expect(summary(failure)).toEqual({
+        code: 'unavailable',
+        errno: null,
+        origin: null,
+        frames: [],
+      });
       expect((failure as Error).message).not.toContain(subject);
       expect(JSON.stringify(events)).not.toContain('example.test');
       expect(events.at(-1)).toMatchObject({ operation: 'findExternal', code: 'unavailable' });
