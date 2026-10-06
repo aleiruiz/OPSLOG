@@ -1,0 +1,31 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "allowSyntheticDefaultImports": true,
+    "baseUrl": "../..",
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "paths": {
+      "@opslog/ui": ["packages/ui/src/index.ts"],
+      "@opslog/contracts": ["packages/contracts/src/index.ts"]
+    },
+    "rootDir": "../..",
+    "types": ["node", "react", "react-dom"]
+  },
+  "include": [
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "auth/**/*.ts",
+    "auth/**/*.tsx",
+    "settings/**/*.ts",
+    "settings/**/*.tsx",
+    "vitest.config.ts",
+    "../../packages/ui/src/**/*.ts",
+    "../../packages/ui/src/**/*.tsx",
+    "../../packages/contracts/src/index.ts"
+  ],
+  "exclude": ["../../packages/ui/src/**/*.stories.tsx", "../../packages/ui/src/**/*.test.tsx"]
+}

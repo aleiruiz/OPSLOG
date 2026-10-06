@@ -1,5 +1,27 @@
 {
   "name": "@opslog/web",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "test:unit": "vitest run --coverage.enabled --coverage.thresholds.lines=90 --coverage.thresholds.functions=90 --coverage.thresholds.statements=90 --coverage.thresholds.branches=85",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint . --max-warnings 0"
+  },
+  "dependencies": {
+    "@emotion/react": "11.14.0",
+    "@emotion/styled": "11.14.0",
+    "@mui/material": "6.4.12",
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "6.6.3",
+    "@testing-library/react": "16.2.0",
+    "@types/react": "19.1.2",
+    "@types/react-dom": "19.1.2",
+    "@vitest/coverage-v8": "3.2.6",
+    "axe-core": "4.10.2",
+    "jsdom": "26.0.0",
+    "vitest": "3.2.6"
+  }
 }

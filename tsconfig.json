@@ -15,6 +15,7 @@
     { "path": "./tests/orchestrator" },
     { "path": "./packages/domain/identity" },
     { "path": "./packages/platform/auth" },
-    { "path": "./apps/api/auth" }
+    { "path": "./apps/api/auth" },
+    { "path": "./apps/web" }
   ]
 }
