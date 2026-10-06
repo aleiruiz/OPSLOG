@@ -13,17 +13,21 @@ import {
   type Session,
 } from '../../../domain/identity/src/index.js';
 import {
+  IDENTITY_TABLES,
   ExternalIdentityEntity,
   IdentityEntity,
   InvitationEntity,
   MembershipEntity,
   RecoveryEntity,
   SessionEntity,
+  RoleEntity,
+  RolePermissionEntity,
   TenantLockEntity,
 } from './entities.js';
 import { IdentityStoreError, LastAdministratorError } from './errors.js';
 import {
   ADMIN_ROLE,
+  CUSTOM_ROLE_LIMITS,
   DEFAULT_ROLE,
   TypeOrmIdentityStore,
   isRoleName,
@@ -1122,5 +1126,225 @@ describe('error handling and privacy', () => {
     await store.revokeMembership(tenantA, a.identityId);
     expect(db.transactions).toBeGreaterThan(0);
     expect(new Set(db.isolations)).toEqual(new Set(['READ COMMITTED']));
+  });
+});
+
+describe('custom roles', () => {
+  const copy = (id: string, name: string, permissions: readonly string[] = ['view', 'create']) => ({
+    id,
+    name,
+    permissions,
+  });
+
+  it('stores a role with its permissions in order and lists roles oldest first', async () => {
+    const { store, join, clock, db } = setup();
+    await join(tenantA, 'admin-a', ADMIN_ROLE);
+    expect(await store.listCustomRoles(tenantA)).toEqual([]);
+    expect(await store.createCustomRole(tenantA, copy('custom-1', 'Regional'), 50)).toBe('created');
+    clock.advance(1000);
+    // Created later but sorts before alphabetically: order follows creation, not the id.
+    expect(
+      await store.createCustomRole(tenantA, copy('custom-0', ' Otro ', ['view_pii', 'view']), 50),
+    ).toBe('created');
+    expect(await store.listCustomRoles(tenantA)).toEqual([
+      { id: 'custom-1', name: 'Regional', permissions: ['view', 'create'] },
+      { id: 'custom-0', name: 'Otro', permissions: ['view_pii', 'view'] },
+    ]);
+    expect(await store.findCustomRole(tenantA, 'custom-0')).toEqual({
+      id: 'custom-0',
+      name: 'Otro',
+      permissions: ['view_pii', 'view'],
+    });
+    expect(db.committed(RoleEntity).map((row) => row.nameKey)).toEqual(['regional', 'otro']);
+    expect(db.committed(RolePermissionEntity)).toHaveLength(4);
+  });
+
+  it('orders roles created in the same instant by id and allows an empty permission set', async () => {
+    const { store, join } = setup();
+    await join(tenantA, 'admin-a', ADMIN_ROLE);
+    await store.createCustomRole(tenantA, copy('role-b', 'B', []), 50);
+    await store.createCustomRole(tenantA, copy('role-a', 'A', []), 50);
+    await store.createCustomRole(tenantA, copy('role-c', 'C', []), 50);
+    expect((await store.listCustomRoles(tenantA)).map((role) => role.id)).toEqual([
+      'role-a',
+      'role-b',
+      'role-c',
+    ]);
+    expect((await store.findCustomRole(tenantA, 'role-a'))?.permissions).toEqual([]);
+  });
+
+  it('keeps names unique per tenant, case-insensitively, and enforces the per-tenant limit', async () => {
+    const { store, join } = setup();
+    await join(tenantA, 'admin-a', ADMIN_ROLE);
+    await join(tenantB, 'admin-b', ADMIN_ROLE);
+    expect(await store.createCustomRole(tenantA, copy('r1', 'Regional'), 2)).toBe('created');
+    expect(await store.createCustomRole(tenantA, copy('r2', '  REGIONAL '), 2)).toBe('name_taken');
+    expect(await store.createCustomRole(tenantA, copy('r2', 'Otro'), 2)).toBe('created');
+    expect(await store.createCustomRole(tenantA, copy('r3', 'Tercero'), 2)).toBe('limit_reached');
+    // The limit is checked before the name, and neither leaks across tenants.
+    expect(await store.createCustomRole(tenantA, copy('r4', 'Regional'), 2)).toBe('limit_reached');
+    expect(await store.createCustomRole(tenantB, copy('r1', 'Regional'), 2)).toBe('created');
+    expect(await store.listCustomRoles(tenantA)).toHaveLength(2);
+    expect(await store.listCustomRoles(tenantB)).toHaveLength(1);
+  });
+
+  it('never shows a role to another tenant, even by id', async () => {
+    const { store, join } = setup();
+    await join(tenantA, 'admin-a', ADMIN_ROLE);
+    await join(tenantB, 'admin-b', ADMIN_ROLE);
+    await store.createCustomRole(tenantA, copy('secret', 'Solo A'), 50);
+    expect(await store.findCustomRole(tenantB, 'secret')).toBeNull();
+    expect(await store.listCustomRoles(tenantB)).toEqual([]);
+    expect(await store.findCustomRole(tenantA, 'unknown')).toBeNull();
+    expect(await store.findCustomRole('', 'secret')).toBeNull();
+    expect(await store.findCustomRole(tenantA, '')).toBeNull();
+    expect(await store.listCustomRoles('')).toEqual([]);
+    // The same role id can exist in two tenants without colliding.
+    expect(await store.createCustomRole(tenantB, copy('secret', 'Solo B', ['view']), 50)).toBe(
+      'created',
+    );
+    expect((await store.findCustomRole(tenantA, 'secret'))?.name).toBe('Solo A');
+    expect((await store.findCustomRole(tenantB, 'secret'))?.name).toBe('Solo B');
+  });
+
+  it('rejects malformed input before touching the database', async () => {
+    const { store, join, db } = setup();
+    await join(tenantA, 'admin-a', ADMIN_ROLE);
+    const statementsBefore = db.statements.length;
+    const tooMany = Array.from({ length: CUSTOM_ROLE_LIMITS.permissions + 1 }, (_, i) =>
+      i % 2 ? `p${'a'.repeat(i)}` : `q${'b'.repeat(i)}`,
+    );
+    const bad: [string, string, unknown, number][] = [
+      ['empty tenant', '', copy('r', 'N'), 50],
+      ['uppercase id', tenantA, copy('R', 'N'), 50],
+      ['id too long', tenantA, copy('r'.repeat(65), 'N'), 50],
+      ['blank name', tenantA, copy('r', '   '), 50],
+      ['long name', tenantA, copy('r', 'n'.repeat(CUSTOM_ROLE_LIMITS.nameLength + 1)), 50],
+      ['non-string name', tenantA, { id: 'r', name: 7, permissions: [] }, 50],
+      ['bad permission', tenantA, copy('r', 'N', ['View']), 50],
+      ['non-string permission', tenantA, copy('r', 'N', [7 as never]), 50],
+      ['duplicate permission', tenantA, copy('r', 'N', ['view', 'view']), 50],
+      ['too many permissions', tenantA, copy('r', 'N', tooMany), 50],
+      ['permissions not a list', tenantA, { id: 'r', name: 'N', permissions: 'view' }, 50],
+      ['zero limit', tenantA, copy('r', 'N'), 0],
+      ['fractional limit', tenantA, copy('r', 'N'), 1.5],
+    ];
+    for (const [label, tenant, role, limit] of bad)
+      await expect(
+        store.createCustomRole(tenant, role as never, limit),
+        label,
+      ).rejects.toMatchObject({ code: 'invalid_input' });
+    expect(db.statements).toHaveLength(statementsBefore);
+  });
+
+  it('answers not_found for a tenant without memberships and creates no lock row for it', async () => {
+    const { store, db } = setup();
+    await expect(store.createCustomRole('ghost', copy('r', 'N'), 50)).rejects.toMatchObject({
+      code: 'not_found',
+    });
+    expect(db.committed(TenantLockEntity)).toEqual([]);
+    expect(db.committed(RoleEntity)).toEqual([]);
+  });
+
+  it('serializes concurrent creations of one name and of the last free slot', async () => {
+    for (let round = 0; round < 10; round += 1) {
+      const { store, join, db } = setup();
+      await join(tenantA, `admin-${round}`, ADMIN_ROLE);
+      const sameName = await Promise.all(
+        ['x1', 'x2', 'x3'].map((id) => store.createCustomRole(tenantA, copy(id, 'Igual'), 50)),
+      );
+      expect(sameName.filter((outcome) => outcome === 'created')).toHaveLength(1);
+      expect(sameName.filter((outcome) => outcome === 'name_taken')).toHaveLength(2);
+      const slots = await Promise.all(
+        ['y1', 'y2', 'y3', 'y4'].map((id) => store.createCustomRole(tenantA, copy(id, id), 3)),
+      );
+      expect(slots.filter((outcome) => outcome === 'created')).toHaveLength(2);
+      expect(slots.filter((outcome) => outcome === 'limit_reached')).toHaveLength(2);
+      expect(await store.listCustomRoles(tenantA)).toHaveLength(3);
+      expect(db.deadlocks).toBe(0);
+    }
+  });
+
+  it('does not make creations of different tenants wait for each other', async () => {
+    const { store, join, db } = setup();
+    await join(tenantA, 'admin-a', ADMIN_ROLE);
+    await join(tenantB, 'admin-b', ADMIN_ROLE);
+    const outcomes = await Promise.all([
+      store.createCustomRole(tenantA, copy('r', 'Igual'), 50),
+      store.createCustomRole(tenantB, copy('r', 'Igual'), 50),
+    ]);
+    expect(outcomes).toEqual(['created', 'created']);
+    expect(db.deadlocks).toBe(0);
+  });
+
+  it('takes the tenant lock before it reads or writes any role row, in one READ COMMITTED transaction', async () => {
+    const { store, join, db } = setup();
+    await join(tenantA, 'admin-a', ADMIN_ROLE);
+    db.statements.length = 0;
+    await store.createCustomRole(tenantA, copy('r', 'N', ['view']), 50);
+    const at = (statement: string) => db.statements.indexOf(statement);
+    const lock = at(`findOne ${IDENTITY_TABLES.tenantLocks} FOR UPDATE`);
+    expect(lock).toBeGreaterThanOrEqual(0);
+    expect(at(`find ${IDENTITY_TABLES.roles}`)).toBeGreaterThan(lock);
+    expect(at(`insert ${IDENTITY_TABLES.roles}`)).toBeGreaterThan(
+      at(`find ${IDENTITY_TABLES.roles}`),
+    );
+    expect(at(`insert ${IDENTITY_TABLES.rolePermissions}`)).toBeGreaterThan(
+      at(`insert ${IDENTITY_TABLES.roles}`),
+    );
+    expect(db.isolations.at(-1)).toBe('READ COMMITTED');
+  });
+
+  it('commits the role and its permissions together or not at all', async () => {
+    const { store, join, db } = setup();
+    await join(tenantA, 'admin-a', ADMIN_ROLE);
+    db.failNext(
+      'insert',
+      { errno: 1114, code: 'ER_RECORD_FILE_FULL' },
+      { entity: RolePermissionEntity, leak: 'sub-secret' },
+    );
+    const error = await rejection(store.createCustomRole(tenantA, copy('r', 'N'), 50));
+    expect(error).toBeInstanceOf(IdentityStoreError);
+    expect(JSON.stringify(error)).not.toContain('sub-secret');
+    expect(db.committed(RoleEntity)).toEqual([]);
+    expect(db.committed(RolePermissionEntity)).toEqual([]);
+    expect(await store.createCustomRole(tenantA, copy('r', 'N'), 50)).toBe('created');
+  });
+
+  it('keys roles and permissions by tenant with foreign keys that cannot be bypassed', async () => {
+    const { store, join, db } = setup();
+    await join(tenantA, 'admin-a', ADMIN_ROLE);
+    await join(tenantB, 'admin-b', ADMIN_ROLE);
+    await store.createCustomRole(tenantA, copy('r', 'N', ['view']), 50);
+    const roles = db.getRepository(RoleEntity);
+    const permissions = db.getRepository(RolePermissionEntity);
+    // A role needs the lock row of its own tenant.
+    await expect(
+      roles.insert({ tenantId: 'nobody', id: 'x', name: 'x', nameKey: 'x', createdAt: T0 }),
+    ).rejects.toMatchObject({ driverError: { errno: 1452 } });
+    // A permission cannot attach to a role of another tenant: the key is (tenant, role).
+    await expect(
+      permissions.insert({ tenantId: tenantB, roleId: 'r', permission: 'view', position: 0 }),
+    ).rejects.toMatchObject({ driverError: { errno: 1452 } });
+    // Two roles of one tenant cannot share a (case-folded) name at the database level either.
+    await expect(
+      roles.insert({ tenantId: tenantA, id: 'dup', name: 'n', nameKey: 'n', createdAt: T0 }),
+    ).rejects.toMatchObject({ driverError: { errno: 1062 } });
+  });
+
+  it('reports read failures without data', async () => {
+    const { store, join, db, events } = setup();
+    await join(tenantA, 'admin-a', ADMIN_ROLE);
+    await store.createCustomRole(tenantA, copy('r', 'N'), 50);
+    db.failNext('find', { errno: 2013, code: 'PROTOCOL_CONNECTION_LOST' }, { leak: 'tenant-a' });
+    expect(await rejection(store.listCustomRoles(tenantA))).toBeInstanceOf(IdentityStoreError);
+    db.failNext(
+      'findOneBy',
+      { errno: 2013, code: 'PROTOCOL_CONNECTION_LOST' },
+      { leak: 'tenant-a' },
+    );
+    expect(await rejection(store.findCustomRole(tenantA, 'r'))).toBeInstanceOf(IdentityStoreError);
+    expect(events.map((event) => event.operation)).toEqual(['listCustomRoles', 'findCustomRole']);
+    expect(JSON.stringify(events)).not.toContain('tenant-a');
   });
 });

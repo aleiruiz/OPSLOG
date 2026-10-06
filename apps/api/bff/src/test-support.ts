@@ -4,6 +4,7 @@ import {
   InMemoryTenantStore,
   createPlatform,
   type Platform,
+  type PlatformAdapters,
   type RoleName,
 } from '../../composition/src/index.js';
 import { createBffHandler, type BffOptions } from './handler.js';
@@ -120,6 +121,8 @@ export class Browser {
 
 export interface BffWorldOptions {
   readonly bff?: Partial<Omit<BffOptions, 'platform'>>;
+  /** Adapters that replace the in-memory defaults (for example a persistent identity store). */
+  readonly adapters?: PlatformAdapters;
 }
 
 /**
@@ -134,7 +137,7 @@ export function createBffWorld(options: BffWorldOptions = {}) {
     verifier,
     issuer: verifier.issuer,
     grantSecret: 'synthetic-grant-secret-for-tests-0123456789',
-    adapters: { tenants: new InMemoryTenantStore() },
+    adapters: { tenants: new InMemoryTenantStore(), ...options.adapters },
   });
   const errors: { correlationId: string; route: string; errorClass: string }[] = [];
   const handler = createBffHandler({

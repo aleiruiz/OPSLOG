@@ -10,7 +10,12 @@ import {
   runIdentityMigrations,
 } from './data-source.js';
 import { IdentityStoreError, LastAdministratorError } from './errors.js';
-import { IDENTITY_CHECKS, IDENTITY_MIGRATION_VERSION } from './migrations.js';
+import {
+  IDENTITY_CHECKS,
+  IDENTITY_MIGRATION_VERSION,
+  IDENTITY_ROLES_MIGRATION_VERSION,
+  IDENTITY_ROLE_CHECKS,
+} from './migrations.js';
 import { BINARY_COLLATION, IDENTITY_TABLES } from './entities.js';
 import { ADMIN_ROLE, TypeOrmIdentityStore, type StoreErrorEvent } from './store.js';
 import { Clock, HOUR, PROVIDER, T0, createHarness } from './test-support/harness.js';
@@ -123,8 +128,13 @@ suite('persistent identity store on MySQL', () => {
     try {
       await runIdentityMigrations(migrations);
       expect(await migrations.showMigrations()).toBe(false);
+      // Down and up again, one migration at a time and then both: every step is reversible.
       await migrations.undoLastMigration({ transaction: 'all' });
       expect(await migrations.showMigrations()).toBe(true);
+      await migrations.undoLastMigration({ transaction: 'all' });
+      await runIdentityMigrations(migrations);
+      expect(await migrations.showMigrations()).toBe(false);
+      await migrations.undoLastMigration({ transaction: 'all' });
       await runIdentityMigrations(migrations);
       expect(await migrations.showMigrations()).toBe(false);
     } finally {
@@ -169,7 +179,8 @@ suite('persistent identity store on MySQL', () => {
       const applied = await rows<{ name: string }>(
         `SELECT name FROM ${identifier(databaseName)}.opslog_identity_migrations`,
       );
-      expect(applied.map((row) => row.name)).toEqual([
+      expect(applied.map((row) => row.name).sort()).toEqual([
+        `CreateIdentityRoles${IDENTITY_ROLES_MIGRATION_VERSION}`,
         `CreateIdentityStore${IDENTITY_MIGRATION_VERSION}`,
       ]);
     });
@@ -195,6 +206,7 @@ suite('persistent identity store on MySQL', () => {
         'uq_identity_invitations_token',
         'uq_identity_memberships_id',
         'uq_identity_recoveries_token',
+        'uq_identity_roles_name',
         'uq_identity_sessions_token',
       ]);
       const foreignKeys = await rows<{ name: string; ref: string }>(
@@ -208,6 +220,8 @@ suite('persistent identity store on MySQL', () => {
           ['fk_identity_invitations_member', IDENTITY_TABLES.memberships],
           ['fk_identity_memberships_identity', IDENTITY_TABLES.identities],
           ['fk_identity_recoveries_identity', IDENTITY_TABLES.identities],
+          ['fk_identity_role_permissions_role', IDENTITY_TABLES.roles],
+          ['fk_identity_roles_tenant', IDENTITY_TABLES.tenantLocks],
           ['fk_identity_sessions_member', IDENTITY_TABLES.memberships],
         ].sort(),
       );
@@ -226,7 +240,7 @@ suite('persistent identity store on MySQL', () => {
         'SELECT CONSTRAINT_NAME AS name FROM information_schema.CHECK_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = ?',
         [databaseName],
       );
-      for (const check of IDENTITY_CHECKS)
+      for (const check of [...IDENTITY_CHECKS, ...IDENTITY_ROLE_CHECKS])
         expect(checks.map((row) => row.name)).toContain(check.name);
     });
 
@@ -730,6 +744,201 @@ suite('persistent identity store on MySQL', () => {
         await holder;
       }
     }, 60_000);
+  });
+
+  describe('custom roles', () => {
+    const role = (
+      id: string,
+      name: string,
+      permissions: readonly string[] = ['view', 'create'],
+    ) => ({
+      id,
+      name,
+      permissions,
+    });
+    /** A tenant that exists (one active membership), as the composition guarantees before a role is created. */
+    const tenantWithAdmin = async (): Promise<string> => {
+      const tenant = tenantId();
+      await h.join(tenant, `admin-${randomUUID()}`, ADMIN_ROLE);
+      return tenant;
+    };
+
+    it('stores roles with ordered permissions, per tenant, and reads them from another process', async () => {
+      const tenantA = await tenantWithAdmin();
+      const tenantB = await tenantWithAdmin();
+      expect(await storeA.createCustomRole(tenantA, role('custom-1', 'Regional'), 50)).toBe(
+        'created',
+      );
+      clock.advance(1000);
+      expect(
+        await storeA.createCustomRole(
+          tenantA,
+          role('custom-2', ' Zona ', ['view_pii', 'view']),
+          50,
+        ),
+      ).toBe('created');
+      expect(await storeB.listCustomRoles(tenantA)).toEqual([
+        { id: 'custom-1', name: 'Regional', permissions: ['view', 'create'] },
+        { id: 'custom-2', name: 'Zona', permissions: ['view_pii', 'view'] },
+      ]);
+      expect(await storeB.findCustomRole(tenantA, 'custom-2')).toMatchObject({ name: 'Zona' });
+      // Another tenant sees nothing, even asking for the id, and may reuse id and name.
+      expect(await storeB.listCustomRoles(tenantB)).toEqual([]);
+      expect(await storeB.findCustomRole(tenantB, 'custom-1')).toBeNull();
+      expect(await storeB.createCustomRole(tenantB, role('custom-1', 'Regional'), 50)).toBe(
+        'created',
+      );
+    });
+
+    it('keeps names unique case-insensitively and enforces the limit', async () => {
+      const tenant = await tenantWithAdmin();
+      expect(await storeA.createCustomRole(tenant, role('r1', 'Regional'), 2)).toBe('created');
+      expect(await storeB.createCustomRole(tenant, role('r2', 'REGIONAL'), 2)).toBe('name_taken');
+      expect(await storeB.createCustomRole(tenant, role('r2', 'Otro'), 2)).toBe('created');
+      expect(await storeA.createCustomRole(tenant, role('r3', 'Tercero'), 2)).toBe('limit_reached');
+      await expect(storeA.createCustomRole(randomUUID(), role('r1', 'x'), 2)).rejects.toMatchObject(
+        { code: 'not_found' },
+      );
+    });
+
+    it('serializes concurrent creations from two processes: one name, one slot', async () => {
+      for (let round = 0; round < 5; round += 1) {
+        const tenant = await tenantWithAdmin();
+        const sameName = await Promise.all(
+          [0, 1, 2, 3].map((index) =>
+            (index % 2 ? storeA : storeB).createCustomRole(
+              tenant,
+              role(`dup-${index}`, 'Igual'),
+              50,
+            ),
+          ),
+        );
+        expect(sameName.filter((outcome) => outcome === 'created')).toHaveLength(1);
+        expect(sameName.filter((outcome) => outcome === 'name_taken')).toHaveLength(3);
+        const slots = await Promise.all(
+          [0, 1, 2, 3, 4, 5].map((index) =>
+            (index % 2 ? storeA : storeB).createCustomRole(
+              tenant,
+              role(`slot-${index}`, `Rol ${index}`),
+              3,
+            ),
+          ),
+        );
+        expect(slots.filter((outcome) => outcome === 'created')).toHaveLength(2);
+        expect(await storeA.listCustomRoles(tenant)).toHaveLength(3);
+      }
+    }, 60_000);
+
+    it('role creation waits for the tenant lock held by an administrator change', async () => {
+      const tenant = await tenantWithAdmin();
+      const second = await h.join(tenant, `second-${randomUUID()}`, ADMIN_ROLE);
+      // The first role creates the tenant lock row that the holder below will lock.
+      await storeA.createCustomRole(tenant, role('seed', 'Semilla'), 50);
+      // Hold the tenant lock row in another connection, like a removal in progress.
+      const holder = await sourceB.createQueryRunner();
+      await holder.connect();
+      await holder.startTransaction();
+      try {
+        await holder.query(
+          `SELECT tenant_id FROM ${IDENTITY_TABLES.tenantLocks} WHERE tenant_id = ? FOR UPDATE`,
+          [tenant],
+        );
+        let finished = false;
+        const pending = storeA
+          .createCustomRole(tenant, role('waits', 'Espera'), 50)
+          .then((outcome) => {
+            finished = true;
+            return outcome;
+          });
+        let waiting = false;
+        for (let attempt = 0; attempt < 100 && !waiting; attempt += 1) {
+          const waits = await rows<{ n: number }>(
+            'SELECT COUNT(*) AS n FROM performance_schema.data_lock_waits',
+          );
+          waiting = Number(waits[0]?.n) > 0;
+          if (!waiting) await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+        expect(waiting).toBe(true);
+        expect(finished).toBe(false);
+        await holder.commitTransaction();
+        expect(await pending).toBe('created');
+      } finally {
+        if (holder.isTransactionActive) await holder.rollbackTransaction();
+        await holder.release();
+      }
+      expect(await storeA.revokeMembership(tenant, second.identityId)).toBe(true);
+    }, 60_000);
+
+    it('enforces tenant-scoped foreign keys, names and shapes in the database itself', async () => {
+      const tenant = await tenantWithAdmin();
+      const other = await tenantWithAdmin();
+      await storeA.createCustomRole(tenant, role('fk-role', 'Con FK', ['view']), 50);
+      const insertRole = (tenantKey: string, id: string, name: string, key: string) =>
+        sourceA.query(
+          `INSERT INTO ${IDENTITY_TABLES.roles} (tenant_id, id, name, name_key, created_at)
+           VALUES (?, ?, ?, ?, NOW(6))`,
+          [tenantKey, id, name, key],
+        );
+      const insertPermission = (tenantKey: string, roleId: string, permission: string) =>
+        sourceA.query(
+          `INSERT INTO ${IDENTITY_TABLES.rolePermissions} (tenant_id, role_id, permission, position)
+           VALUES (?, ?, ?, 0)`,
+          [tenantKey, roleId, permission],
+        );
+      // No lock row for the tenant: no role.
+      await expect(insertRole(randomUUID(), 'x', 'x', 'x')).rejects.toSatisfy(
+        (e) => errnoOf(e) === 1216 || errnoOf(e) === 1452,
+      );
+      // A permission cannot point to a role of another tenant (composite key).
+      await expect(insertPermission(other, 'fk-role', 'view')).rejects.toSatisfy(
+        (e) => errnoOf(e) === 1216 || errnoOf(e) === 1452,
+      );
+      await expect(insertPermission(tenant, 'fk-role', 'view')).rejects.toSatisfy(
+        (e) => errnoOf(e) === 1062,
+      );
+      await expect(insertRole(tenant, 'dup-name', 'OTRA', 'otra')).resolves.toBeDefined();
+      await expect(insertRole(tenant, 'dup-name-2', 'Otra', 'otra')).rejects.toSatisfy(
+        (e) => errnoOf(e) === 1062,
+      );
+      // The binary collation keeps different tenant ids apart: no case or trailing-space collisions.
+      await expect(insertRole(`${other}`.toUpperCase(), 'fk-role', 'x', 'x')).rejects.toSatisfy(
+        (e) => errnoOf(e) === 1216 || errnoOf(e) === 1452,
+      );
+      await expect(insertRole(tenant, 'Bad Id', 'x', 'x')).rejects.toSatisfy(
+        (e) => errnoOf(e) === 3819,
+      );
+      await expect(insertRole(tenant, 'blank-name', '   ', 'x')).rejects.toSatisfy(
+        (e) => errnoOf(e) === 3819,
+      );
+      await expect(insertPermission(tenant, 'fk-role', 'View')).rejects.toSatisfy(
+        (e) => errnoOf(e) === 3819,
+      );
+    });
+
+    it('refuses an over-long permission before storing anything', async () => {
+      const tenant = await tenantWithAdmin();
+      // `view_pii` is fine; a permission with the right shape but over the column limit is refused by the store first.
+      await expect(
+        storeA.createCustomRole(tenant, role('bad', 'Mala', ['view', 'x'.repeat(65)]), 50),
+      ).rejects.toMatchObject({ code: 'invalid_input' });
+      expect(await storeA.listCustomRoles(tenant)).toEqual([]);
+      expect(await storeA.findCustomRole(tenant, 'bad')).toBeNull();
+    });
+
+    it('setRole persists the role and its authorization bump as the directory changes it', async () => {
+      const tenant = await tenantWithAdmin();
+      const member = await h.join(tenant, `member-${randomUUID()}`, 'viewer');
+      expect(await storeA.setRole(tenant, member.identityId, 'editor')).toBe(true);
+      expect(await storeB.findRole(tenant, member.identityId)).toBe('editor');
+      expect((await storeB.findIdentity(member.identityId))?.authorizationVersion).toBe(2);
+      // A pending membership takes its role without a bump, so the activation grants it.
+      const pending = await h.invite(tenant, 'viewer');
+      expect(await storeA.setRole(tenant, pending.identityId, 'auditor')).toBe(true);
+      expect((await storeB.findIdentity(pending.identityId))?.authorizationVersion).toBe(1);
+      expect(await storeA.findMembership(tenant, pending.identityId)).toMatchObject({
+        status: 'pending',
+      });
+    });
   });
 
   describe('errors and privacy', () => {

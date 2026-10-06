@@ -1,7 +1,11 @@
 import 'reflect-metadata';
 import { DataSource, type DataSourceOptions } from 'typeorm';
 import { IDENTITY_ENTITIES } from './entities.js';
-import { CreateIdentityStore2026100600010, IDENTITY_MIGRATIONS_TABLE } from './migrations.js';
+import {
+  CreateIdentityRoles2026100600020,
+  CreateIdentityStore2026100600010,
+  IDENTITY_MIGRATIONS_TABLE,
+} from './migrations.js';
 
 export interface IdentityDatabaseConfig {
   readonly host: string;
@@ -23,7 +27,7 @@ export const IDENTITY_RUNTIME_ACCOUNT = /^opslog_(identity|control)_[a-z0-9_]+$/
 const common = {
   type: 'mysql',
   entities: [...IDENTITY_ENTITIES],
-  migrations: [CreateIdentityStore2026100600010],
+  migrations: [CreateIdentityStore2026100600010, CreateIdentityRoles2026100600020],
   migrationsTableName: IDENTITY_MIGRATIONS_TABLE,
   synchronize: false,
   migrationsRun: false,

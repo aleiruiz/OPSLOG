@@ -15,6 +15,8 @@ export const IDENTITY_TABLES = {
   recoveries: 'opslog_identity_recoveries',
   sessions: 'opslog_identity_sessions',
   tenantLocks: 'opslog_identity_tenant_locks',
+  roles: 'opslog_identity_roles',
+  rolePermissions: 'opslog_identity_role_permissions',
 } as const;
 
 export class IdentityEntity {
@@ -78,6 +80,23 @@ export class SessionEntity {
 export class TenantLockEntity {
   tenantId!: string;
   createdAt!: Date;
+}
+
+/** Custom role of one tenant (a copy of a system template). Immutable once created. */
+export class RoleEntity {
+  tenantId!: string;
+  id!: string;
+  name!: string;
+  /** Lower-cased trimmed name: the per-tenant uniqueness key. */
+  nameKey!: string;
+  createdAt!: Date;
+}
+
+export class RolePermissionEntity {
+  tenantId!: string;
+  roleId!: string;
+  permission!: string;
+  position!: number;
 }
 
 const bin = BINARY_COLLATION;
@@ -200,6 +219,32 @@ export const TenantLockEntitySchema = new EntitySchema<TenantLockEntity>({
   },
 });
 
+export const RoleEntitySchema = new EntitySchema<RoleEntity>({
+  name: 'RoleEntity',
+  target: RoleEntity,
+  tableName: IDENTITY_TABLES.roles,
+  columns: {
+    tenantId: { name: 'tenant_id', type: 'varchar', length: 64, collation: bin, primary: true },
+    id: { type: 'varchar', length: 64, collation: bin, primary: true },
+    name: { type: 'varchar', length: 80, collation: bin },
+    nameKey: { name: 'name_key', type: 'varchar', length: 160, collation: bin },
+    createdAt: { name: 'created_at', type: 'datetime', precision: 6 },
+  },
+  uniques: [{ name: 'uq_identity_roles_name', columns: ['tenantId', 'nameKey'] }],
+});
+
+export const RolePermissionEntitySchema = new EntitySchema<RolePermissionEntity>({
+  name: 'RolePermissionEntity',
+  target: RolePermissionEntity,
+  tableName: IDENTITY_TABLES.rolePermissions,
+  columns: {
+    tenantId: { name: 'tenant_id', type: 'varchar', length: 64, collation: bin, primary: true },
+    roleId: { name: 'role_id', type: 'varchar', length: 64, collation: bin, primary: true },
+    permission: { type: 'varchar', length: 64, collation: bin, primary: true },
+    position: { type: 'int', unsigned: true },
+  },
+});
+
 export const IDENTITY_ENTITIES = [
   IdentityEntitySchema,
   ExternalIdentityEntitySchema,
@@ -208,4 +253,6 @@ export const IDENTITY_ENTITIES = [
   RecoveryEntitySchema,
   SessionEntitySchema,
   TenantLockEntitySchema,
+  RoleEntitySchema,
+  RolePermissionEntitySchema,
 ] as const;

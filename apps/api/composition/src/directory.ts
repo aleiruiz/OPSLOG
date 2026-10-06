@@ -39,6 +39,11 @@ export interface CustomRole {
 
 export const MAX_CUSTOM_ROLES_PER_TENANT = 50;
 
+const isSystemRoleName = (name: string): boolean => {
+  const wanted = name.trim().toLowerCase();
+  return Object.values(ROLE_LABELS).some((label) => label.toLowerCase() === wanted);
+};
+
 /**
  * Custom roles of each tenant (copies of system templates). In-memory stand-in for the persistent
  * role directory; custom roles cannot be assigned to members yet.
@@ -63,7 +68,7 @@ export class RoleCatalog {
   public nameTaken(tenantId: string, name: string): boolean {
     const wanted = name.trim().toLowerCase();
     return (
-      Object.values(ROLE_LABELS).some((label) => label.toLowerCase() === wanted) ||
+      isSystemRoleName(name) ||
       this.custom(tenantId).some((role) => role.name.toLowerCase() === wanted)
     );
   }
@@ -71,6 +76,106 @@ export class RoleCatalog {
     const roles = this.byTenant.get(tenantId) ?? new Map<string, CustomRole>();
     roles.set(role.id, role);
     this.byTenant.set(tenantId, roles);
+  }
+}
+
+export type CreateRoleOutcome = 'created' | 'name_taken' | 'limit_reached';
+
+/**
+ * Port of the persistent role directory: custom roles of each tenant and the role of each
+ * membership. `TypeOrmIdentityStore` (packages/persistence/identity) implements it, so the same
+ * MySQL store that holds identities and memberships holds the roles, under the same tenant lock.
+ * Every method is tenant-scoped; permissions travel as plain strings and are validated on the way back.
+ */
+export interface RoleDirectoryStore {
+  listCustomRoles(
+    tenantId: string,
+  ): Promise<readonly { id: string; name: string; permissions: readonly string[] }[]>;
+  findCustomRole(
+    tenantId: string,
+    roleId: string,
+  ): Promise<{ id: string; name: string; permissions: readonly string[] } | null>;
+  /** Atomically enforces name uniqueness and the per-tenant limit. */
+  createCustomRole(
+    tenantId: string,
+    role: { id: string; name: string; permissions: readonly string[] },
+    maxRoles: number,
+  ): Promise<CreateRoleOutcome>;
+  /** Persists the role of a pending or active membership; false when there is none. */
+  setRole(tenantId: string, identityId: string, role: string): Promise<boolean>;
+}
+
+export const isRoleDirectoryStore = (value: unknown): value is RoleDirectoryStore =>
+  typeof value === 'object' &&
+  value !== null &&
+  ['listCustomRoles', 'findCustomRole', 'createCustomRole', 'setRole'].every(
+    (method) => typeof (value as Record<string, unknown>)[method] === 'function',
+  );
+
+const KNOWN_PERMISSIONS: ReadonlySet<string> = new Set(Object.values(ROLE_PERMISSIONS).flat());
+
+/** Drops anything the composition does not know: a stored role can only ever grant fewer permissions. */
+const knownPermissions = (permissions: readonly string[]): readonly Permission[] =>
+  permissions.filter((permission): permission is Permission => KNOWN_PERMISSIONS.has(permission));
+
+/**
+ * Role directory seen by the platform: the persistent store when one is configured, the in-memory
+ * `RoleCatalog` otherwise. System templates always come from the composition; only custom roles
+ * and membership roles are persisted.
+ */
+export class RoleDirectory {
+  public constructor(
+    private readonly store?: RoleDirectoryStore,
+    public readonly catalog: RoleCatalog = new RoleCatalog(),
+  ) {}
+
+  public get persistent(): boolean {
+    return this.store !== undefined;
+  }
+
+  public async custom(tenantId: string): Promise<readonly CustomRole[]> {
+    if (!this.store) return this.catalog.custom(tenantId);
+    return (await this.store.listCustomRoles(tenantId)).map((role) => ({
+      id: role.id,
+      name: role.name,
+      permissions: knownPermissions(role.permissions),
+    }));
+  }
+
+  /** Looks up a role of this tenant only: system templates or the tenant's own custom roles. */
+  public async find(
+    tenantId: string,
+    roleId: string,
+  ): Promise<{ name: string; permissions: readonly Permission[] } | undefined> {
+    if (!this.store || Object.hasOwn(ROLE_PERMISSIONS, roleId))
+      return this.catalog.find(tenantId, roleId);
+    const stored = await this.store.findCustomRole(tenantId, roleId);
+    return stored
+      ? { name: stored.name, permissions: knownPermissions(stored.permissions) }
+      : undefined;
+  }
+
+  public async create(tenantId: string, role: CustomRole): Promise<CreateRoleOutcome> {
+    if (!this.store) {
+      if (
+        this.catalog.nameTaken(tenantId, role.name) ||
+        this.catalog.custom(tenantId).length >= MAX_CUSTOM_ROLES_PER_TENANT
+      )
+        return 'name_taken';
+      this.catalog.add(tenantId, role);
+      return 'created';
+    }
+    if (isSystemRoleName(role.name)) return 'name_taken';
+    return this.store.createCustomRole(tenantId, role, MAX_CUSTOM_ROLES_PER_TENANT);
+  }
+
+  /** Writes a membership's role through to the store; true (nothing to do) without a store. */
+  public async setMemberRole(
+    tenantId: string,
+    identityId: string,
+    role: RoleName,
+  ): Promise<boolean> {
+    return this.store ? this.store.setRole(tenantId, identityId, role) : true;
   }
 }
 
