@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createAreasClient,
   createBffClient,
+  createDocumentsClient,
   createEmployeesClient,
   createVehiclesClient,
   CSRF_HEADER,
@@ -523,6 +524,50 @@ describe('employees client', () => {
       'PUT /api/employees/e1',
       'POST /api/employees/e1/status',
       'POST /api/employees/e1/archive',
+    ]);
+  });
+});
+
+describe('documents client', () => {
+  it('maps each method to its route, method and path, and exposes the invalid owner field', async () => {
+    const { fetch, seen } = transport((request) => {
+      if (request.url === '/api/auth/csrf') return { status: 200, body: { csrfToken: 'tok' } };
+      if (request.url === '/api/auth/session') return { status: 200, body: session('tok') };
+      if (request.method === 'POST' && request.url === '/api/documents')
+        return { status: 422, body: { ...errorBody('invalid_owner', 422), field: 'owner_id' } };
+      return { status: 200, body: { items: [], total: 0 } };
+    });
+    const documents = createDocumentsClient(createBffClient({ fetch }));
+    await documents.list();
+    await documents.list({ status: 'expiring', ownerType: 'vehicle' });
+    await documents.get('d1');
+    await documents.history('d1');
+    await documents.history('d1', { limit: 25 });
+    const refused = await documents.create({
+      ownerType: 'vehicle',
+      ownerId: 'v1',
+      typeCode: 'registration_card',
+      title: 'Tarjeta',
+      expiresOn: '2027-01-01',
+    });
+    expect(refused).toMatchObject({
+      ok: false,
+      error: { code: 'invalid_owner', fieldErrors: [{ field: 'owner_id' }] },
+    });
+    await documents.update('d1', { version: 1, title: 'x' });
+    await documents.renew('d1', { version: 1, expiresOn: '2028-01-01' });
+    await documents.archive('d1', 1);
+    const calls = seen.filter((entry) => !entry.url.startsWith('/api/auth/'));
+    expect(calls.map((entry) => `${entry.method} ${entry.url}`)).toEqual([
+      'GET /api/documents',
+      'GET /api/documents?status=expiring&ownerType=vehicle',
+      'GET /api/documents/d1',
+      'GET /api/documents/d1/history',
+      'GET /api/documents/d1/history?limit=25',
+      'POST /api/documents',
+      'PUT /api/documents/d1',
+      'POST /api/documents/d1/renew',
+      'POST /api/documents/d1/archive',
     ]);
   });
 });

@@ -5,6 +5,7 @@ import {
   bffRouteIds,
   createAreasClient,
   createBffClient,
+  createDocumentsClient,
   createEmployeesClient,
   createVehiclesClient,
   type BffClient,
@@ -379,6 +380,65 @@ describe('typed client against the real BFF', () => {
       value: { version: 4 },
     });
     expect(await employees.get('desconocido')).toMatchObject({ ok: false, error: { status: 404 } });
+
+    // Documents through the typed client.
+    const documents = createDocumentsClient(client);
+    const truck = await vehicles.create({ ...input, economicNumber: 'U-DOC', plate: 'DOC111' });
+    if (!truck.ok) throw new Error('document owner failed');
+    const tarjeta = await documents.create({
+      ownerType: 'vehicle',
+      ownerId: truck.value.id,
+      typeCode: 'registration_card',
+      title: 'Tarjeta de circulación',
+      expiresOn: '2026-10-20',
+    });
+    if (!tarjeta.ok) throw new Error('document create failed');
+    expect(tarjeta.value).toMatchObject({
+      status: 'expiring',
+      daysToExpiry: 14,
+      revision: 1,
+      version: 1,
+    });
+    expect(
+      await documents.create({
+        ownerType: 'vehicle',
+        ownerId: 'nope',
+        typeCode: 'registration_card',
+        title: 'x',
+        expiresOn: '2026-10-20',
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: {
+        code: 'invalid_owner',
+        status: 422,
+        fieldErrors: [expect.objectContaining({ field: 'owner_id' })],
+      },
+    });
+    expect(await documents.update(tarjeta.value.id, { version: 1, title: 'Otra' })).toMatchObject({
+      ok: true,
+      value: { version: 2 },
+    });
+    expect(await documents.update(tarjeta.value.id, { version: 1, title: 'Vieja' })).toMatchObject({
+      ok: false,
+      error: { code: 'stale_version', status: 409 },
+    });
+    expect(
+      await documents.renew(tarjeta.value.id, { version: 2, expiresOn: '2028-10-20' }),
+    ).toMatchObject({ ok: true, value: { revision: 2, version: 3, status: 'valid' } });
+    expect(await documents.list({ status: 'expiring' })).toMatchObject({
+      ok: true,
+      value: { total: 0 },
+    });
+    expect(await documents.history(tarjeta.value.id, { limit: 25 })).toMatchObject({
+      ok: true,
+      value: { total: 2 },
+    });
+    expect(await documents.archive(tarjeta.value.id, 3)).toMatchObject({
+      ok: true,
+      value: { version: 4 },
+    });
+    expect(await documents.get('desconocido')).toMatchObject({ ok: false, error: { status: 404 } });
 
     // Drafts
     expect(await client.call('drafts.load', { params: { scope: 'form:a' } })).toEqual({
