@@ -23,6 +23,13 @@ import {
   type BffDocumentRevision,
   type BffDocumentsQuery,
   type BffInsurancePoliciesQuery,
+  type BffVehicleAssignment,
+  type BffVehicleAssignmentCreated,
+  type BffVehicleAssignmentEnd,
+  type BffVehicleAssignmentEvent,
+  type BffVehicleAssignmentHistoryQuery,
+  type BffVehicleAssignmentInput,
+  type BffVehicleAssignmentsQuery,
   type BffInsurancePolicy,
   type BffInsurancePolicyHistoryQuery,
   type BffInsurancePolicyInput,
@@ -450,5 +457,37 @@ export function createInsuranceClient(client: BffClient): InsuranceClient {
       query
         ? client.call('insurance.history', { params: { id }, query })
         : client.call('insurance.history', { params: { id } }),
+  };
+}
+
+/**
+ * Typed driver-vehicle assignment calls over any `BffClient`. Each method is one route of the
+ * contract. `assign` rejects a second principal with the `principal_taken` error value (its field
+ * names `vehicle_id` or `employee_id`) unless `replace: true`; `end` closes an assignment with a
+ * reason and the `version` of the last read; assignments are never edited or deleted, and a lost
+ * race comes back as the `stale_version` error value (never an exception).
+ */
+export interface AssignmentsClient {
+  list(query?: BffVehicleAssignmentsQuery): Promise<BffResult<Page<BffVehicleAssignment>>>;
+  get(id: string): Promise<BffResult<BffVehicleAssignment>>;
+  assign(input: BffVehicleAssignmentInput): Promise<BffResult<BffVehicleAssignmentCreated>>;
+  end(id: string, end: BffVehicleAssignmentEnd): Promise<BffResult<BffVehicleAssignment>>;
+  history(
+    id: string,
+    query?: BffVehicleAssignmentHistoryQuery,
+  ): Promise<BffResult<Page<BffVehicleAssignmentEvent>>>;
+}
+
+export function createAssignmentsClient(client: BffClient): AssignmentsClient {
+  return {
+    list: (query) =>
+      query ? client.call('assignments.list', { query }) : client.call('assignments.list'),
+    get: (id) => client.call('assignments.get', { params: { id } }),
+    assign: (input) => client.call('assignments.create', { body: input }),
+    end: (id, end) => client.call('assignments.end', { params: { id }, body: end }),
+    history: (id, query) =>
+      query
+        ? client.call('assignments.history', { params: { id }, query })
+        : client.call('assignments.history', { params: { id } }),
   };
 }

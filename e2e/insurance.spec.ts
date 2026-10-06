@@ -91,14 +91,17 @@ test.describe('insurance: list, permissions and accessibility', () => {
   test('does not overflow horizontally at 360px or 1280px', async ({ page }) => {
     await signIn(page, '/flota/seguros');
     await expect(page.getByRole('table', { name: 'Pólizas (28)' })).toBeVisible();
-    for (const path of [
-      '/flota/seguros/pol-002',
-      '/flota/seguros/pol-002/renovar',
-      '/flota/seguros/nueva',
-      '/flota/seguros',
-    ]) {
+    const headings: Record<string, string | RegExp> = {
+      '/flota/seguros/pol-002': /^Póliza POL-/,
+      '/flota/seguros/pol-002/renovar': 'Renovar póliza',
+      '/flota/seguros/nueva': 'Nueva póliza',
+      '/flota/seguros': 'Seguros',
+    };
+    for (const path of Object.keys(headings)) {
       await goTo(page, path);
-      await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
+      await expect(
+        page.getByRole('heading', { name: headings[path] as string | RegExp, level: 1 }),
+      ).toBeVisible();
       for (const width of [360, 1280]) {
         await page.setViewportSize({ width, height: 800 });
         const overflow = await page.evaluate(

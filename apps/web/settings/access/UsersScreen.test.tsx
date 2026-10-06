@@ -26,7 +26,7 @@ describe('UsersScreen', () => {
     await renderWithSession(<UsersScreen />, { api: slow });
     expect(await screen.findByRole('heading', { name: 'Cargando' })).toBeInTheDocument();
     await act(async () => gate.resolve());
-    const table = await screen.findByRole('table', { name: 'Usuarios (27)' });
+    const table = await screen.findByRole('table', { name: 'Usuarios (28)' });
     expect(table).toHaveTextContent('user-admin');
     expect(table).not.toHaveTextContent('@');
     expect(table).toHaveTextContent('Administrador de empresa');
@@ -39,7 +39,7 @@ describe('UsersScreen', () => {
     await screen.findByRole('table');
     expect(screen.getAllByRole('row')).toHaveLength(26);
     click('Cargar más usuarios');
-    await waitFor(() => expect(screen.getAllByRole('row')).toHaveLength(28));
+    await waitFor(() => expect(screen.getAllByRole('row')).toHaveLength(29));
     expect(screen.queryByRole('button', { name: 'Cargar más usuarios' })).toBeNull();
   });
 
@@ -57,7 +57,7 @@ describe('UsersScreen', () => {
     type('Buscar por identificador, rol o estado', 'zzz');
     expect(await screen.findByRole('heading', { name: 'Sin resultados' })).toBeInTheDocument();
     click('Limpiar filtros');
-    await screen.findByRole('table', { name: 'Usuarios (27)' });
+    await screen.findByRole('table', { name: 'Usuarios (28)' });
   });
 
   it('does not submit the search form when pressing Enter', async () => {

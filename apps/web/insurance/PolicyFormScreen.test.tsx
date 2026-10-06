@@ -527,6 +527,7 @@ describe('describeFailure', () => {
     expect(of(409, 'immutable').alert?.title).toBe('La póliza ya no admite cambios');
     expect(of(422, 'invalid_vehicle', 'create').alert?.message).toMatch(/Elige otro vehículo/);
     expect(of(422, 'invalid_vehicle', 'renew').alert?.message).toMatch(/no se puede renovar/);
+    expect(of(422, 'invalid_vehicle', 'renew').fields).toEqual({});
     expect(of(400, 'bad_request').alert?.title).toBe('El servidor rechazó los datos');
     expect(of(403, 'forbidden', 'renew').alert?.message).toMatch(/renovar esta póliza/);
     expect(of(403, 'forbidden').alert?.message).toMatch(/Escribir el deducible requiere/);

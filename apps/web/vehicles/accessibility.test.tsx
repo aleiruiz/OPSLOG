@@ -28,7 +28,7 @@ describe('vehicle screens in jsdom', () => {
 
   it('has no detectable violations with field errors, an alert and the archive dialog open', async () => {
     const form = await renderApp({ path: '/flota/vehiculos/nuevo' });
-    await screen.findByRole('heading', { name: 'Nuevo vehículo', level: 1 });
+    await screen.findByRole('form', { name: 'Nuevo vehículo' });
     click('Crear vehículo');
     expect(await violations(form.container)).toEqual([]);
     form.unmount();

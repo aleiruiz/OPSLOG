@@ -93,8 +93,8 @@ describe('policy labels', () => {
     );
     expect(formatDeductible({ kind: 'amount', amountMinor: 5, currency: 'xx' })).toBe('0.05 xx');
     expect(formatDeductible({ kind: 'percent', basisPoints: 1500 })).toBe('15 %');
-    expect(formatDeductible({ kind: 'percent', basisPoints: 1250 })).toBe('12,5 %');
-    expect(formatDeductible({ kind: 'percent', basisPoints: 1 })).toBe('0,01 %');
+    expect(formatDeductible({ kind: 'percent', basisPoints: 1250 })).toBe('12.5 %');
+    expect(formatDeductible({ kind: 'percent', basisPoints: 1 })).toBe('0.01 %');
     expect(formatDeductible({ kind: 'percent', basisPoints: 10_000 })).toBe('100 %');
   });
 

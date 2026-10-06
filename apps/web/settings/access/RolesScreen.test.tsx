@@ -13,7 +13,7 @@ import {
 import { RolesScreen } from './RolesScreen';
 
 describe('RolesScreen', () => {
-  it('lists the seven system templates as read-only and the permissions in plain Spanish', async () => {
+  it('lists the eight system templates as read-only and the permissions in plain Spanish', async () => {
     const slow = createMockApi();
     const real = slow.roles.listRoles;
     const gate = deferred();
@@ -27,7 +27,7 @@ describe('RolesScreen', () => {
     const table = await screen.findByRole('table', { name: 'Roles de la empresa' });
     expect(table).toHaveTextContent('Administrador de empresa');
     expect(table).toHaveTextContent('Despachador');
-    expect(screen.getAllByText('Plantilla del sistema')).toHaveLength(7);
+    expect(screen.getAllByText('Plantilla del sistema')).toHaveLength(8);
     click('Ver Consulta');
     const list = await screen.findByRole('list', { name: 'Permisos de Consulta' });
     expect(list).toHaveTextContent('Consultar información');

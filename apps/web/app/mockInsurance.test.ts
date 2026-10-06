@@ -58,6 +58,22 @@ describe('mock insurance store', () => {
     expect(await read('c')).toEqual(['valid', 365, false]);
   });
 
+  it('uses a 30-day expiring window: day 30 is expiring and day 31 is still valid', async () => {
+    const store = createMockInsuranceStore(
+      [
+        makePolicy({ id: 'd30', startsOn: '2025-11-06', endsOn: '2026-11-05' }),
+        makePolicy({ id: 'd31', startsOn: '2025-11-07', endsOn: '2026-11-06' }),
+      ],
+      { now: () => new Date('2026-10-06T12:00:00.000Z') },
+    );
+    const read = async (id: string) => {
+      const result = await store.port.get(id);
+      return result.ok ? [result.value.status, result.value.daysToExpiry] : null;
+    };
+    expect(await read('d30')).toEqual(['expiring', 30]);
+    expect(await read('d31')).toEqual(['valid', 31]);
+  });
+
   it('rejects malformed queries with a uniform 400', async () => {
     const { port } = createMockInsuranceStore();
     for (const query of [

@@ -492,6 +492,7 @@ describe('describeFailure', () => {
     expect(of(409, 'immutable').alert?.title).toBe('El documento ya no admite cambios');
     expect(of(422, 'invalid_owner', 'create').alert?.message).toMatch(/Elige otro vehículo/);
     expect(of(422, 'invalid_owner', 'renew').alert?.message).toMatch(/no se puede renovar/);
+    expect(of(422, 'invalid_owner', 'renew').fields).toEqual({});
     expect(of(400, 'bad_request').alert?.title).toBe('El servidor rechazó los datos');
     expect(of(403, 'forbidden', 'renew').alert?.message).toMatch(/renovar documentos/);
     expect(of(403, 'forbidden').alert?.message).toMatch(/guardar documentos/);

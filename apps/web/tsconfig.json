@@ -27,6 +27,8 @@
     "documents/**/*.tsx",
     "insurance/**/*.ts",
     "insurance/**/*.tsx",
+    "employees/**/*.ts",
+    "employees/**/*.tsx",
     "settings/**/*.ts",
     "settings/**/*.tsx",
     "vehicles/**/*.ts",

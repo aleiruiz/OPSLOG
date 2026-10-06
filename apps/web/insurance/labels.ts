@@ -32,13 +32,11 @@ export const coverageLabel = (code: string): string =>
 export const notStarted = (policy: Pick<InsurancePolicy, 'status' | 'covering'>): boolean =>
   policy.status === 'valid' && !policy.covering;
 
-/** "12,500.00 MXN" or "15 %" (an exact decimal rendering of integers: no float arithmetic on money). */
+/** "12,500.00 MXN" or "15 %" (es-MX separators; the stored values stay integers, only the display divides). */
 export function formatDeductible(deductible: Deductible): string {
   if (deductible.kind === 'percent') {
-    const whole = Math.floor(deductible.basisPoints / 100);
-    const fraction = deductible.basisPoints % 100;
-    const text = fraction === 0 ? '' : `,${String(fraction).padStart(2, '0').replace(/0$/, '')}`;
-    return `${whole}${text} %`;
+    const percent = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 2 });
+    return `${percent.format(deductible.basisPoints / 100)} %`;
   }
   const exponent = currencyExponent(deductible.currency) ?? 2;
   const formatter = new Intl.NumberFormat('es-MX', {

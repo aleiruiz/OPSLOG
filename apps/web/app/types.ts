@@ -27,6 +27,17 @@ import type {
   BffInsurancePolicyRenewal,
   BffInsurancePolicyRevision,
   BffPolicyStatus,
+  BffEmployee,
+  BffEmployeeDetail,
+  BffEmployeeHistoryEntry,
+  BffEmployeeHistoryQuery,
+  BffEmployeeInput,
+  BffEmployeeKind,
+  BffEmployeePatch,
+  BffEmployeeStatus,
+  BffEmployeesQuery,
+  BffFitness,
+  BffFitnessReason,
   BffOidcCredentials,
   BffUser,
   BffUsersQuery,
@@ -38,6 +49,7 @@ import type {
   BffVehiclesQuery,
   DocumentsClient,
   InsuranceClient,
+  EmployeesClient,
   ISODateTime,
   Page,
   Permission,
@@ -246,6 +258,28 @@ export type Deductible = BffDeductible;
  * request that mentions `deductible` at all, a `null` included, is a 403.
  */
 export type InsurancePort = InsuranceClient;
+export type Employee = BffEmployee;
+export type EmployeeDetail = BffEmployeeDetail;
+export type EmployeeKind = BffEmployeeKind;
+export type EmployeeStatus = BffEmployeeStatus;
+export type EmployeeInput = BffEmployeeInput;
+export type EmployeePatch = BffEmployeePatch;
+export type EmployeeListQuery = BffEmployeesQuery;
+export type EmployeeHistoryEntry = BffEmployeeHistoryEntry;
+export type EmployeeHistoryQuery = BffEmployeeHistoryQuery;
+export type Fitness = BffFitness;
+export type FitnessReason = BffFitnessReason;
+
+/**
+ * Employees over the generated BFF client. Every change carries the `version` of the last read (409
+ * `stale_version`); a repeated employee number, identification or e-mail is a 409 `duplicate` whose
+ * `fieldErrors[0].field` is `employee_number`, `national_id` or `email`; an unknown, foreign or inactive
+ * area is a 422 `invalid_area` (`area_id`). `get` returns the personal data (`pii`) only to a session
+ * holding `view_pii` (and the server audits that disclosure); everyone else gets `pii: null`. Writing
+ * personal data needs `view_pii` as well (403 otherwise). Terminated and archived employees are
+ * read-only (409 `immutable`); a status change that the matrix does not allow is a 409 `invalid_transition`.
+ */
+export type EmployeesPort = EmployeesClient;
 
 export interface ApiPorts {
   readonly auth: AuthPort;
@@ -257,5 +291,6 @@ export interface ApiPorts {
   readonly areas: AreasPort;
   readonly documents: DocumentsPort;
   readonly insurance: InsurancePort;
+  readonly employees: EmployeesPort;
   readonly oidc: OidcPort;
 }

@@ -3,6 +3,8 @@ import { PageHeader } from '@opslog/ui';
 import { ResourceView, useResource } from '../app/resource';
 import { useRouter } from '../app/router';
 import type { ApiError, Vehicle } from '../app/types';
+import { areaChoices, type AreaChoice } from '../areas/areaChoices';
+import { loadAllAreas } from '../areas/loadAreas';
 import { useSession } from '../auth/session';
 import { isEditable } from './labels';
 import { VehicleForm, type FormAlert } from './VehicleForm';
@@ -106,6 +108,7 @@ export function describeFailure(error: ApiError, saved: boolean): Failure {
 export function VehicleCreateScreen() {
   const { ports, markExpired } = useSession();
   const router = useRouter();
+  const catalog = useResource(() => loadAllAreas(ports.areas, true), [ports]);
   const [submitting, setSubmitting] = React.useState(false);
   const [failure, setFailure] = React.useState<Failure>({ alert: null, fields: {} });
 
@@ -128,14 +131,19 @@ export function VehicleCreateScreen() {
         title="Nuevo vehículo"
         description="El vehículo se crea con estado Activo y la fecha de alta que indiques."
       />
-      <VehicleForm
-        mode="create"
-        submitting={submitting}
-        serverErrors={failure.fields}
-        alert={failure.alert}
-        cancelTo="/flota/vehiculos"
-        onSubmit={(values) => void submit(values)}
-      />
+      <ResourceView state={catalog.state} onRetry={catalog.reload}>
+        {({ areas }) => (
+          <VehicleForm
+            mode="create"
+            areas={areaChoices(areas)}
+            submitting={submitting}
+            serverErrors={failure.fields}
+            alert={failure.alert}
+            cancelTo="/flota/vehiculos"
+            onSubmit={(values) => void submit(values)}
+          />
+        )}
+      </ResourceView>
     </>
   );
 }
@@ -148,11 +156,13 @@ interface EditDraft {
 
 function EditForm({
   vehicle,
+  areas,
   setVehicle,
   reload,
   draft,
 }: {
   vehicle: Vehicle;
+  areas: readonly AreaChoice[];
   setVehicle: (vehicle: Vehicle) => void;
   reload: () => void;
   draft: React.MutableRefObject<EditDraft | null>;
@@ -238,6 +248,7 @@ function EditForm({
   return (
     <VehicleForm
       mode="edit"
+      areas={areas}
       initial={start.values}
       onValuesChange={remember}
       currentOdometerKm={vehicle.odometerKm}
@@ -261,6 +272,7 @@ export function VehicleEditScreen({ id }: { id: string }) {
     () => ports.vehicles.get(id),
     [ports, id],
   );
+  const catalog = useResource(() => loadAllAreas(ports.areas, true), [ports]);
   const draft = React.useRef<EditDraft | null>(null);
   return (
     <>
@@ -274,13 +286,18 @@ export function VehicleEditScreen({ id }: { id: string }) {
         <ResourceView state={state} onRetry={reload}>
           {(vehicle) =>
             isEditable(vehicle) ? (
-              <EditForm
-                key={generation}
-                vehicle={vehicle}
-                setVehicle={setData}
-                reload={reload}
-                draft={draft}
-              />
+              <ResourceView state={catalog.state} onRetry={catalog.reload}>
+                {({ areas }) => (
+                  <EditForm
+                    key={generation}
+                    vehicle={vehicle}
+                    areas={areaChoices(areas, vehicle.areaId)}
+                    setVehicle={setData}
+                    reload={reload}
+                    draft={draft}
+                  />
+                )}
+              </ResourceView>
             ) : (
               <VehicleNotEditable vehicleId={vehicle.id} />
             )

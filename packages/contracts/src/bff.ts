@@ -30,10 +30,13 @@ export const BFF_ERRORS = {
   invalid_transition: { status: 409, message: 'Conflict' },
   immutable: { status: 409, message: 'Conflict' },
   area_in_use: { status: 409, message: 'Conflict' },
+  principal_taken: { status: 409, message: 'Conflict' },
+  already_assigned: { status: 409, message: 'Conflict' },
   odometer_decrease: { status: 422, message: 'Unprocessable request' },
   invalid_area: { status: 422, message: 'Unprocessable request' },
   invalid_owner: { status: 422, message: 'Unprocessable request' },
   invalid_vehicle: { status: 422, message: 'Unprocessable request' },
+  invalid_employee: { status: 422, message: 'Unprocessable request' },
   invalid_hierarchy: { status: 422, message: 'Unprocessable request' },
   invalid_responsible: { status: 422, message: 'Unprocessable request' },
   payload_too_large: { status: 413, message: 'Payload too large' },
@@ -52,7 +55,10 @@ export interface BffErrorBody {
    * Only on `duplicate` (the unique field that collided: `economic_number`, `plate`, `vin`,
    * `employee_number`, `national_id` or `email`), `area_in_use` (the kind of resource that blocks:
    * `sub_areas`, `vehicles` or `people`), `invalid_area` (`area_id`), `invalid_owner`
-   * (`owner_id`) and `invalid_vehicle` (`vehicle_id`); never a value or a count.
+   * (`owner_id`), `invalid_vehicle` (`vehicle_id`), `invalid_employee` (`employee_id`),
+   * `principal_taken` (`vehicle_id` when the vehicle already has a current principal,
+   * `employee_id` when the driver is already principal of another vehicle) and `already_assigned`
+   * (`employee_id`); never a value or a count.
    */
   readonly field?: string;
 }
@@ -569,6 +575,86 @@ export interface BffInsurancePolicyHistoryQuery {
   readonly cursor?: string;
 }
 
+export const BFF_ASSIGNMENT_TYPES = ['principal', 'secondary', 'temporary'] as const;
+export type BffAssignmentType = (typeof BFF_ASSIGNMENT_TYPES)[number];
+
+/** Derived from `endedAt`: `current` while the assignment has not ended. */
+export const BFF_ASSIGNMENT_STATUSES = ['current', 'ended'] as const;
+export type BffAssignmentStatus = (typeof BFF_ASSIGNMENT_STATUSES)[number];
+
+/** How an assignment ended: closed by a person or replaced by a new principal. */
+export type BffAssignmentEndKind = 'ended' | 'replaced';
+
+/**
+ * A driver-vehicle assignment. The company is implicit (the session's); `version` is the
+ * concurrency token. An assignment is never edited or deleted: it is closed (`endedAt`) and stays
+ * as history. `startedAt` is the server clock at the moment of assigning.
+ */
+export interface BffVehicleAssignment {
+  readonly id: string;
+  readonly vehicleId: string;
+  readonly employeeId: string;
+  readonly type: BffAssignmentType;
+  readonly reason: string;
+  /** `user-<subject>`: the only identifier of a person in the row. */
+  readonly assignedBy: string;
+  readonly startedAt: ISODateTime;
+  readonly endedAt: ISODateTime | null;
+  readonly endKind: BffAssignmentEndKind | null;
+  readonly endReason: string | null;
+  readonly endedBy: string | null;
+  readonly current: boolean;
+  readonly version: number;
+  readonly updatedAt: ISODateTime;
+}
+
+/**
+ * Assigning a driver (`employeeId` of an active employee of kind driver) to a vehicle (neither
+ * archived, inactive nor decommissioned). A second principal is rejected with `principal_taken`;
+ * `replace: true` (principal only; needs `edit` besides `create`) closes the vehicle's current
+ * principal in the same transaction and returns it as `replaced`.
+ */
+export interface BffVehicleAssignmentInput {
+  readonly vehicleId: string;
+  readonly employeeId: string;
+  readonly type: BffAssignmentType;
+  readonly reason: string;
+  readonly replace?: boolean;
+}
+
+export interface BffVehicleAssignmentCreated {
+  readonly assignment: BffVehicleAssignment;
+  readonly replaced: BffVehicleAssignment | null;
+}
+
+export interface BffVehicleAssignmentEnd {
+  readonly version: number;
+  readonly reason: string;
+}
+
+export interface BffVehicleAssignmentsQuery {
+  readonly limit?: 25 | 50 | 100;
+  readonly cursor?: string;
+  readonly vehicleId?: string;
+  readonly employeeId?: string;
+  readonly type?: BffAssignmentType;
+  readonly status?: BffAssignmentStatus;
+}
+
+/** One row of the append-only history of an assignment. */
+export interface BffVehicleAssignmentEvent {
+  readonly seq: number;
+  readonly kind: 'assigned' | BffAssignmentEndKind;
+  readonly actorId: string;
+  readonly reason: string;
+  readonly at: ISODateTime;
+}
+
+export interface BffVehicleAssignmentHistoryQuery {
+  readonly limit?: 25 | 50 | 100;
+  readonly cursor?: string;
+}
+
 /** An area of the company's organizational tree (up to four levels). The company is implicit. */
 export interface BffArea {
   readonly id: string;
@@ -737,6 +823,22 @@ export interface BffRouteTypes {
     params: { id: string };
     query?: BffInsurancePolicyHistoryQuery;
     response: Page<BffInsurancePolicyRevision>;
+  };
+  'assignments.list': {
+    query?: BffVehicleAssignmentsQuery;
+    response: Page<BffVehicleAssignment>;
+  };
+  'assignments.create': { body: BffVehicleAssignmentInput; response: BffVehicleAssignmentCreated };
+  'assignments.get': { params: { id: string }; response: BffVehicleAssignment };
+  'assignments.end': {
+    params: { id: string };
+    body: BffVehicleAssignmentEnd;
+    response: BffVehicleAssignment;
+  };
+  'assignments.history': {
+    params: { id: string };
+    query?: BffVehicleAssignmentHistoryQuery;
+    response: Page<BffVehicleAssignmentEvent>;
   };
   'documents.history': {
     params: { id: string };
@@ -1005,6 +1107,36 @@ export const BFF_ROUTES = {
   'insurance.history': {
     method: 'GET',
     path: ['api', 'insurance-policies', ':id', 'history'],
+    kind: 'session',
+    status: 200,
+  },
+  'assignments.list': {
+    method: 'GET',
+    path: ['api', 'vehicle-assignments'],
+    kind: 'session',
+    status: 200,
+  },
+  'assignments.create': {
+    method: 'POST',
+    path: ['api', 'vehicle-assignments'],
+    kind: 'session-csrf',
+    status: 201,
+  },
+  'assignments.get': {
+    method: 'GET',
+    path: ['api', 'vehicle-assignments', ':id'],
+    kind: 'session',
+    status: 200,
+  },
+  'assignments.end': {
+    method: 'POST',
+    path: ['api', 'vehicle-assignments', ':id', 'end'],
+    kind: 'session-csrf',
+    status: 200,
+  },
+  'assignments.history': {
+    method: 'GET',
+    path: ['api', 'vehicle-assignments', ':id', 'history'],
     kind: 'session',
     status: 200,
   },

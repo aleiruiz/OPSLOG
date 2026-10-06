@@ -151,6 +151,8 @@ importers:
 
   packages/domain/areas: {}
 
+  packages/domain/assignments: {}
+
   packages/domain/documents: {}
 
   packages/domain/employees: {}
@@ -170,6 +172,22 @@ importers:
   packages/domain/vehicles: {}
 
   packages/persistence/areas:
+    dependencies:
+      mysql2:
+        specifier: 3.22.0
+        version: 3.22.0(@types/node@22.15.21)
+      reflect-metadata:
+        specifier: 0.2.2
+        version: 0.2.2
+      typeorm:
+        specifier: 1.1.1
+        version: 1.1.1(babel-plugin-macros@3.1.0)(mysql2@3.22.0(@types/node@22.15.21))(supports-color@7.2.0)
+    devDependencies:
+      vitest:
+        specifier: 3.2.6
+        version: 3.2.6(@types/node@22.15.21)(jsdom@26.0.0(supports-color@7.2.0))(supports-color@7.2.0)
+
+  packages/persistence/assignments:
     dependencies:
       mysql2:
         specifier: 3.22.0

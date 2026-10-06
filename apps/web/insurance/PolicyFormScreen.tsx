@@ -64,7 +64,7 @@ export function describeFailure(error: ApiError, mode: FormMode): Failure {
           ? 'El vehículo no existe o está archivado. Elige otro vehículo de la lista.'
           : 'El vehículo de esta póliza ya no existe o está archivado, por lo que no se puede renovar.',
       ),
-      fields: vehicleErrors(error),
+      fields: mode === 'create' ? vehicleErrors(error) : {},
     };
   if (error.status === 400)
     return {

@@ -1,0 +1,8 @@
+{
+  "name": "@opslog/domain-assignments",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:unit": "vitest run --coverage.enabled --coverage.include=src/**/*.ts --coverage.exclude=**/*.test.ts --coverage.thresholds.lines=95 --coverage.thresholds.functions=95 --coverage.thresholds.statements=95 --coverage.thresholds.branches=90"
+  }
+}

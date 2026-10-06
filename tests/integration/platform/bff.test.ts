@@ -50,6 +50,7 @@ const POLICY_NEW = {
   startsOn: '2026-01-01',
   endsOn: '2026-12-31',
 };
+const ASSIGNMENT_NEW = { type: 'principal', reason: 'Alta de unidad' };
 const SETTINGS = { name: 'Nombre nuevo', mfa: 'disabled', sessionIdleHours: 8 };
 
 interface Fixture {
@@ -64,6 +65,8 @@ interface Fixture {
   readonly employeeId: string;
   readonly documentId: string;
   readonly policyId: string;
+  readonly driverId: string;
+  readonly assignmentId: string;
   readonly areaId: string;
   /** Area that holds the fixture vehicle (a vehicle's area must be an active area of its tenant). */
   readonly fleetAreaId: string;
@@ -109,6 +112,24 @@ async function fixture(options: Parameters<typeof createBffWorld>[0] = {}): Prom
     json: { ...POLICY_NEW, vehicleId: vehicle.json.id },
   });
   if (policy.status !== 201) throw new Error('policy fixture failed');
+  const driver = async (employeeNumber: string) => {
+    const reply = await adminA.post('/api/employees', {
+      json: {
+        kind: 'driver',
+        firstName: 'Ana',
+        lastName: 'Perez',
+        areaId: fleet.json.id,
+        employeeNumber,
+      },
+    });
+    if (reply.status !== 201) throw new Error('driver fixture failed');
+    return reply.json.id as string;
+  };
+  const driverId = await driver('E-010');
+  const assignment = await adminA.post('/api/vehicle-assignments', {
+    json: { ...ASSIGNMENT_NEW, vehicleId: vehicle.json.id, employeeId: await driver('E-011') },
+  });
+  if (assignment.status !== 201) throw new Error('assignment fixture failed');
   const area = await adminA.post('/api/areas', { json: { name: 'Operaciones' } });
   if (area.status !== 201) throw new Error('area fixture failed');
   return {
@@ -120,6 +141,8 @@ async function fixture(options: Parameters<typeof createBffWorld>[0] = {}): Prom
     employeeId: employee.json.id as string,
     documentId: document.json.id as string,
     policyId: policy.json.id as string,
+    driverId,
+    assignmentId: assignment.json.assignment.id as string,
     areaId: area.json.id as string,
     fleetAreaId: fleet.json.id as string,
     viewerA: await world.loginAs('subject-viewer-a'),
@@ -169,6 +192,12 @@ function writes(f: Fixture): [string, string, unknown?][] {
       { version: 1, startsOn: '2027-01-01', endsOn: '2027-12-31' },
     ],
     ['POST', `/api/insurance-policies/${f.policyId}/archive`, { version: 1 }],
+    [
+      'POST',
+      '/api/vehicle-assignments',
+      { ...ASSIGNMENT_NEW, type: 'temporary', vehicleId: f.vehicleId, employeeId: f.driverId },
+    ],
+    ['POST', `/api/vehicle-assignments/${f.assignmentId}/end`, { version: 1, reason: 'Fin' }],
     ['POST', '/api/areas', { name: 'Nueva area' }],
     ['PUT', `/api/areas/${f.areaId}`, { version: 1, name: 'Renombrada' }],
     ['POST', `/api/areas/${f.areaId}/deactivate`, { version: 1 }],
@@ -191,6 +220,8 @@ async function snapshot(f: Fixture) {
     documentsB: await get(f.adminB, '/api/documents?includeArchived=true&limit=100'),
     policies: await get(f.adminA, '/api/insurance-policies?includeArchived=true&limit=100'),
     policiesB: await get(f.adminB, '/api/insurance-policies?includeArchived=true&limit=100'),
+    assignments: await get(f.adminA, '/api/vehicle-assignments?limit=100'),
+    assignmentsB: await get(f.adminB, '/api/vehicle-assignments?limit=100'),
     areas: await get(f.adminA, '/api/areas?includeInactive=true&limit=100'),
     areasB: await get(f.adminB, '/api/areas?includeInactive=true&limit=100'),
     settingsB: await get(f.adminB, '/api/company/settings'),
@@ -651,6 +682,8 @@ describe('request limits through HTTP', () => {
       ['PUT', `/api/insurance-policies/${f.policyId}`],
       ['POST', `/api/insurance-policies/${f.policyId}/renew`],
       ['POST', `/api/insurance-policies/${f.policyId}/archive`],
+      ['POST', '/api/vehicle-assignments'],
+      ['POST', `/api/vehicle-assignments/${f.assignmentId}/end`],
       ['POST', '/api/areas'],
       ['PUT', `/api/areas/${f.areaId}`],
       ['POST', `/api/areas/${f.areaId}/deactivate`],

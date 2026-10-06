@@ -69,7 +69,7 @@ export function describeFailure(error: ApiError, mode: FormMode): Failure {
           ? 'El vehículo no existe o está archivado. Elige otro vehículo de la lista.'
           : 'El vehículo de este documento ya no existe o está archivado, por lo que no se puede renovar.',
       ),
-      fields: ownerErrors(error),
+      fields: mode === 'create' ? ownerErrors(error) : {},
     };
   if (error.status === 400)
     return {
