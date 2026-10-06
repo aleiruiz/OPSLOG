@@ -1,4 +1,9 @@
-import { Worker, drain, type TenantDirectory } from '../../base/src/index.js';
+import {
+  Worker,
+  drain,
+  type ActorPermissionCheck,
+  type TenantDirectory,
+} from '../../base/src/index.js';
 import type { AuditStore } from '../../../../packages/platform/audit/src/index.js';
 import type { OutboxStore } from '../../../../packages/platform/outbox/src/index.js';
 import type {
@@ -8,7 +13,7 @@ import type {
   ScanRunSummary,
 } from '../../../../packages/platform/files/src/index.js';
 
-export type { TenantDirectory };
+export type { ActorPermissionCheck, TenantDirectory };
 
 const MAX_REFILL_ROUNDS = 1000;
 
@@ -67,6 +72,8 @@ export class TenantAwareScanQueue implements ScanQueue {
 export interface WorkerRuntimeDeps {
   readonly outbox: OutboxStore;
   readonly tenants: TenantDirectory;
+  /** Current-permission check for the user that enqueued a job. */
+  readonly actors: ActorPermissionCheck;
   readonly audit: AuditStore;
   readonly pipeline: FilePipeline;
   readonly clock: () => number;
@@ -97,6 +104,7 @@ export function createWorkerRuntime(deps: WorkerRuntimeDeps): WorkerRuntime {
     deps.leaseMs,
     deps.maxAttempts,
     deps.clock,
+    deps.actors,
   );
   return {
     worker,

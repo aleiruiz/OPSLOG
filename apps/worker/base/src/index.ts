@@ -6,12 +6,24 @@ import { DeadLetterQueue } from '../../../../infra/queues/src/index.js';
 export interface TenantDirectory {
   status(tenantId: string): 'active' | 'suspended' | 'missing';
 }
+/**
+ * Re-checks the CURRENT permission of the actor that enqueued a job. Implemented by the
+ * composition on top of the server-side membership/role directory. Throwing counts as denied.
+ */
+export interface ActorPermissionCheck {
+  allows(
+    tenantId: string,
+    actor: { readonly subject: string; readonly kind: 'user' | 'api_key' | 'system' },
+    permission: string | undefined,
+  ): boolean | Promise<boolean>;
+}
 export interface WorkerMetrics {
   claimed: number;
   delivered: number;
   retried: number;
   deadLettered: number;
   rejectedTenants: number;
+  rejectedActors: number;
   handlerFailures: number;
   auditFailures: number;
   staleLeases: number;
@@ -27,6 +39,7 @@ export class Worker {
     retried: 0,
     deadLettered: 0,
     rejectedTenants: 0,
+    rejectedActors: 0,
     handlerFailures: 0,
     auditFailures: 0,
     staleLeases: 0,
@@ -42,6 +55,8 @@ export class Worker {
     // First try plus five retries (SPECS delivery schedule).
     private readonly maxAttempts = 6,
     private readonly clock: () => number = Date.now,
+    // Without a check, jobs enqueued by a user actor fail closed.
+    private readonly actors?: ActorPermissionCheck,
   ) {}
   register(type: string, handler: Handler): void {
     if (this.handlers.has(type)) throw new Error(`handler already registered: ${type}`);
@@ -84,6 +99,23 @@ export class Worker {
           eventId: record.eventId,
           tenantId: record.tenantId,
           reason: 'tenant unavailable',
+        });
+      });
+      return true;
+    }
+    if (
+      !record.handlerCompleted &&
+      record.actorRef?.kind === 'user' &&
+      !(await this.actorStillAllowed(record))
+    ) {
+      this.metrics.rejectedActors += 1;
+      this.guarded(() => {
+        this.store.retry(record.tenantId, record.eventId, fencing, 'actor not permitted', now, 1);
+        this.metrics.deadLettered += 1;
+        this.dlq.send({
+          eventId: record.eventId,
+          tenantId: record.tenantId,
+          reason: 'actor not permitted',
         });
       });
       return true;
@@ -174,6 +206,22 @@ export class Worker {
       this.metrics.delivered += 1;
     });
     return true;
+  }
+  /** Fails closed: no check wired, or a check that throws, means the actor is not permitted. */
+  private async actorStillAllowed(record: {
+    tenantId: string;
+    actorRef?: { subject: string; kind: 'user' | 'api_key' | 'system' };
+    requiredPermission?: string;
+  }): Promise<boolean> {
+    if (!this.actors || !record.actorRef) return false;
+    try {
+      return (
+        (await this.actors.allows(record.tenantId, record.actorRef, record.requiredPermission)) ===
+        true
+      );
+    } catch {
+      return false;
+    }
   }
   /** Runs a fenced store mutation; a lost lease drops the claim instead of crashing the drain loop. */
   private guarded(work: () => void): boolean {

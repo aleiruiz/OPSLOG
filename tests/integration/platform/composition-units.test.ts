@@ -124,6 +124,7 @@ describe('createWorkerRuntime defaults', () => {
     const runtime = createWorkerRuntime({
       outbox: { claimDue: async () => [] } as never,
       tenants: new InMemoryTenantStore(),
+      actors: { allows: () => true },
       audit: {} as never,
       pipeline: { processScans } as never,
       clock: () => 0,

@@ -10,7 +10,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
 const NOT_ALNUM_BEFORE = '(?<![A-Za-z0-9])';
-const PATTERNS = [
+const RAW_PATTERNS = [
   ['AWS access key id', /(?<![A-Z0-9])(?:AKIA|ASIA)[0-9A-Z]{16}(?![A-Z0-9])/],
   ['private key block', /-----BEGIN [A-Z ]{0,30}PRIVATE KEY(?: BLOCK)?-----/],
   [
@@ -32,6 +32,8 @@ const PATTERNS = [
   ],
   ['npm auth token', /_authToken\s*=\s*[^\s$]+/],
 ];
+// Global copies so every match on a line is checked, not just the first one.
+const PATTERNS = RAW_PATTERNS.map(([name, pattern]) => [name, new RegExp(pattern.source, 'g')]);
 const SECRET_FILES =
   /(?:^|\/)(?:\.env(?:\..*)?|\.netrc|\.npmrc|id_(?:rsa|dsa|ecdsa|ed25519)|[^/]+\.(?:pem|key|p12|pfx))$/;
 // Only a trailing comment with a reason allows a line; the value must come before the marker.
@@ -56,11 +58,12 @@ for (const file of files) {
     const line = lines[index];
     const marker = ALLOW.exec(line);
     for (const [name, pattern] of PATTERNS) {
-      const match = pattern.exec(line);
-      if (!match) continue;
-      if (marker && match.index < marker.index)
-        allowed.push(`${file}:${index + 1}: ${name} (allowed: ${marker[1].trim()})`);
-      else findings.push(`${file}:${index + 1}: ${name}`);
+      for (const match of line.matchAll(pattern)) {
+        // The reason is free text that could itself hold a value: it is never echoed.
+        if (marker && match.index < marker.index)
+          allowed.push(`${file}:${index + 1}: ${name} (allowed, reason recorded in source)`);
+        else findings.push(`${file}:${index + 1}: ${name}`);
+      }
     }
   }
 }
