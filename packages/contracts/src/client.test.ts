@@ -293,3 +293,112 @@ describe('BFF client: requests and responses', () => {
     });
   });
 });
+
+describe('BFF client: token bodies and concurrency', () => {
+  it.each([
+    ['auth.csrf', undefined],
+    ['auth.session', undefined],
+  ] as const)('fails with invalid_response for an empty 200 body on %s', async (id) => {
+    const { fetch } = transport(() => ({ status: 200 }));
+    expect(await createBffClient({ fetch }).call(id)).toMatchObject({
+      ok: false,
+      error: { code: 'invalid_response' },
+    });
+  });
+
+  it('fails when a token-bearing body has no string csrfToken, also inside ensurePre', async () => {
+    const bad = transport(() => ({ status: 200, body: { csrfToken: 5 } }));
+    expect(
+      await createBffClient({ fetch: bad.fetch }).call('auth.login', {
+        body: { code: 'c', nonce: 'n' },
+      }),
+    ).toMatchObject({ ok: false, error: { code: 'invalid_response' } });
+    const nullBody = transport(() => ({ status: 200, raw: 'null' }));
+    expect(await createBffClient({ fetch: nullBody.fetch }).call('auth.csrf')).toMatchObject({
+      ok: false,
+      error: { code: 'invalid_response' },
+    });
+  });
+
+  it('shares one in-flight auth.csrf exchange between concurrent callers', async () => {
+    const { fetch, seen } = transport(({ url }) =>
+      url === '/api/auth/csrf'
+        ? { status: 200, body: { csrfToken: 'pre' } }
+        : { status: 200, body: { companyName: 'x', roleLabel: 'y' } },
+    );
+    const client = createBffClient({ fetch });
+    const results = await Promise.all([
+      client.call('auth.invitation.inspect', { body: { token: 'a' } }),
+      client.call('auth.invitation.inspect', { body: { token: 'b' } }),
+    ]);
+    expect(results.every((result) => result.ok)).toBe(true);
+    expect(seen.filter((entry) => entry.url === '/api/auth/csrf')).toHaveLength(1);
+  });
+
+  it('clears the in-flight exchange after a failure so the next call retries', async () => {
+    let calls = 0;
+    const { fetch } = transport(({ url }) => {
+      if (url !== '/api/auth/csrf')
+        return { status: 200, body: { companyName: 'x', roleLabel: 'y' } };
+      calls += 1;
+      return calls === 1
+        ? { status: 500, body: errorBody('internal_error', 500) }
+        : { status: 200, body: { csrfToken: 'pre' } };
+    });
+    const client = createBffClient({ fetch });
+    expect((await client.call('auth.invitation.inspect', { body: { token: 'a' } })).ok).toBe(false);
+    expect((await client.call('auth.invitation.inspect', { body: { token: 'a' } })).ok).toBe(true);
+  });
+});
+
+describe('BFF client: another tab changed the signed-in person', () => {
+  const as = (user: string, company: string, token: string) => ({
+    status: 200,
+    body: { ...session(token), user: { id: user }, company: { id: company, name: company } },
+  });
+
+  it('does not replay a write after a refresh that shows a different person or company', async () => {
+    let current = as('admin-a', 'alfa', 'token-a');
+    const { fetch, seen } = transport(({ url, headers }) => {
+      if (url === '/api/auth/login') return current;
+      if (url === '/api/auth/session') return current;
+      // Writes carry the stale token: the BFF rejects it with csrf_failed.
+      return headers[CSRF_HEADER] === 'token-b'
+        ? { status: 200, body: {} }
+        : { status: 403, body: errorBody('csrf_failed', 403) };
+    });
+    const client = createBffClient({ fetch });
+    await client.call('auth.session');
+    current = as('admin-b', 'beta', 'token-b');
+    const result = await client.call('drafts.save', {
+      params: { scope: 's' },
+      body: { values: { a: 'b' } },
+    });
+    expect(result).toMatchObject({ ok: false, error: { code: 'unauthorized', status: 401 } });
+    expect(seen.filter((entry) => entry.method === 'PUT')).toHaveLength(1);
+  });
+
+  it('adopts the new person only through an explicit session read, and replays for the same person', async () => {
+    let current = as('admin-a', 'alfa', 'token-a');
+    let rotated = false;
+    const { fetch } = transport(({ url, headers }) => {
+      if (url === '/api/auth/session') return current;
+      return rotated && headers[CSRF_HEADER] === 'token-a2'
+        ? { status: 200, body: { scope: 's', values: {}, savedAt: 'x' } }
+        : { status: 403, body: errorBody('csrf_failed', 403) };
+    });
+    const client = createBffClient({ fetch });
+    await client.call('auth.session');
+    rotated = true;
+    current = as('admin-a', 'alfa', 'token-a2');
+    expect(
+      (await client.call('drafts.save', { params: { scope: 's' }, body: { values: {} } })).ok,
+    ).toBe(true);
+    current = as('admin-b', 'beta', 'token-b');
+    expect((await client.call('auth.session')).ok).toBe(true);
+    rotated = false;
+    expect(
+      (await client.call('drafts.save', { params: { scope: 's' }, body: { values: {} } })).ok,
+    ).toBe(false);
+  });
+});

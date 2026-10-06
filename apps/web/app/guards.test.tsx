@@ -15,13 +15,16 @@ function sourceFiles(dir: string): string[] {
     return /\.(ts|tsx)$/.test(name) && !/\.test\./.test(name) ? [path] : [];
   });
 }
-const sources = ['app', 'auth', 'settings'].flatMap((dir) => sourceFiles(join(webRoot, dir)));
+const sources = ['api', 'app', 'auth', 'settings'].flatMap((dir) =>
+  sourceFiles(join(webRoot, dir)),
+);
 const read = (path: string) => readFileSync(path, 'utf8');
 
 describe('browser storage', () => {
   it('has no source reference to Web Storage, IndexedDB or document.cookie', () => {
     expect(sources.length).toBeGreaterThan(10);
-    const offenders = sources.filter((path) =>
+    const client = resolve(webRoot, '../../packages/contracts/src/client.ts');
+    const offenders = [...sources, client].filter((path) =>
       /localStorage|sessionStorage|indexedDB|document\.cookie/.test(read(path)),
     );
     expect(offenders.map((path) => relative(webRoot, path))).toEqual([]);

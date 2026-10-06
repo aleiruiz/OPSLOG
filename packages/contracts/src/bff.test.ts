@@ -16,7 +16,8 @@ describe('BFF contract', () => {
     expect(bffPath('users.list', {}, { limit: 25, cursor: undefined, search: 'a b' })).toBe(
       '/api/users?limit=25&search=a+b',
     );
-    expect(bffPath('drafts.load', {})).toBe('/api/drafts/');
+    expect(() => bffPath('drafts.load', {})).toThrow(/Missing path parameter :scope/);
+    expect(() => bffPath('drafts.load', { scope: '' })).toThrow();
   });
 
   it('recognises uniform error bodies only', () => {

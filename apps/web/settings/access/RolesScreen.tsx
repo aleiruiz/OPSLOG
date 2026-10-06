@@ -157,11 +157,22 @@ function CopyForm({
     }
     setSubmitting(true);
     setErrors({});
-    const result = await ports.roles.copyRole(role.id, draft.values.name);
-    setSubmitting(false);
+    let result;
+    try {
+      result = await ports.roles.copyRole(role.id, draft.values.name);
+    } catch {
+      setErrors({ name: 'No pudimos crear la copia. Intenta nuevamente.' });
+      return;
+    } finally {
+      setSubmitting(false);
+    }
     if (result.ok) {
-      await draft.discard();
       onCreated(result.value);
+      try {
+        await draft.discard();
+      } catch {
+        // The draft is only a convenience; the next save replaces it.
+      }
     } else if (result.error.status === 401) markExpired();
     else
       // The BFF answers with a uniform error and no per-field detail: a conflict can only be the name.

@@ -10,6 +10,7 @@ import {
 import { BINARY_COLLATION, IDENTITY_TABLES } from './entities.js';
 
 export const IDENTITY_MIGRATION_VERSION = '2026100600010';
+export const IDENTITY_ROLES_MIGRATION_VERSION = '2026100600020';
 export const IDENTITY_MIGRATIONS_TABLE = 'opslog_identity_migrations';
 
 const text = (name: string, length: number, extra: Partial<TableColumnOptions> = {}) =>
@@ -282,5 +283,87 @@ export class CreateIdentityStore2026100600010 implements MigrationInterface {
     await queryRunner.dropTable(T.memberships);
     await queryRunner.dropTable(T.external);
     await queryRunner.dropTable(T.identities);
+  }
+}
+
+/** CHECK constraints of the role tables (same raw-DDL mechanism as `IDENTITY_CHECKS`). */
+export const IDENTITY_ROLE_CHECKS: readonly {
+  readonly table: string;
+  readonly name: string;
+  readonly expression: string;
+}[] = [
+  {
+    table: T.roles,
+    name: 'ck_identity_roles_id',
+    expression: "`id` REGEXP '^[a-z0-9][a-z0-9_-]{0,63}$'",
+  },
+  {
+    table: T.roles,
+    name: 'ck_identity_roles_name',
+    expression: 'CHAR_LENGTH(TRIM(`name`)) > 0 AND CHAR_LENGTH(`name_key`) > 0',
+  },
+  {
+    table: T.rolePermissions,
+    name: 'ck_identity_role_permissions_permission',
+    expression: "`permission` REGEXP '^[a-z][a-z_:]{0,63}$'",
+  },
+];
+
+/**
+ * Custom roles of each tenant. Both tables are tenant-keyed: a role hangs off the tenant lock row
+ * (the same row that serializes administrative changes) and its permissions reference the composite
+ * `(tenant_id, id)` key of the role, so a permission row can never attach to another tenant's role.
+ */
+export class CreateIdentityRoles2026100600020 implements MigrationInterface {
+  name = 'CreateIdentityRoles2026100600020';
+
+  async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.createTable(
+      new Table({
+        name: T.roles,
+        columns: [
+          text('tenant_id', 64, { isPrimary: true }),
+          text('id', 64, { isPrimary: true }),
+          text('name', 80),
+          text('name_key', 160),
+          moment('created_at'),
+        ],
+        uniques: [
+          new TableUnique({
+            name: 'uq_identity_roles_name',
+            columnNames: ['tenant_id', 'name_key'],
+          }),
+        ],
+        foreignKeys: [
+          foreignKey('fk_identity_roles_tenant', ['tenant_id'], T.tenantLocks, ['tenant_id']),
+        ],
+      }),
+    );
+    await queryRunner.createTable(
+      new Table({
+        name: T.rolePermissions,
+        columns: [
+          text('tenant_id', 64, { isPrimary: true }),
+          text('role_id', 64, { isPrimary: true }),
+          text('permission', 64, { isPrimary: true }),
+          version('position'),
+        ],
+        foreignKeys: [
+          foreignKey('fk_identity_role_permissions_role', ['tenant_id', 'role_id'], T.roles, [
+            'tenant_id',
+            'id',
+          ]),
+        ],
+      }),
+    );
+    for (const check of IDENTITY_ROLE_CHECKS)
+      await queryRunner.query(
+        `ALTER TABLE \`${check.table}\` ADD CONSTRAINT \`${check.name}\` CHECK (${check.expression})`,
+      );
+  }
+
+  async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.dropTable(T.rolePermissions);
+    await queryRunner.dropTable(T.roles);
   }
 }

@@ -274,9 +274,12 @@ export function bffPath(
   query: Readonly<Record<string, string | number | undefined>> = {},
 ): string {
   const path = BFF_ROUTES[id].path
-    .map((segment) =>
-      segment.startsWith(':') ? encodeURIComponent(params[segment.slice(1)] ?? '') : segment,
-    )
+    .map((segment) => {
+      if (!segment.startsWith(':')) return segment;
+      const value = params[segment.slice(1)];
+      if (value === undefined || value === '') throw new Error(`Missing path parameter ${segment}`);
+      return encodeURIComponent(value);
+    })
     .join('/');
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(query))

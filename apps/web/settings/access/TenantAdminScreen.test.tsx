@@ -79,6 +79,21 @@ describe('TenantAdminScreen', () => {
     api.controls.failNext('updateCompanySettings', 500);
     click('Guardar cambios');
     expect(await screen.findByText('No pudimos guardar los cambios')).toBeInTheDocument();
+    expect(screen.queryByText(/Revisa los campos marcados/)).toBeNull();
+    expect(screen.getByText(/El servicio no aceptó los cambios/)).toBeInTheDocument();
+    type('Nombre de la empresa', 'Otro nombre 2');
+    expect(screen.queryByText('No pudimos guardar los cambios')).toBeNull();
+  });
+
+  it('clears validation errors as soon as the person edits', async () => {
+    await renderWithSession(<TenantAdminScreen />);
+    await screen.findByDisplayValue('Transportes Demo SA');
+    type('Nombre de la empresa', ' ');
+    click('Guardar cambios');
+    expect(await screen.findByText('Escribe el nombre.')).toBeInTheDocument();
+    type('Nombre de la empresa', 'Nombre');
+    expect(screen.queryByText('Escribe el nombre.')).toBeNull();
+    expect(screen.queryByText('No pudimos guardar los cambios')).toBeNull();
   });
 
   it('keeps the form and shows the expired state when saving gets a 401', async () => {

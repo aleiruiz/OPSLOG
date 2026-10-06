@@ -54,13 +54,14 @@ import {
 import { AccessDirectory, ROLE_PERMISSIONS, isRoleName, type RoleName } from './access.js';
 import {
   DraftStore,
-  MAX_CUSTOM_ROLES_PER_TENANT,
   MFA_POLICIES,
   ROLE_LABELS,
-  RoleCatalog,
+  RoleDirectory,
   TenantSettingsStore,
+  isRoleDirectoryStore,
   type DraftValues,
   type MfaPolicy,
+  type RoleDirectoryStore,
 } from './directory.js';
 import { InMemoryTenantStore } from './tenancy.js';
 
@@ -99,7 +100,12 @@ function failure(error: unknown): PlatformResponse<never> {
   let code: PlatformErrorCode | 'internal_error' = 'internal_error';
   if (error instanceof PlatformError) code = error.code;
   else if (error instanceof AuthError)
-    code = error.code === 'expired' ? 'unauthorized' : error.code;
+    code =
+      (error as { reason?: unknown }).reason === 'last_admin'
+        ? 'last_admin'
+        : error.code === 'expired'
+          ? 'unauthorized'
+          : error.code;
   return {
     ok: false,
     error: {
@@ -163,6 +169,11 @@ class GatedIdentityService extends IdentityService {
 
 export interface PlatformAdapters {
   readonly identityStore?: IdentityStore;
+  /**
+   * Persistent role directory (custom roles and membership roles). Defaults to the identity store
+   * when that store implements it (the TypeORM adapter does); otherwise roles stay in memory.
+   */
+  readonly roleStore?: RoleDirectoryStore;
   readonly storage?: ObjectStorage;
   readonly scanner?: VirusScanner;
   readonly scanQueue?: ScanQueue;
@@ -263,7 +274,7 @@ export class Platform {
   public readonly scanQueue: TenantAwareScanQueue;
   public readonly runtime: WorkerRuntime;
   public readonly settings = new TenantSettingsStore();
-  public readonly roles = new RoleCatalog();
+  public readonly roles: RoleDirectory;
   public readonly drafts = new DraftStore();
   private readonly invitations = new Map<
     string,
@@ -282,6 +293,9 @@ export class Platform {
     this.storage = adapters.storage ?? new InMemoryObjectStorage();
     this.access = new AccessDirectory((tenantId) => this.tenants.status(tenantId) === 'active');
     const identityStore = adapters.identityStore ?? new InMemoryIdentityStore();
+    this.roles = new RoleDirectory(
+      adapters.roleStore ?? (isRoleDirectoryStore(identityStore) ? identityStore : undefined),
+    );
     const notifier = adapters.recoveryNotifier ?? {
       deliver: async () => {
         throw new Error('recovery notifier is not configured');
@@ -419,6 +433,8 @@ export class Platform {
       const tenant = this.tenants.provisionVerified(input.name);
       try {
         const invitation = await this.identity.issueInvitation(tenant.id);
+        // The persisted role is set while the membership is pending, so activation grants it directly.
+        await this.persistRole(tenant.id, invitation.identityId, 'admin');
         const activation = await this.identity.activateInvitation(
           invitation.token,
           input.adminPrincipal.provider,
@@ -531,6 +547,7 @@ export class Platform {
       if (!isRoleName(role)) throw new PlatformError('invalid_input');
       const context = await this.authorize(token, correlationId, ['manage_users']);
       const invitation = await this.identity.issueInvitation(context.tenantId);
+      await this.persistRole(context.tenantId, invitation.identityId, role);
       this.access.expectInvitation(invitation.identityId, context.tenantId, role);
       const nowMs = this.now().getTime();
       for (const [hash, meta] of this.invitations)
@@ -596,6 +613,12 @@ export class Platform {
     }
   }
 
+  /** Writes a membership role through to the persistent directory (no-op with in-memory adapters). */
+  private async persistRole(tenantId: string, identityId: string, role: RoleName): Promise<void> {
+    if (!(await this.roles.setMemberRole(tenantId, identityId, role)))
+      throw new PlatformError('conflict');
+  }
+
   private async bumpProjection(
     tenantId: string,
     identityId: string,
@@ -651,8 +674,18 @@ export class Platform {
         this.access.activeAdmins(context.tenantId).length <= 1
       )
         throw new PlatformError('last_admin');
-      this.access.setRole(context.tenantId, targetIdentityId, role);
-      await this.bumpProjection(context.tenantId, targetIdentityId, 'active');
+      // Persisted first: the store enforces the last-administrator rule across processes and bumps
+      // the persisted authorization version. The in-memory directory follows; if the rest of the
+      // change fails, both writes are compensated so the directory and the store never disagree.
+      await this.persistRole(context.tenantId, targetIdentityId, role);
+      try {
+        this.access.setRole(context.tenantId, targetIdentityId, role);
+        await this.bumpProjection(context.tenantId, targetIdentityId, 'active');
+      } catch (error) {
+        this.access.setRole(context.tenantId, targetIdentityId, current);
+        await this.persistRole(context.tenantId, targetIdentityId, current).catch(() => undefined);
+        throw error;
+      }
       this.auditNow(
         this.userActor(context),
         'membership.role_changed',
@@ -774,7 +807,7 @@ export class Platform {
     }
   }
 
-  private roleViews(tenantId: string): readonly RoleView[] {
+  private async roleViews(tenantId: string): Promise<readonly RoleView[]> {
     const members = this.access.membersOf(tenantId);
     const count = (roleId: string) =>
       members.filter((member) => member.status === 'active' && member.role === roleId).length;
@@ -785,7 +818,7 @@ export class Platform {
       permissions: ROLE_PERMISSIONS[id],
       memberCount: count(id),
     }));
-    const custom = this.roles.custom(tenantId).map((role) => ({
+    const custom = (await this.roles.custom(tenantId)).map((role) => ({
       id: role.id,
       name: role.name,
       kind: 'custom' as const,
@@ -802,7 +835,7 @@ export class Platform {
   ): Promise<PlatformResponse<readonly RoleView[]>> {
     try {
       const context = await this.authorize(token, correlationId, ['manage_users']);
-      return success(this.roleViews(context.tenantId));
+      return success(await this.roleViews(context.tenantId));
     } catch (error) {
       return failure(error);
     }
@@ -817,17 +850,14 @@ export class Platform {
   ): Promise<PlatformResponse<RoleView>> {
     try {
       const context = await this.authorize(token, correlationId, ['manage_users']);
-      const source = typeof roleId === 'string' ? this.roles.find(context.tenantId, roleId) : null;
+      const source =
+        typeof roleId === 'string' ? await this.roles.find(context.tenantId, roleId) : null;
       if (!source) throw new PlatformError('not_found');
       const trimmed = typeof name === 'string' ? name.trim() : '';
       if (!trimmed || trimmed.length > 80) throw new PlatformError('invalid_input');
-      if (
-        this.roles.nameTaken(context.tenantId, trimmed) ||
-        this.roles.custom(context.tenantId).length >= MAX_CUSTOM_ROLES_PER_TENANT
-      )
-        throw new PlatformError('conflict');
       const role = { id: `custom-${randomUUID()}`, name: trimmed, permissions: source.permissions };
-      this.roles.add(context.tenantId, role);
+      if ((await this.roles.create(context.tenantId, role)) !== 'created')
+        throw new PlatformError('conflict');
       this.auditNow(this.userActor(context), 'role.copied', 'role', role.id, correlationId);
       return success({ ...role, kind: 'custom' as const, memberCount: 0 });
     } catch (error) {

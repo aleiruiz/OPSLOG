@@ -51,8 +51,16 @@ function CompanyForm({ settings }: { settings: CompanySettings }) {
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [confirming, setConfirming] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
-  const [outcome, setOutcome] = React.useState<'saved' | 'failed' | 'expired' | null>(null);
-  const { values, setField } = draft;
+  const [outcome, setOutcome] = React.useState<'saved' | 'failed' | 'rejected' | 'expired' | null>(
+    null,
+  );
+  // Editing clears stale validation errors and failure banners.
+  const setField = (name: string, value: string) => {
+    setErrors({});
+    setOutcome((current) => (current === 'failed' || current === 'rejected' ? null : current));
+    draft.setField(name, value);
+  };
+  const { values } = draft;
 
   const securityChanged =
     values.mfa !== saved.mfa || Number(values.sessionIdleHours) !== saved.sessionIdleHours;
@@ -93,7 +101,7 @@ function CompanyForm({ settings }: { settings: CompanySettings }) {
       setOutcome('expired');
     } else {
       setErrors({});
-      setOutcome('failed');
+      setOutcome('rejected');
     }
   };
 
@@ -125,6 +133,13 @@ function CompanyForm({ settings }: { settings: CompanySettings }) {
             kind="error"
             title="No pudimos guardar los cambios"
             description="Revisa los campos marcados e intenta nuevamente."
+          />
+        )}
+        {outcome === 'rejected' && (
+          <UiState
+            kind="error"
+            title="No pudimos guardar los cambios"
+            description="El servicio no aceptó los cambios. Intenta nuevamente."
           />
         )}
         {outcome === 'expired' && <UiState kind="session-expired" />}

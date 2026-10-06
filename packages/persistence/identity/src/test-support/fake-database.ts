@@ -6,7 +6,10 @@ import {
   InvitationEntity,
   MembershipEntity,
   RecoveryEntity,
+  RoleEntity,
+  RolePermissionEntity,
   SessionEntity,
+  TenantLockEntity,
 } from '../entities.js';
 
 /**
@@ -67,6 +70,18 @@ const FOREIGN_KEYS: readonly ForeignKey[] = [
     columns: ['tenantId', 'identityId'],
     parent: MembershipEntity,
     parentColumns: ['tenantId', 'identityId'],
+  },
+  {
+    child: RoleEntity,
+    columns: ['tenantId'],
+    parent: TenantLockEntity,
+    parentColumns: ['tenantId'],
+  },
+  {
+    child: RolePermissionEntity,
+    columns: ['tenantId', 'roleId'],
+    parent: RoleEntity,
+    parentColumns: ['tenantId', 'id'],
   },
 ];
 

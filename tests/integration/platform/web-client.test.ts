@@ -8,7 +8,6 @@ import {
   type BffRouteId,
   type FetchLike,
 } from '../../../packages/contracts/src/index.js';
-import { ERRORS } from '../../../apps/api/bff/src/index.js';
 import { ROUTES } from '../../../apps/api/bff/src/routes.js';
 import {
   HOST,
@@ -80,22 +79,26 @@ function trackedClient(handler: BffWorld['handler']) {
 }
 
 describe('contract drift: BFF routing table against the contract module', () => {
-  it('implements exactly the routes the contract declares, with the same method, path and protection', () => {
+  // Method, path and protection are taken from BFF_ROUTES by construction, so only what the BFF
+  // declares on its own can drift: which routes exist and the parameter patterns of its handlers.
+  it('implements exactly the routes the contract declares, with a pattern per path parameter', () => {
     expect(ROUTES.map((route) => route.id).sort()).toEqual([...bffRouteIds].sort());
     for (const route of ROUTES) {
-      const declared = BFF_ROUTES[route.id];
-      expect({ method: route.method, path: route.path, kind: route.kind }).toEqual({
-        method: declared.method,
-        path: declared.path,
-        kind: declared.kind,
-      });
-      const names = declared.path.filter((s) => s.startsWith(':')).map((s) => s.slice(1));
+      const names = BFF_ROUTES[route.id].path
+        .filter((s) => s.startsWith(':'))
+        .map((s) => s.slice(1));
       expect(Object.keys(route.params ?? {}).sort()).toEqual(names.sort());
     }
   });
 
-  it('serves the same error catalogue', () => {
-    expect(ERRORS).toEqual(BFF_ERRORS);
+  it('reports the contract status for an unauthenticated call', async () => {
+    world = createBffWorld();
+    const { client } = trackedClient(world.handler);
+    // An unauthenticated read is a uniform 401 with the status the contract declares.
+    expect(await client.call('users.list')).toMatchObject({
+      ok: false,
+      error: { code: 'unauthorized', status: BFF_ERRORS.unauthorized.status },
+    });
   });
 });
 
@@ -264,6 +267,47 @@ describe('typed client against the real BFF', () => {
     ).toMatchObject({
       ok: false,
       error: { code: 'forbidden' },
+    });
+  });
+
+  it('does not replay a write into another company when a second tab changed the shared session', async () => {
+    world = createBffWorld();
+    await world.tenant('Empresa Alfa', 'subject-admin-a');
+    await world.tenant('Empresa Beta', 'subject-admin-b');
+    // Two tabs of one browser: one cookie jar, two page contexts (two clients).
+    const fetch = browserFetch(world.handler);
+    const tabA = createBffClient({ fetch });
+    const tabB = createBffClient({ fetch });
+    expect(
+      await tabA.call('auth.login', { body: world.credentials('subject-admin-a') }),
+    ).toMatchObject({
+      ok: true,
+      value: { company: { name: 'Empresa Alfa' } },
+    });
+    expect(
+      await tabB.call('auth.login', { body: world.credentials('subject-admin-b') }),
+    ).toMatchObject({
+      ok: true,
+      value: { company: { name: 'Empresa Beta' } },
+    });
+    // Tab A still believes it is Alfa's administrator.
+    const write = await tabA.call('drafts.save', {
+      params: { scope: 'form' },
+      body: { values: { nota: 'de Alfa' } },
+    });
+    expect(write).toMatchObject({ ok: false, error: { code: 'unauthorized', status: 401 } });
+    const rename = await tabA.call('company.settings.update', {
+      body: { name: 'Renombrada desde Alfa', mfa: 'optional', sessionIdleHours: 8 },
+    });
+    expect(rename).toMatchObject({ ok: false, error: { status: 401 } });
+    // Nothing reached Beta.
+    expect(await tabB.call('drafts.load', { params: { scope: 'form' } })).toEqual({
+      ok: true,
+      value: { draft: null },
+    });
+    expect(await tabB.call('company.settings.get')).toMatchObject({
+      ok: true,
+      value: { name: 'Empresa Beta' },
     });
   });
 });

@@ -1,4 +1,5 @@
 import {
+  BFF_ERRORS,
   BFF_ROUTES,
   CSRF_HEADER,
   bffPath,
@@ -40,6 +41,13 @@ export interface BffClientOptions {
 export interface BffClient {
   call<K extends BffRouteId>(id: K, ...args: BffCallArgs<K>): Promise<BffResult<BffResponseOf<K>>>;
 }
+
+const TOKEN_ROUTES: ReadonlySet<BffRouteId> = new Set([
+  'auth.csrf',
+  'auth.session',
+  'auth.login',
+  'auth.invitation.accept',
+]);
 
 const KNOWN_STATUSES: readonly number[] = [400, 401, 403, 404, 409, 422, 429, 500];
 
@@ -123,21 +131,51 @@ export function createBffClient(options: BffClientOptions = {}): BffClient {
         correlationId,
       );
     }
+    // Token-bearing responses must really carry the token: never trust a malformed 2xx body.
+    if (
+      TOKEN_ROUTES.has(id) &&
+      (typeof parsed !== 'object' ||
+        parsed === null ||
+        typeof (parsed as { csrfToken?: unknown }).csrfToken !== 'string')
+    )
+      return failure(500, 'invalid_response', 'Respuesta inesperada del servidor.', correlationId);
     return { ok: true, value: parsed as BffResponseOf<K> };
   }
 
-  async function ensurePre(): Promise<BffResult<string>> {
-    if (preToken !== null) return { ok: true, value: preToken };
-    const fetched = await exchange('auth.csrf', {}, null);
-    if (!fetched.ok) return fetched;
-    preToken = fetched.value.csrfToken;
-    return { ok: true, value: preToken };
+  // Concurrent callers share one in-flight `auth.csrf` exchange.
+  let pendingPre: Promise<BffResult<string>> | null = null;
+  function ensurePre(): Promise<BffResult<string>> {
+    if (preToken !== null) return Promise.resolve({ ok: true, value: preToken });
+    if (pendingPre) return pendingPre;
+    const pending = (async (): Promise<BffResult<string>> => {
+      try {
+        const fetched = await exchange('auth.csrf', {}, null);
+        if (!fetched.ok) return fetched;
+        preToken = fetched.value.csrfToken;
+        return { ok: true, value: preToken };
+      } finally {
+        pendingPre = null;
+      }
+    })();
+    pendingPre = pending;
+    return pending;
   }
+
+  // Who the page believes is signed in ("user|company"). A silent token refresh must never switch it:
+  // another tab sharing the cookie jar may have signed in as someone else, and a replayed write
+  // would then land in that other person's company.
+  let identity: string | null = null;
+  const identityOf = (session: BffSession): string => `${session.user.id}|${session.company.id}`;
 
   async function ensureSession(): Promise<BffResult<string>> {
     if (sessionToken !== null) return { ok: true, value: sessionToken };
-    const session = await call('auth.session');
-    return session.ok ? { ok: true, value: session.value.csrfToken } : session;
+    const fetched = await exchange('auth.session', {}, null);
+    if (!fetched.ok) return fetched;
+    if (identity !== null && identityOf(fetched.value) !== identity)
+      return failure(401, 'unauthorized', BFF_ERRORS.unauthorized.message, 'client');
+    identity = identityOf(fetched.value);
+    sessionToken = fetched.value.csrfToken;
+    return { ok: true, value: sessionToken };
   }
 
   async function call<K extends BffRouteId>(
@@ -171,10 +209,12 @@ export function createBffClient(options: BffClientOptions = {}): BffClient {
       if (id === 'auth.csrf') preToken = (result.value as BffResponseOf<'auth.csrf'>).csrfToken;
       if (id === 'auth.session' || id === 'auth.login' || id === 'auth.invitation.accept') {
         sessionToken = (result.value as BffSession).csrfToken;
+        identity = identityOf(result.value as BffSession);
         preToken = null;
       }
       if (id === 'auth.logout') {
         sessionToken = null;
+        identity = null;
         preToken = null;
       }
     } else if (result.error.status === 401 && (kind === 'session' || kind === 'session-csrf')) {

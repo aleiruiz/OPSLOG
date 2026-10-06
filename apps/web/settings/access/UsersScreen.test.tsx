@@ -6,6 +6,7 @@ import {
   deferred,
   fireEvent,
   getField,
+  renderApp,
   renderWithSession,
   screen,
   type,
@@ -139,6 +140,47 @@ describe('UsersScreen', () => {
     expect(link.value).toMatch(/\/invitacion\/invitacion-emitida-\d+$/);
     await waitFor(() => expect(getField('Rol')).toHaveValue(''));
     expect(api.controls.storedDrafts()['invite-user']).toBeUndefined();
+  });
+
+  it('does not stay stuck when the invite call rejects, and drops the old token on a new invite', async () => {
+    const { api } = await renderWithSession(<UsersScreen />);
+    await screen.findByRole('form', { name: 'Invitar usuario' });
+    fireEvent.change(getField('Rol'), { target: { value: 'role-fleet' } });
+    click('Crear invitación');
+    await screen.findByLabelText('Enlace de invitación');
+    fireEvent.change(getField('Rol'), { target: { value: 'role-fleet' } });
+    api.users.inviteUser = async () => {
+      throw new Error('red');
+    };
+    click('Crear invitación');
+    expect(
+      await screen.findByText('No pudimos crear la invitación. Intenta nuevamente.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText('Enlace de invitación')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Crear invitación' })).toBeEnabled();
+  });
+
+  it('keeps the invitation when clearing the draft fails', async () => {
+    const { api } = await renderWithSession(<UsersScreen />);
+    await screen.findByRole('form', { name: 'Invitar usuario' });
+    fireEvent.change(getField('Rol'), { target: { value: 'role-fleet' } });
+    api.drafts.discard = async () => {
+      throw new Error('red');
+    };
+    click('Crear invitación');
+    expect(await screen.findByLabelText('Enlace de invitación')).toBeInTheDocument();
+  });
+
+  it('forgets the one-time link when the session expires', async () => {
+    const { api } = await renderApp({ path: '/configuracion/usuarios' });
+    await screen.findByRole('form', { name: 'Invitar usuario' });
+    fireEvent.change(getField('Rol'), { target: { value: 'role-fleet' } });
+    click('Crear invitación');
+    await screen.findByLabelText('Enlace de invitación');
+    api.controls.expireSession();
+    type('Buscar por identificador, rol o estado', 'x');
+    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await waitFor(() => expect(screen.queryByLabelText('Enlace de invitación')).toBeNull());
   });
 
   it('asks for a role before inviting and reports a server failure without field detail', async () => {

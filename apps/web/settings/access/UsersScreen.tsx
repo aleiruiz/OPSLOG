@@ -53,6 +53,10 @@ export function UsersScreen() {
   } | null>(null);
 
   React.useEffect(() => setExtra(null), [search, first.state]);
+  // A one-time invitation token must not outlive the session that issued it.
+  React.useEffect(() => {
+    if (sessionState.status === 'expired') setIssued(null);
+  }, [sessionState.status]);
 
   const searchRef = React.useRef(search);
   searchRef.current = search;
@@ -175,6 +179,7 @@ export function UsersScreen() {
       {roles.state.status === 'ready' && (
         <InviteForm
           roles={roles.state.data}
+          onInviteStarted={() => setIssued(null)}
           onInvited={(invitation) => {
             setIssued(invitation);
             setNotice({ text: 'Invitación creada.', severity: 'success' });
@@ -212,8 +217,10 @@ function IssuedInvitation({ invitation }: { invitation: InvitationIssued }) {
 function InviteForm({
   roles,
   onInvited,
+  onInviteStarted,
 }: {
   roles: readonly RoleSummary[];
+  onInviteStarted: () => void;
   onInvited: (invitation: InvitationIssued) => void;
 }) {
   const { ports, markExpired } = useSession();
@@ -230,13 +237,28 @@ function InviteForm({
     }
     setSubmitting(true);
     setErrors({});
-    const result = await ports.users.inviteUser({ roleId: values.roleId });
-    setSubmitting(false);
+    onInviteStarted();
+    const failed = () =>
+      setErrors({ roleId: 'No pudimos crear la invitación. Intenta nuevamente.' });
+    let result;
+    try {
+      result = await ports.users.inviteUser({ roleId: values.roleId });
+    } catch {
+      failed();
+      return;
+    } finally {
+      setSubmitting(false);
+    }
     if (result.ok) {
-      await draft.discard();
+      // The one-time token must reach the administrator even if clearing the draft fails.
       onInvited(result.value);
+      try {
+        await draft.discard();
+      } catch {
+        // The draft is only a convenience; the next save replaces it.
+      }
     } else if (result.error.status === 401) markExpired();
-    else setErrors({ roleId: 'No pudimos crear la invitación. Intenta nuevamente.' });
+    else failed();
   };
 
   return (
