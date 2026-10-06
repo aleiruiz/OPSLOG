@@ -40,6 +40,8 @@ export interface MockControls {
   /** Makes the next call of `operation` fail with the given status. */
   failNext(operation: MockOperation, status?: ApiError['status']): void;
   isSignedIn(): boolean;
+  /** Simulates a server-side status change of a user (e.g. suspension) without a UI path. */
+  setUserStatus(userId: string, status: UserSummary['status']): void;
   /** Server-side drafts of the current user, for assertions. */
   storedDrafts(): Readonly<Record<string, DraftValues>>;
 }
@@ -173,6 +175,10 @@ export function createMockApi(): MockApi {
     mfa: 'optional',
     sessionIdleHours: 8,
   };
+  // Mock credential store (email -> password). Only active users may authenticate.
+  const credentials = new Map<string, string>(
+    Object.values(demoCredentials).map((item) => [item.email, item.password]),
+  );
   const roles: RoleSummary[] = systemRoles.map((role) => ({ ...role }));
   const users: UserSummary[] = [
     ...people.map((person) => ({
@@ -199,7 +205,8 @@ export function createMockApi(): MockApi {
   function roleName(roleId: string): string {
     return roles.find((role) => role.id === roleId)?.name ?? roleId;
   }
-  const currentUser = () => users.find((user) => user.id === signedInAs);
+  const currentUser = () =>
+    users.find((user) => user.id === signedInAs && user.status === 'active');
   const sessionFor = (userId: string): SessionInfo => {
     const user = users.find((item) => item.id === userId) as UserSummary;
     const role = roles.find((item) => item.id === user.roleId) as RoleSummary;
@@ -251,6 +258,11 @@ export function createMockApi(): MockApi {
       failures.set(operation, status);
     },
     isSignedIn: () => signedInAs !== null,
+    setUserStatus: (userId, status) => {
+      const index = users.findIndex((user) => user.id === userId);
+      const target = users[index];
+      if (target) users[index] = { ...target, status };
+    },
     storedDrafts: () =>
       Object.fromEntries(
         [...drafts.entries()]
@@ -266,12 +278,10 @@ export function createMockApi(): MockApi {
       login: (input) => {
         const failed = injected('login');
         if (failed) return Promise.resolve(failed);
-        const match = Object.values(demoCredentials).find(
-          (item) =>
-            item.email === input.email.trim().toLowerCase() && item.password === input.password,
-        );
-        const user = match && users.find((item) => item.email === match.email);
-        if (!user)
+        const email = input.email.trim().toLowerCase();
+        const user = users.find((item) => item.email === email);
+        const valid = credentials.has(email) && credentials.get(email) === input.password;
+        if (!user || user.status !== 'active' || !valid)
           return Promise.resolve(
             apiError(401, 'invalid_credentials', 'El correo o la contraseña no son correctos.'),
           );
@@ -314,7 +324,10 @@ export function createMockApi(): MockApi {
           roleLabel: roleName('role-fleet'),
           status: 'active',
         };
-        users.push(user);
+        const existing = users.findIndex((item) => item.email === user.email);
+        if (existing >= 0) users[existing] = user;
+        else users.push(user);
+        credentials.set(user.email, input.password);
         signedInAs = user.id;
         return Promise.resolve(ok(sessionFor(user.id)));
       },
