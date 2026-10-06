@@ -1,6 +1,12 @@
 # Informe de gate G0 — candidato `8b1b61c187c153c2c24e4cf3d714f8ae7f41051e`
 
-Fecha: 2026-10-05, America/Mexico_City. Alcance: acumulativo (M0 FND-REPO/CONTRACTS/DS/AWS/ORCH/INTEGRATE más los slices M1 de audit/outbox #15, tenancy #16, auth #17, seguimientos #20, y los cierres de G0 #19, #21, #22 y #23). Sustituye al informe histórico `docs/audits/G0/2026-10-04-report.md`.
+Fecha: 2026-10-05 (actualizado 2026-10-06), America/Mexico_City. Alcance: acumulativo (M0 FND-REPO/CONTRACTS/DS/AWS/ORCH/INTEGRATE más los slices M1 de audit/outbox #15, tenancy #16, auth #17, seguimientos #20, y los cierres de G0 #19, #21, #22 y #23). Sustituye al informe histórico `docs/audits/G0/2026-10-04-report.md`.
+
+## Decisión del propietario (2026-10-06)
+
+Con ambos auditores aprobando `8b1b61c`, el propietario (Alei Ruiz) **aceptó por escrito que G0 pase con branch protection abierta**: «lets just add a note to G0 that since this is an MVP, we dont need the protection right now». En respuesta a la solicitud de aprobación del 2026-10-05 («run a secondary audit to clean and approve it»), **G0 queda aprobado por decisión del propietario sobre el candidato `8b1b61c`**, con la condición cumplida de esta manera y con los diferimientos y bloqueos externos listados abajo. Este registro lo redacta la sesión autora de #19–#24 y solo la transcribe.
+
+Estado de la protección (actualizado 2026-10-06): durante la auditoría `main` no tenía rulesets. El repositorio se hizo privado, donde GitHub no aplica rulesets sin plan Team, y por eso se aceptó la ausencia. Después el propietario volvió a hacerlo público y activó el ruleset `protect-main`. Verificado por API el 2026-10-06: `enforcement: active`, rama por defecto (`main`), lista de bypass vacía, reglas `deletion`, `non_fast_forward` y `required_status_checks` (`quality`, política estricta); `GET /rules/branches/main` devuelve esas tres reglas. Queda sin cubrir: el ruleset no exige pull request, así que no impide que el autor modifique un manifiesto y su archivo en el mismo cambio (observación del auditor A); `baseline:check` no lo detecta. Reabrir ese punto, con la regla de PR obligatoria, antes de abrir el repositorio a más colaboradores y, como máximo, al cierre de G1.
 
 ## Resultado
 
@@ -21,12 +27,12 @@ Ambos auditores ejecutaron por su cuenta install, `baseline:check`, lint, `forma
 
 ## Condiciones y bloqueos externos explícitos
 
-- **Branch protection en `main`: no configurada.** Solo el propietario o un administrador de GitHub puede configurarla (check `quality` requerido, sin pushes directos). Ambos auditores la registran como criterio de FND-INTEGRATE ("protección de baseline/gates contra cambios del autor") aún no cumplido. **G0 solo debe registrarse como aprobado si el propietario la activa o acepta por escrito que G0 pasa con ella abierta.**
+- **Branch protection en `main`: parcial.** Ambos auditores la registran como criterio de FND-INTEGRATE ("protección de baseline/gates contra cambios del autor") no cumplido y condicionaron el registro de G0 a que el propietario la activara o aceptara por escrito su ausencia; el 2026-10-06 el propietario la aceptó por ser un MVP y después activó el ruleset `protect-main` en el repositorio público (ver «Decisión del propietario»). Impide borrar `main`, forzar pushes y fusionar sin `quality` en verde. Riesgo abierto: no exige pull request, de modo que un cambio del autor que edite un manifiesto y su archivo a la vez solo lo frena la revisión de código.
 - **AWS: diferido (ADR-0002).** La viabilidad queda pendiente; auditor A y B lo aceptan como bloqueo externo registrado.
 - **Diferimiento de FND-ORCH a G1** (GitHub fake, store/proyección de Tasks, `simulate`, e2e): decisión del usuario atestiguada en ADR-0008 (tarjeta de decisión en la app, 2026-10-05); el repositorio no puede verificarla. Fecha límite: cierre de G1.
 - **Storybook como runtime y snapshots de píxeles:** diferidos a antes de la primera pantalla funcional y no más tarde de G1.
 - **Excepción de M1:** #15, #16, #17 y #20 se fusionaron antes de G0 y fueron ratificados por el usuario (ADR-0008); el código M1 está dentro del alcance acumulativo auditado.
-- **Autoría:** la sesión que redactó #19–#23 no declara G0 aprobado. La decisión de aprobación corresponde al usuario.
+- **Autoría:** la sesión que redactó #19–#24 no decide la aprobación; la tomó el propietario (ver arriba).
 
 ## Hallazgos no bloqueantes (a atender en G1)
 
