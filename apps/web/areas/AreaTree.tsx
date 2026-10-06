@@ -116,13 +116,14 @@ export function AreaTree({
       const branch = node.children.length > 0;
       const open = expanded.has(area.id);
       const labelId = `${uid}-${area.id}`;
+      const stateId = `${uid}-${area.id}-state`;
       return (
         <Box
           component="li"
           key={area.id}
           role="treeitem"
           data-area-id={area.id}
-          aria-labelledby={labelId}
+          aria-labelledby={area.active ? labelId : `${labelId} ${stateId}`}
           aria-level={level}
           aria-setsize={nodes.length}
           aria-posinset={position + 1}
@@ -203,7 +204,11 @@ export function AreaTree({
                     {area.code}
                   </Typography>
                 )}
-                {!area.active && <StatusBadge label="Inactiva" tone="neutral" />}
+                {!area.active && (
+                  <Box component="span" id={stateId} sx={{ display: 'inline-flex' }}>
+                    <StatusBadge label="Inactiva" tone="neutral" />
+                  </Box>
+                )}
               </Box>
               <Typography variant="body2" color="text.secondary">
                 {count(node.children.length, 'sub-área', 'sub-áreas')} ·{' '}

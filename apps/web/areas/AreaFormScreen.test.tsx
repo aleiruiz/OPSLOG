@@ -77,7 +77,7 @@ describe('create area', () => {
     type('Nombre', '  Base   Oeste ');
     type('Código', 'oes-1');
     fireEvent.change(parent(), { target: { value: 'area-sur' } });
-    addResponsible('user-dispatch');
+    addResponsible('dispatch');
     click('Crear área');
     expect(
       await screen.findByRole('heading', { name: 'Base Oeste', level: 1 }),
@@ -86,7 +86,7 @@ describe('create area', () => {
       name: 'Base Oeste',
       code: 'OES-1',
       parentId: 'area-sur',
-      responsibleIds: ['user-dispatch'],
+      responsibleIds: ['dispatch'],
     });
     expect(screen.getByText('Área creada.')).toBeInTheDocument();
     expect(dd('Nivel')).toHaveTextContent('2 de 4');
@@ -107,14 +107,14 @@ describe('create area', () => {
   it('manages the responsibles: add with Enter or the button, remove, add yourself, and explain problems', async () => {
     await create();
     expect(screen.getByText('0 responsables de 20 como máximo')).toBeInTheDocument();
-    type('Agregar responsable', 'user-dispatch');
+    type('Agregar responsable', 'dispatch');
     fireEvent.keyDown(getField('Agregar responsable'), { key: 'Enter' });
-    expect(screen.getByText('user-dispatch')).toBeInTheDocument();
+    expect(screen.getByText('dispatch')).toBeInTheDocument();
     expect(getField('Agregar responsable')).toHaveValue('');
     fireEvent.keyDown(getField('Agregar responsable'), { key: 'a' });
     // Enter never submits the whole form.
     expect(screen.getByRole('form', { name: 'Nueva área' })).toBeInTheDocument();
-    addResponsible('user-dispatch');
+    addResponsible('dispatch');
     expect(screen.getByText('Esa persona ya es responsable.')).toBeInTheDocument();
     type('Agregar responsable', 'no válido');
     click('Agregar');
@@ -125,11 +125,11 @@ describe('create area', () => {
     type('Agregar responsable', 'x');
     expect(screen.queryByText('Escribe el identificador de la persona.')).toBeNull();
     click('Agregarme como responsable');
-    expect(screen.getByText('user-admin')).toBeInTheDocument();
+    expect(screen.getByText('admin')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Agregarme como responsable' })).toBeNull();
     expect(screen.getByText('2 responsables de 20 como máximo')).toBeInTheDocument();
-    click('Quitar a user-dispatch');
-    expect(screen.queryByText('user-dispatch')).toBeNull();
+    click('Quitar a dispatch');
+    expect(screen.queryByText('dispatch')).toBeNull();
   });
 
   it('refuses an identifier that was typed but never added', async () => {
@@ -137,7 +137,7 @@ describe('create area', () => {
     const spy = vi.spyOn(api.areas, 'create');
     await create('/plantilla/areas/nueva', { api });
     type('Nombre', 'Oeste');
-    type('Agregar responsable', 'user-dispatch');
+    type('Agregar responsable', 'dispatch');
     click('Crear área');
     expect(screen.getByText(/Escribiste un identificador sin agregarlo/)).toBeInTheDocument();
     expect(getField('Agregar responsable')).toHaveFocus();
@@ -183,7 +183,7 @@ describe('create area', () => {
   it('explains a responsible who is not an active member', async () => {
     await create();
     type('Nombre', 'Nueva');
-    addResponsible('user-fantasma');
+    addResponsible('fantasma');
     click('Crear área');
     expect(
       await screen.findByRole('heading', { name: 'Responsables no válidos' }),
@@ -210,7 +210,7 @@ describe('create area', () => {
   it('keeps what was typed when the session expires, and creates after signing in again', async () => {
     const { api } = await create();
     type('Nombre', 'Oeste');
-    addResponsible('user-dispatch');
+    addResponsible('dispatch');
     api.controls.expireSession();
     click('Crear área');
     await screen.findByRole('group', { name: 'Sesión expirada' });
@@ -221,7 +221,7 @@ describe('create area', () => {
       expect(screen.queryByRole('group', { name: 'Sesión expirada' })).toBeNull(),
     );
     await waitFor(() => expect(getField('Nombre')).toHaveValue('Oeste'));
-    expect(screen.getByText('user-dispatch')).toBeInTheDocument();
+    expect(screen.getByText('dispatch')).toBeInTheDocument();
     click('Crear área');
     expect(await screen.findByRole('heading', { name: 'Oeste', level: 1 })).toBeInTheDocument();
   });
@@ -265,7 +265,7 @@ describe('edit area', () => {
     await edit();
     expect(getField('Nombre')).toHaveValue('Monterrey');
     expect(getField('Código')).toHaveValue('NTE-MTY');
-    expect(screen.getByText('user-admin')).toBeInTheDocument();
+    expect(screen.getByText('admin')).toBeInTheDocument();
     expect(screen.queryByLabelText('Área superior')).toBeNull();
     expect(screen.getByRole('link', { name: 'Cancelar' })).toHaveAttribute(
       'href',
@@ -288,7 +288,7 @@ describe('edit area', () => {
     await edit('area-norte-mty', { api });
     type('Nombre', 'Monterrey Metropolitano');
     type('Código', '');
-    click('Quitar a user-dispatch');
+    click('Quitar a dispatch');
     click('Guardar cambios');
     expect(
       await screen.findByRole('heading', { name: 'Monterrey Metropolitano', level: 1 }),
@@ -297,7 +297,7 @@ describe('edit area', () => {
       version: 4,
       name: 'Monterrey Metropolitano',
       code: null,
-      responsibleIds: ['user-admin'],
+      responsibleIds: ['admin'],
     });
     expect(screen.getByText('Cambios guardados.')).toBeInTheDocument();
     expect(dd('Código')).toHaveTextContent('Sin código');
