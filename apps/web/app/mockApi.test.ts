@@ -257,6 +257,36 @@ describe('mock tenant, users and roles ports', () => {
     });
   });
 
+  it('revokes a pending invitation when its member is deactivated, like the server', async () => {
+    const api = await signedIn();
+    const invited = await api.users.inviteUser({ roleId: 'role-admin' });
+    if (!invited.ok) throw new Error('expected ok');
+    const { invitationToken } = invited.value;
+    const id = invited.value.user.id;
+    expect(await api.auth.inspectInvitation(invitationToken)).toMatchObject({ ok: true });
+    expect(await api.users.deactivateUser(id, 'Error de envío')).toEqual({
+      ok: true,
+      value: { id, status: 'inactive' },
+    });
+    // Same answers as an invalid token, and the stray subject never gets an account.
+    expect(await api.auth.inspectInvitation(invitationToken)).toMatchObject({
+      ok: false,
+      error: { status: 404 },
+    });
+    expect(await api.auth.acceptInvitation(invitationToken, identity('intruso'))).toMatchObject({
+      ok: false,
+      error: { status: 404 },
+    });
+    const listed = await api.users.listUsers({ search: 'invitado' });
+    expect(listed.ok && listed.value.items.some((user) => user.id === id)).toBe(false);
+    expect(await api.users.deactivateUser(id, 'Otra vez')).toMatchObject({
+      error: { status: 404 },
+    });
+    // Active users are still only marked inactive.
+    const active = await api.users.deactivateUser('user-dispatch', 'baja');
+    expect(active.ok).toBe(true);
+  });
+
   it('lists the seven system templates and copies a role as custom', async () => {
     const api = await signedIn();
     const roles = await api.roles.listRoles();

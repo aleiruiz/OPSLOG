@@ -51,7 +51,13 @@ import {
   createWorkerRuntime,
   type WorkerRuntime,
 } from '../../../worker/composition/src/index.js';
-import { AccessDirectory, ROLE_PERMISSIONS, isRoleName, type RoleName } from './access.js';
+import {
+  AccessDirectory,
+  ROLE_PERMISSIONS,
+  isRoleName,
+  isStoredRoleReader,
+  type RoleName,
+} from './access.js';
 import {
   DraftStore,
   MFA_POLICIES,
@@ -291,8 +297,11 @@ export class Platform {
     this.outbox = adapters.outbox ?? new InMemoryOutboxStore(() => this.now().getTime());
     this.records = adapters.records ?? new InMemoryFileRecordStore();
     this.storage = adapters.storage ?? new InMemoryObjectStorage();
-    this.access = new AccessDirectory((tenantId) => this.tenants.status(tenantId) === 'active');
     const identityStore = adapters.identityStore ?? new InMemoryIdentityStore();
+    this.access = new AccessDirectory(
+      (tenantId) => this.tenants.status(tenantId) === 'active',
+      isStoredRoleReader(identityStore) ? identityStore : undefined,
+    );
     this.roles = new RoleDirectory(
       adapters.roleStore ?? (isRoleDirectoryStore(identityStore) ? identityStore : undefined),
     );
@@ -581,6 +590,15 @@ export class Platform {
     principal: unknown,
   ): Promise<PlatformResponse<{ identityId: string; tenantId: string }>> {
     try {
+      // Same gate as `inspectInvitation`: a suspended or failed tenant is frozen, so the redemption
+      // fails with the uniform error before anything is consumed, activated or audited. The
+      // invitation stays redeemable (until it expires) once the tenant is active again.
+      const meta =
+        typeof invitationToken === 'string'
+          ? this.invitations.get(opaqueTokenGenerator.hash(invitationToken))
+          : undefined;
+      if (meta && this.tenants.status(meta.tenantId) !== 'active')
+        throw new AuthError('unauthorized');
       const activated = await this.auth.activateInvitation(invitationToken, principal);
       if (!activated.ok || !activated.value) return failure(new AuthError('unauthorized'));
       const { identity, membership } = activated.value;
@@ -708,7 +726,22 @@ export class Platform {
   ): Promise<PlatformResponse<null>> {
     return this.adminOperation(token, correlationId, targetIdentityId, async (context) => {
       const current = this.access.roleOf(context.tenantId, targetIdentityId);
-      if (!current) throw new PlatformError('not_found');
+      if (!current) {
+        if (!this.access.hasPending(targetIdentityId, context.tenantId))
+          throw new PlatformError('not_found');
+        // A pending invitation (of any role) is revoked: the token can no longer be redeemed. It
+        // holds no active seat, so the last-administrator rule does not apply.
+        await this.identity.revokeMembership(context.tenantId, targetIdentityId);
+        this.access.revokePending(targetIdentityId, context.tenantId);
+        this.auditNow(
+          this.userActor(context),
+          'invitation.revoked',
+          'membership',
+          targetIdentityId,
+          correlationId,
+        );
+        return null;
+      }
       if (current === 'admin' && this.access.activeAdmins(context.tenantId).length <= 1)
         throw new PlatformError('last_admin');
       await this.identity.revokeMembership(context.tenantId, targetIdentityId);

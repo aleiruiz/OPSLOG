@@ -410,7 +410,13 @@ export function createMockApi(): MockApi {
           );
           if (target.roleId === 'role-admin' && target.status === 'active' && admins.length === 1)
             return apiError(409, 'last_admin', 'Conflict');
-          users[index] = { ...target, status: 'inactive' };
+          if (target.status === 'invited') {
+            // Like the server: deactivating a pending member revokes the invitation, so its token
+            // can no longer be inspected or accepted, and the pending row disappears.
+            users.splice(index, 1);
+            for (const [token, invitation] of invitations)
+              if (invitation.userId === target.id) invitations.delete(token);
+          } else users[index] = { ...target, status: 'inactive' };
           return ok({ id: target.id, status: 'inactive' as const });
         }),
     },

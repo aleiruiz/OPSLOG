@@ -292,7 +292,7 @@ describe('audit safety and tenant isolation', () => {
       'key sk-live12345 rejected',
       `creds ${awsKey} rejected`,
       `hash ${hex} mismatch`,
-      '-----BEGIN PRIVATE KEY-----',
+      '-----BEGIN PRIVATE KEY-----', // secret-scan:allow synthetic negative fixture
     ])
       expect(redactError(new Error(text))).toBe('[REDACTED]');
   });

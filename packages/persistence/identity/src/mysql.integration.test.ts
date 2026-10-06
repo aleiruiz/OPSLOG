@@ -435,6 +435,63 @@ suite('persistent identity store on MySQL', () => {
     });
   });
 
+  describe('revoking a pending invitation', () => {
+    it('consumes the invitation and revokes the pending membership, so the token is never redeemable', async () => {
+      const tenant = tenantId();
+      await h.join(tenant, `admin-${randomUUID()}`, ADMIN_ROLE);
+      const invited = await h.invite(tenant, ADMIN_ROLE);
+      // Revoked from the other process, which also answers false when repeated.
+      expect(await storeB.revokeMembership(tenant, invited.identityId)).toBe(true);
+      expect(await storeA.revokeMembership(tenant, invited.identityId)).toBe(false);
+      const stored = await rows<{ consumed_at: Date | null }>(
+        `SELECT consumed_at FROM ${IDENTITY_TABLES.invitations} WHERE identity_id = ?`,
+        [invited.identityId],
+      );
+      expect(stored).toHaveLength(1);
+      expect(stored[0]?.consumed_at).toBeInstanceOf(Date);
+      expect(await storeA.findMembership(tenant, invited.identityId)).toMatchObject({
+        status: 'revoked',
+      });
+      await expect(
+        h.service.activateInvitation(invited.token, PROVIDER, `sub-${invited.identityId}`),
+      ).rejects.toMatchObject({ code: 'unauthorized' });
+      expect(await storeA.countActiveAdmins(tenant)).toBe(1);
+    });
+
+    it('leaves the invitation unredeemable whichever of revoke and accept wins the race', async () => {
+      for (let round = 0; round < 5; round += 1) {
+        const tenant = tenantId();
+        await h.join(tenant, `admin-${randomUUID()}`, ADMIN_ROLE);
+        const invited = await h.invite(tenant, ADMIN_ROLE);
+        const barrier = new Barrier(2);
+        await Promise.allSettled([
+          barrier.wait().then(() => storeA.revokeMembership(tenant, invited.identityId)),
+          barrier
+            .wait()
+            .then(() =>
+              storeB.activateInvitation(
+                invited.tokenHash,
+                PROVIDER,
+                `sub-${invited.identityId}`,
+                clock.now(),
+              ),
+            ),
+        ]);
+        // Whatever happened first, the membership never ends up active, and the link is spent.
+        const membership = await storeA.findMembership(tenant, invited.identityId);
+        expect(membership?.status === 'revoked' || membership?.status === 'active').toBe(true);
+        const stored = await rows<{ consumed_at: Date | null }>(
+          `SELECT consumed_at FROM ${IDENTITY_TABLES.invitations} WHERE identity_id = ?`,
+          [invited.identityId],
+        );
+        expect(stored[0]?.consumed_at).toBeInstanceOf(Date);
+        await expect(
+          h.service.activateInvitation(invited.token, PROVIDER, `sub-${invited.identityId}`),
+        ).rejects.toMatchObject({ code: 'unauthorized' });
+      }
+    });
+  });
+
   describe('sessions, revocation and version bumps', () => {
     it('expires sessions after 8 hours', async () => {
       const tenant = tenantId();

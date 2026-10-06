@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { sessionIdOf } from '../../../apps/api/composition/src/index.js';
+import type { SubjectId, TenantId } from '../../../packages/domain/tenants/src/index.js';
 import { corr, createWorld, jpeg, type World } from './world.js';
 
 let world: World;
@@ -134,5 +136,29 @@ describe('suspended tenants', () => {
     expect(operatorTrail).toEqual(
       expect.arrayContaining(['tenant.suspended', 'tenant.reactivated']),
     );
+  });
+});
+
+describe('the tenant gate binds a session to its own subject', () => {
+  it('refuses a session whose control-plane mirror belongs to another member of the same tenant', async () => {
+    world = createWorld();
+    const { platform } = world;
+    const a = await world.tenant('Empresa Alfa', 'subject-admin-a');
+    const viewer = await world.member(a.admin, 'viewer', 'subject-viewer-a');
+    expect((await platform.session(viewer.token, corr())).ok).toBe(true);
+    // The mirror of the viewer's session now says it belongs to the administrator: same tenant,
+    // active membership at the current version, but not the person the identity session names.
+    const admin = (await platform.tenants.getMembership(
+      a.tenantId as TenantId,
+      a.admin.identityId as SubjectId,
+    ))!;
+    const mirrored = (await platform.tenants.getSession(sessionIdOf(viewer.token)))!;
+    await platform.tenants.saveSession({
+      ...mirrored,
+      subjectId: admin.subjectId,
+      authorizationVersion: admin.version,
+    });
+    expect((await platform.session(viewer.token, corr())).error?.code).toBe('unauthorized');
+    expect((await platform.listMembers(viewer.token, corr())).error?.code).toBe('unauthorized');
   });
 });

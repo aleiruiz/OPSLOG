@@ -283,7 +283,7 @@ describe('authorized download through the proxy', () => {
     const id = await releasedFile(w, token);
     const grant = await grantFor(w, token, id);
     w.records.get = async () => {
-      throw new Error('mysql://user:secret@host exploded');
+      throw new Error('mysql://user:secret@host exploded'); // secret-scan:allow synthetic leak to be sanitized
     };
     const result = await w.api.download(token, 'c', grant);
     expect(result).toEqual({

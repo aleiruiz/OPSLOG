@@ -142,8 +142,9 @@ export interface IdentityStore {
    */
   consumeRecovery(id: string, usedAt: Date): Promise<boolean>;
   /**
-   * One transaction: mark the membership revoked and bump the identity authorizationVersion.
-   * Returns false when the membership does not exist or is already revoked.
+   * One transaction: mark the membership revoked and bump the identity authorizationVersion. Revoking a pending
+   * membership revokes its invitation: the token can no longer be redeemed (activation requires a pending
+   * membership) and persistent adapters also mark its unconsumed invitation rows consumed. Returns false when the membership does not exist or is already revoked.
    * authorizationVersion is per identity, so this also ends the identity's sessions in other tenants (safe but
    * broad). SPECS §5.3's "last active administrator" rule is not enforced here: the caller or the persistent
    * adapter must refuse to revoke the final administrator of a tenant.

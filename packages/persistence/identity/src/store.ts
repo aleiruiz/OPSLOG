@@ -549,7 +549,8 @@ export class TypeOrmIdentityStore implements IdentityStore {
    * Revokes the membership and bumps the identity's authorization version in one transaction. The
    * tenant's final active administrator cannot be revoked (`LastAdministratorError`): the check runs
    * under the tenant lock row, so concurrent removals in any process serialize. The membership's
-   * sessions are also marked revoked. Returns false when the membership is missing or already revoked.
+   * sessions are also marked revoked, and any unconsumed invitation of the membership is consumed (revoking a
+   * pending invitation). Returns false when the membership is missing or already revoked.
    */
   public async revokeMembership(tenantId: string, identityId: string): Promise<boolean> {
     if (!nonBlank(tenantId, 64) || !nonBlank(identityId, 64)) return false;
@@ -567,6 +568,10 @@ export class TypeOrmIdentityStore implements IdentityStore {
       if (current.status === 'active' && current.role === ADMIN_ROLE)
         await this.assertAnotherAdmin(manager, tenantId);
       await memberships.update({ tenantId, identityId }, { status: 'revoked' });
+      // Revoking a pending membership also consumes its invitation links (single use, never redeemable again).
+      await manager
+        .getRepository(InvitationEntity)
+        .update({ tenantId, identityId, consumedAt: IsNull() }, { consumedAt: this.now() });
       await manager
         .getRepository(SessionEntity)
         .update({ tenantId, identityId, revokedAt: IsNull() }, { revokedAt: this.now() });

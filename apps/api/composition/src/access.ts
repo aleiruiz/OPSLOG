@@ -45,6 +45,19 @@ export interface MemberRow {
   readonly status: 'active' | 'revoked' | 'pending';
 }
 
+/**
+ * Reads the role stored for a membership by the persistent identity store. The store is the
+ * source of truth: another process may have changed the role since the directory was written.
+ */
+export interface StoredRoleReader {
+  findRole(tenantId: string, identityId: string): Promise<string | null>;
+}
+
+export const isStoredRoleReader = (value: unknown): value is StoredRoleReader =>
+  typeof value === 'object' &&
+  value !== null &&
+  typeof (value as Record<string, unknown>)['findRole'] === 'function';
+
 const key = (tenantId: string, identityId: string): string =>
   `${tenantId.length}:${tenantId}${identityId.length}:${identityId}`;
 
@@ -57,7 +70,10 @@ export class AccessDirectory implements IdentityAccessResolver {
   private readonly members = new Map<string, Member>();
   private readonly tenantsOf = new Map<string, Set<string>>();
   private readonly pending = new Map<string, { tenantId: string; role: RoleName }>();
-  public constructor(private readonly tenantIsActive: (tenantId: string) => boolean) {}
+  public constructor(
+    private readonly tenantIsActive: (tenantId: string) => boolean,
+    private readonly stored?: StoredRoleReader,
+  ) {}
 
   /** Records the role an invitation will grant once it is activated. */
   public expectInvitation(identityId: string, tenantId: string, role: RoleName): void {
@@ -70,6 +86,11 @@ export class AccessDirectory implements IdentityAccessResolver {
     this.pending.delete(identityId);
     this.set({ tenantId, identityId, role: expected.role, status: 'active' });
     return true;
+  }
+  /** Drops an invitation that has not been activated; false when none is recorded for this tenant. */
+  public revokePending(identityId: string, tenantId: string): boolean {
+    if (this.pending.get(identityId)?.tenantId !== tenantId) return false;
+    return this.pending.delete(identityId);
   }
   /** Direct grant for bootstrap flows (first administrator). */
   public grant(tenantId: string, identityId: string, role: RoleName): void {
@@ -124,13 +145,25 @@ export class AccessDirectory implements IdentityAccessResolver {
     this.tenantsOf.set(member.identityId, tenants);
   }
 
+  /**
+   * The role the caller may use: the directory role, confirmed against the persistent store when
+   * one is configured. A disagreement (for example a role changed by another process) fails
+   * closed: no role, so no permissions and no sign-in until the directory is brought up to date.
+   */
+  public async effectiveRole(tenantId: string, identityId: string): Promise<RoleName | null> {
+    const role = this.roleOf(tenantId, identityId);
+    if (!role || !this.stored) return role;
+    return (await this.stored.findRole(tenantId, identityId)) === role ? role : null;
+  }
+
   public async resolveActiveTenant(identityId: string): Promise<string | null> {
     for (const tenantId of this.tenantsOf.get(identityId) ?? [])
-      if (this.roleOf(tenantId, identityId) && this.tenantIsActive(tenantId)) return tenantId;
+      if ((await this.effectiveRole(tenantId, identityId)) && this.tenantIsActive(tenantId))
+        return tenantId;
     return null;
   }
   public async resolvePermissions(context: TenantContext): Promise<readonly Permission[]> {
-    const role = this.roleOf(context.tenantId, context.actor.subject);
+    const role = await this.effectiveRole(context.tenantId, context.actor.subject);
     return role ? ROLE_PERMISSIONS[role] : [];
   }
 }
