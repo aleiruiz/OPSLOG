@@ -1,6 +1,8 @@
 import {
   createAreasClient,
   createBffClient,
+  createDocumentsClient,
+  createInsuranceClient,
   createEmployeesClient,
   createVehiclesClient,
   type BffClient,
@@ -34,6 +36,8 @@ export function createHttpApi(
   const { call } = client;
   const vehicles = createVehiclesClient(client);
   const areas = createAreasClient(client);
+  const documents = createDocumentsClient(client);
+  const insurance = createInsuranceClient(client);
   const employees = createEmployeesClient(client);
   return {
     oidc,
@@ -91,6 +95,8 @@ export function createHttpApi(
       activate: areas.activate,
       history: areas.history,
     },
+    documents,
+    insurance,
     employees: {
       list: employees.list,
       get: employees.get,

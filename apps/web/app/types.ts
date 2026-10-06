@@ -8,6 +8,25 @@ import type {
   BffAreaInput,
   BffAreaPatch,
   BffAreasQuery,
+  BffCoverageType,
+  BffDeductible,
+  BffDocument,
+  BffDocumentHistoryQuery,
+  BffDocumentInput,
+  BffDocumentOwnerType,
+  BffDocumentPatch,
+  BffDocumentRenewal,
+  BffDocumentRevision,
+  BffDocumentsQuery,
+  BffDocumentStatus,
+  BffInsurancePoliciesQuery,
+  BffInsurancePolicy,
+  BffInsurancePolicyHistoryQuery,
+  BffInsurancePolicyInput,
+  BffInsurancePolicyPatch,
+  BffInsurancePolicyRenewal,
+  BffInsurancePolicyRevision,
+  BffPolicyStatus,
   BffEmployee,
   BffEmployeeDetail,
   BffEmployeeHistoryEntry,
@@ -28,6 +47,8 @@ import type {
   BffVehiclePatch,
   BffVehicleStatus,
   BffVehiclesQuery,
+  DocumentsClient,
+  InsuranceClient,
   EmployeesClient,
   ISODateTime,
   Page,
@@ -201,6 +222,42 @@ export type AreaHistoryQuery = BffAreaHistoryQuery;
  */
 export type AreasPort = AreasClient;
 
+export type Document = BffDocument;
+export type DocumentOwnerType = BffDocumentOwnerType;
+export type DocumentStatus = BffDocumentStatus;
+export type DocumentInput = BffDocumentInput;
+export type DocumentPatch = BffDocumentPatch;
+export type DocumentRenewal = BffDocumentRenewal;
+export type DocumentRevision = BffDocumentRevision;
+export type DocumentListQuery = BffDocumentsQuery;
+export type DocumentHistoryQuery = BffDocumentHistoryQuery;
+
+/**
+ * Documents (metadata with an expiry date) over the generated BFF client. Every change carries the
+ * `version` of the last read (409 `stale_version`); an archived document is read-only (409 `immutable`); an
+ * owner that is unknown, of another company or archived is a 422 `invalid_owner` whose `fieldErrors[0].field` is
+ * `owner_id`. Only the title and the notes are edited in place: correcting a date is a renewal.
+ */
+export type DocumentsPort = DocumentsClient;
+
+export type InsurancePolicy = BffInsurancePolicy;
+export type InsurancePolicyInput = BffInsurancePolicyInput;
+export type InsurancePolicyPatch = BffInsurancePolicyPatch;
+export type InsurancePolicyRenewal = BffInsurancePolicyRenewal;
+export type InsurancePolicyRevision = BffInsurancePolicyRevision;
+export type InsuranceListQuery = BffInsurancePoliciesQuery;
+export type InsuranceHistoryQuery = BffInsurancePolicyHistoryQuery;
+export type CoverageType = BffCoverageType;
+export type PolicyStatus = BffPolicyStatus;
+export type Deductible = BffDeductible;
+
+/**
+ * Vehicle insurance policies over the generated BFF client. Same concurrency and renewal model as documents; a
+ * vehicle that is unknown, of another company or archived is a 422 `invalid_vehicle` (`vehicle_id`). The deductible
+ * is financial data: without `view_costs` it comes back `null` (`hasDeductible` says whether one exists), and a
+ * request that mentions `deductible` at all, a `null` included, is a 403.
+ */
+export type InsurancePort = InsuranceClient;
 export type Employee = BffEmployee;
 export type EmployeeDetail = BffEmployeeDetail;
 export type EmployeeKind = BffEmployeeKind;
@@ -232,6 +289,8 @@ export interface ApiPorts {
   readonly drafts: DraftsPort;
   readonly vehicles: VehiclesPort;
   readonly areas: AreasPort;
+  readonly documents: DocumentsPort;
+  readonly insurance: InsurancePort;
   readonly employees: EmployeesPort;
   readonly oidc: OidcPort;
 }

@@ -1,6 +1,9 @@
 import type { ApiError } from '@opslog/contracts';
 import { createFakeOidc, fakeOidcCode, fakeOidcSubject } from '../api/fakeOidc';
+import { demoEmployeeIds } from '../documents/fixtures';
 import { createMockAreaStore, type MockAreaStore } from './mockAreas';
+import { createMockDocumentStore, type MockDocumentStore } from './mockDocuments';
+import { createMockInsuranceStore, type MockInsuranceStore } from './mockInsurance';
 import {
   createMockEmployeeStore,
   type EmployeeAuditAction,
@@ -22,6 +25,8 @@ import type {
   UserSummary,
   Vehicle,
   Area,
+  Document,
+  InsurancePolicy,
 } from './types';
 
 /**
@@ -59,6 +64,20 @@ export type MockOperation =
   | 'deactivateArea'
   | 'activateArea'
   | 'areaHistory'
+  | 'listDocuments'
+  | 'getDocument'
+  | 'createDocument'
+  | 'updateDocument'
+  | 'renewDocument'
+  | 'archiveDocument'
+  | 'documentHistory'
+  | 'listPolicies'
+  | 'getPolicy'
+  | 'createPolicy'
+  | 'updatePolicy'
+  | 'renewPolicy'
+  | 'archivePolicy'
+  | 'policyHistory'
   | 'listEmployees'
   | 'getEmployee'
   | 'createEmployee'
@@ -94,6 +113,18 @@ export interface MockControls {
   setAreaPeople(id: string, people: number): void;
   /** Areas currently on the server, for assertions. */
   areas(): readonly Area[];
+  /** Another actor edits a document on the server: its version moves on, so a form that loaded it is stale. */
+  changeDocumentExternally(id: string, change: Partial<Pick<Document, 'title' | 'notes'>>): void;
+  /** Another actor archives a document on the server. */
+  archiveDocumentExternally(id: string): void;
+  /** Documents currently on the server, for assertions. */
+  documents(): readonly Document[];
+  /** Another actor edits a policy on the server: its version moves on, so a form that loaded it is stale. */
+  changePolicyExternally(id: string, change: Partial<Pick<InsurancePolicy, 'insurer'>>): void;
+  /** Another actor archives a policy on the server. */
+  archivePolicyExternally(id: string): void;
+  /** Policies currently on the server, deductible included, for assertions. */
+  policies(): readonly InsurancePolicy[];
   /** Another actor edits an employee on the server: its version moves on, so a form that loaded it is stale. */
   changeEmployeeExternally(
     id: string,
@@ -249,6 +280,10 @@ export interface MockApiOptions {
   readonly vehicles?: readonly Vehicle[];
   /** Initial areas: the synthetic demo tree by default; pass `[]` for a company without areas. */
   readonly areas?: readonly Area[];
+  /** Initial documents: the synthetic demo set by default; pass `[]` for a company without documents. */
+  readonly documents?: readonly Document[];
+  /** Initial policies: the synthetic demo set by default; pass `[]` for a company without policies. */
+  readonly policies?: readonly InsurancePolicy[];
   /** Initial staff with their personal data: the synthetic demo staff by default; pass `[]` for none. */
   readonly employees?: readonly EmployeeDetail[];
 }
@@ -285,6 +320,21 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     },
     ...(options.areas ? [options.areas] : []),
   );
+  const paperwork: MockDocumentStore = createMockDocumentStore(options.documents, {
+    isLiveOwner: (ownerType, ownerId) =>
+      ownerType === 'vehicle'
+        ? fleet.snapshot().some((vehicle) => vehicle.id === ownerId && vehicle.archivedAt === null)
+        : demoEmployeeIds.includes(ownerId),
+    actorId: () => signedInAs ?? 'user-admin',
+  });
+  const cover: MockInsuranceStore = createMockInsuranceStore(options.policies, {
+    isLiveVehicle: (vehicleId) =>
+      fleet.snapshot().some((vehicle) => vehicle.id === vehicleId && vehicle.archivedAt === null),
+    canViewCosts: () =>
+      roles.find((role) => role.id === currentUser()?.roleId)?.permissions.includes('view_costs') ??
+      false,
+    actorId: () => signedInAs ?? 'user-admin',
+  });
   const failures = new Map<MockOperation, ApiError['status']>();
   const drafts = new Map<string, DraftRecord>();
   let company: CompanySettings = {
@@ -395,6 +445,12 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     deactivateAreaExternally: (id) => orgTree.deactivateExternally(id),
     setAreaPeople: (id, people) => orgTree.setPeople(id, people),
     areas: () => orgTree.snapshot(),
+    changeDocumentExternally: (id, change) => paperwork.changeExternally(id, change),
+    archiveDocumentExternally: (id) => paperwork.archiveExternally(id),
+    documents: () => paperwork.snapshot(),
+    changePolicyExternally: (id, change) => cover.changeExternally(id, change),
+    archivePolicyExternally: (id) => cover.archiveExternally(id),
+    policies: () => cover.snapshot(),
     changeEmployeeExternally: (id, change) => staff.changeExternally(id, change),
     archiveEmployeeExternally: (id) => staff.archiveExternally(id),
     terminateEmployeeExternally: (id) => staff.terminateExternally(id),
@@ -610,6 +666,29 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
       activate: (id, version) =>
         guarded('activateArea', 'edit', () => orgTree.port.activate(id, version)),
       history: (id, query) => guarded('areaHistory', 'view', () => orgTree.port.history(id, query)),
+    },
+    documents: {
+      list: (query) => guarded('listDocuments', 'view', () => paperwork.port.list(query)),
+      get: (id) => guarded('getDocument', 'view', () => paperwork.port.get(id)),
+      create: (input) => guarded('createDocument', 'create', () => paperwork.port.create(input)),
+      update: (id, patch) =>
+        guarded('updateDocument', 'edit', () => paperwork.port.update(id, patch)),
+      renew: (id, renewal) =>
+        guarded('renewDocument', 'edit', () => paperwork.port.renew(id, renewal)),
+      archive: (id, version) =>
+        guarded('archiveDocument', 'delete', () => paperwork.port.archive(id, version)),
+      history: (id, query) =>
+        guarded('documentHistory', 'view', () => paperwork.port.history(id, query)),
+    },
+    insurance: {
+      list: (query) => guarded('listPolicies', 'view', () => cover.port.list(query)),
+      get: (id) => guarded('getPolicy', 'view', () => cover.port.get(id)),
+      create: (input) => guarded('createPolicy', 'create', () => cover.port.create(input)),
+      update: (id, patch) => guarded('updatePolicy', 'edit', () => cover.port.update(id, patch)),
+      renew: (id, renewal) => guarded('renewPolicy', 'edit', () => cover.port.renew(id, renewal)),
+      archive: (id, version) =>
+        guarded('archivePolicy', 'delete', () => cover.port.archive(id, version)),
+      history: (id, query) => guarded('policyHistory', 'view', () => cover.port.history(id, query)),
     },
     employees: {
       list: (query) => guarded('listEmployees', 'view', () => staff.port.list(query)),

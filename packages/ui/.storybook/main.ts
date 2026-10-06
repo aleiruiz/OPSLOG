@@ -11,6 +11,8 @@ const config: StorybookConfig = {
     '../src/**/*.stories.tsx',
     '../../../apps/web/vehicles/**/*.stories.tsx',
     '../../../apps/web/areas/**/*.stories.tsx',
+    '../../../apps/web/documents/**/*.stories.tsx',
+    '../../../apps/web/insurance/**/*.stories.tsx',
     '../../../apps/web/employees/**/*.stories.tsx',
   ],
   framework: { name: '@storybook/react-vite', options: {} },
