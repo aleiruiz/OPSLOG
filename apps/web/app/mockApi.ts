@@ -1,5 +1,6 @@
 import type { ApiError } from '@opslog/contracts';
 import { createFakeOidc, fakeOidcCode, fakeOidcSubject } from '../api/fakeOidc';
+import { createMockVehicleStore, type MockVehicleStore } from './mockVehicles';
 import type {
   ApiPorts,
   CompanySettings,
@@ -11,6 +12,7 @@ import type {
   RoleSummary,
   SessionInfo,
   UserSummary,
+  Vehicle,
 } from './types';
 
 /**
@@ -34,7 +36,13 @@ export type MockOperation =
   | 'copyRole'
   | 'loadDraft'
   | 'saveDraft'
-  | 'discardDraft';
+  | 'discardDraft'
+  | 'listVehicles'
+  | 'getVehicle'
+  | 'createVehicle'
+  | 'updateVehicle'
+  | 'recordOdometer'
+  | 'archiveVehicle';
 
 export interface MockControls {
   /** Simulates the server-side session expiring (cookie no longer valid). */
@@ -46,6 +54,15 @@ export interface MockControls {
   setUserStatus(userId: string, status: UserSummary['status']): void;
   /** Server-side drafts of the current user, for assertions. */
   storedDrafts(): Readonly<Record<string, DraftValues>>;
+  /** Another actor edits a vehicle on the server: its version moves on, so a form that loaded it is stale. */
+  changeVehicleExternally(
+    id: string,
+    change: Partial<Pick<Vehicle, 'odometerKm' | 'make' | 'model'>>,
+  ): void;
+  /** Another actor archives a vehicle on the server. */
+  archiveVehicleExternally(id: string): void;
+  /** Vehicles currently on the server, for assertions. */
+  vehicles(): readonly Vehicle[];
 }
 
 export interface MockApi extends ApiPorts {
@@ -56,12 +73,15 @@ export interface MockApi extends ApiPorts {
 export const demoSubjects = {
   admin: 'cuenta-admin',
   viewer: 'cuenta-consulta',
+  /** Can view, create and edit, but not archive (role "Despachador"). */
+  dispatch: 'cuenta-despacho',
 } as const;
 
 /** What the fake provider hands the browser for each demo account. */
 export const demoCredentials = {
   admin: { code: fakeOidcCode(demoSubjects.admin), nonce: 'nonce-demo-admin' },
   viewer: { code: fakeOidcCode(demoSubjects.viewer), nonce: 'nonce-demo-viewer' },
+  dispatch: { code: fakeOidcCode(demoSubjects.dispatch), nonce: 'nonce-demo-dispatch' },
 } as const;
 
 export const demoInvitations = {
@@ -140,7 +160,7 @@ const systemRoles: RoleSummary[] = [
 const people = [
   { id: 'user-admin', subject: demoSubjects.admin, role: 'role-admin' },
   { id: 'user-viewer', subject: demoSubjects.viewer, role: 'role-viewer' },
-  { id: 'user-dispatch', subject: 'cuenta-despacho', role: 'role-dispatch' },
+  { id: 'user-dispatch', subject: demoSubjects.dispatch, role: 'role-dispatch' },
 ] as const;
 
 let correlation = 0;
@@ -153,7 +173,13 @@ function apiError(status: ApiError['status'], code: string, message: string): Re
 const ok = <T>(value: T): Result<T> => ({ ok: true, value });
 const badRequest = () => apiError(400, 'bad_request', 'Invalid request');
 
-export function createMockApi(): MockApi {
+export interface MockApiOptions {
+  /** Initial fleet: the synthetic demo fleet by default; pass `[]` for a company without vehicles. */
+  readonly vehicles?: readonly Vehicle[];
+}
+
+export function createMockApi(options: MockApiOptions = {}): MockApi {
+  const fleet: MockVehicleStore = createMockVehicleStore(options.vehicles);
   let signedInAs: string | null = null;
   const failures = new Map<MockOperation, ApiError['status']>();
   const drafts = new Map<string, DraftRecord>();
@@ -217,7 +243,7 @@ export function createMockApi(): MockApi {
   function guarded<T>(
     operation: MockOperation,
     permission: Permission | null,
-    action: () => Result<T>,
+    action: () => Result<T> | Promise<Result<T>>,
   ): Promise<Result<T>> {
     const failed = injected(operation);
     if (failed) return Promise.resolve(failed);
@@ -251,6 +277,9 @@ export function createMockApi(): MockApi {
           .filter(([key]) => key.startsWith(`${signedInAs ?? ''}:`))
           .map(([key, record]) => [key.slice(key.indexOf(':') + 1), record.values]),
       ),
+    changeVehicleExternally: (id, change) => fleet.changeExternally(id, change),
+    archiveVehicleExternally: (id) => fleet.archiveExternally(id),
+    vehicles: () => fleet.snapshot(),
   };
 
   return {
@@ -440,6 +469,16 @@ export function createMockApi(): MockApi {
           roles.push(copy);
           return ok({ ...copy });
         }),
+    },
+    vehicles: {
+      list: (query) => guarded('listVehicles', 'view', () => fleet.port.list(query)),
+      get: (id) => guarded('getVehicle', 'view', () => fleet.port.get(id)),
+      create: (input) => guarded('createVehicle', 'create', () => fleet.port.create(input)),
+      update: (id, patch) => guarded('updateVehicle', 'edit', () => fleet.port.update(id, patch)),
+      recordOdometer: (id, reading) =>
+        guarded('recordOdometer', 'edit', () => fleet.port.recordOdometer(id, reading)),
+      archive: (id, version) =>
+        guarded('archiveVehicle', 'delete', () => fleet.port.archive(id, version)),
     },
     drafts: {
       load: (scope) => guarded('loadDraft', null, () => ok(drafts.get(draftKey(scope)) ?? null)),

@@ -95,6 +95,46 @@ describe('createHttpApi', () => {
     expect(calls[11]?.input).toEqual({ params: { scope: 's' } });
   });
 
+  it('maps the vehicle port to the generated vehicles client routes', async () => {
+    const { api, calls } = scripted({});
+    await api.vehicles.list({ limit: 25, status: 'active' });
+    await api.vehicles.list();
+    await api.vehicles.get('veh-1');
+    await api.vehicles.create({
+      economicNumber: 'ECO-1',
+      plate: 'AB-1',
+      make: 'M',
+      model: 'X',
+      year: 2020,
+      areaId: 'a',
+      odometerKm: 1,
+    });
+    await api.vehicles.update('veh-1', { version: 2, make: 'N' });
+    await api.vehicles.recordOdometer('veh-1', { version: 3, odometerKm: 9 });
+    await api.vehicles.archive('veh-1', 4);
+    expect(calls.map((call) => call.id)).toEqual([
+      'vehicles.list',
+      'vehicles.list',
+      'vehicles.get',
+      'vehicles.create',
+      'vehicles.update',
+      'vehicles.odometer',
+      'vehicles.archive',
+    ]);
+    expect(calls[0]?.input).toEqual({ query: { limit: 25, status: 'active' } });
+    expect(calls[2]?.input).toEqual({ params: { id: 'veh-1' } });
+    expect(calls[4]?.input).toEqual({ params: { id: 'veh-1' }, body: { version: 2, make: 'N' } });
+    expect(calls[5]?.input).toEqual({
+      params: { id: 'veh-1' },
+      body: { version: 3, odometerKm: 9 },
+    });
+    expect(calls[6]?.input).toEqual({ params: { id: 'veh-1' }, body: { version: 4 } });
+    // Status changes and history have no screen: the port does not expose them.
+    expect(Object.keys(api.vehicles).sort()).toEqual(
+      ['archive', 'create', 'get', 'list', 'recordOdometer', 'update'].sort(),
+    );
+  });
+
   it('passes failures through untouched and exposes the identity provider', async () => {
     const oidc = createFakeOidc();
     const client = { call: async () => failure } as unknown as BffClient;

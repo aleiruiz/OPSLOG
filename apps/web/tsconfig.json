@@ -23,6 +23,8 @@
     "auth/**/*.tsx",
     "settings/**/*.ts",
     "settings/**/*.tsx",
+    "vehicles/**/*.ts",
+    "vehicles/**/*.tsx",
     "vitest.config.ts",
     "../../packages/ui/src/**/*.ts",
     "../../packages/ui/src/**/*.tsx",

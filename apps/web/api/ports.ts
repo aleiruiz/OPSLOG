@@ -1,5 +1,6 @@
 import {
   createBffClient,
+  createVehiclesClient,
   type BffClient,
   type BffClientOptions,
   type BffSession,
@@ -29,6 +30,7 @@ export function createHttpApi(
   client: BffClient = createBffClient(options),
 ): ApiPorts {
   const { call } = client;
+  const vehicles = createVehiclesClient(client);
   return {
     oidc,
     auth: {
@@ -66,6 +68,15 @@ export function createHttpApi(
       save: (scope, values) => call('drafts.save', { params: { scope }, body: { values } }),
       discard: async (scope) =>
         mapResult(await call('drafts.discard', { params: { scope } }), () => null),
+    },
+    // Only what the screens use: status changes and history are in the contract but have no screen yet.
+    vehicles: {
+      list: vehicles.list,
+      get: vehicles.get,
+      create: vehicles.create,
+      update: vehicles.update,
+      recordOdometer: vehicles.recordOdometer,
+      archive: vehicles.archive,
     },
   };
 }

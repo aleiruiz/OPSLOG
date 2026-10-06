@@ -4,9 +4,15 @@ import type {
   BffUser,
   BffUsersQuery,
   BffUserStatus,
+  BffVehicle,
+  BffVehicleInput,
+  BffVehiclePatch,
+  BffVehicleStatus,
+  BffVehiclesQuery,
   ISODateTime,
   Page,
   Permission,
+  VehiclesClient,
 } from '@opslog/contracts';
 
 export type { ApiError, ISODateTime, Page, Permission };
@@ -141,11 +147,29 @@ export interface DraftsPort {
   discard(scope: string): Promise<Result<null>>;
 }
 
+export type Vehicle = BffVehicle;
+export type VehicleStatus = BffVehicleStatus;
+export type VehicleInput = BffVehicleInput;
+export type VehiclePatch = BffVehiclePatch;
+export type VehicleListQuery = BffVehiclesQuery;
+
+/**
+ * Vehicles over the generated BFF client. Every change carries the `version` of the last read: a lost
+ * race comes back as a 409 `stale_version` value, a lower odometer as a 422 `odometer_decrease`, and
+ * a repeated economic number, plate or VIN as a 409 `duplicate` with `fieldErrors`. Status changes and
+ * history exist in the contract but have no screen yet, so the port does not expose them.
+ */
+export type VehiclesPort = Pick<
+  VehiclesClient,
+  'list' | 'get' | 'create' | 'update' | 'recordOdometer' | 'archive'
+>;
+
 export interface ApiPorts {
   readonly auth: AuthPort;
   readonly tenant: TenantAdminPort;
   readonly users: UsersPort;
   readonly roles: RolesPort;
   readonly drafts: DraftsPort;
+  readonly vehicles: VehiclesPort;
   readonly oidc: OidcPort;
 }

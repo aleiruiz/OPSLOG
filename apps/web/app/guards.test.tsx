@@ -15,7 +15,7 @@ function sourceFiles(dir: string): string[] {
     return /\.(ts|tsx)$/.test(name) && !/\.test\./.test(name) ? [path] : [];
   });
 }
-const sources = ['api', 'app', 'auth', 'settings'].flatMap((dir) =>
+const sources = ['api', 'app', 'auth', 'settings', 'vehicles'].flatMap((dir) =>
   sourceFiles(join(webRoot, dir)),
 );
 const read = (path: string) => readFileSync(path, 'utf8');

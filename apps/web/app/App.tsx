@@ -7,6 +7,9 @@ import { SessionProvider, useSession } from '../auth/session';
 import { RolesScreen } from '../settings/access/RolesScreen';
 import { TenantAdminScreen } from '../settings/access/TenantAdminScreen';
 import { UsersScreen } from '../settings/access/UsersScreen';
+import { VehicleDetailScreen } from '../vehicles/VehicleDetailScreen';
+import { VehicleCreateScreen, VehicleEditScreen } from '../vehicles/VehicleFormScreen';
+import { VehiclesScreen } from '../vehicles/VehiclesScreen';
 import { AppShell } from './AppShell';
 import { HomeScreen } from './HomeScreen';
 import { RouterProvider, useRouter } from './router';
@@ -21,6 +24,11 @@ export function App({ ports, basename = '' }: { ports: ApiPorts; basename?: stri
       </SessionProvider>
     </RouterProvider>
   );
+}
+
+/** Vehicle sub-screens keep the "Vehículos" entry highlighted. */
+function navigationRoute(id: string | null): string | null {
+  return id === 'vehicleNew' || id === 'vehicleDetail' || id === 'vehicleEdit' ? 'vehicles' : id;
 }
 
 function Redirect({ to }: { to: string }) {
@@ -118,6 +126,18 @@ function Routes() {
       case 'roles':
         screen = <RolesScreen />;
         break;
+      case 'vehicles':
+        screen = <VehiclesScreen />;
+        break;
+      case 'vehicleNew':
+        screen = <VehicleCreateScreen />;
+        break;
+      case 'vehicleDetail':
+        screen = <VehicleDetailScreen key={match.params.id} id={match.params.id as string} />;
+        break;
+      case 'vehicleEdit':
+        screen = <VehicleEditScreen key={match.params.id} id={match.params.id as string} />;
+        break;
       case 'invitation':
         screen = (
           <UiState
@@ -134,7 +154,7 @@ function Routes() {
   return (
     <AppShell
       session={session}
-      currentRouteId={match?.route.id ?? null}
+      currentRouteId={navigationRoute(match?.route.id ?? null)}
       can={can}
       onSignOut={() => void logout().then((result) => setSignOutFailed(!result.ok))}
       locked={expired}

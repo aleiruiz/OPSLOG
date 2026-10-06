@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
   type RenderResult,
 } from '@testing-library/react';
 import React from 'react';
@@ -73,7 +74,7 @@ export const type = (label: string, value: string) =>
 export const click = (name: string | RegExp) =>
   fireEvent.click(screen.getByRole('button', { name }));
 
-export { screen, waitFor, fireEvent };
+export { screen, waitFor, fireEvent, within };
 
 /** A promise opened by hand, so a test can hold a port call until it decides to release it. */
 export function deferred() {

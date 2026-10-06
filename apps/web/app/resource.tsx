@@ -17,11 +17,18 @@ export type ResourceState<T> =
 export function useResource<T>(
   load: () => Promise<Result<T>>,
   deps: React.DependencyList,
-): { state: ResourceState<T>; reload: () => void; setData: (data: T) => void } {
+): {
+  state: ResourceState<T>;
+  reload: () => void;
+  setData: (data: T) => void;
+  /** Counts completed loads (not `setData`): a key that forces a form to start over from fresh data. */
+  generation: number;
+} {
   const { state: sessionState, markExpired } = useSession();
   const authenticated = sessionState.status === 'authenticated';
   const [state, setState] = React.useState<ResourceState<T>>({ status: 'loading' });
   const [attempt, setAttempt] = React.useState(0);
+  const [generation, setGeneration] = React.useState(0);
   const loadRef = React.useRef(load);
   loadRef.current = load;
   const expireRef = React.useRef(markExpired);
@@ -33,6 +40,7 @@ export function useResource<T>(
     setState({ status: 'loading' });
     void loadRef.current().then((result) => {
       if (cancelled) return;
+      setGeneration((count) => count + 1);
       if (result.ok) setState({ status: 'ready', data: result.value });
       else if (result.error.status === 401) {
         expireRef.current();
@@ -49,6 +57,7 @@ export function useResource<T>(
     state,
     reload: () => setAttempt((count) => count + 1),
     setData: (data) => setState({ status: 'ready', data }),
+    generation,
   };
 }
 
