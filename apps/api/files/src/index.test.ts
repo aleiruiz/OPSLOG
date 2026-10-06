@@ -354,7 +354,11 @@ describe('tenant isolation A/B', () => {
     const b = await w.user('tenant-b', 'subject-b');
     const idA = await releasedFile(w, a.token);
     const grantA = await grantFor(w, a.token, idA);
-    expect((await w.api.download(b.token, 'c', grantA)).error?.code).toBe('forbidden');
+    expect((await w.api.download(b.token, 'c', grantA)).error?.code).toBe('not_found');
+    // The foreign file id is not written to tenant B's audit trail.
+    const denied = w.audit.list('tenant-b').filter((e) => e.action === 'file.access_denied');
+    expect(denied.map((e) => e.entityId)).toEqual(['[REDACTED]']);
+    expect(JSON.stringify(w.audit.list('tenant-b'))).not.toContain(idA);
   });
   it('rejects a grant presented by a different user of the same tenant', async () => {
     const w = await world();
@@ -362,8 +366,33 @@ describe('tenant isolation A/B', () => {
     const a2 = await w.user('tenant-a', 'subject-2');
     const id = await releasedFile(w, a1.token);
     expect((await w.api.download(a2.token, 'c', await grantFor(w, a1.token, id))).error?.code).toBe(
-      'forbidden',
+      'not_found',
     );
+  });
+  it('requires view and view_pii to derive from a pii original and hides other-tenant originals', async () => {
+    const w = await world();
+    const owner = await w.user('tenant-a', 'owner');
+    const editorOnly = await w.user('tenant-a', 'editor-only', ['edit']);
+    const editorView = await w.user('tenant-a', 'editor-view', ['edit', 'view']);
+    const other = await w.user('tenant-b', 'other');
+    const piiId = await releasedFile(w, owner.token, 'pii-original', 'pii');
+    const input = { contentType: 'image/jpeg', bytes: jpeg('thumb'), width: 10, height: 10 };
+    const code = async (token: string, id: string) =>
+      (await w.api.createDerivative(token, 'c', id, input)).error?.code;
+    expect(await code(editorOnly.token, piiId)).toBe('forbidden');
+    expect(await code(editorView.token, piiId)).toBe('forbidden');
+    expect(await code(other.token, piiId)).toBe('not_found');
+    expect(await code(owner.token, '../x')).toBe('invalid_input');
+    expect((await w.api.createDerivative(owner.token, 'c', piiId, input)).value?.status).toBe(
+      'pending_scan',
+    );
+  });
+  it('records denials only with opaque ids, never raw caller input', async () => {
+    const w = await world();
+    const { token } = await w.user('tenant-a', 'subject-a');
+    await w.api.createDownloadGrant(token, 'c', 'a@b.example/../x');
+    const events = w.audit.list('tenant-a');
+    expect(events.map((e) => e.entityId)).toEqual(['[REDACTED]']);
   });
   it('keeps same local ids in both tenants separate', async () => {
     const w = await world();

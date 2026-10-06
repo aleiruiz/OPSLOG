@@ -110,6 +110,8 @@ export function validateUpload(input: {
   };
 }
 
+const WINDOWS_RESERVED = /^(?:con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\..*)?$/i;
+
 /** Removes paths, control characters, quotes and leading dots; forces the extension of the verified type. */
 export function sanitizeFilename(name: unknown, contentType: AllowedContentType): string {
   const extension = FILE_TYPES[contentType].extension;
@@ -117,11 +119,13 @@ export function sanitizeFilename(name: unknown, contentType: AllowedContentType)
   const base = raw.split(/[\\/]/).pop() ?? '';
   const stem = base
     .replace(/\.[A-Za-z0-9]{1,5}$/, '')
+    .replace(/[\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, '')
     .replace(/[\u0000-\u001f\u007f"';<>|:*?%&=+,`^{}[\]()!$#@~]/g, '_')
     .replace(/\s+/g, ' ')
     .replace(/^[\s._]+|[\s._]+$/g, '')
     .slice(0, 80);
-  return `${stem || 'file'}.${extension}`;
+  const safeStem = WINDOWS_RESERVED.test(stem) ? `_${stem}` : stem;
+  return `${safeStem || 'file'}.${extension}`;
 }
 
 /** Originals are never rendered inline: always an attachment with an ASCII fallback and RFC 5987 name. */

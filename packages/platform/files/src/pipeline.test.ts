@@ -187,6 +187,19 @@ describe('scan and release', () => {
   });
 });
 
+describe('scanner verdict handling', () => {
+  it('never releases on an unknown, malformed or missing verdict and stays quarantined', async () => {
+    for (const verdict of [{ outcome: 'error' }, { outcome: 'CLEAN' }, {}, null, 'clean']) {
+      const t = setup();
+      t.scanner.scan = async () => verdict as never;
+      await t.pipeline.ingestOriginal(actorFor('tenant-a'), upload());
+      expect(await t.pipeline.processScans()).toMatchObject({ released: 0, deferred: 1 });
+      expect((await t.records.get('tenant-a', 'file-1'))?.status).toBe('pending_scan');
+      expect(t.storage.keys()).toEqual(['tenants/tenant-a/quarantine/originals/file-1']);
+    }
+  });
+});
+
 describe('scanner outage', () => {
   it('keeps the file in quarantine, backs off exponentially and never releases while down', async () => {
     const t = setup({ scanBackoffBaseMs: 1000, scanBackoffMaxMs: 3000 });

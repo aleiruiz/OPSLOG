@@ -138,6 +138,12 @@ describe('file names and headers', () => {
     expect(sanitizeFilename('   ', 'image/webp')).toBe('file.webp');
     expect(sanitizeFilename(undefined, 'image/jpeg')).toBe('file.jpg');
     expect(sanitizeFilename('.hidden', 'image/jpeg')).toBe('hidden.jpg');
+    expect(sanitizeFilename('a\u202egpj.exe\u200b\u2066b\u2069', 'application/pdf')).toBe(
+      'agpj.exeb.pdf',
+    );
+    for (const reserved of ['CON', 'nul.txt', 'com1', 'LPT9.tar'])
+      expect(sanitizeFilename(reserved, 'application/pdf').startsWith('_')).toBe(true);
+    expect(sanitizeFilename('console', 'application/pdf')).toBe('console.pdf');
     expect(sanitizeFilename('x'.repeat(300), 'image/jpeg')).toHaveLength(84);
   });
   it('builds an attachment disposition with ASCII fallback and encoded name', () => {

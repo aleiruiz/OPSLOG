@@ -243,6 +243,9 @@ export class FilePipeline {
       bytes,
     );
     if (verdict.outcome === 'infected') return this.reject(actor, record, quarantineRef, 'malware');
+    // Fail closed: anything other than an explicit clean verdict is treated as a scanner failure.
+    if ((verdict as { outcome?: unknown } | null)?.outcome !== 'clean')
+      throw new Error('unexpected scan verdict');
     // Released bytes must exist before the record says clean, so a clean record is always servable.
     await this.deps.storage.putIfAbsent(refFor(record, 'released'), bytes, {
       contentType: record.contentType,

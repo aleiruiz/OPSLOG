@@ -103,6 +103,7 @@ export interface FilesApiDeps {
   readonly now?: () => Date;
 }
 
+const OPAQUE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 const UUID = /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i;
 
 interface Authorized {
@@ -173,7 +174,14 @@ export class FilesApi {
     input: { contentType: string; bytes: Uint8Array; width: number; height: number },
   ): Promise<FilesResponse<FileSummary>> {
     try {
-      const { actor } = await this.authorize(token, correlationId, ['edit']);
+      const { context, granted, actor } = await this.authorize(token, correlationId, [
+        'edit',
+        'view',
+      ]);
+      const original = await this.deps.records.get(context.tenantId, requireOpaqueId(originalId));
+      if (!original) throw new FileError('not_found');
+      if (original.sensitivity === 'pii' && !granted.includes('view_pii'))
+        throw new FileError('forbidden');
       const derivative: DerivativeInput = {
         declaredType: input.contentType,
         bytes: input.bytes,
@@ -245,12 +253,13 @@ export class FilesApi {
     try {
       auth = await this.authorize(token, correlationId, ['view']);
       const claims = this.deps.grants.verify(grantToken);
-      fileId = claims.fileId;
+      // A grant for another tenant or actor looks like an unknown file; its file id is never audited.
       if (
         claims.tenantId !== auth.context.tenantId ||
         claims.subject !== auth.context.actor.subject
       )
-        throw new FileError('forbidden');
+        throw new FileError('not_found');
+      fileId = claims.fileId;
       const record = await this.resolveDownloadable(auth, fileId);
       const bytes = await this.deps.storage.get(refFor(record, 'released'));
       if (!bytes) throw new FileError('not_found');
@@ -291,7 +300,8 @@ export class FilesApi {
   private auditDenied(auth: Authorized | undefined, fileId: string, error: unknown): void {
     if (!auth || !(error instanceof FileError) || error.code === 'unauthorized') return;
     try {
-      auditFileEvent(this.deps.audit, auth.actor, 'file.access_denied', fileId, this.now());
+      const safeId = OPAQUE.test(fileId) ? fileId : '';
+      auditFileEvent(this.deps.audit, auth.actor, 'file.access_denied', safeId, this.now());
     } catch {
       /* the denial response stands */
     }
