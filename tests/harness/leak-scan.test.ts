@@ -33,7 +33,7 @@ const slack = `xoxb-${'1234567890-abcdefghij'}`;
 const apiKey = `sk-ant-${'api03-abcdefghijklmnopqrstuvwxyz0123456789'}`;
 const google = `AIza${'SyA1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q'}`;
 const jwt = `eyJ${'hbGciOiJIUzI1NiJ9'}.eyJ${'zdWIiOiIxMjM0NTY3ODkwIn0'}.${'abcdefghijklmnop'}`;
-const dbUrl = `mysql://root:${'hunter2hunter2'}@db.internal/app`;
+const dbUrl = `${'mysql'}://root:${'hunter2hunter2'}@db.internal/app`;
 const npmrc = `//registry.example/:_authToken=${'abcdef123456'}`;
 
 describe('leak scan', () => {
@@ -75,6 +75,15 @@ describe('leak scan', () => {
     const marked = `const fixture = '${aws}'; // secret-scan:allow synthetic negative fixture\n`;
     expect(scan({ 'a.ts': marked }).status).toBe(0);
     expect(scan({ 'a.ts': `${marked}const other = '${aws}';\n` }).status).toBe(1);
+  });
+
+  it('passes on this repository (tracked files, including this test)', () => {
+    const result = spawnSync('node', [script], {
+      cwd: join(dirname(script), '..', '..'),
+      encoding: 'utf8',
+    });
+    expect(result.stderr).toBe('');
+    expect(result.status).toBe(0);
   });
 
   it('ignores binary files', () => {
