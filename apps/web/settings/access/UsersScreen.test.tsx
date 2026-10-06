@@ -189,6 +189,7 @@ describe('UsersScreen', () => {
     click('Crear invitación');
     expect(await screen.findByText('Elige un rol de la lista.')).toBeInTheDocument();
     fireEvent.change(getField('Rol'), { target: { value: 'role-fleet' } });
+    expect(screen.queryByText('Elige un rol de la lista.')).toBeNull();
     api.controls.failNext('inviteUser', 500);
     click('Crear invitación');
     expect(

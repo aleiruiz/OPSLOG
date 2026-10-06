@@ -64,6 +64,7 @@ describe('RolesScreen', () => {
     click('Crear copia');
     expect(await screen.findByText('Escribe un nombre.')).toBeInTheDocument();
     type('Nombre del nuevo rol', 'Auditor externo');
+    expect(screen.queryByText('Escribe un nombre.')).toBeNull();
     api.controls.failNext('copyRole', 500);
     click('Crear copia');
     expect(

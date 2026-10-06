@@ -195,7 +195,10 @@ function CopyForm({
           label="Nombre del nuevo rol"
           required
           value={draft.values.name}
-          onChange={(event) => draft.setField('name', event.target.value)}
+          onChange={(event) => {
+            setErrors({});
+            draft.setField('name', event.target.value);
+          }}
           error={Boolean(errors.name)}
           helperText={errors.name}
         />

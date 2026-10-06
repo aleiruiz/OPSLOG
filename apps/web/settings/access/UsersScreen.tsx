@@ -275,7 +275,10 @@ function InviteForm({
           SelectProps={{ native: true }}
           InputLabelProps={{ shrink: true }}
           value={values.roleId}
-          onChange={(event) => setField('roleId', event.target.value)}
+          onChange={(event) => {
+            setErrors({});
+            setField('roleId', event.target.value);
+          }}
           error={Boolean(errors.roleId)}
           helperText={errors.roleId}
         >
