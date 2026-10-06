@@ -40,6 +40,27 @@ describe('route matching', () => {
     );
   });
 
+  it('resolves the area screens, with "nueva" taking precedence over the id, under the "Plantilla" group', () => {
+    expect(resolveRoute('/plantilla/areas')?.route.id).toBe('areas');
+    expect(resolveRoute('/plantilla/areas/nueva')?.route.id).toBe('areaNew');
+    expect(resolveRoute('/plantilla/areas/a-1')).toMatchObject({
+      route: { id: 'areaDetail' },
+      params: { id: 'a-1' },
+    });
+    expect(resolveRoute('/plantilla/areas/a-1/editar')?.route.id).toBe('areaEdit');
+    expect(resolveRoute('/plantilla/areas/a-1/mover')?.route.id).toBe('areaMove');
+    expect(resolveRoute('/plantilla/areas/a/b/c')).toBeNull();
+    expect(
+      routes.filter((route) => route.nav?.group === 'Plantilla').map((route) => route.id),
+    ).toEqual(['areas']);
+    const byId = Object.fromEntries(routes.map((route) => [route.id, route.access]));
+    expect(byId.areas).toEqual({ permission: 'view' });
+    expect(byId.areaNew).toEqual({ permission: 'create' });
+    expect(byId.areaDetail).toEqual({ permission: 'view' });
+    expect(byId.areaEdit).toEqual({ permission: 'edit' });
+    expect(byId.areaMove).toEqual({ permission: 'edit' });
+  });
+
   it('declares a permission for every configuration route and none for public ones', () => {
     const byId = Object.fromEntries(routes.map((route) => [route.id, route.access]));
     expect(byId.company).toEqual({ permission: 'manage_config' });

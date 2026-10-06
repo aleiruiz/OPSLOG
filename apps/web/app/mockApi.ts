@@ -1,5 +1,6 @@
 import type { ApiError } from '@opslog/contracts';
 import { createFakeOidc, fakeOidcCode, fakeOidcSubject } from '../api/fakeOidc';
+import { createMockAreaStore, type MockAreaStore } from './mockAreas';
 import { createMockVehicleStore, type MockVehicleStore } from './mockVehicles';
 import type {
   ApiPorts,
@@ -13,6 +14,7 @@ import type {
   SessionInfo,
   UserSummary,
   Vehicle,
+  Area,
 } from './types';
 
 /**
@@ -42,7 +44,14 @@ export type MockOperation =
   | 'createVehicle'
   | 'updateVehicle'
   | 'recordOdometer'
-  | 'archiveVehicle';
+  | 'archiveVehicle'
+  | 'listAreas'
+  | 'getArea'
+  | 'createArea'
+  | 'updateArea'
+  | 'deactivateArea'
+  | 'activateArea'
+  | 'areaHistory';
 
 export interface MockControls {
   /** Simulates the server-side session expiring (cookie no longer valid). */
@@ -63,6 +72,14 @@ export interface MockControls {
   archiveVehicleExternally(id: string): void;
   /** Vehicles currently on the server, for assertions. */
   vehicles(): readonly Vehicle[];
+  /** Another actor renames an area on the server: its version moves on, so a form that loaded it is stale. */
+  changeAreaExternally(id: string, change: { name: string }): void;
+  /** Another actor deactivates an area on the server. */
+  deactivateAreaExternally(id: string): void;
+  /** Active people the (not yet built) personnel module reports for an area: they block its deactivation. */
+  setAreaPeople(id: string, people: number): void;
+  /** Areas currently on the server, for assertions. */
+  areas(): readonly Area[];
 }
 
 export interface MockApi extends ApiPorts {
@@ -176,11 +193,31 @@ const badRequest = () => apiError(400, 'bad_request', 'Invalid request');
 export interface MockApiOptions {
   /** Initial fleet: the synthetic demo fleet by default; pass `[]` for a company without vehicles. */
   readonly vehicles?: readonly Vehicle[];
+  /** Initial areas: the synthetic demo tree by default; pass `[]` for a company without areas. */
+  readonly areas?: readonly Area[];
 }
 
 export function createMockApi(options: MockApiOptions = {}): MockApi {
-  const fleet: MockVehicleStore = createMockVehicleStore(options.vehicles);
+  const fleet: MockVehicleStore = createMockVehicleStore(options.vehicles, undefined, (areaId) =>
+    orgTree.snapshot().some((area) => area.id === areaId && area.active),
+  );
   let signedInAs: string | null = null;
+  const orgTree: MockAreaStore = createMockAreaStore(
+    {
+      liveVehicles: (areaId) =>
+        fleet
+          .snapshot()
+          .filter(
+            (vehicle) =>
+              vehicle.areaId === areaId &&
+              vehicle.archivedAt === null &&
+              vehicle.status !== 'decommissioned',
+          ).length,
+      isMember: (userId) => users.some((user) => user.id === userId && user.status === 'active'),
+      actorId: () => signedInAs ?? 'user-admin',
+    },
+    ...(options.areas ? [options.areas] : []),
+  );
   const failures = new Map<MockOperation, ApiError['status']>();
   const drafts = new Map<string, DraftRecord>();
   let company: CompanySettings = {
@@ -280,6 +317,10 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     changeVehicleExternally: (id, change) => fleet.changeExternally(id, change),
     archiveVehicleExternally: (id) => fleet.archiveExternally(id),
     vehicles: () => fleet.snapshot(),
+    changeAreaExternally: (id, change) => orgTree.changeExternally(id, change),
+    deactivateAreaExternally: (id) => orgTree.deactivateExternally(id),
+    setAreaPeople: (id, people) => orgTree.setPeople(id, people),
+    areas: () => orgTree.snapshot(),
   };
 
   return {
@@ -479,6 +520,17 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
         guarded('recordOdometer', 'edit', () => fleet.port.recordOdometer(id, reading)),
       archive: (id, version) =>
         guarded('archiveVehicle', 'delete', () => fleet.port.archive(id, version)),
+    },
+    areas: {
+      list: (query) => guarded('listAreas', 'view', () => orgTree.port.list(query)),
+      get: (id) => guarded('getArea', 'view', () => orgTree.port.get(id)),
+      create: (input) => guarded('createArea', 'create', () => orgTree.port.create(input)),
+      update: (id, patch) => guarded('updateArea', 'edit', () => orgTree.port.update(id, patch)),
+      deactivate: (id, version) =>
+        guarded('deactivateArea', 'delete', () => orgTree.port.deactivate(id, version)),
+      activate: (id, version) =>
+        guarded('activateArea', 'edit', () => orgTree.port.activate(id, version)),
+      history: (id, query) => guarded('areaHistory', 'view', () => orgTree.port.history(id, query)),
     },
     drafts: {
       load: (scope) => guarded('loadDraft', null, () => ok(drafts.get(draftKey(scope)) ?? null)),

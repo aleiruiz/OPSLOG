@@ -73,7 +73,7 @@ Las stories son CSF plano (sin tipos de Storybook: el paquete web no depende de 
 ## Huecos y decisiones pendientes (no se declaran cumplidos)
 
 1. **Cambio de estado e historial** (FR-072/077): el backend existe (`vehicles.status`, `vehicles.history`), pero no están en el alcance pedido y no tienen pantalla; el estado solo se muestra.
-2. **Áreas:** no hay módulo de Áreas; el filtro y el campo son un identificador opaco de texto. Cuando exista el catálogo, serán un selector.
+2. **Áreas:** el módulo de Áreas ya existe (`AREAS-WEB-M2-20261006`) y el backend valida el `areaId` (422 `invalid_area`, campo `area_id`: la pantalla lo muestra junto al campo y el mock lo reproduce), pero el filtro y el campo de vehículos siguen siendo un identificador de texto; convertirlos en un selector del catálogo queda pendiente.
 3. **Búsqueda por texto** (número económico, placa, VIN): el listado del backend solo filtra por estado, área y archivados; no hay búsqueda ni orden configurable.
 4. **Edición no atómica:** el odómetro tiene un comando propio, así que guardar campos y lectura son dos llamadas (con el manejo de guardado parcial descrito). Un `PUT` que admita el odómetro, o un comando transaccional, lo simplificaría; no se construyó por no ser necesario para las pantallas.
 5. **Corrección del odómetro hacia abajo** (BR-015, con permiso y motivo): el backend la rechaza siempre; la pantalla lo explica y no la ofrece.

@@ -41,3 +41,11 @@ export const WithError: Story = {
     onErrorAction: () => undefined,
   },
 };
+export const Reversible: Story = {
+  args: {
+    title: 'Activar área',
+    description: 'Volverá a estar disponible para asignarle recursos.',
+    confirmLabel: 'Activar',
+    confirmTone: 'primary',
+  },
+};

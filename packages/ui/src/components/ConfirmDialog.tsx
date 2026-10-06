@@ -12,6 +12,8 @@ export type ConfirmDialogProps = {
   description: string;
   confirmLabel: string;
   cancelLabel?: string;
+  /** `danger` (default) for destructive actions; `primary` for a reversible one such as activating a record. */
+  confirmTone?: 'danger' | 'primary';
   /** The confirmation is running: both actions are disabled and the dialog cannot be dismissed. */
   busy?: boolean;
   /** A failure of the confirmed action, announced to assistive technology and kept inside the dialog. */
@@ -32,6 +34,7 @@ export function ConfirmDialog({
   description,
   confirmLabel,
   cancelLabel = 'Cancelar',
+  confirmTone = 'danger',
   busy = false,
   error,
   errorActionLabel,
@@ -80,7 +83,12 @@ export function ConfirmDialog({
         <Button variant="text" autoFocus data-initial-focus onClick={onCancel} disabled={busy}>
           {cancelLabel}
         </Button>
-        <Button variant="contained" color="error" loading={busy} onClick={onConfirm}>
+        <Button
+          variant="contained"
+          color={confirmTone === 'primary' ? 'primary' : 'error'}
+          loading={busy}
+          onClick={onConfirm}
+        >
           {confirmLabel}
         </Button>
       </DialogActions>

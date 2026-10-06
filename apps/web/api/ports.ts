@@ -1,4 +1,5 @@
 import {
+  createAreasClient,
   createBffClient,
   createVehiclesClient,
   type BffClient,
@@ -31,6 +32,7 @@ export function createHttpApi(
 ): ApiPorts {
   const { call } = client;
   const vehicles = createVehiclesClient(client);
+  const areas = createAreasClient(client);
   return {
     oidc,
     auth: {
@@ -77,6 +79,15 @@ export function createHttpApi(
       update: vehicles.update,
       recordOdometer: vehicles.recordOdometer,
       archive: vehicles.archive,
+    },
+    areas: {
+      list: areas.list,
+      get: areas.get,
+      create: areas.create,
+      update: areas.update,
+      deactivate: areas.deactivate,
+      activate: areas.activate,
+      history: areas.history,
     },
   };
 }

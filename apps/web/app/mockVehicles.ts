@@ -68,6 +68,7 @@ function failure(
 const ok = <T>(value: T): Result<T> => ({ ok: true, value });
 const badRequest = () => failure(400, 'bad_request', 'Invalid request');
 const notFound = () => failure(404, 'not_found', 'Resource not found');
+const invalidArea = () => failure(422, 'invalid_area', 'Unprocessable request', 'area_id');
 const conflict = (code: 'stale_version' | 'immutable') => failure(409, code, 'Conflict');
 
 const economicKey = (value: string) => value.toLowerCase();
@@ -127,6 +128,8 @@ function parseCore(input: Readonly<Record<string, unknown>>, now: Date): Partial
 export function createMockVehicleStore(
   seed: readonly Vehicle[] = demoVehicles(),
   now: () => Date = () => new Date(NOW),
+  /** Whether an area id is an active area of the company (like the backend, which refuses any other). */
+  isActiveArea: (areaId: string) => boolean = () => true,
 ): MockVehicleStore {
   let rows: Vehicle[] = seed.map((vehicle) => ({ ...vehicle }));
   let sequence = rows.length;
@@ -213,6 +216,7 @@ export function createMockVehicleStore(
         !isPastOrToday(registeredOn, todayOf(now()))
       )
         return badRequest();
+      if (!isActiveArea(core.areaId as string)) return invalidArea();
       const clash = collision(core, null);
       if (clash) return duplicate(clash);
       sequence += 1;
@@ -247,6 +251,8 @@ export function createMockVehicleStore(
       if (current.archivedAt !== null || current.status === 'decommissioned')
         return conflict('immutable');
       if (current.version !== version) return conflict('stale_version');
+      if (core.areaId !== undefined && core.areaId !== current.areaId && !isActiveArea(core.areaId))
+        return invalidArea();
       const clash = collision(core, id);
       if (clash) return duplicate(clash);
       return ok({ ...replace(id, bump(current, core)) });

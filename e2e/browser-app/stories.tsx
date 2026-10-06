@@ -24,9 +24,14 @@ const modules = (
   import.meta as unknown as {
     glob: (patterns: string[], options: { eager: true }) => Record<string, StoryModule>;
   }
-).glob(['../../packages/ui/src/**/*.stories.tsx', '../../apps/web/vehicles/**/*.stories.tsx'], {
-  eager: true,
-});
+).glob(
+  [
+    '../../packages/ui/src/**/*.stories.tsx',
+    '../../apps/web/vehicles/**/*.stories.tsx',
+    '../../apps/web/areas/**/*.stories.tsx',
+  ],
+  { eager: true },
+);
 
 // Stories that open a modal hide the rest of the page (by design), so the all-stories axe page skips them; the
 // dialog is scanned on its own in e2e/vehicles.spec.ts.

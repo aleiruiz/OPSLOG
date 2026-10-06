@@ -67,6 +67,28 @@ export const CreateValidationErrors = {
       serverErrors: validate(invalid, { mode: 'create', now: storyNow }),
     }),
 };
+export const CreateInvalidArea = {
+  render: () =>
+    create({
+      initial: {
+        economicNumber: 'ECO-900',
+        plate: 'ZZ-900',
+        vin: '',
+        make: 'Toyota',
+        model: 'Hiace',
+        year: '2023',
+        areaId: 'area-inexistente',
+        odometerKm: '1200',
+        registeredOn: '2026-10-06',
+      },
+      serverErrors: { areaId: 'El área no existe o está inactiva.' },
+      alert: {
+        severity: 'error',
+        title: 'El área no es válida',
+        message: 'El área no existe o está inactiva. Elige un área activa de tu empresa.',
+      },
+    }),
+};
 export const CreateDuplicates = {
   render: () =>
     create({
