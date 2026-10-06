@@ -45,6 +45,9 @@ export function useServerDraft<T extends DraftValues>(scope: string, initial: T)
   const dirty = React.useRef(held.values.has(scope));
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const alive = React.useRef(true);
+  // Writes to the held store are only valid for the sign-in this screen was mounted under.
+  const generation = React.useRef(held.generation);
+  const live = () => held.generation === generation.current;
   const sessionRef = React.useRef({ markExpired, authenticated });
   sessionRef.current = { markExpired, authenticated };
 
@@ -67,7 +70,7 @@ export function useServerDraft<T extends DraftValues>(scope: string, initial: T)
     if (result.ok) {
       if (latest.current === snapshot) {
         dirty.current = false;
-        held.values.delete(scope);
+        if (live()) held.values.delete(scope);
         setStatus('saved');
       }
     } else if (result.error.status === 401) {
@@ -83,11 +86,12 @@ export function useServerDraft<T extends DraftValues>(scope: string, initial: T)
       clearTimer();
       // Leaving the screen with unsent edits: hand them to the server; if that is not possible they are
       // held in page memory (outside this screen) until the person is authenticated again.
-      if (!dirty.current) return;
+      if (!dirty.current || !live()) return; // signed out meanwhile: the edits are not carried over
       const pending = latest.current;
       if (!sessionRef.current.authenticated) held.values.set(scope, pending);
       else
         void ports.drafts.save(scope, pending).then((result) => {
+          if (!live()) return;
           if (result.ok) held.values.delete(scope);
           else held.values.set(scope, pending);
         });
@@ -102,8 +106,9 @@ export function useServerDraft<T extends DraftValues>(scope: string, initial: T)
         // A discard failed earlier: finish it first and never restore the draft it was meant to remove.
         const dropped = await ports.drafts.discard(scope);
         if (cancelled) return;
-        if (dropped.ok) held.discards.delete(scope);
-        else if (dropped.error.status === 401) sessionRef.current.markExpired();
+        if (dropped.ok) {
+          if (live()) held.discards.delete(scope);
+        } else if (dropped.error.status === 401) sessionRef.current.markExpired();
         setStatus((current) => (current === 'loading' ? 'idle' : current));
         return;
       }
@@ -146,8 +151,9 @@ export function useServerDraft<T extends DraftValues>(scope: string, initial: T)
     latest.current = initialRef.current;
     setValues(initialRef.current);
     setStatus('idle');
-    held.values.delete(scope);
+    if (live()) held.values.delete(scope);
     const result = await ports.drafts.discard(scope);
+    if (!live()) return;
     if (result.ok) held.discards.delete(scope);
     else {
       held.discards.add(scope);

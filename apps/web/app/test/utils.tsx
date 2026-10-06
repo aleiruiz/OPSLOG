@@ -39,7 +39,7 @@ export async function renderApp(
 /** Wraps a screen in the providers it needs, with an already signed-in mock session. */
 export async function renderWithSession(
   ui: React.ReactNode,
-  options: { api?: MockApi; account?: Account } = {},
+  options: { api?: MockApi; account?: Account; outside?: React.ReactNode } = {},
 ): Promise<RenderResult & { api: MockApi }> {
   const { RouterProvider } = await import('../router');
   const { SessionProvider, useSession } = await import('../../auth/session');
@@ -54,6 +54,7 @@ export async function renderWithSession(
       <RouterProvider>
         <SessionProvider ports={api}>
           <Gate>{ui}</Gate>
+          {options.outside}
         </SessionProvider>
       </RouterProvider>
     </ThemeProvider>,

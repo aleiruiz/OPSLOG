@@ -35,11 +35,13 @@ describe('browser storage', () => {
     type('Contraseña', demoCredentials.admin.password);
     click('Iniciar sesión');
     await screen.findByDisplayValue('Transportes Demo SA');
-    type('Nombre de la empresa', 'Cambio sin guardar');
+    // Edit only once the draft load settled; otherwise the first effects flush after the edit.
+    await waitFor(() =>
+      expect(document.querySelector('[data-draft-status="idle"]')).not.toBeNull(),
+    );
     api.controls.expireSession();
-    await waitFor(() => expect(screen.getByText(/Tu sesión expiró/)).toBeInTheDocument(), {
-      timeout: 3000,
-    });
+    type('Nombre de la empresa', 'Cambio sin guardar');
+    await screen.findByText(/Tu sesión expiró/);
     expect(setItem).not.toHaveBeenCalled();
     expect(window.localStorage.length).toBe(0);
     expect(window.sessionStorage.length).toBe(0);

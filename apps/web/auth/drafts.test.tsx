@@ -235,4 +235,38 @@ describe('useServerDraft', () => {
     expect(note()).toHaveValue('');
     expect(api.controls.storedDrafts()).toEqual({});
   });
+
+  describe.each([
+    ['another person', undefined],
+    ['a person from another company', 'company-otra'],
+  ] as const)('edit, sign out, then %s signs in', (_label, otherCompany) => {
+    it('shows no trace of the previous edits and saves nothing of them', async () => {
+      const api = createMockApi();
+      const realLogin = api.auth.login;
+      api.auth.login = async (input) => {
+        const result = await realLogin(input);
+        return result.ok && otherCompany && input.email === demoCredentials.viewer.email
+          ? { ok: true, value: { ...result.value, company: { id: otherCompany, name: 'Otra SA' } } }
+          : result;
+      };
+      function Outside() {
+        const { login } = useSession();
+        return (
+          <button onClick={() => void login(demoCredentials.viewer)}>Entrar como consulta</button>
+        );
+      }
+      await act(async () => renderWithSession(<Probe />, { api, outside: <Outside /> }));
+      await advance(10);
+      fireEvent.change(note(), { target: { value: 'texto de la primera persona' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Salir' }));
+      await advance(draftSaveDelayMs + 50);
+      fireEvent.click(screen.getByRole('button', { name: 'Entrar como consulta' }));
+      await advance(draftSaveDelayMs + 50);
+      expect(note()).toHaveValue('');
+      expect(api.controls.storedDrafts()).toEqual({});
+      expect(document.body.textContent).not.toContain('primera persona');
+      await realLogin(demoCredentials.admin);
+      expect(api.controls.storedDrafts()).toEqual({});
+    });
+  });
 });

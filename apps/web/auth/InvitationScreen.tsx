@@ -15,7 +15,14 @@ type Preview =
   | { readonly status: 'error' };
 
 /** Invitation acceptance. A bad, used or expired token all show the same message (no existence leak). */
-export function InvitationScreen({ token }: { token: string }) {
+export function InvitationScreen({
+  token,
+  onConsumed,
+}: {
+  token: string;
+  /** The token is spent (accepted) or known to be unusable: the caller must forget it. */
+  onConsumed?: () => void;
+}) {
   const router = useRouter();
   const { ports, acceptInvitation } = useSession();
   const [preview, setPreview] = React.useState<Preview>({ status: 'loading' });
@@ -33,7 +40,10 @@ export function InvitationScreen({ token }: { token: string }) {
     void ports.auth.inspectInvitation(token).then((result: Result<InvitationPreview>) => {
       if (cancelled) return;
       if (result.ok) setPreview({ status: 'ready', preview: result.value });
-      else setPreview({ status: result.error.status === 404 ? 'unavailable' : 'error' });
+      else if (result.error.status === 404) {
+        onConsumed?.();
+        setPreview({ status: 'unavailable' });
+      } else setPreview({ status: 'error' });
     });
     return () => {
       cancelled = true;
@@ -78,9 +88,12 @@ export function InvitationScreen({ token }: { token: string }) {
     if (result.ok) {
       setPassword('');
       setConfirmation('');
+      onConsumed?.();
       router.navigate('/', { replace: true });
-    } else if (result.error.status === 404) setPreview({ status: 'unavailable' });
-    else {
+    } else if (result.error.status === 404) {
+      onConsumed?.();
+      setPreview({ status: 'unavailable' });
+    } else {
       const fields = fieldErrorMap(result.error);
       setErrors(fields);
       setRejected(Object.keys(fields).length > 0 ? 'fields' : 'unavailable');

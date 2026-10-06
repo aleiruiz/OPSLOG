@@ -135,12 +135,25 @@ describe('shell: session, company and user', () => {
     expect(api.controls.isSignedIn()).toBe(false);
   });
 
-  it('keeps going to login even when the sign-out call fails', async () => {
+  it('stays signed in and says so when the sign-out call fails', async () => {
     const { api } = await renderApp();
     await screen.findByRole('heading', { name: 'Inicio', level: 1 });
     api.controls.failNext('logout');
     click('Cerrar sesión');
+    expect(await screen.findByText('No pudimos cerrar sesión')).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Inicio', level: 1 })).toBeInTheDocument();
+    expect(api.controls.isSignedIn()).toBe(true);
+    click('Cerrar sesión');
     await screen.findByRole('heading', { name: 'Iniciar sesión', level: 1 });
+    expect(api.controls.isSignedIn()).toBe(false);
+  });
+
+  it('treats a 401 on sign-out as an expired session', async () => {
+    const { api } = await renderApp();
+    await screen.findByRole('heading', { name: 'Inicio', level: 1 });
+    api.controls.failNext('logout', 401);
+    click('Cerrar sesión');
+    await screen.findByRole('group', { name: 'Sesión expirada' });
   });
 });
 
@@ -355,7 +368,9 @@ describe('expired session', () => {
     api.controls.expireSession();
     type('Correo de la persona', 'nueva2@demo.opslog.test');
     await screen.findByRole('group', { name: 'Sesión expirada' });
-    expect(screen.getByRole('group', { name: 'Sesión expirada' })).toHaveFocus();
+    await waitFor(() =>
+      expect(screen.getByRole('group', { name: 'Sesión expirada' })).toHaveFocus(),
+    );
     expect(screen.getByText(/Mantenemos estos cambios en esta pantalla/)).toBeInTheDocument();
     // The screen below the panel is inert while the session is expired.
     expect(getField('Correo de la persona').closest('[inert]')).not.toBeNull();
@@ -423,5 +438,25 @@ describe('expired session', () => {
     expect(screen.getByRole('button', { name: 'Cerrar sesión' })).toBeDisabled();
     expect(window.location.pathname).toBe('/configuracion/empresa');
     expect(getField('Nombre de la empresa')).toHaveValue('Pendiente de enviar');
+  });
+
+  it('forgets a spent invitation token so a later bare /invitacion cannot reuse it', async () => {
+    const api = createMockApi();
+    const inspect = vi.spyOn(api.auth, 'inspectInvitation');
+    await renderApp({ api, account: null, path: `/invitacion/${demoInvitations.valid}` });
+    await findField('Nombre completo');
+    type('Nombre completo', 'Nueva Persona');
+    type('Contraseña', strongPassword);
+    type('Confirma la contraseña', strongPassword);
+    click('Activar cuenta');
+    await screen.findByRole('heading', { name: 'Inicio', level: 1 });
+    click('Cerrar sesión');
+    await screen.findByRole('heading', { name: 'Iniciar sesión', level: 1 });
+    act(() => {
+      window.history.pushState(null, '', '/invitacion');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    await screen.findByRole('heading', { name: 'Invitación no disponible' });
+    expect(inspect).toHaveBeenLastCalledWith('');
   });
 });

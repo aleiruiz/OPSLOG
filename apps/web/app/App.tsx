@@ -32,6 +32,7 @@ function Redirect({ to }: { to: string }) {
 function Routes() {
   const router = useRouter();
   const { state, can, logout, retry } = useSession();
+  const [signOutFailed, setSignOutFailed] = React.useState(false);
   const match = resolveRoute(router.path);
   // The invitation token is kept in memory only and removed from the address bar and history entry.
   const invitationToken = React.useRef('');
@@ -68,7 +69,12 @@ function Routes() {
     if (match?.route.id === 'invitation')
       return (
         <main>
-          <InvitationScreen token={invitationToken.current} />
+          <InvitationScreen
+            token={invitationToken.current}
+            onConsumed={() => {
+              invitationToken.current = '';
+            }}
+          />
         </main>
       );
     if (match?.route.id === 'login')
@@ -130,9 +136,16 @@ function Routes() {
       session={session}
       currentRouteId={match?.route.id ?? null}
       can={can}
-      onSignOut={() => void logout()}
+      onSignOut={() => void logout().then((result) => setSignOutFailed(!result.ok))}
       locked={expired}
     >
+      {signOutFailed && !expired && (
+        <UiState
+          kind="error"
+          title="No pudimos cerrar sesión"
+          description="Tu sesión sigue abierta. Intenta nuevamente."
+        />
+      )}
       {expired && <SessionExpiredPanel email={session.user.email} />}
       {/* Keyed by user: signing back in as someone else drops the previous person's screen state. */}
       <div key={session.user.id} inert={expired}>

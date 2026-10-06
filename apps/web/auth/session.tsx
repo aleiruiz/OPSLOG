@@ -27,6 +27,8 @@ export type SessionState =
 export interface HeldDrafts {
   readonly values: Map<string, Readonly<Record<string, string>>>;
   readonly discards: Set<string>;
+  /** Bumped whenever held drafts are wiped; a screen from an older generation must not write to them. */
+  generation: number;
 }
 
 interface SessionContextValue {
@@ -36,7 +38,8 @@ interface SessionContextValue {
   can(permission: Permission): boolean;
   login(input: LoginInput): Promise<Result<SessionInfo>>;
   acceptInvitation(token: string, input: AcceptInvitationInput): Promise<Result<SessionInfo>>;
-  logout(): Promise<void>;
+  /** Only a confirmed sign-out clears the session; on failure the person stays signed in. */
+  logout(): Promise<Result<null>>;
   /** Called by any screen that receives a 401 from the API. */
   markExpired(): void;
   retry(): void;
@@ -53,14 +56,19 @@ export function SessionProvider({
 }) {
   const [state, setState] = React.useState<SessionState>({ status: 'loading' });
   const [attempt, setAttempt] = React.useState(0);
-  const held = React.useRef<HeldDrafts>({ values: new Map(), discards: new Set() });
+  const held = React.useRef<HeldDrafts>({ values: new Map(), discards: new Set(), generation: 0 });
   const lastUser = React.useRef<string | null>(null);
-  // Held drafts belong to one person: a different identity must never inherit them.
-  const remember = (session: SessionInfo) => {
-    if (lastUser.current !== null && lastUser.current !== session.user.id) {
-      held.current.values.clear();
-      held.current.discards.clear();
-    }
+  const stateRef = React.useRef(state);
+  stateRef.current = state;
+  const wipe = () => {
+    held.current.values.clear();
+    held.current.discards.clear();
+    held.current.generation += 1;
+  };
+  // Held drafts belong to one person in one session. Only signing in again from the expired state as the
+  // same person keeps them; any other sign-in starts clean, and so does sign-out.
+  const remember = (session: SessionInfo, resumed: boolean) => {
+    if (!resumed || lastUser.current !== session.user.id) wipe();
     lastUser.current = session.user.id;
   };
 
@@ -70,7 +78,7 @@ export function SessionProvider({
     void ports.auth.getSession().then((result) => {
       if (cancelled) return;
       if (result.ok) {
-        remember(result.value);
+        lastUser.current = result.value.user.id;
         setState({ status: 'authenticated', session: result.value });
       } else if (result.error.status === 401) setState({ status: 'anonymous' });
       else setState({ status: 'error', error: result.error });
@@ -83,11 +91,17 @@ export function SessionProvider({
   const value = React.useMemo<SessionContextValue>(() => {
     const established = (result: Result<SessionInfo>) => {
       if (result.ok) {
-        remember(result.value);
+        remember(result.value, stateRef.current.status === 'expired');
         setState({ status: 'authenticated', session: result.value });
       }
       return result;
     };
+    const markExpired = () =>
+      setState((current) =>
+        current.status === 'authenticated'
+          ? { status: 'expired', session: current.session }
+          : current,
+      );
     return {
       state,
       held: held.current,
@@ -99,19 +113,18 @@ export function SessionProvider({
       acceptInvitation: async (token, input) =>
         established(await ports.auth.acceptInvitation(token, input)),
       logout: async () => {
-        // Local state is cleared even if the server call fails: the user asked to leave.
-        await ports.auth.logout();
-        held.current.values.clear();
-        held.current.discards.clear();
+        const result = await ports.auth.logout();
+        if (!result.ok) {
+          // The server may still hold the session: do not pretend it ended.
+          if (result.error.status === 401) markExpired();
+          return result;
+        }
+        wipe();
         lastUser.current = null;
         setState({ status: 'anonymous' });
+        return result;
       },
-      markExpired: () =>
-        setState((current) =>
-          current.status === 'authenticated'
-            ? { status: 'expired', session: current.session }
-            : current,
-        ),
+      markExpired,
       retry: () => setAttempt((count) => count + 1),
     };
   }, [state, ports]);
