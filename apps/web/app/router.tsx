@@ -40,8 +40,13 @@ export function RouterProvider({
       basename,
       navigate: (to, options) => {
         const target = `${basename}${to}`;
-        if (options?.replace) window.history.replaceState(null, '', target);
-        else window.history.pushState(null, '', target);
+        try {
+          if (options?.replace) window.history.replaceState(null, '', target);
+          else window.history.pushState(null, '', target);
+        } catch {
+          // History API refused the URL (e.g. a malformed target): stay on the current screen.
+          return;
+        }
         window.dispatchEvent(new Event('opslog:navigate'));
       },
     };

@@ -1,18 +1,29 @@
 import { act } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { createMockApi } from '../../app/mockApi';
-import { click, fireEvent, renderWithSession, screen, type, waitFor } from '../../app/test/utils';
+import {
+  click,
+  deferred,
+  fireEvent,
+  renderWithSession,
+  screen,
+  type,
+  waitFor,
+} from '../../app/test/utils';
 import { RolesScreen } from './RolesScreen';
 
 describe('RolesScreen', () => {
   it('lists the seven system templates as read-only and the permissions in plain Spanish', async () => {
     const slow = createMockApi();
     const real = slow.roles.listRoles;
-    let release: () => void = () => undefined;
-    slow.roles.listRoles = () => new Promise((resolve) => (release = () => resolve(real())));
+    const gate = deferred();
+    slow.roles.listRoles = async () => {
+      await gate.promise;
+      return real();
+    };
     await renderWithSession(<RolesScreen />, { api: slow });
     expect(await screen.findByRole('heading', { name: 'Cargando' })).toBeInTheDocument();
-    await act(async () => release());
+    await act(async () => gate.resolve());
     const table = await screen.findByRole('table', { name: 'Roles de la empresa' });
     expect(table).toHaveTextContent('Administrador de empresa');
     expect(table).toHaveTextContent('Despachador');

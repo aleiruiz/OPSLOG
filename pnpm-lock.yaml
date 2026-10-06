@@ -76,6 +76,8 @@ importers:
 
   apps/api/auth: {}
 
+  apps/api/files: {}
+
   apps/api/tenants:
     dependencies:
       '@opslog/domain-tenants':
@@ -138,6 +140,8 @@ importers:
         specifier: 3.2.6
         version: 3.2.6(@types/node@22.15.21)(jsdom@26.0.0(supports-color@7.2.0))(supports-color@7.2.0)
 
+  packages/domain/files: {}
+
   packages/domain/identity: {}
 
   packages/domain/tenants:
@@ -168,6 +172,8 @@ importers:
   packages/platform/audit: {}
 
   packages/platform/auth: {}
+
+  packages/platform/files: {}
 
   packages/platform/outbox: {}
 

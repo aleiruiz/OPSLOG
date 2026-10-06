@@ -49,6 +49,9 @@ describe('route access', () => {
       'https://evil.example',
       '//evil.example',
       '/\\evil',
+      '/a\tb',
+      '/a\nb',
+      '/a\u0000b',
       '/iniciar-sesion',
     ])
       expect(safeNextPath(unsafe)).toBe('/');

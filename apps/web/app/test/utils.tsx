@@ -73,3 +73,12 @@ export const click = (name: string | RegExp) =>
   fireEvent.click(screen.getByRole('button', { name }));
 
 export { screen, waitFor, fireEvent };
+
+/** A promise opened by hand, so a test can hold a port call until it decides to release it. */
+export function deferred() {
+  let resolve: () => void = () => undefined;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}

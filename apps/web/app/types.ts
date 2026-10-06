@@ -114,7 +114,11 @@ export interface RolesPort {
   copyRole(roleId: string, name: string): Promise<Result<RoleSummary>>;
 }
 
-/** Drafts live on the server so an expired session or a closed tab never loses them. */
+/**
+ * Drafts saved through this port survive an expired session and a closed tab. Edits that could not be
+ * sent yet (session expired) exist only in page memory until the person signs in again; closing or
+ * reloading the page before that loses them.
+ */
 export interface DraftsPort {
   load(scope: string): Promise<Result<DraftRecord | null>>;
   save(scope: string, values: DraftValues): Promise<Result<DraftRecord>>;

@@ -27,12 +27,15 @@ export function AppShell({
   currentRouteId,
   can,
   onSignOut,
+  locked = false,
   children,
 }: {
   session: SessionInfo;
   currentRouteId: string | null;
   can: (permission: Permission) => boolean;
   onSignOut: () => void;
+  /** Expired session: navigation and sign-out are inert so no screen (and its drafts) can be left. */
+  locked?: boolean;
   children: React.ReactNode;
 }) {
   const navigation = visibleNavigation(can);
@@ -98,6 +101,7 @@ export function AppShell({
           </Typography>
         </Box>
         <Button
+          {...(locked ? { disabled: true } : {})}
           variant="outlined"
           color="inherit"
           size="small"
@@ -110,6 +114,7 @@ export function AppShell({
       <Box sx={{ display: 'flex', flex: 1, flexDirection: { xs: 'column', md: 'row' } }}>
         <Box
           component="nav"
+          {...(locked ? { inert: true } : {})}
           aria-label="Principal"
           sx={{
             bgcolor: colors.navigation,

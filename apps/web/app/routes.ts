@@ -28,6 +28,12 @@ export const routes: readonly RouteDefinition[] = [
     access: 'public',
   },
   {
+    id: 'invitation',
+    pattern: '/invitacion',
+    title: 'Aceptar invitación',
+    access: 'public',
+  },
+  {
     id: 'company',
     pattern: '/configuracion/empresa',
     title: 'Empresa',
@@ -89,6 +95,7 @@ export const loginPath = '/iniciar-sesion';
 /** Only same-app absolute paths are accepted as a post-login destination (no open redirect). */
 export function safeNextPath(candidate: string | null): string {
   if (!candidate || !candidate.startsWith('/') || candidate.startsWith('//')) return '/';
+  if (/[\u0000-\u001f\u007f]/.test(candidate)) return '/';
   if (candidate.includes('\\') || candidate.startsWith(loginPath)) return '/';
   return candidate;
 }

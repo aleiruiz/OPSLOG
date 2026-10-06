@@ -52,10 +52,16 @@ export function UsersScreen() {
 
   React.useEffect(() => setExtra(null), [search, first.state]);
 
+  const searchRef = React.useRef(search);
+  searchRef.current = search;
+
   const loadMore = async (cursor: string) => {
     setLoadingMore(true);
-    const result = await ports.users.listUsers({ limit: 25, cursor, search });
+    const requested = search;
+    const result = await ports.users.listUsers({ limit: 25, cursor, search: requested });
     setLoadingMore(false);
+    // The filter changed while this page was loading: its rows belong to a different search.
+    if (searchRef.current !== requested) return;
     if (result.ok)
       setExtra((current) => ({
         items: [...(current?.items ?? []), ...result.value.items],
@@ -73,7 +79,11 @@ export function UsersScreen() {
       setNotice({ text: `${result.value.displayName} fue desactivado.`, severity: 'success' });
       first.reload();
     } else if (result.error.status === 401) markExpired();
-    else setNotice({ text: result.error.message, severity: 'error' });
+    else
+      setNotice({
+        text: 'No pudimos desactivar a la persona. Intenta nuevamente.',
+        severity: 'error',
+      });
   };
 
   return (

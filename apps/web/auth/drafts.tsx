@@ -31,13 +31,18 @@ const messages: Record<DraftStatus, string> = {
  * in again, and is then sent to the server.
  */
 export function useServerDraft<T extends DraftValues>(scope: string, initial: T) {
-  const { ports, state, markExpired } = useSession();
+  const { ports, state, markExpired, held } = useSession();
   const authenticated = state.status === 'authenticated';
   const initialRef = React.useRef(initial);
-  const [values, setValues] = React.useState<T>(initial);
-  const [status, setStatus] = React.useState<DraftStatus>('loading');
-  const latest = React.useRef<T>(initial);
-  const dirty = React.useRef(false);
+  // Edits held from a previous visit to this screen (they could not reach the server) come back first.
+  const [values, setValues] = React.useState<T>(
+    () => ({ ...initial, ...(held.values.get(scope) ?? {}) }) as T,
+  );
+  const [status, setStatus] = React.useState<DraftStatus>(
+    held.values.has(scope) ? 'waiting-session' : 'loading',
+  );
+  const latest = React.useRef<T>(values);
+  const dirty = React.useRef(held.values.has(scope));
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const alive = React.useRef(true);
   const sessionRef = React.useRef({ markExpired, authenticated });
@@ -62,29 +67,47 @@ export function useServerDraft<T extends DraftValues>(scope: string, initial: T)
     if (result.ok) {
       if (latest.current === snapshot) {
         dirty.current = false;
+        held.values.delete(scope);
         setStatus('saved');
       }
     } else if (result.error.status === 401) {
       sessionRef.current.markExpired();
       setStatus('waiting-session');
     } else setStatus('error');
-  }, [ports, scope]);
+  }, [ports, scope, held]);
 
   React.useEffect(() => {
     alive.current = true;
     return () => {
       alive.current = false;
       clearTimer();
-      // Leaving the screen with unsent edits: hand them to the server instead of dropping them.
-      if (dirty.current && sessionRef.current.authenticated)
-        void ports.drafts.save(scope, latest.current);
+      // Leaving the screen with unsent edits: hand them to the server; if that is not possible they are
+      // held in page memory (outside this screen) until the person is authenticated again.
+      if (!dirty.current) return;
+      const pending = latest.current;
+      if (!sessionRef.current.authenticated) held.values.set(scope, pending);
+      else
+        void ports.drafts.save(scope, pending).then((result) => {
+          if (result.ok) held.values.delete(scope);
+          else held.values.set(scope, pending);
+        });
     };
-  }, [ports, scope]);
+  }, [ports, scope, held]);
 
   React.useEffect(() => {
     if (!authenticated) return undefined;
     let cancelled = false;
-    void ports.drafts.load(scope).then((result) => {
+    void (async () => {
+      if (held.discards.has(scope)) {
+        // A discard failed earlier: finish it first and never restore the draft it was meant to remove.
+        const dropped = await ports.drafts.discard(scope);
+        if (cancelled) return;
+        if (dropped.ok) held.discards.delete(scope);
+        else if (dropped.error.status === 401) sessionRef.current.markExpired();
+        setStatus((current) => (current === 'loading' ? 'idle' : current));
+        return;
+      }
+      const result = await ports.drafts.load(scope);
       if (cancelled) return;
       if (result.ok && result.value && !dirty.current) {
         const restored = { ...initialRef.current, ...result.value.values } as T;
@@ -94,11 +117,11 @@ export function useServerDraft<T extends DraftValues>(scope: string, initial: T)
       } else if (!result.ok && result.error.status === 401) {
         sessionRef.current.markExpired();
       } else setStatus((current) => (current === 'loading' ? 'idle' : current));
-    });
+    })();
     return () => {
       cancelled = true;
     };
-  }, [authenticated, ports, scope]);
+  }, [authenticated, ports, scope, held]);
 
   // Back online after re-authentication: send what could not be saved while the session was expired.
   React.useEffect(() => {
@@ -123,8 +146,13 @@ export function useServerDraft<T extends DraftValues>(scope: string, initial: T)
     latest.current = initialRef.current;
     setValues(initialRef.current);
     setStatus('idle');
+    held.values.delete(scope);
     const result = await ports.drafts.discard(scope);
-    if (!result.ok && result.error.status === 401) sessionRef.current.markExpired();
+    if (result.ok) held.discards.delete(scope);
+    else {
+      held.discards.add(scope);
+      if (result.error.status === 401) sessionRef.current.markExpired();
+    }
   };
 
   return { values, setField, status, discard, saveNow: save };

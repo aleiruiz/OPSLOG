@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createMockApi } from '../../app/mockApi';
 import {
   click,
+  deferred,
   fireEvent,
   getField,
   renderWithSession,
@@ -16,12 +17,14 @@ describe('UsersScreen', () => {
   it('shows a loading state, then the users with labelled statuses and no technical ids', async () => {
     const slow = createMockApi();
     const real = slow.users.listUsers;
-    let release: () => void = () => undefined;
-    slow.users.listUsers = (query) =>
-      new Promise((resolve) => (release = () => resolve(real(query))));
+    const gate = deferred();
+    slow.users.listUsers = async (query) => {
+      await gate.promise;
+      return real(query);
+    };
     await renderWithSession(<UsersScreen />, { api: slow });
     expect(await screen.findByRole('heading', { name: 'Cargando' })).toBeInTheDocument();
-    await act(async () => release());
+    await act(async () => gate.resolve());
     const table = await screen.findByRole('table', { name: 'Usuarios (27)' });
     expect(table).toHaveTextContent('Ana Prueba');
     expect(table).toHaveTextContent('Administrador de empresa');
@@ -119,7 +122,10 @@ describe('UsersScreen', () => {
     });
     api.controls.failNext('deactivateUser', 422);
     click('Confirmar');
-    expect(await screen.findByText('La operación falló de forma simulada.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('No pudimos desactivar a la persona. Intenta nuevamente.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/simulada/)).toBeNull();
   });
 
   it('invites a person, clears the form and the server draft', async () => {
@@ -144,5 +150,24 @@ describe('UsersScreen', () => {
     type('Correo de la persona', 'bien@demo.opslog.test');
     click('Enviar invitación');
     expect(await screen.findByText('Elige un rol de la lista.')).toBeInTheDocument();
+  });
+
+  it('ignores a further page that arrives after the search changed', async () => {
+    const api = createMockApi();
+    const real = api.users.listUsers;
+    const gate = deferred();
+    api.users.listUsers = async (query) => {
+      if (query.cursor) await gate.promise;
+      return real(query);
+    };
+    await renderWithSession(<UsersScreen />, { api });
+    await screen.findByRole('table');
+    click('Cargar más usuarios');
+    type('Buscar por nombre o correo', 'Prueba');
+    await screen.findByRole('table', { name: 'Usuarios (1)' });
+    await act(async () => gate.resolve());
+    await act(async () => undefined);
+    expect(screen.getAllByRole('row')).toHaveLength(2);
+    expect(screen.queryByText('Persona sintética 25')).toBeNull();
   });
 });

@@ -25,7 +25,7 @@ export function InvitationScreen({ token }: { token: string }) {
   const [confirmation, setConfirmation] = React.useState('');
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [submitting, setSubmitting] = React.useState(false);
-  const [rejected, setRejected] = React.useState(false);
+  const [rejected, setRejected] = React.useState<'fields' | 'unavailable' | false>(false);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -54,7 +54,7 @@ export function InvitationScreen({ token }: { token: string }) {
           title="Invitación no disponible"
           description="El enlace no es válido, ya se usó o expiró. Pide una nueva invitación a tu administrador."
           actionLabel="Ir a iniciar sesión"
-          onAction={() => router.navigate('/iniciar-sesion')}
+          onAction={() => router.navigate('/iniciar-sesion', { replace: true })}
         />
       </Box>
     );
@@ -81,8 +81,9 @@ export function InvitationScreen({ token }: { token: string }) {
       router.navigate('/', { replace: true });
     } else if (result.error.status === 404) setPreview({ status: 'unavailable' });
     else {
-      setErrors(fieldErrorMap(result.error));
-      setRejected(true);
+      const fields = fieldErrorMap(result.error);
+      setErrors(fields);
+      setRejected(Object.keys(fields).length > 0 ? 'fields' : 'unavailable');
     }
   };
 
@@ -97,11 +98,18 @@ export function InvitationScreen({ token }: { token: string }) {
           title="Crea tu acceso"
           description={`La contraseña debe tener al menos ${minimumPasswordLength} caracteres.`}
         >
-          {rejected && (
+          {rejected === 'fields' && (
             <UiState
               kind="error"
               title="No pudimos activar tu cuenta"
               description="Revisa los campos marcados e intenta nuevamente."
+            />
+          )}
+          {rejected === 'unavailable' && (
+            <UiState
+              kind="error"
+              title="Servicio no disponible"
+              description="No pudimos activar tu cuenta por ahora. Intenta nuevamente."
             />
           )}
           <Field

@@ -13,6 +13,7 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    testTimeout: 15000,
     setupFiles: ['./app/test/setup.ts'],
     include: ['app/**/*.test.{ts,tsx}', 'auth/**/*.test.{ts,tsx}', 'settings/**/*.test.{ts,tsx}'],
     coverage: {

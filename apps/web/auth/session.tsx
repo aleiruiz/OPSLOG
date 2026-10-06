@@ -20,8 +20,18 @@ export type SessionState =
   | { readonly status: 'expired'; readonly session: SessionInfo }
   | { readonly status: 'error'; readonly error: ApiError };
 
+/**
+ * Draft bookkeeping that must outlive any single screen (page memory only, never browser storage):
+ * edits that could not reach the server yet, and server drafts whose discard failed.
+ */
+export interface HeldDrafts {
+  readonly values: Map<string, Readonly<Record<string, string>>>;
+  readonly discards: Set<string>;
+}
+
 interface SessionContextValue {
   readonly state: SessionState;
+  readonly held: HeldDrafts;
   readonly ports: ApiPorts;
   can(permission: Permission): boolean;
   login(input: LoginInput): Promise<Result<SessionInfo>>;
@@ -43,14 +53,26 @@ export function SessionProvider({
 }) {
   const [state, setState] = React.useState<SessionState>({ status: 'loading' });
   const [attempt, setAttempt] = React.useState(0);
+  const held = React.useRef<HeldDrafts>({ values: new Map(), discards: new Set() });
+  const lastUser = React.useRef<string | null>(null);
+  // Held drafts belong to one person: a different identity must never inherit them.
+  const remember = (session: SessionInfo) => {
+    if (lastUser.current !== null && lastUser.current !== session.user.id) {
+      held.current.values.clear();
+      held.current.discards.clear();
+    }
+    lastUser.current = session.user.id;
+  };
 
   React.useEffect(() => {
     let cancelled = false;
     setState({ status: 'loading' });
     void ports.auth.getSession().then((result) => {
       if (cancelled) return;
-      if (result.ok) setState({ status: 'authenticated', session: result.value });
-      else if (result.error.status === 401) setState({ status: 'anonymous' });
+      if (result.ok) {
+        remember(result.value);
+        setState({ status: 'authenticated', session: result.value });
+      } else if (result.error.status === 401) setState({ status: 'anonymous' });
       else setState({ status: 'error', error: result.error });
     });
     return () => {
@@ -60,11 +82,15 @@ export function SessionProvider({
 
   const value = React.useMemo<SessionContextValue>(() => {
     const established = (result: Result<SessionInfo>) => {
-      if (result.ok) setState({ status: 'authenticated', session: result.value });
+      if (result.ok) {
+        remember(result.value);
+        setState({ status: 'authenticated', session: result.value });
+      }
       return result;
     };
     return {
       state,
+      held: held.current,
       ports,
       can: (permission) =>
         (state.status === 'authenticated' || state.status === 'expired') &&
@@ -75,6 +101,9 @@ export function SessionProvider({
       logout: async () => {
         // Local state is cleared even if the server call fails: the user asked to leave.
         await ports.auth.logout();
+        held.current.values.clear();
+        held.current.discards.clear();
+        lastUser.current = null;
         setState({ status: 'anonymous' });
       },
       markExpired: () =>

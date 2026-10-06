@@ -2,20 +2,30 @@ import { act } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { createMockApi, demoCredentials, demoInvitations } from './mockApi';
 import { fireEvent } from '@testing-library/react';
-import { click, findField, getField, renderApp, screen, type, waitFor } from './test/utils';
+import {
+  click,
+  deferred,
+  findField,
+  getField,
+  renderApp,
+  screen,
+  type,
+  waitFor,
+} from './test/utils';
 
 const strongPassword = 'una-contraseña-larga-123';
 
 describe('shell: session, company and user', () => {
   it('shows a loading state while the session is being resolved', async () => {
     const api = createMockApi();
-    let release: (value: Awaited<ReturnType<typeof api.auth.getSession>>) => void = () => undefined;
-    api.auth.getSession = () => new Promise((resolve) => (release = resolve));
+    const gate = deferred();
+    api.auth.getSession = async () => {
+      await gate.promise;
+      return { ok: false, error: { code: 'x', status: 401, message: 'x', correlationId: 'c' } };
+    };
     await renderApp({ api, account: 'admin' });
-    expect(screen.getByRole('heading', { name: 'Cargando' })).toBeInTheDocument();
-    await act(async () =>
-      release({ ok: false, error: { code: 'x', status: 401, message: 'x', correlationId: 'c' } }),
-    );
+    expect(await screen.findByRole('heading', { name: 'Cargando' })).toBeInTheDocument();
+    await act(async () => gate.resolve());
     await screen.findByRole('heading', { name: 'Iniciar sesión', level: 1 });
   });
 
@@ -74,6 +84,32 @@ describe('shell: session, company and user', () => {
     click('Iniciar sesión');
     await screen.findByRole('heading', { name: 'Inicio', level: 1 });
     expect(window.location.pathname).toBe('/');
+  });
+
+  it('keeps the query string of the requested route through login', async () => {
+    await renderApp({ account: null, path: '/configuracion/usuarios?pagina=2' });
+    await screen.findByRole('heading', { name: 'Iniciar sesión', level: 1 });
+    expect(window.location.search).toBe('?siguiente=%2Fconfiguracion%2Fusuarios%3Fpagina%3D2');
+    await findField('Correo electrónico');
+    type('Correo electrónico', demoCredentials.admin.email);
+    type('Contraseña', demoCredentials.admin.password);
+    click('Iniciar sesión');
+    await screen.findByRole('heading', { name: 'Usuarios', level: 1 });
+    expect(window.location.pathname + window.location.search).toBe(
+      '/configuracion/usuarios?pagina=2',
+    );
+  });
+
+  it('stays on the current screen when the History API refuses a navigation', async () => {
+    await renderApp();
+    const link = await screen.findByRole('link', { name: 'Roles' });
+    const push = vi.spyOn(window.history, 'pushState').mockImplementation(() => {
+      throw new Error('SecurityError');
+    });
+    expect(() => link.click()).not.toThrow();
+    push.mockRestore();
+    expect(window.location.pathname).toBe('/');
+    expect(screen.getByRole('heading', { name: 'Inicio', level: 1 })).toBeInTheDocument();
   });
 
   it('redirects a signed-in person away from the login route', async () => {
@@ -276,10 +312,33 @@ describe('invitation acceptance', () => {
     await screen.findByRole('heading', { name: 'Invitación no disponible' });
   });
 
-  it('is reachable while signed in', async () => {
+  it('tells a signed-in person to sign out first instead of showing the acceptance form', async () => {
     await renderApp({ path });
+    await screen.findByRole('heading', { name: 'Ya tienes una sesión activa' });
+    expect(screen.queryByLabelText(/^Nombre completo/)).toBeNull();
+  });
+
+  it('keeps the token in memory only: it leaves the address bar but the form still works', async () => {
+    const api = createMockApi();
+    const inspect = vi.spyOn(api.auth, 'inspectInvitation');
+    await renderApp({ api, account: null, path });
     await findField('Nombre completo');
-    expect(screen.getByRole('navigation', { name: 'Principal' })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/invitacion');
+    expect(window.location.href).not.toContain(demoInvitations.valid);
+    expect(inspect).toHaveBeenCalledWith(demoInvitations.valid);
+  });
+
+  it('shows a generic unavailable state, not field errors, when the server fails without fields', async () => {
+    const api = createMockApi();
+    await renderApp({ api, account: null, path });
+    await findField('Nombre completo');
+    type('Nombre completo', 'Nueva Persona');
+    type('Contraseña', strongPassword);
+    type('Confirma la contraseña', strongPassword);
+    api.controls.failNext('acceptInvitation', 500);
+    click('Activar cuenta');
+    expect(await screen.findByText('Servicio no disponible')).toBeVisible();
+    expect(screen.queryByText('Revisa los campos marcados e intenta nuevamente.')).toBeNull();
   });
 });
 
@@ -350,5 +409,19 @@ describe('expired session', () => {
         name: 'Otra razón social',
       }),
     );
+  });
+
+  it('locks navigation and sign-out while expired, so no screen (and its draft) can be left', async () => {
+    const { api } = await renderApp({ path: '/configuracion/empresa' });
+    await findField('Nombre de la empresa');
+    api.controls.expireSession();
+    type('Nombre de la empresa', 'Pendiente de enviar');
+    await screen.findByRole('group', { name: 'Sesión expirada' });
+    expect(screen.getByRole('navigation', { name: 'Principal', hidden: true })).toHaveAttribute(
+      'inert',
+    );
+    expect(screen.getByRole('button', { name: 'Cerrar sesión' })).toBeDisabled();
+    expect(window.location.pathname).toBe('/configuracion/empresa');
+    expect(getField('Nombre de la empresa')).toHaveValue('Pendiente de enviar');
   });
 });

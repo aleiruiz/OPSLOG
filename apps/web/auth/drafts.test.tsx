@@ -1,7 +1,8 @@
 import { act } from '@testing-library/react';
+import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMockApi, demoCredentials } from '../app/mockApi';
-import { fireEvent, renderWithSession, screen } from '../app/test/utils';
+import { deferred, fireEvent, renderWithSession, screen } from '../app/test/utils';
 import { DraftNotice, draftSaveDelayMs, useServerDraft } from './drafts';
 import { useSession } from './session';
 
@@ -69,12 +70,14 @@ describe('useServerDraft', () => {
     await api.auth.login(demoCredentials.admin);
     await api.drafts.save('probe', { note: 'del servidor' });
     const realLoad = api.drafts.load;
-    let release: () => void = () => undefined;
-    api.drafts.load = (scope) =>
-      new Promise((resolve) => (release = () => resolve(realLoad(scope))));
+    const gate = deferred();
+    api.drafts.load = async (scope) => {
+      await gate.promise;
+      return realLoad(scope);
+    };
     await mount({ api });
     fireEvent.change(note(), { target: { value: 'escrito ahora' } });
-    await act(async () => release());
+    await act(async () => gate.resolve());
     await advance(10);
     expect(note()).toHaveValue('escrito ahora');
   });
@@ -162,5 +165,74 @@ describe('useServerDraft', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Descartar' }));
     await advance(10);
     expect(screen.getByTestId('session')).toHaveTextContent('expired');
+  });
+
+  function Host() {
+    const [shown, setShown] = React.useState(true);
+    const { login } = useSession();
+    return (
+      <div>
+        <button onClick={() => setShown((value) => !value)}>Alternar</button>
+        <button onClick={() => void login(demoCredentials.admin)}>Reautenticar</button>
+        <button onClick={() => void login(demoCredentials.viewer)}>Entrar como consulta</button>
+        {shown && <Probe />}
+      </div>
+    );
+  }
+  const toggle = () => fireEvent.click(screen.getByRole('button', { name: 'Alternar' }));
+
+  it('holds unsent edits outside the screen when it unmounts while the session is expired', async () => {
+    const api = createMockApi();
+    await act(async () => renderWithSession(<Host />, { api }));
+    await advance(10);
+    api.controls.expireSession();
+    fireEvent.change(note(), { target: { value: 'pendiente' } });
+    await advance(draftSaveDelayMs + 10);
+    expect(screen.getByTestId('session')).toHaveTextContent('expired');
+    toggle();
+    await advance(10);
+    fireEvent.click(screen.getByRole('button', { name: 'Reautenticar' }));
+    await advance(50);
+    toggle();
+    await advance(draftSaveDelayMs + 50);
+    expect(note()).toHaveValue('pendiente');
+    expect(api.controls.storedDrafts()).toEqual({ probe: { note: 'pendiente' } });
+  });
+
+  it('does not restore a server draft whose discard failed, and retries the discard', async () => {
+    const api = createMockApi();
+    await api.auth.login(demoCredentials.admin);
+    await api.drafts.save('probe', { note: 'ya descartado' });
+    await act(async () => renderWithSession(<Host />, { api }));
+    await advance(10);
+    expect(note()).toHaveValue('ya descartado');
+    api.controls.failNext('discardDraft');
+    fireEvent.click(screen.getByRole('button', { name: 'Descartar' }));
+    await advance(10);
+    expect(note()).toHaveValue('');
+    expect(api.controls.storedDrafts()).toEqual({ probe: { note: 'ya descartado' } });
+    toggle();
+    await advance(10);
+    toggle();
+    await advance(50);
+    expect(note()).toHaveValue('');
+    expect(api.controls.storedDrafts()).toEqual({});
+  });
+
+  it('forgets held edits when a different person signs in', async () => {
+    const api = createMockApi();
+    await act(async () => renderWithSession(<Host />, { api }));
+    await advance(10);
+    api.controls.expireSession();
+    fireEvent.change(note(), { target: { value: 'de la primera persona' } });
+    await advance(draftSaveDelayMs + 10);
+    toggle();
+    await advance(10);
+    fireEvent.click(screen.getByRole('button', { name: 'Entrar como consulta' }));
+    await advance(50);
+    toggle();
+    await advance(draftSaveDelayMs + 50);
+    expect(note()).toHaveValue('');
+    expect(api.controls.storedDrafts()).toEqual({});
   });
 });

@@ -33,6 +33,14 @@ function Routes() {
   const router = useRouter();
   const { state, can, logout, retry } = useSession();
   const match = resolveRoute(router.path);
+  // The invitation token is kept in memory only and removed from the address bar and history entry.
+  const invitationToken = React.useRef('');
+  if (match?.route.id === 'invitation' && match.params.token)
+    invitationToken.current = match.params.token;
+  const tokenInUrl = match?.route.id === 'invitation' && Boolean(match.params.token);
+  React.useEffect(() => {
+    if (tokenInUrl) router.navigate('/invitacion', { replace: true });
+  }, [tokenInUrl, router]);
   const mainTitle = match?.route.title ?? 'Página no encontrada';
 
   React.useEffect(() => {
@@ -60,7 +68,7 @@ function Routes() {
     if (match?.route.id === 'invitation')
       return (
         <main>
-          <InvitationScreen token={match.params.token as string} />
+          <InvitationScreen token={invitationToken.current} />
         </main>
       );
     if (match?.route.id === 'login')
@@ -69,7 +77,9 @@ function Routes() {
           <LoginScreen />
         </main>
       );
-    const next = router.path === '/' ? '' : `?siguiente=${encodeURIComponent(router.path)}`;
+    const query = router.search.toString();
+    const target = query ? `${router.path}?${query}` : router.path;
+    const next = target === '/' ? '' : `?siguiente=${encodeURIComponent(target)}`;
     return <Redirect to={`${loginPath}${next}`} />;
   }
 
@@ -103,7 +113,13 @@ function Routes() {
         screen = <RolesScreen />;
         break;
       case 'invitation':
-        screen = <InvitationScreen token={match.params.token as string} />;
+        screen = (
+          <UiState
+            kind="closed"
+            title="Ya tienes una sesión activa"
+            description="Cierra sesión si quieres aceptar una invitación con otra cuenta."
+          />
+        );
         break;
       default:
         screen = null;
@@ -115,6 +131,7 @@ function Routes() {
       currentRouteId={match?.route.id ?? null}
       can={can}
       onSignOut={() => void logout()}
+      locked={expired}
     >
       {expired && <SessionExpiredPanel email={session.user.email} />}
       {/* Keyed by user: signing back in as someone else drops the previous person's screen state. */}

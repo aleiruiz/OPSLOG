@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createMockApi } from '../../app/mockApi';
 import {
   click,
+  deferred,
   fireEvent,
   getField,
   renderWithSession,
@@ -16,12 +17,14 @@ describe('TenantAdminScreen', () => {
   it('loads the company settings with the status label', async () => {
     const slow = createMockApi();
     const real = slow.tenant.getCompanySettings;
-    let release: () => void = () => undefined;
-    slow.tenant.getCompanySettings = () =>
-      new Promise((resolve) => (release = () => resolve(real())));
+    const gate = deferred();
+    slow.tenant.getCompanySettings = async () => {
+      await gate.promise;
+      return real();
+    };
     await renderWithSession(<TenantAdminScreen />, { api: slow });
     expect(await screen.findByRole('heading', { name: 'Cargando' })).toBeInTheDocument();
-    await act(async () => release());
+    await act(async () => gate.resolve());
     expect(await screen.findByDisplayValue('Transportes Demo SA')).toBeInTheDocument();
     expect(screen.getByLabelText(/Estado: Activa/)).toBeInTheDocument();
     expect(getField('Cierre de sesión por inactividad')).toHaveValue(8);
