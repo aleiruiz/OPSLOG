@@ -55,7 +55,7 @@ function CompanyForm({ settings }: { settings: CompanySettings }) {
     null,
   );
   // Editing clears stale validation errors and failure banners.
-  const setField = (name: string, value: string) => {
+  const setField = (name: keyof Form, value: string) => {
     setErrors({});
     setOutcome((current) => (current === 'failed' || current === 'rejected' ? null : current));
     draft.setField(name, value);

@@ -295,16 +295,16 @@ describe('BFF client: requests and responses', () => {
 });
 
 describe('BFF client: token bodies and concurrency', () => {
-  it.each([
-    ['auth.csrf', undefined],
-    ['auth.session', undefined],
-  ] as const)('fails with invalid_response for an empty 200 body on %s', async (id) => {
-    const { fetch } = transport(() => ({ status: 200 }));
-    expect(await createBffClient({ fetch }).call(id)).toMatchObject({
-      ok: false,
-      error: { code: 'invalid_response' },
-    });
-  });
+  it.each(['auth.csrf', 'auth.session'] as const)(
+    'fails with invalid_response for an empty 200 body on %s',
+    async (id) => {
+      const { fetch } = transport(() => ({ status: 200 }));
+      expect(await createBffClient({ fetch }).call(id)).toMatchObject({
+        ok: false,
+        error: { code: 'invalid_response' },
+      });
+    },
+  );
 
   it('fails when a token-bearing body has no string csrfToken, also inside ensurePre', async () => {
     const bad = transport(() => ({ status: 200, body: { csrfToken: 5 } }));
