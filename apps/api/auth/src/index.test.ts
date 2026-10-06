@@ -58,6 +58,30 @@ describe('auth API trust boundaries', () => {
     );
   });
 
+  it('refuses to issue a session when the server resolver finds no active tenant', async () => {
+    const service = new IdentityService(new InMemoryIdentityStore(), {
+      deliver: async () => undefined,
+    });
+    let sessionsRequested = 0;
+    const createSession = service.createSession.bind(service);
+    service.createSession = async (...args) => {
+      sessionsRequested += 1;
+      return createSession(...args);
+    };
+    const api = new AuthApi(service, {
+      resolveActiveTenant: async () => null,
+      resolvePermissions: async () => ['view'] as const,
+    });
+    const principal = await verifiedPrincipal('subject-without-tenant');
+    await enroll(service, 'tenant-a', principal.provider, principal.subject);
+
+    await expect(api.login(principal)).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'unauthorized' },
+    });
+    expect(sessionsRequested).toBe(0);
+  });
+
   it('rejects a forged tenant and actor context before resolving permissions', async () => {
     let permissionLookups = 0;
     const service = new IdentityService(new InMemoryIdentityStore(), {
