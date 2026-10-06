@@ -5,6 +5,7 @@ const repositoryRoot = fileURLToPath(new URL('..', import.meta.url));
 
 export default defineConfig({
   testDir: '.',
+  testIgnore: 'visual/**', // pixel snapshots run via e2e/visual/playwright.config.mjs (`pnpm test:visual`)
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: 0, // SPECS §9.1: no retries

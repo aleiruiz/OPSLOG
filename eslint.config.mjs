@@ -3,7 +3,7 @@ import parser from '@typescript-eslint/parser';
 import prettier from 'eslint-config-prettier';
 
 export default [
-  { ignores: ['**/dist/**', '**/coverage/**', 'pnpm-lock.yaml'] },
+  { ignores: ['**/dist/**', '**/coverage/**', '**/storybook-static/**', 'pnpm-lock.yaml'] },
   {
     files: ['**/*.ts', '**/*.tsx'],
     languageOptions: { parser, parserOptions: { project: true } },
