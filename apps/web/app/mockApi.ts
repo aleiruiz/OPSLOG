@@ -92,6 +92,8 @@ export const demoSubjects = {
   viewer: 'cuenta-consulta',
   /** Can view, create and edit, but not archive (role "Despachador"). */
   dispatch: 'cuenta-despacho',
+  /** Can view and edit, but not create or archive (role "Mecánico"). */
+  mechanic: 'cuenta-mecanico',
 } as const;
 
 /** What the fake provider hands the browser for each demo account. */
@@ -99,6 +101,7 @@ export const demoCredentials = {
   admin: { code: fakeOidcCode(demoSubjects.admin), nonce: 'nonce-demo-admin' },
   viewer: { code: fakeOidcCode(demoSubjects.viewer), nonce: 'nonce-demo-viewer' },
   dispatch: { code: fakeOidcCode(demoSubjects.dispatch), nonce: 'nonce-demo-dispatch' },
+  mechanic: { code: fakeOidcCode(demoSubjects.mechanic), nonce: 'nonce-demo-mechanic' },
 } as const;
 
 export const demoInvitations = {
@@ -178,6 +181,7 @@ const people = [
   { id: 'user-admin', subject: demoSubjects.admin, role: 'role-admin' },
   { id: 'user-viewer', subject: demoSubjects.viewer, role: 'role-viewer' },
   { id: 'user-dispatch', subject: demoSubjects.dispatch, role: 'role-dispatch' },
+  { id: 'user-mechanic', subject: demoSubjects.mechanic, role: 'role-mechanic' },
 ] as const;
 
 let correlation = 0;
@@ -213,7 +217,8 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
               vehicle.archivedAt === null &&
               vehicle.status !== 'decommissioned',
           ).length,
-      isMember: (userId) => users.some((user) => user.id === userId && user.status === 'active'),
+      isMember: (subject) =>
+        users.some((user) => user.id === `user-${subject}` && user.status === 'active'),
       actorId: () => signedInAs ?? 'user-admin',
     },
     ...(options.areas ? [options.areas] : []),
@@ -240,7 +245,7 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
       roleLabel: roleName(person.role),
       status: 'active' as const,
     })),
-    ...Array.from({ length: 24 }, (_, index) => {
+    ...Array.from({ length: 23 }, (_, index) => {
       const n = String(index + 1).padStart(2, '0');
       return {
         id: `user-sintetico-${n}`,

@@ -4,7 +4,7 @@ import { createMockAreaStore, demoMockAreas } from './mockAreas';
 import type { Area, Result } from './types';
 
 let vehicles: Record<string, number> = {};
-const members = new Set(['user-admin', 'user-dispatch']);
+const members = new Set(['admin', 'dispatch']);
 const store = (seed?: readonly Area[]) => {
   vehicles = {};
   return createMockAreaStore(
@@ -107,7 +107,7 @@ describe('mock areas: create', () => {
   it('creates a root area and a child, normalizing values and recording the history', async () => {
     const mock = store();
     const root = value(
-      await mock.port.create({ name: '  Oeste  ', code: 'oes', responsibleIds: ['user-dispatch'] }),
+      await mock.port.create({ name: '  Oeste  ', code: 'oes', responsibleIds: ['dispatch'] }),
     );
     expect(root).toMatchObject({
       name: 'Oeste',
@@ -173,11 +173,11 @@ describe('mock areas: update and move', () => {
         version: area.version,
         name: 'Sureste',
         code: null,
-        responsibleIds: ['user-dispatch', 'user-admin'],
+        responsibleIds: ['dispatch', 'admin'],
       }),
     );
     expect(next).toMatchObject({ name: 'Sureste', code: null, version: area.version + 1 });
-    expect(next.responsibleIds).toEqual(['user-admin', 'user-dispatch']);
+    expect(next.responsibleIds).toEqual(['admin', 'dispatch']);
     expect(value(await mock.port.history('area-sur')).items[0]).toMatchObject({
       action: 'updated',
       fields: ['name', 'code', 'responsibles'],
@@ -200,6 +200,11 @@ describe('mock areas: update and move', () => {
     );
     expect(code(await port.update('x', { version: 1, name: 'x' }))).toBe('404 not_found');
     expect(code(await port.update('area-sur', { version: 1 }))).toBe('400 bad_request');
+    // Input is validated before the lookup, like the backend: a malformed patch is 400 even for an unknown id.
+    expect(code(await port.update('x', { version: 0, name: 'x' } as never))).toBe(
+      '400 bad_request',
+    );
+    expect(code(await port.update('x', { version: 1 }))).toBe('400 bad_request');
     expect(code(await port.update('area-sur', { version: 0, name: 'x' } as never))).toBe(
       '400 bad_request',
     );
@@ -259,16 +264,16 @@ describe('mock areas: update and move', () => {
       '422 invalid_responsible',
     );
     // Already-assigned responsibles are not revalidated, so a departed member can always be removed.
-    members.delete('user-admin');
+    members.delete('admin');
     expect(
       code(
         await port.update('area-norte', {
           version: 28,
-          responsibleIds: ['user-admin', 'user-dispatch'],
+          responsibleIds: ['admin', 'dispatch'],
         }),
       ),
     ).toBe('ok');
-    members.add('user-admin');
+    members.add('admin');
   });
 });
 
@@ -318,6 +323,12 @@ describe('mock areas: deactivate and activate', () => {
     expect(code(await mock.port.activate('area-mty-guadalupe', child.version))).toBe(
       '422 invalid_hierarchy',
     );
+  });
+
+  it('refuses to activate under a missing parent with 422 invalid_hierarchy', async () => {
+    const orphan = makeArea({ id: 'huerfana', parentId: 'no-existe', depth: 2, active: false });
+    const { port } = store([orphan]);
+    expect(code(await port.activate('huerfana', orphan.version))).toBe('422 invalid_hierarchy');
   });
 
   it('simulates other actors: a rename moves the version on and ignores unknown ids', async () => {

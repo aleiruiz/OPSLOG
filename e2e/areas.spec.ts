@@ -178,9 +178,9 @@ test.describe('areas: create, edit, move', () => {
     await expect(page.getByRole('textbox', { name: /Nombre/ })).toBeFocused();
     await fillByKeyboard(page, /Nombre/, 'Oeste');
     await fillByKeyboard(page, /Código/, 'oes');
-    await fillByKeyboard(page, /Agregar responsable/, 'user-dispatch');
+    await fillByKeyboard(page, /Agregar responsable/, 'dispatch');
     await page.keyboard.press('Enter');
-    await expect(page.getByText('user-dispatch')).toBeVisible();
+    await expect(page.getByText('dispatch')).toBeVisible();
     await page.getByRole('button', { name: 'Crear área' }).focus();
     await page.keyboard.press('Enter');
     await expect(page.getByRole('heading', { name: 'Oeste', level: 1 })).toBeVisible();

@@ -25,7 +25,7 @@ export function AreaCreateScreen() {
   const draft = React.useRef<AreaFormValues | null>(null);
   const userId =
     session.status === 'authenticated' || session.status === 'expired'
-      ? session.session.user.id
+      ? session.session.user.id.replace(/^user-/, '')
       : undefined;
 
   const remember = React.useCallback((values: AreaFormValues) => {
@@ -133,7 +133,7 @@ function EditForm({
   const choices = React.useMemo(() => parentChoices(tree, node), [tree, node]);
   const userId =
     session.status === 'authenticated' || session.status === 'expired'
-      ? session.session.user.id
+      ? session.session.user.id.replace(/^user-/, '')
       : undefined;
 
   const submit = async (values: AreaFormValues) => {

@@ -10,7 +10,7 @@ export function makeArea(overrides: Partial<Area> = {}): Area {
     parentId: null,
     depth: 1,
     active: true,
-    responsibleIds: ['user-admin'],
+    responsibleIds: ['admin'],
     version: 3,
     createdAt: '2026-01-12T15:00:00.000Z',
     updatedAt: '2026-09-20T18:30:00.000Z',
@@ -55,7 +55,7 @@ export function demoAreas(): Area[] {
     id: 'area-centro',
     name: 'Centro',
     code: 'CEN',
-    responsibleIds: ['user-dispatch'],
+    responsibleIds: ['dispatch'],
     version: 2,
   });
   const sur = makeArea({
@@ -66,7 +66,7 @@ export function demoAreas(): Area[] {
     version: 1,
   });
   const monterrey = child('area-norte-mty', 'Monterrey', 'NTE-MTY', norte, {
-    responsibleIds: ['user-admin', 'user-dispatch'],
+    responsibleIds: ['admin', 'dispatch'],
     version: 4,
   });
   const chihuahua = child('area-norte-chih', 'Chihuahua', 'NTE-CHI', norte);
@@ -74,7 +74,7 @@ export function demoAreas(): Area[] {
   const queretaro = child('area-centro-qro', 'Querétaro', null, centro);
   const merida = child('area-sur-mer', 'Mérida', 'SUR-MER', sur);
   const apodaca = child('area-mty-apodaca', 'Base Apodaca', 'APO', monterrey, {
-    responsibleIds: ['user-dispatch'],
+    responsibleIds: ['dispatch'],
   });
   const guadalupe = child('area-mty-guadalupe', 'Base Guadalupe', 'GPE', monterrey, {
     active: false,

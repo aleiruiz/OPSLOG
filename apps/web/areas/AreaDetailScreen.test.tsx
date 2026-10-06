@@ -26,7 +26,7 @@ describe('area detail: data', () => {
     expect(dd('Nivel')).toHaveTextContent('2 de 4');
     expect(dd('Área superior')).toHaveTextContent('Norte');
     expect(dd('Estado')).toHaveTextContent('Activa');
-    expect(dd('Responsables')).toHaveTextContent('user-adminuser-dispatch');
+    expect(dd('Responsables')).toHaveTextContent('admindispatch');
     expect(dd('Vehículos activos')).toHaveTextContent('0');
     expect(dd('Personas activas')).toHaveTextContent('0');
     const subAreas = screen.getByRole('table', { name: 'Sub-áreas (2)' });
@@ -142,6 +142,22 @@ describe('area detail: actions by permission', () => {
     expect(screen.getByRole('link', { name: 'Mover' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Nueva sub-área' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Desactivar' })).toBeNull();
+  });
+
+  it('gives an editor without create no "Nueva sub-área", but edit, move and activation', async () => {
+    const view = await open('area-norte-mty', { account: 'mechanic' });
+    expect(screen.getByRole('link', { name: 'Editar' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Mover' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Nueva sub-área' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Desactivar' })).toBeNull();
+    view.unmount();
+    await open('area-mty-guadalupe', { account: 'mechanic' });
+    expect(screen.getByRole('button', { name: 'Activar' })).toBeInTheDocument();
+  });
+
+  it('offers "Activar" on an inactive area to the dispatcher, who cannot delete', async () => {
+    await open('area-mty-guadalupe', { account: 'dispatch' });
+    expect(screen.getByRole('button', { name: 'Activar' })).toBeInTheDocument();
   });
 
   it('gives a read-only role no actions at all', async () => {
