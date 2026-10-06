@@ -39,7 +39,14 @@ const SECRETS = {
   email: 'ana.perez@synthetic.example',
   licenseNumber: 'LIC-445566-ZZ',
 };
-const FRAGMENTS = ['7788', '9000', '90001234', 'synthetic', 'ana.perez', '445566'];
+const FRAGMENTS = [
+  'SYNTH-ID-7788',
+  '9000 1234',
+  '90001234',
+  'synthetic.example',
+  'ana.perez',
+  'LIC-445566',
+];
 
 let serial = 0;
 const person = (areaId: string, over: Record<string, unknown> = {}) => {

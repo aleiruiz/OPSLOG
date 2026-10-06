@@ -38,9 +38,9 @@ const body = (over: Record<string, unknown> = {}) => {
     employeeNumber: `E-${serial}`,
     idType: 'ine',
     ...SECRETS,
-    nationalId: `SYNTH-${serial}-QX`,
-    email: `ana${serial}@synthetic.example`,
-    licenseNumber: `LIC-${serial}`,
+    nationalId: `SYNTH-ID-7788-Q${serial}`,
+    email: `ana.perez${serial}@synthetic.example`,
+    licenseNumber: `LIC-445566-${serial}`,
     licenseType: 'c',
     licenseExpiresOn: '2099-01-31',
     ...over,
@@ -169,7 +169,13 @@ describe('employees over HTTP', () => {
         (await browser.get(`/api/employees/${made.id}/history`)).text,
       ];
       for (const text of texts)
-        for (const fragment of ['SYNTH-', 'QX', '9000', 'synthetic.example', 'LIC-'])
+        for (const fragment of [
+          'SYNTH-ID-7788',
+          'ID-7788-QX',
+          '9000 1234',
+          'synthetic.example',
+          'LIC-445566',
+        ])
           expect(text, fragment).not.toContain(fragment);
     }
   });
@@ -295,7 +301,13 @@ describe('who may do what', () => {
     const v = await create(adminA);
     const masked = await viewerA.get(`/api/employees/${v.id}`);
     expect(masked.json.pii).toBeNull();
-    for (const fragment of ['SYNTH-', 'QX', '9000', 'synthetic.example', 'LIC-'])
+    for (const fragment of [
+      'SYNTH-ID-7788',
+      'ID-7788-QX',
+      '9000 1234',
+      'synthetic.example',
+      'LIC-445566',
+    ])
       expect(masked.text, fragment).not.toContain(fragment);
     expect((await piiA.get(`/api/employees/${v.id}`)).json.pii).toMatchObject({
       phone: '+525590001234',
@@ -398,7 +410,7 @@ describe('errors', () => {
       json: body({ nationalId: 'synth id 7788 qx' }),
     });
     expect(dupId.json).toMatchObject({ code: 'duplicate', field: 'national_id' });
-    expect(dupId.text).not.toContain('7788');
+    expect(dupId.text).not.toContain('SYNTH-ID-7788');
     // the reader of personal data gets the same answer
     expect(
       (await piiA.post('/api/employees', { json: body({ nationalId: SECRETS.nationalId }) })).json,

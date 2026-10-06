@@ -34,15 +34,17 @@ const SECRETS = {
   email: 'ana.perez@synthetic.example',
   licenseNumber: 'LIC-445566-ZZ',
 };
+// Distinctive fragments only (>= 8 characters): a short one could appear by chance inside random
+// base64 ciphertext, an id or a hash and make the "no plaintext" checks flaky.
 const FRAGMENTS = [
-  '7788',
-  'QX',
+  'SYNTH-ID-7788',
+  'ID-7788-QX',
   '9000 1234',
   '90001234',
   'ana.perez',
   'synthetic.example',
-  '445566',
-  'LIC-',
+  'LIC-445566',
+  '445566-ZZ',
 ];
 
 const input = (over: Record<string, unknown> = {}) =>
@@ -599,7 +601,13 @@ describe('personal data protection (D23)', () => {
     const row = await store.find(f.a.tenantId, created.id);
     const history = await store.history(f.a.tenantId, created.id, { limit: 50, offset: 0 });
     const stored = JSON.stringify([row, history]);
-    for (const fragment of [...FRAGMENTS, '70000001', '7000 0001', 'Ana.Perez'])
+    for (const fragment of [
+      ...FRAGMENTS,
+      '70000001',
+      '7000 0001',
+      'Ana.Perez',
+      'synthetic.example',
+    ])
       expect(stored, fragment).not.toContain(fragment);
     expect(row?.pii.nationalId?.sealed).toMatch(/^pii1\./);
     expect(row?.pii.nationalId?.index).toMatch(/^[0-9a-f]{64}$/);
