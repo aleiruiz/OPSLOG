@@ -6,4 +6,4 @@ Modelos explícitos, sin fallback (ADR-0007, SPEC/ORCH-1.4): código con claude-
 
 Orquestador coordina sesiones separadas, fusiona automáticamente tras CI/auditoría y toma tareas elegibles. Es único escritor de Tasks/state ignorados. Respetar leases, hashes y gates acumulativos; AWS diferido, producción no autorizada. Modelos/transferencia ADR-0004/0005/0006/0007 y sucesora 1.4 sustituyen instrucciones históricas incompatibles. Las asignaciones de snapshots anteriores preservan su modelo observado y no se repiten por esta actualización.
 
-Profundidad de revisión reducida hasta la auditoría final: ver docs/adr/0011-lighter-review-until-final-audit.md.
+Profundidad de revisión reducida hasta la auditoría final: ver docs/adr/0011-lighter-review-until-final-audit.md. Los PRs solo de documentación (ADR, docs, LICENSE) no requieren revisión Opus y se fusionan con CI en verde, aunque el párrafo anterior diga que todo PR la recibe.
