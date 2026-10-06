@@ -15,6 +15,7 @@
     "../../../packages/domain/files/src/**/*.ts",
     "../../../packages/domain/vehicles/src/**/*.ts",
     "../../../packages/domain/areas/src/**/*.ts",
+    "../../../packages/domain/documents/src/**/*.ts",
     "../../../packages/domain/employees/src/**/*.ts",
     "../../../packages/platform/pii/src/**/*.ts",
     "../../../packages/platform/auth/src/**/*.ts",

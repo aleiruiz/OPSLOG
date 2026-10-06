@@ -12,6 +12,8 @@
     { "path": "./packages/persistence/areas" },
     { "path": "./packages/domain/employees" },
     { "path": "./packages/persistence/employees" },
+    { "path": "./packages/domain/documents" },
+    { "path": "./packages/persistence/documents" },
     { "path": "./packages/platform/pii" },
     { "path": "./packages/ui" },
     { "path": "./apps/api/tenants" },

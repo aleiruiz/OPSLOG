@@ -24,6 +24,12 @@ import {
   type EmployeeStore,
 } from '../../../../packages/domain/employees/src/index.js';
 import {
+  DocumentError,
+  DocumentService,
+  InMemoryDocumentStore,
+  type DocumentStore,
+} from '../../../../packages/domain/documents/src/index.js';
+import {
   EnvelopePiiCipher,
   LocalDevKms,
   type PiiCipher,
@@ -94,6 +100,7 @@ import {
 } from './directory.js';
 import { InMemoryTenantStore } from './tenancy.js';
 import { AreasApi } from './areas.js';
+import { DocumentsApi } from './documents.js';
 import { EmployeesApi } from './employees.js';
 import { VehiclesApi } from './vehicles.js';
 
@@ -222,6 +229,8 @@ export interface PlatformAdapters {
   readonly areas?: AreaStore;
   /** Persistent employee store (the TypeORM adapter of `packages/persistence/employees`); in-memory by default. */
   readonly employees?: EmployeeStore;
+  /** Persistent document store (the TypeORM adapter of `packages/persistence/documents`); in-memory by default. */
+  readonly documents?: DocumentStore;
   /**
    * Personal-data protection (SPECS D23): envelope encryption plus blind indexes. Defaults to the
    * local development KMS with a random per-process key, which refuses production-mode
@@ -324,6 +333,7 @@ export class Platform {
   public readonly vehicles: VehiclesApi;
   public readonly areas: AreasApi;
   public readonly employees: EmployeesApi;
+  public readonly documents: DocumentsApi;
   public readonly access: AccessDirectory;
   public readonly tenants: InMemoryTenantStore;
   public readonly audit: AuditStore;
@@ -426,44 +436,74 @@ export class Platform {
           (await this.access.effectiveRole(tenantId, userId)) !== null,
       },
     });
-    this.vehicles = new VehiclesApi({
-      service: new VehicleService(vehicleStore, {
-        now: this.now,
-        // BR-021 vs. TOCTOU: a vehicle write that sets or changes `areaId` runs under the same
-        // per-tenant area lock as `AreaService.deactivate`, after checking the area is active.
-        areas: {
-          withActiveArea: async (tenantId, areaId, work) => {
-            const outcome = await areaService.withActiveArea(tenantId, areaId, work);
-            if (!outcome.active) throw new VehicleError('invalid_area', 'area_id');
-            return outcome.value;
-          },
+    const vehicleService = new VehicleService(vehicleStore, {
+      now: this.now,
+      // BR-021 vs. TOCTOU: a vehicle write that sets or changes `areaId` runs under the same
+      // per-tenant area lock as `AreaService.deactivate`, after checking the area is active.
+      areas: {
+        withActiveArea: async (tenantId, areaId, work) => {
+          const outcome = await areaService.withActiveArea(tenantId, areaId, work);
+          if (!outcome.active) throw new VehicleError('invalid_area', 'area_id');
+          return outcome.value;
         },
-      }),
+      },
+    });
+    this.vehicles = new VehiclesApi({
+      service: vehicleService,
       authorize: (token, correlationId, required) => this.authorize(token, correlationId, required),
       audit: (context, action, entityId, correlationId) =>
         this.auditNow(this.userActor(context), action, 'vehicle', entityId, correlationId),
     });
-    this.employees = new EmployeesApi({
-      service: new EmployeeService(employeeStore, {
-        now: this.now,
-        pii:
-          adapters.pii ??
-          new EnvelopePiiCipher(LocalDevKms.ephemeral(process.env['OPSLOG_ENV'] ?? 'development')),
-        // BR-021 vs. TOCTOU: an employee write that sets or changes `areaId` runs under the same
-        // per-tenant area lock as `AreaService.deactivate`, after checking the area is active.
-        areas: {
-          withActiveArea: async (tenantId, areaId, work) => {
-            const outcome = await areaService.withActiveArea(tenantId, areaId, work);
-            if (!outcome.active) throw new EmployeeError('invalid_area', 'area_id');
-            return outcome.value;
-          },
+    const employeeService = new EmployeeService(employeeStore, {
+      now: this.now,
+      pii:
+        adapters.pii ??
+        new EnvelopePiiCipher(LocalDevKms.ephemeral(process.env['OPSLOG_ENV'] ?? 'development')),
+      // BR-021 vs. TOCTOU: an employee write that sets or changes `areaId` runs under the same
+      // per-tenant area lock as `AreaService.deactivate`, after checking the area is active.
+      areas: {
+        withActiveArea: async (tenantId, areaId, work) => {
+          const outcome = await areaService.withActiveArea(tenantId, areaId, work);
+          if (!outcome.active) throw new EmployeeError('invalid_area', 'area_id');
+          return outcome.value;
         },
-      }),
+      },
+    });
+    this.employees = new EmployeesApi({
+      service: employeeService,
       authorize: (token, correlationId, required) => this.authorize(token, correlationId, required),
       can: async (context, permission) =>
         (await this.access.resolvePermissions(context)).includes(permission),
       audit: (context, action, entityId, correlationId) =>
         this.auditNow(this.userActor(context), action, 'employee', entityId, correlationId),
+    });
+    this.documents = new DocumentsApi({
+      service: new DocumentService(adapters.documents ?? new InMemoryDocumentStore(), {
+        now: this.now,
+        // The owner of a document must be a live (not archived) vehicle or employee of the same
+        // tenant. Unknown, foreign and archived owners are indistinguishable (no tenant oracle).
+        owners: {
+          assertLive: async (tenantId, ownerType, ownerId) => {
+            const found = await (
+              ownerType === 'vehicle'
+                ? vehicleService.get(tenantId, ownerId)
+                : employeeService.get(tenantId, ownerId)
+            ).catch((error: unknown) => {
+              if (
+                (error instanceof VehicleError || error instanceof EmployeeError) &&
+                error.code === 'not_found'
+              )
+                return null;
+              throw error;
+            });
+            if (found === null || found.archivedAt !== null)
+              throw new DocumentError('invalid_owner', 'owner_id');
+          },
+        },
+      }),
+      authorize: (token, correlationId, required) => this.authorize(token, correlationId, required),
+      audit: (context, action, entityId, correlationId) =>
+        this.auditNow(this.userActor(context), action, 'document', entityId, correlationId),
     });
     this.areas = new AreasApi({
       service: areaService,

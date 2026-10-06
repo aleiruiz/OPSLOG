@@ -32,6 +32,7 @@ export const BFF_ERRORS = {
   area_in_use: { status: 409, message: 'Conflict' },
   odometer_decrease: { status: 422, message: 'Unprocessable request' },
   invalid_area: { status: 422, message: 'Unprocessable request' },
+  invalid_owner: { status: 422, message: 'Unprocessable request' },
   invalid_hierarchy: { status: 422, message: 'Unprocessable request' },
   invalid_responsible: { status: 422, message: 'Unprocessable request' },
   payload_too_large: { status: 413, message: 'Payload too large' },
@@ -49,7 +50,8 @@ export interface BffErrorBody {
   /**
    * Only on `duplicate` (the unique field that collided: `economic_number`, `plate`, `vin`,
    * `employee_number`, `national_id` or `email`), `area_in_use` (the kind of resource that blocks:
-   * `sub_areas`, `vehicles` or `people`) and `invalid_area` (`area_id`); never a value or a count.
+   * `sub_areas`, `vehicles` or `people`), `invalid_area` (`area_id`) and `invalid_owner`
+   * (`owner_id`); never a value or a count.
    */
   readonly field?: string;
 }
@@ -351,6 +353,103 @@ export interface BffEmployeeHistoryQuery {
   readonly cursor?: string;
 }
 
+export const BFF_DOCUMENT_OWNER_TYPES = ['vehicle', 'employee'] as const;
+export type BffDocumentOwnerType = (typeof BFF_DOCUMENT_OWNER_TYPES)[number];
+
+/** Derived from the expiry date and the server clock; never stored. */
+export const BFF_DOCUMENT_STATUSES = ['valid', 'expiring', 'expired'] as const;
+export type BffDocumentStatus = (typeof BFF_DOCUMENT_STATUSES)[number];
+
+/** Status of a revision in the history: the current one is derived, older ones are `replaced`. */
+export type BffDocumentRevisionStatus = BffDocumentStatus | 'replaced';
+
+/**
+ * A document of a vehicle or an employee: metadata only (files arrive with the files module). The
+ * company is implicit (the session's); `version` is the concurrency token. The validity fields
+ * (`issuedOn`, `expiresOn`, `documentNumber`) belong to the current `revision`; renewing appends a
+ * revision and keeps the earlier ones.
+ */
+export interface BffDocument {
+  readonly id: string;
+  readonly ownerType: BffDocumentOwnerType;
+  readonly ownerId: string;
+  /** Catalog code, valid for the owner type (for example `registration_card` or `medical_exam`). */
+  readonly typeCode: string;
+  readonly title: string;
+  readonly notes: string | null;
+  readonly revision: number;
+  /** `YYYY-MM-DD`. */
+  readonly issuedOn: string | null;
+  /** `YYYY-MM-DD`; the last valid day, inclusive. */
+  readonly expiresOn: string | null;
+  readonly documentNumber: string | null;
+  readonly status: BffDocumentStatus;
+  /** Whole days to the last valid day (0 on that day, negative once expired); `null` without expiry. */
+  readonly daysToExpiry: number | null;
+  readonly version: number;
+  readonly createdAt: ISODateTime;
+  readonly updatedAt: ISODateTime;
+  readonly archivedAt: ISODateTime | null;
+}
+
+/**
+ * Creating a document. Types that must expire (for example `registration_card`) require
+ * `expiresOn`; `expiresOn` is never before `issuedOn`, and `issuedOn` is not in the future.
+ */
+export interface BffDocumentInput {
+  readonly ownerType: BffDocumentOwnerType;
+  readonly ownerId: string;
+  readonly typeCode: string;
+  readonly title: string;
+  readonly notes?: string | null;
+  readonly issuedOn?: string | null;
+  readonly expiresOn?: string | null;
+  readonly documentNumber?: string | null;
+}
+
+/** Only the title and the notes can be edited in place; at least one besides `version`. */
+export interface BffDocumentPatch {
+  readonly version: number;
+  readonly title?: string;
+  readonly notes?: string | null;
+}
+
+/** A renewal: the validity data of the new revision. The owner, type and title stay. */
+export interface BffDocumentRenewal {
+  readonly version: number;
+  readonly issuedOn?: string | null;
+  readonly expiresOn?: string | null;
+  readonly documentNumber?: string | null;
+}
+
+export interface BffDocumentsQuery {
+  readonly limit?: 25 | 50 | 100;
+  readonly cursor?: string;
+  readonly ownerType?: BffDocumentOwnerType;
+  /** Needs `ownerType`. */
+  readonly ownerId?: string;
+  readonly typeCode?: string;
+  readonly status?: BffDocumentStatus;
+  /** `true` to include archived documents (default: hidden). */
+  readonly includeArchived?: 'true' | 'false';
+}
+
+export interface BffDocumentRevision {
+  readonly revision: number;
+  readonly issuedOn: string | null;
+  readonly expiresOn: string | null;
+  readonly documentNumber: string | null;
+  readonly status: BffDocumentRevisionStatus;
+  /** `user-<subject>`: the only identifier of a person in the row. */
+  readonly actorId: string;
+  readonly at: ISODateTime;
+}
+
+export interface BffDocumentHistoryQuery {
+  readonly limit?: 25 | 50 | 100;
+  readonly cursor?: string;
+}
+
 /** An area of the company's organizational tree (up to four levels). The company is implicit. */
 export interface BffArea {
   readonly id: string;
@@ -490,6 +589,17 @@ export interface BffRouteTypes {
     params: { id: string };
     query?: BffEmployeeHistoryQuery;
     response: Page<BffEmployeeHistoryEntry>;
+  };
+  'documents.list': { query?: BffDocumentsQuery; response: Page<BffDocument> };
+  'documents.create': { body: BffDocumentInput; response: BffDocument };
+  'documents.get': { params: { id: string }; response: BffDocument };
+  'documents.update': { params: { id: string }; body: BffDocumentPatch; response: BffDocument };
+  'documents.renew': { params: { id: string }; body: BffDocumentRenewal; response: BffDocument };
+  'documents.archive': { params: { id: string }; body: { version: number }; response: BffDocument };
+  'documents.history': {
+    params: { id: string };
+    query?: BffDocumentHistoryQuery;
+    response: Page<BffDocumentRevision>;
   };
   'areas.list': { query?: BffAreasQuery; response: Page<BffArea> };
   'areas.create': { body: BffAreaInput; response: BffArea };
@@ -674,6 +784,43 @@ export const BFF_ROUTES = {
   'employees.history': {
     method: 'GET',
     path: ['api', 'employees', ':id', 'history'],
+    kind: 'session',
+    status: 200,
+  },
+  'documents.list': { method: 'GET', path: ['api', 'documents'], kind: 'session', status: 200 },
+  'documents.create': {
+    method: 'POST',
+    path: ['api', 'documents'],
+    kind: 'session-csrf',
+    status: 201,
+  },
+  'documents.get': {
+    method: 'GET',
+    path: ['api', 'documents', ':id'],
+    kind: 'session',
+    status: 200,
+  },
+  'documents.update': {
+    method: 'PUT',
+    path: ['api', 'documents', ':id'],
+    kind: 'session-csrf',
+    status: 200,
+  },
+  'documents.renew': {
+    method: 'POST',
+    path: ['api', 'documents', ':id', 'renew'],
+    kind: 'session-csrf',
+    status: 200,
+  },
+  'documents.archive': {
+    method: 'POST',
+    path: ['api', 'documents', ':id', 'archive'],
+    kind: 'session-csrf',
+    status: 200,
+  },
+  'documents.history': {
+    method: 'GET',
+    path: ['api', 'documents', ':id', 'history'],
     kind: 'session',
     status: 200,
   },
