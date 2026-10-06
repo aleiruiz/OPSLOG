@@ -31,6 +31,12 @@ const VEHICLE_NEW = {
   year: 2021,
   odometerKm: 10,
 };
+const EMPLOYEE_NEW = {
+  kind: 'driver',
+  firstName: 'Ana',
+  lastName: 'Perez',
+  employeeNumber: 'E-002',
+};
 const SETTINGS = { name: 'Nombre nuevo', mfa: 'disabled', sessionIdleHours: 8 };
 
 interface Fixture {
@@ -42,6 +48,7 @@ interface Fixture {
   readonly viewerAId: string;
   readonly memberB: { identityId: string };
   readonly vehicleId: string;
+  readonly employeeId: string;
   readonly areaId: string;
   /** Area that holds the fixture vehicle (a vehicle's area must be an active area of its tenant). */
   readonly fleetAreaId: string;
@@ -69,6 +76,16 @@ async function fixture(options: Parameters<typeof createBffWorld>[0] = {}): Prom
     },
   });
   if (vehicle.status !== 201) throw new Error('vehicle fixture failed');
+  const employee = await adminA.post('/api/employees', {
+    json: {
+      kind: 'other',
+      firstName: 'Luis',
+      lastName: 'Gomez',
+      areaId: fleet.json.id,
+      employeeNumber: 'E-001',
+    },
+  });
+  if (employee.status !== 201) throw new Error('employee fixture failed');
   const area = await adminA.post('/api/areas', { json: { name: 'Operaciones' } });
   if (area.status !== 201) throw new Error('area fixture failed');
   return {
@@ -77,6 +94,7 @@ async function fixture(options: Parameters<typeof createBffWorld>[0] = {}): Prom
     adminA,
     adminB: await world.loginAs('subject-admin-b'),
     vehicleId: vehicle.json.id as string,
+    employeeId: employee.json.id as string,
     areaId: area.json.id as string,
     fleetAreaId: fleet.json.id as string,
     viewerA: await world.loginAs('subject-viewer-a'),
@@ -106,6 +124,14 @@ function writes(f: Fixture): [string, string, unknown?][] {
     ],
     ['POST', `/api/vehicles/${f.vehicleId}/odometer`, { version: 1, odometerKm: 2000 }],
     ['POST', `/api/vehicles/${f.vehicleId}/archive`, { version: 1 }],
+    ['POST', '/api/employees', { ...EMPLOYEE_NEW, areaId: f.fleetAreaId }],
+    ['PUT', `/api/employees/${f.employeeId}`, { version: 1, position: 'Jefe' }],
+    [
+      'POST',
+      `/api/employees/${f.employeeId}/status`,
+      { version: 1, status: 'inactive', reason: 'x' },
+    ],
+    ['POST', `/api/employees/${f.employeeId}/archive`, { version: 1 }],
     ['POST', '/api/areas', { name: 'Nueva area' }],
     ['PUT', `/api/areas/${f.areaId}`, { version: 1, name: 'Renombrada' }],
     ['POST', `/api/areas/${f.areaId}/deactivate`, { version: 1 }],
@@ -122,6 +148,8 @@ async function snapshot(f: Fixture) {
     draft: await get(f.adminA, '/api/drafts/form'),
     vehicles: await get(f.adminA, '/api/vehicles?includeArchived=true&limit=100'),
     vehiclesB: await get(f.adminB, '/api/vehicles?includeArchived=true&limit=100'),
+    employees: await get(f.adminA, '/api/employees?includeArchived=true&limit=100'),
+    employeesB: await get(f.adminB, '/api/employees?includeArchived=true&limit=100'),
     areas: await get(f.adminA, '/api/areas?includeInactive=true&limit=100'),
     areasB: await get(f.adminB, '/api/areas?includeInactive=true&limit=100'),
     settingsB: await get(f.adminB, '/api/company/settings'),
@@ -570,6 +598,10 @@ describe('request limits through HTTP', () => {
       ['POST', `/api/vehicles/${f.vehicleId}/status`],
       ['POST', `/api/vehicles/${f.vehicleId}/odometer`],
       ['POST', `/api/vehicles/${f.vehicleId}/archive`],
+      ['POST', '/api/employees'],
+      ['PUT', `/api/employees/${f.employeeId}`],
+      ['POST', `/api/employees/${f.employeeId}/status`],
+      ['POST', `/api/employees/${f.employeeId}/archive`],
       ['POST', '/api/areas'],
       ['PUT', `/api/areas/${f.areaId}`],
       ['POST', `/api/areas/${f.areaId}/deactivate`],

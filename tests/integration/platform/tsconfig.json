@@ -11,6 +11,7 @@
     { "path": "../../../apps/api/bff" },
     { "path": "../../../packages/persistence/identity" },
     { "path": "../../../packages/persistence/vehicles" },
-    { "path": "../../../packages/persistence/areas" }
+    { "path": "../../../packages/persistence/areas" },
+    { "path": "../../../packages/persistence/employees" }
   ]
 }

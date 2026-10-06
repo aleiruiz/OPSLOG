@@ -18,9 +18,19 @@ import {
   type VehicleStore,
 } from '../../../../packages/domain/vehicles/src/index.js';
 import {
+  EmployeeError,
+  EmployeeService,
+  InMemoryEmployeeStore,
+  type EmployeeStore,
+} from '../../../../packages/domain/employees/src/index.js';
+import {
+  EnvelopePiiCipher,
+  LocalDevKms,
+  type PiiCipher,
+} from '../../../../packages/platform/pii/src/index.js';
+import {
   AreaService,
   InMemoryAreaStore,
-  NO_RESOURCES,
   type AreaResourceCounter,
   type AreaStore,
 } from '../../../../packages/domain/areas/src/index.js';
@@ -84,6 +94,7 @@ import {
 } from './directory.js';
 import { InMemoryTenantStore } from './tenancy.js';
 import { AreasApi } from './areas.js';
+import { EmployeesApi } from './employees.js';
 import { VehiclesApi } from './vehicles.js';
 
 export type PlatformErrorCode =
@@ -108,7 +119,7 @@ export interface PlatformResponse<T> {
     readonly code: string;
     readonly status: number;
     readonly message: string;
-    /** Only for a vehicle duplicate or invalid area: the field (never its value). */
+    /** Only for a duplicate or an invalid area: the field (never its value). */
     readonly field?: string;
   };
 }
@@ -209,9 +220,17 @@ export interface PlatformAdapters {
   readonly vehicles?: VehicleStore;
   /** Persistent area store (the TypeORM adapter of `packages/persistence/areas`); in-memory by default. */
   readonly areas?: AreaStore;
+  /** Persistent employee store (the TypeORM adapter of `packages/persistence/employees`); in-memory by default. */
+  readonly employees?: EmployeeStore;
   /**
-   * Counter of the active people assigned to an area (BR-021). The employees module does not exist
-   * yet, so by default no person is ever assigned.
+   * Personal-data protection (SPECS D23): envelope encryption plus blind indexes. Defaults to the
+   * local development KMS with a random per-process key, which refuses production-mode
+   * configurations; a deployment with real data must inject a cipher over a real KMS adapter.
+   */
+  readonly pii?: PiiCipher;
+  /**
+   * Counter of the live people assigned to an area (BR-021). Defaults to the employee store's
+   * `countLiveInArea`; injecting one is only for tests that need to hold the count.
    */
   readonly people?: AreaResourceCounter;
   readonly audit?: AuditStore;
@@ -304,6 +323,7 @@ export class Platform {
   public readonly files: FilesApi;
   public readonly vehicles: VehiclesApi;
   public readonly areas: AreasApi;
+  public readonly employees: EmployeesApi;
   public readonly access: AccessDirectory;
   public readonly tenants: InMemoryTenantStore;
   public readonly audit: AuditStore;
@@ -383,6 +403,7 @@ export class Platform {
       now: this.now,
     });
     const vehicleStore = adapters.vehicles ?? new InMemoryVehicleStore();
+    const employeeStore = adapters.employees ?? new InMemoryEmployeeStore();
     const areaService = new AreaService(adapters.areas ?? new InMemoryAreaStore(), {
       now: this.now,
       resources: {
@@ -390,7 +411,10 @@ export class Platform {
         vehicles: {
           countActive: (tenantId, areaId) => vehicleStore.countLiveInArea(tenantId, areaId),
         },
-        people: adapters.people ?? NO_RESOURCES,
+        // BR-021: live employees are counted through the employees store port.
+        people: adapters.people ?? {
+          countActive: (tenantId, areaId) => employeeStore.countLiveInArea(tenantId, areaId),
+        },
       },
       // FR-041: a responsible user must be an active member of the tenant, per the directory.
       members: {
@@ -414,6 +438,28 @@ export class Platform {
       authorize: (token, correlationId, required) => this.authorize(token, correlationId, required),
       audit: (context, action, entityId, correlationId) =>
         this.auditNow(this.userActor(context), action, 'vehicle', entityId, correlationId),
+    });
+    this.employees = new EmployeesApi({
+      service: new EmployeeService(employeeStore, {
+        now: this.now,
+        pii:
+          adapters.pii ??
+          new EnvelopePiiCipher(LocalDevKms.ephemeral(process.env['OPSLOG_ENV'] ?? 'development')),
+        // BR-021 vs. TOCTOU: an employee write that sets or changes `areaId` runs under the same
+        // per-tenant area lock as `AreaService.deactivate`, after checking the area is active.
+        areas: {
+          withActiveArea: async (tenantId, areaId, work) => {
+            const outcome = await areaService.withActiveArea(tenantId, areaId, work);
+            if (!outcome.active) throw new EmployeeError('invalid_area', 'area_id');
+            return outcome.value;
+          },
+        },
+      }),
+      authorize: (token, correlationId, required) => this.authorize(token, correlationId, required),
+      can: async (context, permission) =>
+        (await this.access.resolvePermissions(context)).includes(permission),
+      audit: (context, action, entityId, correlationId) =>
+        this.auditNow(this.userActor(context), action, 'employee', entityId, correlationId),
     });
     this.areas = new AreasApi({
       service: areaService,
