@@ -18,6 +18,9 @@ import {
  */
 const suite = adminUrl ? describe : describe.skip;
 
+/** Real, active areas of each company (set up once; the in-memory area store is not reset). */
+const areas = { a: '', b: '' };
+
 const input = (over: Record<string, unknown> = {}) => ({
   economicNumber: 'U-001',
   plate: 'ABC123',
@@ -25,7 +28,7 @@ const input = (over: Record<string, unknown> = {}) => ({
   make: 'Toyota',
   model: 'Hilux',
   year: 2022,
-  areaId: 'area-1',
+  areaId: areas.a,
   odometerKm: 1000,
   ...over,
 });
@@ -57,6 +60,8 @@ suite('BFF on a real MySQL vehicles store', () => {
     editorA = await world.loginAs('subject-editor-a');
     // A second session of the same administrator (same process, same pool).
     adminA2 = await world.loginAs('subject-admin-a');
+    areas.a = (await adminA.post('/api/areas', { json: { name: 'Area 1' } })).json.id as string;
+    areas.b = (await adminB.post('/api/areas', { json: { name: 'Area 1' } })).json.id as string;
   }, 120_000);
 
   afterEach(async () => {
@@ -112,7 +117,7 @@ suite('BFF on a real MySQL vehicles store', () => {
     const id = mine.json.id as string;
     // The same economic number, plate and VIN are free in another company (no existence oracle).
     const theirs = await adminB.post('/api/vehicles', {
-      json: input({ vin: '1HGCM82633A004352' }),
+      json: input({ vin: '1HGCM82633A004352', areaId: areas.b }),
     });
     expect(theirs.status).toBe(201);
     const unknown = '00000000-0000-4000-8000-000000000000';

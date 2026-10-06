@@ -183,6 +183,8 @@ describe('typed client against the real BFF', () => {
 
     // Vehicles through the typed client.
     const vehicles = createVehiclesClient(client);
+    const fleet = await createAreasClient(client).create({ name: 'Flota' });
+    if (!fleet.ok) throw new Error('fleet area failed');
     const input = {
       economicNumber: 'U-001',
       plate: 'abc 123',
@@ -190,12 +192,23 @@ describe('typed client against the real BFF', () => {
       make: 'Toyota',
       model: 'Hilux',
       year: 2022,
-      areaId: 'area-1',
+      areaId: fleet.value.id,
       odometerKm: 100,
     };
     const car = await vehicles.create(input);
     if (!car.ok) throw new Error('vehicle create failed');
     expect(car.value).toMatchObject({ plate: 'ABC 123', status: 'active', version: 1 });
+    // An unknown area is a field-level 422 (the same for foreign and inactive areas).
+    expect(
+      await vehicles.create({ ...input, economicNumber: 'U-9', plate: 'OTRA9', areaId: 'nope' }),
+    ).toMatchObject({
+      ok: false,
+      error: {
+        code: 'invalid_area',
+        status: 422,
+        fieldErrors: [expect.objectContaining({ field: 'area_id' })],
+      },
+    });
     expect(await vehicles.create({ ...input, plate: 'OTRA1' })).toMatchObject({
       ok: false,
       error: {
@@ -280,7 +293,8 @@ describe('typed client against the real BFF', () => {
       ok: true,
       value: { active: false },
     });
-    expect(await areas.list()).toMatchObject({ ok: true, value: { total: 1 } });
+    // The fleet area, the country root (the deactivated city is hidden).
+    expect(await areas.list()).toMatchObject({ ok: true, value: { total: 2 } });
     expect(await areas.list({ includeInactive: 'true', parentId: root.value.id })).toMatchObject({
       ok: true,
       value: { total: 1, items: [{ active: false }] },

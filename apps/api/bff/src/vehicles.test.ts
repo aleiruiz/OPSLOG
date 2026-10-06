@@ -6,6 +6,10 @@ import { createBffWorld, type BffWorld, type Browser, type Reply } from './test-
 let world: BffWorld;
 afterEach(() => world?.dispose());
 
+/** Real areas of the fixture (a vehicle's area must be an active area of its tenant). */
+const areaIds = { a1: '', a2: '', b1: '' };
+const defaultArea = new Map<Browser, string>();
+
 const body = (over: Record<string, unknown> = {}) => ({
   economicNumber: 'U-001',
   plate: 'ab-123 c',
@@ -13,7 +17,7 @@ const body = (over: Record<string, unknown> = {}) => ({
   make: 'Toyota',
   model: 'Hilux',
   year: 2022,
-  areaId: 'area-1',
+  areaId: areaIds.a1,
   odometerKm: 1000,
   ...over,
 });
@@ -31,16 +35,30 @@ async function fixture(): Promise<Fixture> {
   await world.tenant('Empresa Beta', 'subject-admin-b');
   await world.member('subject-admin-a', 'editor', 'subject-editor-a');
   await world.member('subject-admin-a', 'viewer', 'subject-viewer-a');
-  return {
+  const fx = {
     adminA: await world.loginAs('subject-admin-a'),
     editorA: await world.loginAs('subject-editor-a'),
     viewerA: await world.loginAs('subject-viewer-a'),
     adminB: await world.loginAs('subject-admin-b'),
   };
+  const area = async (browser: Browser, name: string): Promise<string> => {
+    const reply = await browser.post('/api/areas', { json: { name } });
+    if (reply.status !== 201) throw new Error(`area fixture failed: ${reply.status}`);
+    return reply.json.id as string;
+  };
+  areaIds.a1 = await area(fx.adminA, 'Area 1');
+  areaIds.a2 = await area(fx.adminA, 'Area 2');
+  areaIds.b1 = await area(fx.adminB, 'Area 1');
+  defaultArea.clear();
+  for (const browser of [fx.adminA, fx.editorA, fx.viewerA]) defaultArea.set(browser, areaIds.a1);
+  defaultArea.set(fx.adminB, areaIds.b1);
+  return fx;
 }
 
 const create = async (browser: Browser, over: Record<string, unknown> = {}) => {
-  const reply = await browser.post('/api/vehicles', { json: body(over) });
+  const reply = await browser.post('/api/vehicles', {
+    json: body({ areaId: defaultArea.get(browser), ...over }),
+  });
   if (reply.status !== 201) throw new Error(`create fixture failed: ${reply.status}`);
   return reply.json as { id: string; version: number };
 };
@@ -149,7 +167,7 @@ describe('vehicles over HTTP', () => {
   it('filters by status, area and archived flag', async () => {
     const { adminA } = await fixture();
     const one = await create(adminA, { economicNumber: 'A-1', plate: 'F1', vin: null });
-    await create(adminA, { economicNumber: 'A-2', plate: 'F2', vin: null, areaId: 'area-2' });
+    await create(adminA, { economicNumber: 'A-2', plate: 'F2', vin: null, areaId: areaIds.a2 });
     await adminA.post(`/api/vehicles/${one.id}/status`, {
       json: { version: 1, status: 'inactive', reason: 'Temporada' },
     });
@@ -158,7 +176,7 @@ describe('vehicles over HTTP', () => {
         (v: { economicNumber: string }) => v.economicNumber,
       );
     expect(await numbers('?status=inactive')).toEqual(['A-1']);
-    expect(await numbers('?areaId=area-2')).toEqual(['A-2']);
+    expect(await numbers(`?areaId=${areaIds.a2}`)).toEqual(['A-2']);
     expect(await numbers('?includeArchived=false&limit=50')).toEqual(['A-1', 'A-2']);
   });
 });
@@ -405,8 +423,9 @@ describe('errors', () => {
     });
     await world.tenant('Empresa Alfa', 'subject-admin-a');
     const admin = await world.loginAs('subject-admin-a');
+    const area = await admin.post('/api/areas', { json: { name: 'Area 1' } });
     for (const reply of [
-      await admin.post('/api/vehicles', { json: body() }),
+      await admin.post('/api/vehicles', { json: body({ areaId: area.json.id }) }),
       await admin.get('/api/vehicles'),
     ]) {
       expect(reply.status).toBe(500);

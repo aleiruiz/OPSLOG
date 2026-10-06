@@ -97,6 +97,7 @@ function failure(
     invalid_transition: 'invalid_transition',
     immutable: 'immutable',
     odometer_decrease: 'odometer_decrease',
+    invalid_area: 'invalid_area',
     area_in_use: 'area_in_use',
     invalid_hierarchy: 'invalid_hierarchy',
     invalid_responsible: 'invalid_responsible',
@@ -106,7 +107,9 @@ function failure(
     code,
     ctx.correlationId,
     {},
-    code === 'duplicate' || code === 'area_in_use' ? error?.field : undefined,
+    code === 'duplicate' || code === 'area_in_use' || code === 'invalid_area'
+      ? error?.field
+      : undefined,
   );
 }
 

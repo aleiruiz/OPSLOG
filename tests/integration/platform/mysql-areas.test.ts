@@ -11,6 +11,7 @@ import {
   startAreasDatabase,
   type AreasDatabase,
 } from '../../../packages/persistence/areas/src/test-support/mysql.js';
+import type { Vehicle, VehicleStatusEntry } from '../../../packages/domain/vehicles/src/index.js';
 import { TypeOrmVehicleStore } from '../../../packages/persistence/vehicles/src/index.js';
 import {
   startVehiclesDatabase,
@@ -36,6 +37,34 @@ const vehicle = (areaId: string, over: Record<string, unknown> = {}) => ({
   odometerKm: 1000,
   ...over,
 });
+
+/** Hooks that hold a vehicle insert or an area resource count open, to interleave the two writers. */
+const hooks: {
+  insert: { entered: () => void; hold: Promise<void> } | null;
+  count: { entered: () => void; hold: Promise<void> } | null;
+} = { insert: null, count: null };
+
+const latch = () => {
+  let release: () => void = () => undefined;
+  const hold = new Promise<void>((resolve) => (release = resolve));
+  let entered: () => void = () => undefined;
+  const wasEntered = new Promise<void>((resolve) => (entered = resolve));
+  return { hold, release, entered, wasEntered };
+};
+
+const tick = (ms = 150) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+class HeldVehicleStore extends TypeOrmVehicleStore {
+  public override async insert(next: Vehicle, entry: VehicleStatusEntry): Promise<void> {
+    const held = hooks.insert;
+    hooks.insert = null;
+    if (held) {
+      held.entered();
+      await held.hold;
+    }
+    return super.insert(next, entry);
+  }
+}
 
 const area = (name: string, parentId: string | null = null, code: string | null = null) => ({
   name,
@@ -66,9 +95,20 @@ suite('BFF on real MySQL areas and vehicles stores', () => {
     areasDb = await startAreasDatabase('plat');
     vehiclesDb = await startVehiclesDatabase('platv');
     const areas = new TypeOrmAreaStore(await areasDb.openRuntime());
-    const vehicles = new TypeOrmVehicleStore(await vehiclesDb.openRuntime());
+    const vehicles = new HeldVehicleStore(await vehiclesDb.openRuntime());
     const tenants = new InMemoryTenantStore();
-    world = createBffWorld({ adapters: { tenants, areas, vehicles } });
+    const people = {
+      countActive: async () => {
+        const held = hooks.count;
+        hooks.count = null;
+        if (held) {
+          held.entered();
+          await held.hold;
+        }
+        return 0;
+      },
+    };
+    world = createBffWorld({ adapters: { tenants, areas, vehicles, people } });
     tenantA = (await world.tenant('Empresa Alfa', 'subject-admin-a')).tenantId;
     tenantB = (await world.tenant('Empresa Beta', 'subject-admin-b')).tenantId;
     await world.member('subject-admin-a', 'viewer', 'subject-viewer-a');
@@ -81,6 +121,8 @@ suite('BFF on real MySQL areas and vehicles stores', () => {
   }, 120_000);
 
   afterEach(async () => {
+    hooks.insert = null;
+    hooks.count = null;
     for (const table of ['opslog_area_history', 'opslog_area_responsibles'])
       await areasDb.admin.query(`DELETE FROM ${table}`);
     // Children first: the parent key is a composite foreign key.
@@ -260,5 +302,147 @@ suite('BFF on real MySQL areas and vehicles stores', () => {
       const rows = await areasDb.rows<{ depth: number }>('SELECT depth FROM opslog_areas');
       expect(Math.max(...rows.map((row) => Number(row.depth)))).toBeLessThanOrEqual(4);
     }
+  });
+
+  describe('vehicle area validation (BR-021)', () => {
+    const vehicleRows = () =>
+      vehiclesDb.rows<{ area_id: string }>('SELECT area_id FROM opslog_vehicles');
+    const inactiveAreas = async () =>
+      new Set(
+        (await areasDb.rows<{ id: string }>('SELECT id FROM opslog_areas WHERE active = 0')).map(
+          (row) => row.id,
+        ),
+      );
+    const withoutCorrelation = (reply: { json: object }) => ({
+      ...reply.json,
+      correlationId: '',
+    });
+
+    it('answers the same field-level 422 for unknown, foreign and inactive areas, writing no row', async () => {
+      const closed = await make(adminA, 'Cerrada');
+      await adminA.post(`/api/areas/${closed}/deactivate`, { json: { version: 1 } });
+      const foreign = await make(adminB, 'Ajena');
+      const replies = [];
+      for (const areaId of ['desconocida', foreign, closed])
+        replies.push(await adminA.post('/api/vehicles', { json: vehicle(areaId) }));
+      for (const reply of replies)
+        expect(reply).toMatchObject({
+          status: 422,
+          json: { code: 'invalid_area', field: 'area_id' },
+        });
+      expect(new Set(replies.map((reply) => JSON.stringify(withoutCorrelation(reply)))).size).toBe(
+        1,
+      );
+      expect(await vehicleRows()).toEqual([]);
+
+      const home = await make(adminA, 'Base');
+      const car = await adminA.post('/api/vehicles', { json: vehicle(home) });
+      expect(car.status).toBe(201);
+      for (const areaId of ['desconocida', foreign, closed]) {
+        const moved = await adminA.put(`/api/vehicles/${car.json.id}`, {
+          json: { version: 1, areaId },
+        });
+        expect(moved, areaId).toMatchObject({ status: 422, json: { code: 'invalid_area' } });
+      }
+      expect((await vehicleRows()).map((row) => row.area_id)).toEqual([home]);
+      expect((await adminA.get(`/api/vehicles/${car.json.id}`)).json.version).toBe(1);
+      // The foreign area was never touched.
+      expect((await adminB.get(`/api/areas/${foreign}`)).json.resourceCounts.vehicles).toBe(0);
+    });
+
+    it('keeps a vehicle whose area is unchanged even when that area is inactive', async () => {
+      const home = await make(adminA, 'Base');
+      const other = await make(adminA, 'Otra');
+      const car = await adminA.post('/api/vehicles', { json: vehicle(home) });
+      // Legacy row: the area is inactive although a vehicle is still there (administration SQL).
+      await areasDb.admin.query(
+        'UPDATE opslog_areas SET active = 0, deactivated_at = NOW(3) WHERE id = ?',
+        [home],
+      );
+      const kept = await adminA.put(`/api/vehicles/${car.json.id}`, {
+        json: { version: 1, make: 'Ford', areaId: home },
+      });
+      expect(kept).toMatchObject({ status: 200, json: { make: 'Ford', areaId: home } });
+      // It can leave for an active area, and cannot come back.
+      expect(
+        (await adminA.put(`/api/vehicles/${car.json.id}`, { json: { version: 2, areaId: other } }))
+          .status,
+      ).toBe(200);
+      expect(
+        (await adminA.put(`/api/vehicles/${car.json.id}`, { json: { version: 3, areaId: home } }))
+          .status,
+      ).toBe(422);
+    });
+
+    it('holds the deactivation until an in-flight vehicle assignment commits, then refuses it', async () => {
+      const home = await make(adminA, 'Base');
+      const insert = latch();
+      hooks.insert = { entered: insert.entered, hold: insert.hold };
+      const create = adminA.post('/api/vehicles', { json: vehicle(home) });
+      await insert.wasEntered; // area checked, insert pending under the tenant area lock
+      const deactivate = adminA2.post(`/api/areas/${home}/deactivate`, { json: { version: 1 } });
+      let settled = false;
+      void deactivate.then(() => (settled = true));
+      await tick();
+      expect(settled).toBe(false);
+      insert.release();
+      const [created, deactivated] = await Promise.all([create, deactivate]);
+      expect(created.status).toBe(201);
+      expect(deactivated).toMatchObject({
+        status: 409,
+        json: { code: 'area_in_use', field: 'vehicles' },
+      });
+      expect((await adminA.get(`/api/areas/${home}`)).json.active).toBe(true);
+    });
+
+    it('holds a vehicle assignment until an in-flight deactivation commits, then refuses it', async () => {
+      const home = await make(adminA, 'Base');
+      const counting = latch();
+      hooks.count = { entered: counting.entered, hold: counting.hold };
+      const deactivate = adminA.post(`/api/areas/${home}/deactivate`, { json: { version: 1 } });
+      await counting.wasEntered; // under the tenant area lock, counting resources
+      const create = adminA2.post('/api/vehicles', { json: vehicle(home) });
+      let settled = false;
+      void create.then(() => (settled = true));
+      await tick();
+      expect(settled).toBe(false);
+      counting.release();
+      const [deactivated, created] = await Promise.all([deactivate, create]);
+      expect(deactivated.status).toBe(200);
+      expect(created).toMatchObject({ status: 422, json: { code: 'invalid_area' } });
+      expect(await vehicleRows()).toEqual([]);
+    });
+
+    it('exactly one of a concurrent assignment and deactivation wins; an inactive area never holds a vehicle', async () => {
+      let assigned = 0;
+      let closed = 0;
+      for (let round = 0; round < 12; round += 1) {
+        const home = await make(adminA, `Carrera ${round}`);
+        const create = () =>
+          adminA.post('/api/vehicles', {
+            json: vehicle(home, { economicNumber: `R-${round}`, plate: `R${round}` }),
+          });
+        const deactivate = () =>
+          adminA2.post(`/api/areas/${home}/deactivate`, { json: { version: 1 } });
+        const results =
+          round % 2 === 0
+            ? await Promise.all([create(), deactivate()])
+            : (await Promise.all([deactivate(), create()])).reverse();
+        const created = results[0]!;
+        const deactivated = results[1]!;
+        const oneWon = (created.status === 201) !== (deactivated.status === 200);
+        expect(oneWon, `round ${round}: ${created.status}/${deactivated.status}`).toBe(true);
+        if (created.status === 201) {
+          assigned += 1;
+          expect(deactivated).toMatchObject({ status: 409, json: { code: 'area_in_use' } });
+        } else {
+          closed += 1;
+          expect(created).toMatchObject({ status: 422, json: { code: 'invalid_area' } });
+        }
+      }
+      expect(assigned + closed).toBe(12);
+      const inactive = await inactiveAreas();
+      for (const row of await vehicleRows()) expect(inactive.has(row.area_id)).toBe(false);
+    });
   });
 });
