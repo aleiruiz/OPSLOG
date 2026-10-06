@@ -250,6 +250,7 @@ function PersonalData({
   initiallyRevealed: boolean;
 }) {
   const [revealed, setRevealed] = React.useState(initiallyRevealed);
+  const rowsId = React.useId();
   const { piiPresent } = employee;
   const pii = canView ? employee.pii : null;
   const driver = employee.kind === 'driver';
@@ -320,10 +321,17 @@ function PersonalData({
           />
         </Box>
       )}
-      <Rows rows={rows} />
+      <Box id={rowsId}>
+        <Rows rows={rows} />
+      </Box>
       {pii && (
         <Box sx={{ mt: 2 }}>
-          <Button variant="outlined" onClick={() => setRevealed((value) => !value)}>
+          <Button
+            variant="outlined"
+            aria-pressed={revealed}
+            aria-controls={rowsId}
+            onClick={() => setRevealed((value) => !value)}
+          >
             {revealed ? 'Ocultar datos personales' : 'Mostrar datos personales'}
           </Button>
         </Box>
@@ -597,6 +605,7 @@ export function EmployeeDetailView({
               </Typography>
               <Detail employee={employee} areas={areas} />
               <PersonalData
+                // A new version remounts this section on purpose: it re-hides the personal data after any change.
                 key={`${employee.id}:${employee.version}`}
                 employee={employee}
                 canView={can('view_pii')}

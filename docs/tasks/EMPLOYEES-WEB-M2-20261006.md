@@ -106,3 +106,5 @@ Las stories con modal llevan `harness: 'modal'` (el diálogo se escanea aparte c
 7. **Historial:** ids opacos de actor y nombres de área de la estructura cargada; sin nombres de persona (política de PII). Los motivos del historial son texto libre del operador: no debería contener PII, no se valida.
 8. **Empleado archivado y recontratación:** conserva sus claves únicas y no hay desarchivado (pregunta abierta 4 del backend): un alta con el mismo número, identificación o correo responde 409 `duplicate`, que la pantalla muestra por campo.
 9. **Sin OIDC real:** las pantallas no se han probado contra el BFF real en navegador, solo contra el mock fiel.
+10. **Formularios de vehículo y áreas:** el formulario de vehículos ahora necesita `areas.list` (permiso `view` en Áreas) para cargar; sin él no se muestra el formulario.
+11. **Catálogo de áreas truncado:** el selector carga el catálogo con tope de 2,000 áreas (20 páginas de 100); más allá queda truncado y las áreas restantes no se pueden elegir.

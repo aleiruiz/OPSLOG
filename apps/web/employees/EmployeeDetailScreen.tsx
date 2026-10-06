@@ -50,6 +50,7 @@ export function EmployeeDetailScreen({ id }: { id: string }) {
   React.useEffect(() => {
     generation.current += 1;
     setExtra(null);
+    setLoadingMore(false);
     setHistoryNotice(null);
   }, [history.state]);
 
@@ -70,8 +71,9 @@ export function EmployeeDetailScreen({ id }: { id: string }) {
     setHistoryNotice(null);
     const requested = generation.current;
     const result = await ports.employees.history(id, { limit: HISTORY_PAGE, cursor });
-    setLoadingMore(false);
+    // A stale request must not clear the spinner of the one that is active.
     if (generation.current !== requested) return;
+    setLoadingMore(false);
     if (result.ok)
       setExtra((current) => ({
         items: [...(current?.items ?? []), ...result.value.items],
