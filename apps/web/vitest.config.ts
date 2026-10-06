@@ -18,6 +18,7 @@ export default defineConfig({
     include: [
       'api/**/*.test.{ts,tsx}',
       'app/**/*.test.{ts,tsx}',
+      'areas/**/*.test.{ts,tsx}',
       'auth/**/*.test.{ts,tsx}',
       'settings/**/*.test.{ts,tsx}',
       'vehicles/**/*.test.{ts,tsx}',
@@ -27,6 +28,7 @@ export default defineConfig({
       include: [
         'api/**/*.{ts,tsx}',
         'app/**/*.{ts,tsx}',
+        'areas/**/*.{ts,tsx}',
         'auth/**/*.{ts,tsx}',
         'settings/**/*.{ts,tsx}',
         'vehicles/**/*.{ts,tsx}',

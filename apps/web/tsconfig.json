@@ -21,6 +21,8 @@
     "app/**/*.tsx",
     "auth/**/*.ts",
     "auth/**/*.tsx",
+    "areas/**/*.ts",
+    "areas/**/*.tsx",
     "settings/**/*.ts",
     "settings/**/*.tsx",
     "vehicles/**/*.ts",

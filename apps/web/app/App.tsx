@@ -7,6 +7,9 @@ import { SessionProvider, useSession } from '../auth/session';
 import { RolesScreen } from '../settings/access/RolesScreen';
 import { TenantAdminScreen } from '../settings/access/TenantAdminScreen';
 import { UsersScreen } from '../settings/access/UsersScreen';
+import { AreaDetailScreen } from '../areas/AreaDetailScreen';
+import { AreaCreateScreen, AreaEditScreen, AreaMoveScreen } from '../areas/AreaFormScreen';
+import { AreasScreen } from '../areas/AreasScreen';
 import { VehicleDetailScreen } from '../vehicles/VehicleDetailScreen';
 import { VehicleCreateScreen, VehicleEditScreen } from '../vehicles/VehicleFormScreen';
 import { VehiclesScreen } from '../vehicles/VehiclesScreen';
@@ -26,9 +29,12 @@ export function App({ ports, basename = '' }: { ports: ApiPorts; basename?: stri
   );
 }
 
-/** Vehicle sub-screens keep the "Vehículos" entry highlighted. */
+/** Sub-screens keep the entry of their list highlighted ("Vehículos", "Áreas"). */
 function navigationRoute(id: string | null): string | null {
-  return id === 'vehicleNew' || id === 'vehicleDetail' || id === 'vehicleEdit' ? 'vehicles' : id;
+  if (id === 'vehicleNew' || id === 'vehicleDetail' || id === 'vehicleEdit') return 'vehicles';
+  if (id === 'areaNew' || id === 'areaDetail' || id === 'areaEdit' || id === 'areaMove')
+    return 'areas';
+  return id;
 }
 
 function Redirect({ to }: { to: string }) {
@@ -137,6 +143,21 @@ function Routes() {
         break;
       case 'vehicleEdit':
         screen = <VehicleEditScreen key={match.params.id} id={match.params.id as string} />;
+        break;
+      case 'areas':
+        screen = <AreasScreen />;
+        break;
+      case 'areaNew':
+        screen = <AreaCreateScreen />;
+        break;
+      case 'areaDetail':
+        screen = <AreaDetailScreen key={match.params.id} id={match.params.id as string} />;
+        break;
+      case 'areaEdit':
+        screen = <AreaEditScreen key={match.params.id} id={match.params.id as string} />;
+        break;
+      case 'areaMove':
+        screen = <AreaMoveScreen key={match.params.id} id={match.params.id as string} />;
         break;
       case 'invitation':
         screen = (

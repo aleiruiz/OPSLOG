@@ -89,4 +89,20 @@ describe('ConfirmDialog', () => {
     await new Promise((resolve) => setTimeout(resolve, 500));
     expect(confirm).toHaveFocus();
   });
+
+  it('colours the confirmation as a danger by default and as primary for a reversible action', () => {
+    const { rerender } = render(
+      <ConfirmDialog {...props} onConfirm={() => undefined} onCancel={() => undefined} />,
+    );
+    expect(screen.getByRole('button', { name: 'Archivar' }).className).toMatch(/colorError/);
+    rerender(
+      <ConfirmDialog
+        {...props}
+        confirmTone="primary"
+        onConfirm={() => undefined}
+        onCancel={() => undefined}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Archivar' }).className).toMatch(/colorPrimary/);
+  });
 });

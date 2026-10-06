@@ -135,6 +135,37 @@ describe('createHttpApi', () => {
     );
   });
 
+  it('maps every area call to its route, with the version in the body and the cursor in the query', async () => {
+    const { api, calls } = scripted({});
+    await api.areas.list();
+    await api.areas.list({ limit: 100, includeInactive: 'true', parentId: 'root' });
+    await api.areas.get('a-1');
+    await api.areas.create({ name: 'Norte', responsibleIds: [] });
+    await api.areas.update('a-1', { version: 2, parentId: null });
+    await api.areas.deactivate('a-1', 3);
+    await api.areas.activate('a-1', 4);
+    await api.areas.history('a-1');
+    await api.areas.history('a-1', { limit: 25, cursor: 'c' });
+    expect(calls.map((call) => call.id)).toEqual([
+      'areas.list',
+      'areas.list',
+      'areas.get',
+      'areas.create',
+      'areas.update',
+      'areas.deactivate',
+      'areas.activate',
+      'areas.history',
+      'areas.history',
+    ]);
+    expect(calls[1]?.input).toEqual({
+      query: { limit: 100, includeInactive: 'true', parentId: 'root' },
+    });
+    expect(calls[4]?.input).toEqual({ params: { id: 'a-1' }, body: { version: 2, parentId: null } });
+    expect(calls[5]?.input).toEqual({ params: { id: 'a-1' }, body: { version: 3 } });
+    expect(calls[6]?.input).toEqual({ params: { id: 'a-1' }, body: { version: 4 } });
+    expect(calls[8]?.input).toEqual({ params: { id: 'a-1' }, query: { limit: 25, cursor: 'c' } });
+  });
+
   it('passes failures through untouched and exposes the identity provider', async () => {
     const oidc = createFakeOidc();
     const client = { call: async () => failure } as unknown as BffClient;

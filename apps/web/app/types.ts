@@ -1,5 +1,13 @@
 import type {
   ApiError,
+  AreasClient,
+  BffArea,
+  BffAreaDetail,
+  BffAreaHistoryEntry,
+  BffAreaHistoryQuery,
+  BffAreaInput,
+  BffAreaPatch,
+  BffAreasQuery,
   BffOidcCredentials,
   BffUser,
   BffUsersQuery,
@@ -164,6 +172,23 @@ export type VehiclesPort = Pick<
   'list' | 'get' | 'create' | 'update' | 'recordOdometer' | 'archive'
 >;
 
+export type Area = BffArea;
+export type AreaDetail = BffAreaDetail;
+export type AreaInput = BffAreaInput;
+export type AreaPatch = BffAreaPatch;
+export type AreaHistoryEntry = BffAreaHistoryEntry;
+export type AreaListQuery = BffAreasQuery;
+export type AreaHistoryQuery = BffAreaHistoryQuery;
+
+/**
+ * Areas over the generated BFF client. Moving an area is an `update` with a new `parentId`. Every change
+ * carries the `version` of the last read (409 `stale_version`); deactivating an area that still holds
+ * resources is a 409 `area_in_use` whose `fieldErrors[0].field` is `sub_areas`, `vehicles` or `people`; a
+ * repeated name among siblings or a repeated code is a 409 `duplicate` naming `name` or `code`; a bad
+ * placement (cycle, more than four levels, inactive parent) is a 422 `invalid_hierarchy`.
+ */
+export type AreasPort = AreasClient;
+
 export interface ApiPorts {
   readonly auth: AuthPort;
   readonly tenant: TenantAdminPort;
@@ -171,5 +196,6 @@ export interface ApiPorts {
   readonly roles: RolesPort;
   readonly drafts: DraftsPort;
   readonly vehicles: VehiclesPort;
+  readonly areas: AreasPort;
   readonly oidc: OidcPort;
 }

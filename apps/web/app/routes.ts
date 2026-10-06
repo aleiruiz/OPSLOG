@@ -2,7 +2,7 @@ import type { Permission } from './types';
 
 export type RouteAccess = 'public' | 'authenticated' | { readonly permission: Permission };
 
-export type NavGroup = 'Inicio' | 'Flota' | 'Configuración';
+export type NavGroup = 'Inicio' | 'Plantilla' | 'Flota' | 'Configuración';
 
 export interface RouteDefinition {
   readonly id:
@@ -15,7 +15,12 @@ export interface RouteDefinition {
     | 'vehicles'
     | 'vehicleNew'
     | 'vehicleDetail'
-    | 'vehicleEdit';
+    | 'vehicleEdit'
+    | 'areas'
+    | 'areaNew'
+    | 'areaDetail'
+    | 'areaEdit'
+    | 'areaMove';
   readonly pattern: string;
   readonly title: string;
   readonly access: RouteAccess;
@@ -42,6 +47,39 @@ export const routes: readonly RouteDefinition[] = [
     pattern: '/invitacion',
     title: 'Aceptar invitación',
     access: 'public',
+  },
+  // Areas (BRD S06, nav group "Plantilla"): read = `view`, create = `create`, edit/move/activate = `edit`; deactivating
+  // (`delete`) is an action of the detail.
+  {
+    id: 'areas',
+    pattern: '/plantilla/areas',
+    title: 'Áreas',
+    access: { permission: 'view' },
+    nav: { group: 'Plantilla', label: 'Áreas' },
+  },
+  {
+    id: 'areaNew',
+    pattern: '/plantilla/areas/nueva',
+    title: 'Nueva área',
+    access: { permission: 'create' },
+  },
+  {
+    id: 'areaDetail',
+    pattern: '/plantilla/areas/:id',
+    title: 'Área',
+    access: { permission: 'view' },
+  },
+  {
+    id: 'areaEdit',
+    pattern: '/plantilla/areas/:id/editar',
+    title: 'Editar área',
+    access: { permission: 'edit' },
+  },
+  {
+    id: 'areaMove',
+    pattern: '/plantilla/areas/:id/mover',
+    title: 'Mover área',
+    access: { permission: 'edit' },
   },
   // Vehicles: read = `view`, create = `create`, change = `edit`; archiving (`delete`) is an action of the detail.
   {

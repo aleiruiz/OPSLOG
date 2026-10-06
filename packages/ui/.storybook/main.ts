@@ -7,7 +7,11 @@ const fromRoot = (path: string) => fileURLToPath(new URL(`../../../${path}`, imp
 // fetched at runtime, telemetry and update checks disabled, fonts bundled from @fontsource.
 const config: StorybookConfig = {
   // Design-system stories live next to the components; screen stories live next to the screens of the web app.
-  stories: ['../src/**/*.stories.tsx', '../../../apps/web/vehicles/**/*.stories.tsx'],
+  stories: [
+    '../src/**/*.stories.tsx',
+    '../../../apps/web/vehicles/**/*.stories.tsx',
+    '../../../apps/web/areas/**/*.stories.tsx',
+  ],
   framework: { name: '@storybook/react-vite', options: {} },
   core: { disableTelemetry: true, disableWhatsNewNotifications: true, enableCrashReports: false },
   typescript: { reactDocgen: false },
