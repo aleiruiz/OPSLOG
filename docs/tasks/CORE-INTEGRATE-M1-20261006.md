@@ -214,11 +214,11 @@ Rama `claude/core-integrate-coverage-tier`, base `3eabccb`. Se sube al nivel de 
 
 - `apps/api/composition` y `apps/worker/composition`: `pnpm test:platform` (umbral agregado sobre ambas, como el PR #31 hizo con los demás). Resultado: 99,6 % líneas / 98,3 % funciones / 99,6 % sentencias / 97,7 % ramas.
 - `packages/domain/files` (`test:unit` del paquete): 100 / 100 / 100 / 100. Se sustituyó `split(...).pop() ?? ''` en `sanitizeFilename` por un corte con `lastIndexOf` (mismo resultado; la rama `?? ''` era inalcanzable porque `split` siempre devuelve al menos un elemento).
-- `apps/api/files` (`test:unit` del paquete): 100 / 98,6 de ramas / 100 / 100.
+- `apps/api/files` (`test:unit` del paquete): 100 / 100 / 100 / 98,6 (líneas / funciones / sentencias / ramas).
 
-`platform/files`, `infra/storage`, `infra/runtime`, `apps/worker/base`, audit, outbox y colas siguen en 90/85 (fuera de este alcance). Pruebas añadidas por comportamiento real sin cubrir: `tests/integration/platform/composition-units.test.ts` (membresías inexistentes o revocadas en `AccessDirectory`, invitación de otro tenant, nombre de tenant vacío o largo, proyección de membresía monótona y versión inválida, `setTenantStatus` sobre tenant desconocido y activación sin ubicación, `TenantAwareScanQueue` con `holdMs` inválido y job repetido, reversión de la sesión de identidad cuando la membresía reflejada no está activa, cierre de sesión repetido) y dos pruebas en `apps/api/files` (reloj por defecto en la auditoría de denegaciones; códigos de autenticación que no son `unauthorized` ni `forbidden` se devuelven como `invalid_input`).
+`platform/files`, `infra/storage`, `infra/runtime`, `apps/worker/base`, audit, outbox y colas siguen en 90/85 (fuera de este alcance). Pruebas añadidas por comportamiento real sin cubrir: `tests/integration/platform/composition-units.test.ts` (membresías inexistentes o revocadas en `AccessDirectory`, invitación de otro tenant, nombre de tenant vacío o largo, proyección de membresía monótona y versión inválida, `setTenantStatus` sobre tenant desconocido y cambio de estado de un tenant aprovisionado (la activación sin ubicación verificada, `tenancy.ts:103-104`, no es alcanzable con el almacén en memoria, que siempre aprovisiona con ubicación; la regla la prueba `persistence/tenancy`), `TenantAwareScanQueue` con `holdMs` inválido y job repetido, revocación comprobada de la sesión de identidad creada por un inicio de sesión cuya membresía reflejada no está activa, `expired` de autenticación devuelto como `unauthorized`, cierre de sesión repetido que deja la sesión inutilizable) y dos pruebas en `apps/api/files` (reloj por defecto en la auditoría de denegaciones; códigos de autenticación que no son `unauthorized` ni `forbidden`, incluido `expired`, se devuelven como `invalid_input`: caracterización del comportamiento actual, ver pendiente 10).
 
-Sin cubrir en composición (justificado, sin ignorar): el notificador de recuperación por defecto de `platform.ts` (lanza «not configured»; ninguna ruta de la composición pide recuperación) y la rama de error de `signOut` (fallo del almacén al revocar); su ejecución se añadirá con el flujo de recuperación y el BFF de recuperación.
+Sin cubrir en composición, entre otros (sin ignorar cobertura): el notificador de recuperación por defecto de `platform.ts:301-302` (lanza «not configured»; ninguna ruta de la composición pide recuperación), la rama de error de `signOut` (`platform.ts:526-527`, fallo del almacén al revocar), el reloj por defecto del outbox (`platform.ts:291`), ramas de valores por defecto en `platform.ts:146, 288, 600, 631, 730, 873`, `access.ts:134` y `tenancy.ts:104`. El mapeo de `expired` a `unauthorized` (`platform.ts:106-107`) ya está cubierto.
 
 ## Pendientes abiertos de las revisiones Opus (no bloqueantes)
 
@@ -227,12 +227,13 @@ Ninguno bloquea la auditoría G1 según las revisiones; quedan abiertos y no se 
 1. **Operaciones de operador sin autorización propia**: `bootstrapTenant`, `suspendTenant` y `reactivateTenant` no autorizan por sí mismas ni tienen ruta; hace falta un plano de operador autenticado.
 2. **Permiso de `publish` elegido por el llamador** (parámetro `permission`): fijarlo por ruta o eliminar el parámetro.
 3. **`TenantContextResolver` usa `Date.now()`** mientras identidad usa el reloj inyectado; unificar con un reloj inyectado.
-4. **CHECK de expiración en base y `issued_at`** en las tablas de identidad (hoy la expiración se valida en el adaptador).
+4. **CHECK de expiración e `issued_at` en `invitations`**: la tabla `invitations` no tiene columna `issued_at` ni CHECK de expiración (la expiración se valida en el adaptador); `recoveries` y `sessions` ya tienen CHECK de ventana de expiración (`packages/persistence/identity/src/migrations.ts`, `ck_identity_recoveries_window` y `ck_identity_sessions_window`).
 5. **Nombres de cookie `__Host-`** (`__Host-opslog_session`/`__Host-opslog_csrf`, `Path=/`): hoy `opslog_session` con `Path=/api`.
 6. **`name_key` no impuesto por la base**: la unicidad del nombre de rol por tenant depende de la normalización en el adaptador, no de una restricción o columna generada.
 7. **Normalización Unicode de los nombres de rol** (NFC/NFKC y confusables) antes de calcular `name_key`.
 8. **Líneas `Cookie` partidas**: varias cabeceras `Cookie` ahora fallan cerradas (401); el comportamiento es deliberado pero hay que confirmarlo con un navegador y proxy reales (Playwright no se ejecutó).
 9. **`import-meta.d.ts` frente a los tipos de `vite/client`** en `apps/web`: la declaración local de `import.meta.env` duplica a `vite/client`; unificar para no divergir.
+10. **Mapeo inconsistente de sesión caducada** (preexistente): `apps/api/files` devuelve 400 `invalid_input` para un `AuthError` `expired` (`apps/api/files/src/index.ts`, `failure`), mientras la composición lo mapea a 401 `unauthorized`; alinear con el BFF.
 
 ## Verificación
 

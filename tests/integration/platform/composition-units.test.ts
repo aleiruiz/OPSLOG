@@ -1,4 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
+import {
+  AuthError,
+  InMemoryIdentityStore,
+  type Session,
+} from '../../../packages/domain/identity/src/index.js';
 import { corr, createWorld } from './world.js';
 import {
   AccessDirectory,
@@ -61,7 +66,7 @@ describe('InMemoryTenantStore control-plane rules', () => {
     expect(await store.getMembership(tenant, subject)).toBe(next);
   });
 
-  it('only activates known tenants that have a verified location', async () => {
+  it('rejects unknown tenants and toggles the status of provisioned ones', async () => {
     const store = new InMemoryTenantStore();
     await expect(store.setTenantStatus(tid('missing'), 'suspended')).rejects.toThrow(
       'unknown tenant',
@@ -129,12 +134,27 @@ describe('createWorkerRuntime defaults', () => {
   });
 });
 
+class SpyIdentityStore extends InMemoryIdentityStore {
+  public readonly saved: Session[] = [];
+  public readonly revoked: string[] = [];
+  public override async saveSession(session: Session): Promise<void> {
+    this.saved.push(session);
+    return super.saveSession(session);
+  }
+  public override async revokeSession(id: string, revokedAt: Date): Promise<boolean> {
+    this.revoked.push(id);
+    return super.revokeSession(id, revokedAt);
+  }
+}
+
 describe('sign-in and sign-out against the control-plane mirror', () => {
-  it('rolls back the identity session when the mirrored membership is not active', async () => {
-    const world = createWorld();
+  it('revokes the identity session created by a sign-in whose mirrored membership is not active', async () => {
+    const identityStore = new SpyIdentityStore();
+    const world = createWorld({ adapters: { identityStore } });
     try {
       const { platform } = world;
       const a = await world.tenant('Empresa Alfa', 'subject-admin-a');
+      const before = identityStore.saved.length;
       await world.tenants.projectMembership(
         tid(a.tenantId),
         sid(a.admin.identityId),
@@ -144,18 +164,39 @@ describe('sign-in and sign-out against the control-plane mirror', () => {
       const login = await platform.signIn(await world.principal('subject-admin-a'));
       expect(login.ok).toBe(false);
       expect(login.error?.code).toBe('unauthorized');
-      expect((await platform.session(a.admin.token, corr())).ok).toBe(false);
+      const created = identityStore.saved.slice(before);
+      expect(created).toHaveLength(1);
+      const [session] = created;
+      expect(identityStore.revoked).toContain(session?.id);
+      expect(await identityStore.findSession(session?.tokenHash ?? '')).toMatchObject({
+        revokedAt: expect.any(Date),
+      });
     } finally {
       world.dispose();
     }
   });
 
-  it('signs out twice without failing', async () => {
+  it('signs out twice without failing and leaves the session unusable', async () => {
     const world = createWorld();
     try {
       const a = await world.tenant('Empresa Alfa', 'subject-admin-a');
       expect((await world.platform.signOut(a.admin.token)).ok).toBe(true);
       expect((await world.platform.signOut(a.admin.token)).ok).toBe(true);
+      expect((await world.platform.session(a.admin.token, corr())).ok).toBe(false);
+    } finally {
+      world.dispose();
+    }
+  });
+
+  it('maps an expired auth error to unauthorized', async () => {
+    const world = createWorld();
+    try {
+      const a = await world.tenant('Empresa Alfa', 'subject-admin-a');
+      const expiring = world.platform.auth;
+      vi.spyOn(expiring, 'login').mockRejectedValueOnce(new AuthError('expired'));
+      const login = await world.platform.signIn(await world.principal('subject-admin-a'));
+      expect(login.error?.code).toBe('unauthorized');
+      expect((await world.platform.session(a.admin.token, corr())).ok).toBe(true);
     } finally {
       world.dispose();
     }

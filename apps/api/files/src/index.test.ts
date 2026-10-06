@@ -502,11 +502,19 @@ describe('audit trail', () => {
       },
     );
     expect((await api.status(token, 'c', 'file-404')).error?.code).toBe('not_found');
-    // The denial audit uses the default clock.
+    // Without an injected clock the denial audit is stamped with the real current time.
+    const before = Date.now();
     expect((await api.createDownloadGrant(token, 'c', 'file-404')).error?.code).toBe('not_found');
+    const denied = w.audit.list('tenant-a').filter((e) => e.action === 'file.access_denied');
+    expect(denied).toHaveLength(1);
+    const stamped = Date.parse(denied[0]?.occurredAt ?? '');
+    expect(stamped).toBeGreaterThanOrEqual(before);
+    expect(stamped).toBeLessThanOrEqual(Date.now());
   });
-  it('maps other authentication failures to invalid_input and expiry to a safe payload', async () => {
+  it('documents the current mapping: non-unauthorized/forbidden auth errors (including expired) become 400 invalid_input', async () => {
     const w = await world();
+    // Characterizes existing behavior only: composition maps `expired` to 401 unauthorized, so this
+    // 400 is an open inconsistency (see CORE-INTEGRATE open item 10), not a decision.
     const failing = (code: 'expired' | 'conflict' | 'not_found' | 'forbidden') =>
       new FilesApi(
         { authenticate: async () => Promise.reject(new AuthError(code)) } as never,
