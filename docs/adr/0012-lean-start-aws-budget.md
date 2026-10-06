@@ -1,6 +1,6 @@
 # ADR-0012 — Arranque austero en AWS y crecimiento por etapas
 
-Estado: **propuesto; decisión del propietario por transcribir.** El propietario pidió un presupuesto inicial muy pequeño; la propuesta de abajo se le presentó y no la ha objetado, pero este repositorio no puede verificarlo (misma limitación que ADR-0008, ADR-0009 y ADR-0011). Hasta que el propietario la confirme, este ADR es una propuesta y no autoriza nada en AWS.
+Estado: **aceptado por el propietario el 2026-10-06** ("Yes go ahead", en el hilo del proyecto, tras presentarle la propuesta austera con la API en Lambda como opción por defecto). Aceptar este ADR no autoriza aprovisionar nada en AWS: AWS sigue diferido y los importes son estimaciones sin verificar.
 Fecha: 2026-10-06.
 Compatible con SPEC-1.4 y ORCH-1.4; no modifica sus baselines.
 
