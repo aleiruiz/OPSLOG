@@ -1,5 +1,6 @@
 // @vitest-environment node
 import react from '@vitejs/plugin-react';
+import { isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build, type InlineConfig } from 'vite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -13,6 +14,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 const fromHere = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 
 afterEach(() => vi.unstubAllEnvs());
+
+/** Bare package specifiers are external; relative, absolute (any platform) and virtual ids are bundled. */
+const isPackageImport = (id: string): boolean =>
+  !id.startsWith('.') && !id.startsWith('\0') && !isAbsolute(id) && !/^[A-Za-z]:[\\/]/.test(id);
 
 async function bundle(mode: 'production' | 'development'): Promise<string> {
   // Vitest runs with NODE_ENV=test, which Vite would treat as a development build.
@@ -38,7 +43,7 @@ async function bundle(mode: 'production' | 'development'): Promise<string> {
       // The application's own modules are bundled as in production; third-party packages (React,
       // MUI, the UI kit, the contracts) are left external. That keeps the build fast and cannot
       // hide a mock, because none of them contains one.
-      rollupOptions: { external: (id) => !/^[./\0]/.test(id) && !id.startsWith('/') },
+      rollupOptions: { external: isPackageImport },
     },
   };
   const result = await build(config);

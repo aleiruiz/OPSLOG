@@ -458,13 +458,13 @@ suite('persistent identity store on MySQL', () => {
       expect(await storeA.countActiveAdmins(tenant)).toBe(1);
     });
 
-    it('leaves the invitation unredeemable whichever of revoke and accept wins the race', async () => {
+    it('ends revoked with a spent invitation whichever of revoke and accept wins the race', async () => {
       for (let round = 0; round < 5; round += 1) {
         const tenant = tenantId();
         await h.join(tenant, `admin-${randomUUID()}`, ADMIN_ROLE);
         const invited = await h.invite(tenant, ADMIN_ROLE);
         const barrier = new Barrier(2);
-        await Promise.allSettled([
+        const [revoked, activated] = await Promise.allSettled([
           barrier.wait().then(() => storeA.revokeMembership(tenant, invited.identityId)),
           barrier
             .wait()
@@ -477,9 +477,19 @@ suite('persistent identity store on MySQL', () => {
               ),
             ),
         ]);
-        // Whatever happened first, the membership never ends up active, and the link is spent.
+        // Neither call fails: the revoke always finds a membership to revoke (pending or just
+        // activated, the tenant keeps another administrator) and the accept resolves to an
+        // activation or to null.
+        expect(revoked).toEqual({ status: 'fulfilled', value: true });
+        expect(activated.status).toBe('fulfilled');
+        // The store serializes them under row locks. If the accept won, the revoke then revoked the
+        // now active membership (the tenant keeps its other administrator); if the revoke won, the
+        // accept found no pending membership. Either way the final state is revoked and the link
+        // is spent. Keeping a directory consistent with this is the composition's job (it locks
+        // the tenant; see tests/integration/platform/mysql-identity.test.ts).
         const membership = await storeA.findMembership(tenant, invited.identityId);
-        expect(membership?.status === 'revoked' || membership?.status === 'active').toBe(true);
+        expect(membership?.status).toBe('revoked');
+        expect(await storeA.countActiveAdmins(tenant)).toBe(1);
         const stored = await rows<{ consumed_at: Date | null }>(
           `SELECT consumed_at FROM ${IDENTITY_TABLES.invitations} WHERE identity_id = ?`,
           [invited.identityId],

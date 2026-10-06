@@ -7,6 +7,8 @@ import {
   createPlatform,
   type Platform,
 } from '../../../apps/api/composition/src/index.js';
+import { withLatency } from './latency.js';
+import { raceAcceptAndRevoke, type Order } from './invitation-race.js';
 import {
   TypeOrmIdentityStore,
   createIdentityDataSource,
@@ -196,5 +198,62 @@ suite('platform on a real MySQL identity store', () => {
     expect((await platform.session(secondLogin.token, 'corr-6')).error?.code).toBe('unauthorized');
     expect((await platform.signIn(await principal('second-drift'))).ok).toBe(false);
     expect((await platform.listMembers(a.token, 'corr-7')).ok).toBe(true);
+  });
+  it.each<Order>(['accept-first', 'revoke-first'])(
+    'keeps directory, MySQL rows, audit and last administrator consistent when accept races revoke (%s)',
+    async (order) => {
+      for (let round = 0; round < 3; round += 1) {
+        const latency = withLatency(storeA, { activateInvitation: 1, revokeMembership: 10 });
+        const racing = createPlatform({
+          verifier,
+          issuer: verifier.issuer,
+          grantSecret: 'synthetic-grant-secret-for-tests-0123456789',
+          adapters: { identityStore: latency.store as never, tenants: new InMemoryTenantStore() },
+        });
+        const principalFor = async (subject: string) => {
+          const nonce = `nonce-${(nonces += 1)}`;
+          return (await racing.verifyPrincipal(verifier.issueCode(subject, nonce), nonce)).value;
+        };
+        await raceAcceptAndRevoke(
+          {
+            platform: racing,
+            principal: principalFor,
+            findMembership: (tenantId, identityId) => storeB.findMembership(tenantId, identityId),
+            started: latency.started,
+          },
+          `${order}-${round}-${suffix}`,
+          order,
+        );
+      }
+    },
+  );
+
+  it('never leaves a phantom administrator when accept and revoke start together', async () => {
+    for (let round = 0; round < 8; round += 1) {
+      const a = await tenant(`together-${round}`);
+      const invited = (await platform.inviteUser(a.token, `c-${round}`, 'admin')).value!;
+      const invitee = await principal(`invitee-together-${round}`);
+      const [accepted, removed] = await Promise.all([
+        platform.acceptInvitation(invited.invitationToken, invitee),
+        platform.removeMember(a.token, `r-${round}`, invited.identityId),
+      ]);
+      const stored = await storeB.findMembership(a.tenantId, invited.identityId);
+      const role = platform.access.roleOf(a.tenantId, invited.identityId);
+      // Either order is legal, but the directory and the database must tell the same story.
+      expect(removed.ok).toBe(true);
+      expect(role === null, `accepted=${accepted.ok}`).toBe(stored?.status !== 'active');
+      expect(stored?.status).toBe('revoked');
+      expect(platform.access.activeAdmins(a.tenantId)).toEqual([a.adminId]);
+      expect(
+        Number(
+          (
+            await rows<{ c: number | string }>(
+              "SELECT COUNT(*) c FROM opslog_identity_memberships WHERE tenant_id = ? AND role = 'admin' AND status = 'active'",
+              [a.tenantId],
+            )
+          )[0]?.c,
+        ),
+      ).toBe(1);
+    }
   });
 });

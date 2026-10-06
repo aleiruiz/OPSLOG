@@ -178,6 +178,8 @@ describe('platform on the persistent identity store', () => {
     db.seed(MembershipEntity, { ...row, role: 'viewer' });
     expect((await platform.session(second.token, corr())).ok).toBe(true);
     expect((await platform.listMembers(second.token, corr())).error?.code).toBe('forbidden');
+    // The session view fails closed too instead of reporting an admin with no permissions.
+    expect((await platform.sessionDetails(second.token, corr())).error?.code).toBe('unauthorized');
     expect((await platform.signIn(await world.principal('subject-admin-a2'))).ok).toBe(false);
     // The first administrator, whose directory and stored roles agree, is unaffected.
     expect((await platform.listMembers(a.admin.token, corr())).ok).toBe(true);

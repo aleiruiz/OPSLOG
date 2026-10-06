@@ -34,6 +34,9 @@ const apiKey = `sk-ant-${'api03-abcdefghijklmnopqrstuvwxyz0123456789'}`;
 const google = `AIza${'SyA1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q'}`;
 const jwt = `eyJ${'hbGciOiJIUzI1NiJ9'}.eyJ${'zdWIiOiIxMjM0NTY3ODkwIn0'}.${'abcdefghijklmnop'}`;
 const dbUrl = `${'mysql'}://root:${'hunter2hunter2'}@db.internal/app`;
+const emptyUserUrl = `${'mysql'}://:${'hunter2hunter2'}@db.internal/app`;
+const httpsUrl = `${'https'}://deploy:${'hunter2hunter2'}@git.internal/repo.git`;
+const pgp = `-----BEGIN ${'PGP'} PRIVATE KEY BLOCK-----`;
 const npmrc = `//registry.example/:_authToken=${'abcdef123456'}`;
 
 describe('leak scan', () => {
@@ -54,7 +57,10 @@ describe('leak scan', () => {
     ['Anthropic or OpenAI key', apiKey],
     ['Google API key', google],
     ['JSON web token', jwt],
-    ['database URL with a password', dbUrl],
+    ['URL with a password', dbUrl],
+    ['URL with a password', emptyUserUrl],
+    ['URL with a password', httpsUrl],
+    ['private key block', pgp],
     ['npm auth token', npmrc],
   ])('fails on a %s and names the file and line', (name, value) => {
     const result = scan({ 'src/leak.ts': `const ok = 1;\nconst leaked = '${value}';\n` });
@@ -64,17 +70,59 @@ describe('leak scan', () => {
   });
 
   it('fails on tracked secret-like file names', () => {
-    for (const name of ['.env', '.env.production', 'deploy/id_rsa', 'certs/server.pem', 'k.key']) {
+    for (const name of [
+      '.env',
+      '.env.production',
+      'deploy/id_rsa',
+      'certs/server.pem',
+      'k.key',
+      '.npmrc',
+      'a/.npmrc',
+    ]) {
       const result = scan({ [name]: 'x\n' });
       expect(result.status, name).toBe(1);
       expect(result.out).toContain(`${name}: secret-like file name is tracked`);
     }
   });
 
-  it('accepts a line that carries the allow marker, and only that line', () => {
+  it('accepts only a trailing comment with a reason after the value, and lists it', () => {
     const marked = `const fixture = '${aws}'; // secret-scan:allow synthetic negative fixture\n`;
-    expect(scan({ 'a.ts': marked }).status).toBe(0);
+    const ok = scan({ 'a.ts': marked });
+    expect(ok.status).toBe(0);
+    expect(ok.out).toContain('a.ts:1: AWS access key id (allowed: synthetic negative fixture)');
+    expect(ok.out).not.toContain(aws);
+    expect(
+      scan({ 'a.py': `fixture = '${aws}'  # secret-scan:allow synthetic fixture\n` }).status,
+    ).toBe(0);
+    // Only that line is allowed.
     expect(scan({ 'a.ts': `${marked}const other = '${aws}';\n` }).status).toBe(1);
+    // No reason, a marker that is not a trailing comment, or a value after the marker: all fail.
+    for (const line of [
+      `const x = '${aws}'; // secret-scan:allow\n`,
+      `const x = '${aws}'; // secret-scan:allow   \n`,
+      `const x = '${aws}'; /* secret-scan:allow reason */\n`,
+      `const secret_scan_allow = 'secret-scan:allow reason'; const x = '${aws}';\n`,
+      `// secret-scan:allow reason ${aws}\n`,
+    ])
+      expect(scan({ 'a.ts': line }).status, line).toBe(1);
+  });
+
+  it('finds a value glued to an identifier character and in files with NUL bytes', () => {
+    expect(scan({ 'a.ts': `const x = 'x_${aws}';\n` }).status).toBe(1);
+    expect(scan({ 'a.ts': `const x = 'x_${github}';\n` }).status).toBe(1);
+    expect(scan({ 'data.bin': `\0${aws}\0` }).status).toBe(1);
+    expect(scan({ 'data.bin': '\0\0plain\0' }).status).toBe(0);
+  });
+
+  it('does not take long near-matches for a leak, and finishes quickly on hostile lines', () => {
+    const hostile = `${'mysql'}://${'a:'.repeat(50_000)}\n${'-----BEGIN '.repeat(20_000)}\n${'x'.repeat(200_000)}\n`;
+    const started = Date.now();
+    const result = scan({
+      'big.txt': hostile,
+      'ok.txt': `see ${'https'}://example.com:8080/path\n`,
+    });
+    expect(Date.now() - started).toBeLessThan(10_000);
+    expect(result.out).not.toContain('ok.txt');
   });
 
   it('passes on this repository (tracked files, including this test)', () => {
@@ -84,9 +132,5 @@ describe('leak scan', () => {
     });
     expect(result.stderr).toBe('');
     expect(result.status).toBe(0);
-  });
-
-  it('ignores binary files', () => {
-    expect(scan({ 'data.bin': `\0${aws}\0` }).status).toBe(0);
   });
 });

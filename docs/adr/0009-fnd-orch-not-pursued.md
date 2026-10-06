@@ -1,7 +1,7 @@
 # ADR-0009 — El propietario decide no perseguir el trabajo de FND-ORCH (orquestador)
 
-Estado: **Confirmado por el propietario en el hilo del proyecto el 2026-10-06.** Tras ver la transcripción, el propietario respondió: «you got it right» (mensaje de las 08:33 UTC, relayado por el coordinador a la sesión autora). Este repositorio no puede verificar esa confirmación (la misma limitación que ADR-0008, que también recoge decisiones tomadas fuera del repositorio): el registro es una transcripción por la sesión autora, no una firma del propietario ni una aprobación de los auditores.
-Fecha de la decisión: 2026-10-06, America/Mexico_City.
+Estado: **Confirmado por el propietario en el hilo del proyecto el 2026-10-06.** Al recibir un resumen de una línea de la decisión (no el texto de este ADR), el propietario respondió: «you got it right» (mensaje de las 08:33 UTC, relayado por el coordinador a la sesión autora). Confirma el resumen, no la redacción completa de este documento. Este repositorio no puede verificar esa confirmación (la misma limitación que ADR-0008, que también recoge decisiones tomadas fuera del repositorio): el registro es una transcripción por la sesión autora, no una firma del propietario ni una aprobación de los auditores.
+Fecha de la decisión: 2026-10-05 18:27 America/Mexico_City (2026-10-06 00:27 UTC); la confirmación es del 2026-10-06.
 Decisor: Alei Ruiz (propietario).
 
 ## Contexto
@@ -10,7 +10,7 @@ ADR-0008 aceptó diferir a G1, como máximo a su cierre, los componentes no cons
 
 ## Decisión
 
-El 2026-10-06, en el hilo del proyecto, el propietario indicó: «Yes start working on this, except the orchestrator thing, that was an issue on codex and I've not had that issue with you». Se transcribe así:
+El 2026-10-05 a las 18:27 (America/Mexico_City), en el hilo del proyecto, el propietario indicó: «Yes start working on this, except the orchestrator thing, that was an issue on codex and I've not had that issue with you». Se transcribe así:
 
 - No se persigue el trabajo de FND-ORCH ni del orquestador. Los componentes diferidos por ADR-0008 no se construyen en M1.
 - Esto **supera la fecha de diferimiento de ADR-0008** («como máximo al cierre de G1»): ya no hay fecha, porque el trabajo no se retoma salvo nueva decisión del propietario.
