@@ -15,6 +15,13 @@ import {
   type BffAreaPatch,
   type BffAreasQuery,
   type BffSession,
+  type BffDocument,
+  type BffDocumentHistoryQuery,
+  type BffDocumentInput,
+  type BffDocumentPatch,
+  type BffDocumentRenewal,
+  type BffDocumentRevision,
+  type BffDocumentsQuery,
   type BffEmployee,
   type BffEmployeeDetail,
   type BffEmployeeHistoryEntry,
@@ -361,5 +368,42 @@ export function createEmployeesClient(client: BffClient): EmployeesClient {
       query
         ? client.call('employees.history', { params: { id }, query })
         : client.call('employees.history', { params: { id } }),
+  };
+}
+
+/**
+ * Typed document calls over any `BffClient`. Each method is one route of the contract; the
+ * `version` of the last read travels with every change, and a lost race comes back as the
+ * `stale_version` error value (never an exception). `renew` appends a revision (the previous ones
+ * stay in `history`); `update` only edits the title and the notes. Metadata only: files are not
+ * part of this contract yet.
+ */
+export interface DocumentsClient {
+  list(query?: BffDocumentsQuery): Promise<BffResult<Page<BffDocument>>>;
+  get(id: string): Promise<BffResult<BffDocument>>;
+  create(input: BffDocumentInput): Promise<BffResult<BffDocument>>;
+  update(id: string, patch: BffDocumentPatch): Promise<BffResult<BffDocument>>;
+  renew(id: string, renewal: BffDocumentRenewal): Promise<BffResult<BffDocument>>;
+  archive(id: string, version: number): Promise<BffResult<BffDocument>>;
+  history(
+    id: string,
+    query?: BffDocumentHistoryQuery,
+  ): Promise<BffResult<Page<BffDocumentRevision>>>;
+}
+
+export function createDocumentsClient(client: BffClient): DocumentsClient {
+  return {
+    list: (query) =>
+      query ? client.call('documents.list', { query }) : client.call('documents.list'),
+    get: (id) => client.call('documents.get', { params: { id } }),
+    create: (input) => client.call('documents.create', { body: input }),
+    update: (id, patch) => client.call('documents.update', { params: { id }, body: patch }),
+    renew: (id, renewal) => client.call('documents.renew', { params: { id }, body: renewal }),
+    archive: (id, version) =>
+      client.call('documents.archive', { params: { id }, body: { version } }),
+    history: (id, query) =>
+      query
+        ? client.call('documents.history', { params: { id }, query })
+        : client.call('documents.history', { params: { id } }),
   };
 }

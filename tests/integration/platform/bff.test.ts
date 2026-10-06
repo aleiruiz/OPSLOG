@@ -37,6 +37,12 @@ const EMPLOYEE_NEW = {
   lastName: 'Perez',
   employeeNumber: 'E-002',
 };
+const DOCUMENT_NEW = {
+  ownerType: 'vehicle',
+  typeCode: 'registration_card',
+  title: 'Tarjeta de circulación',
+  expiresOn: '2027-03-31',
+};
 const SETTINGS = { name: 'Nombre nuevo', mfa: 'disabled', sessionIdleHours: 8 };
 
 interface Fixture {
@@ -49,6 +55,7 @@ interface Fixture {
   readonly memberB: { identityId: string };
   readonly vehicleId: string;
   readonly employeeId: string;
+  readonly documentId: string;
   readonly areaId: string;
   /** Area that holds the fixture vehicle (a vehicle's area must be an active area of its tenant). */
   readonly fleetAreaId: string;
@@ -86,6 +93,10 @@ async function fixture(options: Parameters<typeof createBffWorld>[0] = {}): Prom
     },
   });
   if (employee.status !== 201) throw new Error('employee fixture failed');
+  const document = await adminA.post('/api/documents', {
+    json: { ...DOCUMENT_NEW, ownerId: vehicle.json.id },
+  });
+  if (document.status !== 201) throw new Error('document fixture failed');
   const area = await adminA.post('/api/areas', { json: { name: 'Operaciones' } });
   if (area.status !== 201) throw new Error('area fixture failed');
   return {
@@ -95,6 +106,7 @@ async function fixture(options: Parameters<typeof createBffWorld>[0] = {}): Prom
     adminB: await world.loginAs('subject-admin-b'),
     vehicleId: vehicle.json.id as string,
     employeeId: employee.json.id as string,
+    documentId: document.json.id as string,
     areaId: area.json.id as string,
     fleetAreaId: fleet.json.id as string,
     viewerA: await world.loginAs('subject-viewer-a'),
@@ -132,6 +144,10 @@ function writes(f: Fixture): [string, string, unknown?][] {
       { version: 1, status: 'inactive', reason: 'x' },
     ],
     ['POST', `/api/employees/${f.employeeId}/archive`, { version: 1 }],
+    ['POST', '/api/documents', { ...DOCUMENT_NEW, ownerId: f.vehicleId }],
+    ['PUT', `/api/documents/${f.documentId}`, { version: 1, title: 'Otra' }],
+    ['POST', `/api/documents/${f.documentId}/renew`, { version: 1, expiresOn: '2028-03-31' }],
+    ['POST', `/api/documents/${f.documentId}/archive`, { version: 1 }],
     ['POST', '/api/areas', { name: 'Nueva area' }],
     ['PUT', `/api/areas/${f.areaId}`, { version: 1, name: 'Renombrada' }],
     ['POST', `/api/areas/${f.areaId}/deactivate`, { version: 1 }],
@@ -150,6 +166,8 @@ async function snapshot(f: Fixture) {
     vehiclesB: await get(f.adminB, '/api/vehicles?includeArchived=true&limit=100'),
     employees: await get(f.adminA, '/api/employees?includeArchived=true&limit=100'),
     employeesB: await get(f.adminB, '/api/employees?includeArchived=true&limit=100'),
+    documents: await get(f.adminA, '/api/documents?includeArchived=true&limit=100'),
+    documentsB: await get(f.adminB, '/api/documents?includeArchived=true&limit=100'),
     areas: await get(f.adminA, '/api/areas?includeInactive=true&limit=100'),
     areasB: await get(f.adminB, '/api/areas?includeInactive=true&limit=100'),
     settingsB: await get(f.adminB, '/api/company/settings'),
@@ -602,6 +620,10 @@ describe('request limits through HTTP', () => {
       ['PUT', `/api/employees/${f.employeeId}`],
       ['POST', `/api/employees/${f.employeeId}/status`],
       ['POST', `/api/employees/${f.employeeId}/archive`],
+      ['POST', '/api/documents'],
+      ['PUT', `/api/documents/${f.documentId}`],
+      ['POST', `/api/documents/${f.documentId}/renew`],
+      ['POST', `/api/documents/${f.documentId}/archive`],
       ['POST', '/api/areas'],
       ['PUT', `/api/areas/${f.areaId}`],
       ['POST', `/api/areas/${f.areaId}/deactivate`],
