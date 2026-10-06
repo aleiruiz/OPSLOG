@@ -67,6 +67,44 @@ export const isCheckViolation = (error: unknown): boolean =>
 export const isLockContention = (error: unknown): boolean =>
   matches(error, 1213, 'ER_LOCK_DEADLOCK') || matches(error, 1205, 'ER_LOCK_WAIT_TIMEOUT');
 
+const ORIGIN_PATTERN = /^[A-Za-z0-9_]{1,64}$/;
+/** A real stack frame ends in `:line:col` (optionally closed by `)`); message text never qualifies once the header is removed. */
+const FRAME_PATTERN = /^at [^\r\n]*:\d+:\d+\)?$/;
+
+/** Class name of the cause (`constructor.name`, never the mutable `error.name`), restricted to a safe alphabet. */
+function originOf(error: unknown): string {
+  if (!(error instanceof Error)) return typeof error;
+  const name: unknown = (error.constructor as { name?: unknown } | undefined)?.name;
+  return typeof name === 'string' && ORIGIN_PATTERN.test(name) ? name : 'Error';
+}
+
+/**
+ * Stack locations only. V8 prints `${name}: ${message}` before the frames, and the message may span
+ * several lines that look like frames, so the header is removed first; when it cannot be located
+ * reliably nothing is kept. Remaining lines must end in `:line:col`.
+ */
+function framesOf(error: unknown): readonly string[] {
+  if (!(error instanceof Error) || typeof error.stack !== 'string') return [];
+  const { stack, message } = error;
+  let body: string;
+  if (message.length > 0) {
+    const at = stack.indexOf(message);
+    if (at < 0) return [];
+    body = stack.slice(at + message.length);
+  } else {
+    // Empty message: the header is the first line, which must start with the error name.
+    const name = String(error.name);
+    if (name.includes('\n') || !stack.startsWith(name)) return [];
+    const newline = stack.indexOf('\n');
+    body = newline < 0 ? '' : stack.slice(newline);
+  }
+  return body
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => FRAME_PATTERN.test(line))
+    .slice(0, 8);
+}
+
 /** Maps any thrown value to an error that is safe to log and to return upstream. */
 export function sanitizeStoreError(error: unknown): Error {
   if (error instanceof AuthError || error instanceof IdentityStoreError) return error;
@@ -75,18 +113,7 @@ export function sanitizeStoreError(error: unknown): Error {
     return new IdentityStoreError('integrity', driverErrno(error));
   if (isLockContention(error)) return new IdentityStoreError('contention', driverErrno(error));
   if (driverErrno(error) === null && driverCode(error) === null) {
-    const stack = error instanceof Error ? (error.stack ?? '') : '';
-    const frames = stack
-      .split('\n')
-      .filter((line) => line.trimStart().startsWith('at '))
-      .slice(0, 8)
-      .map((line) => line.trim());
-    return new IdentityStoreError(
-      'internal',
-      null,
-      error instanceof Error ? error.name : typeof error,
-      frames,
-    );
+    return new IdentityStoreError('internal', null, originOf(error), framesOf(error));
   }
   return new IdentityStoreError('unavailable', driverErrno(error));
 }
