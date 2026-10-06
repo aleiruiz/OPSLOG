@@ -1,4 +1,5 @@
 export * from './access.js';
+export * from './areas.js';
 export * from './directory.js';
 export * from './platform.js';
 export * from './tenancy.js';

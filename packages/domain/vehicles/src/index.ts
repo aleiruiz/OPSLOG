@@ -379,7 +379,17 @@ export interface VehicleStore {
    */
   replace(next: Vehicle, expectedVersion: number, entry?: VehicleStatusEntry): Promise<boolean>;
   history(tenantId: string, vehicleId: string): Promise<readonly VehicleStatusEntry[]>;
+  /**
+   * Count port for the Areas module (BR-021): vehicles of the tenant in `areaId` that still count
+   * as assigned resources, i.e. not archived and not `decommissioned`. Every other status
+   * (including `inactive`) counts: such a vehicle can return to service inside that area.
+   */
+  countLiveInArea(tenantId: string, areaId: string): Promise<number>;
 }
+
+/** The vehicles that block deactivating their area (see `VehicleStore.countLiveInArea`). */
+export const isLiveVehicle = (vehicle: Pick<Vehicle, 'status' | 'archivedAt'>): boolean =>
+  vehicle.archivedAt === null && vehicle.status !== 'decommissioned';
 
 /** Plain code-unit order, the same a binary collation gives, so every store lists in the same order. */
 const compareKeys = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
@@ -456,6 +466,13 @@ export class InMemoryVehicleStore implements VehicleStore {
     this.vehicles.set(key, structuredClone(next));
     if (entry) this.entries.push(structuredClone(entry));
     return true;
+  }
+
+  public async countLiveInArea(tenantId: string, areaId: string): Promise<number> {
+    return [...this.vehicles.values()].filter(
+      (vehicle) =>
+        vehicle.tenantId === tenantId && vehicle.areaId === areaId && isLiveVehicle(vehicle),
+    ).length;
   }
 
   public async history(

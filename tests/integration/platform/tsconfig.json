@@ -10,6 +10,7 @@
     { "path": "../../../apps/api/composition" },
     { "path": "../../../apps/api/bff" },
     { "path": "../../../packages/persistence/identity" },
-    { "path": "../../../packages/persistence/vehicles" }
+    { "path": "../../../packages/persistence/vehicles" },
+    { "path": "../../../packages/persistence/areas" }
   ]
 }

@@ -399,6 +399,7 @@ describe('errors', () => {
           },
           replace: async () => false,
           history: async () => [],
+          countLiveInArea: async () => 0,
         },
       },
     });

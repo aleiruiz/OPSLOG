@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createBffClient, createVehiclesClient, CSRF_HEADER, type FetchLike } from './index.js';
+import {
+  createAreasClient,
+  createBffClient,
+  createVehiclesClient,
+  CSRF_HEADER,
+  type FetchLike,
+} from './index.js';
 
 interface Seen {
   method: string;
@@ -446,6 +452,38 @@ describe('vehicles client', () => {
       'POST /api/vehicles/v1/status',
       'POST /api/vehicles/v1/archive',
       'POST /api/vehicles/v1/odometer',
+    ]);
+  });
+});
+
+describe('areas client', () => {
+  it('maps each method to its route, method and path', async () => {
+    const { fetch, seen } = transport((request) => {
+      if (request.url === '/api/auth/csrf') return { status: 200, body: { csrfToken: 'tok' } };
+      if (request.url === '/api/auth/session') return { status: 200, body: session('tok') };
+      return { status: 200, body: { items: [], total: 0 } };
+    });
+    const areas = createAreasClient(createBffClient({ fetch }));
+    await areas.list();
+    await areas.list({ includeInactive: 'true' });
+    await areas.get('a1');
+    await areas.history('a1');
+    await areas.history('a1', { limit: 25 });
+    await areas.create({ name: 'Norte', code: null, parentId: null, responsibleIds: [] });
+    await areas.update('a1', { version: 1, name: 'Sur' });
+    await areas.deactivate('a1', 2);
+    await areas.activate('a1', 3);
+    const calls = seen.filter((entry) => !entry.url.startsWith('/api/auth/'));
+    expect(calls.map((entry) => `${entry.method} ${entry.url.split('?')[0]}`)).toEqual([
+      'GET /api/areas',
+      'GET /api/areas',
+      'GET /api/areas/a1',
+      'GET /api/areas/a1/history',
+      'GET /api/areas/a1/history',
+      'POST /api/areas',
+      'PUT /api/areas/a1',
+      'POST /api/areas/a1/deactivate',
+      'POST /api/areas/a1/activate',
     ]);
   });
 });

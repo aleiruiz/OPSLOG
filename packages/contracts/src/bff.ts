@@ -29,7 +29,10 @@ export const BFF_ERRORS = {
   stale_version: { status: 409, message: 'Conflict' },
   invalid_transition: { status: 409, message: 'Conflict' },
   immutable: { status: 409, message: 'Conflict' },
+  area_in_use: { status: 409, message: 'Conflict' },
   odometer_decrease: { status: 422, message: 'Unprocessable request' },
+  invalid_hierarchy: { status: 422, message: 'Unprocessable request' },
+  invalid_responsible: { status: 422, message: 'Unprocessable request' },
   payload_too_large: { status: 413, message: 'Payload too large' },
   unsupported_media_type: { status: 415, message: 'Unsupported media type' },
   internal_error: { status: 500, message: 'Request failed' },
@@ -42,7 +45,10 @@ export interface BffErrorBody {
   readonly status: number;
   readonly message: string;
   readonly correlationId: string;
-  /** Only on `duplicate`: the unique field that collided, never its value. */
+  /**
+   * Only on `duplicate` (the unique field that collided) and `area_in_use` (the kind of resource
+   * that blocks: `sub_areas`, `vehicles` or `people`); never a value or a count.
+   */
   readonly field?: string;
 }
 
@@ -214,6 +220,76 @@ export interface BffVehicleStatusEntry {
   readonly at: ISODateTime;
 }
 
+/** An area of the company's organizational tree (up to four levels). The company is implicit. */
+export interface BffArea {
+  readonly id: string;
+  readonly name: string;
+  readonly code: string | null;
+  /** `null` for a root area. */
+  readonly parentId: string | null;
+  /** Level in the tree: 1 for a root, at most 4. */
+  readonly depth: number;
+  readonly active: boolean;
+  /** Opaque ids of the responsible users, sorted. Names and emails never reach the browser. */
+  readonly responsibleIds: readonly string[];
+  readonly version: number;
+  readonly createdAt: ISODateTime;
+  readonly updatedAt: ISODateTime;
+  readonly deactivatedAt: ISODateTime | null;
+}
+
+/** The single-area read adds the active resources that block its deactivation. */
+export interface BffAreaDetail extends BffArea {
+  readonly resourceCounts: { readonly vehicles: number; readonly people: number };
+}
+
+export interface BffAreaInput {
+  readonly name: string;
+  readonly code?: string | null;
+  readonly parentId?: string | null;
+  readonly responsibleIds?: readonly string[];
+}
+
+/** Fields that can be edited in place; at least one besides `version`. `parentId` moves the whole subtree. */
+export interface BffAreaPatch {
+  readonly version: number;
+  readonly name?: string;
+  readonly code?: string | null;
+  readonly parentId?: string | null;
+  readonly responsibleIds?: readonly string[];
+}
+
+export interface BffAreasQuery {
+  readonly limit?: 25 | 50 | 100;
+  readonly cursor?: string;
+  /** An area id for its direct children, `root` for the roots; omitted for every level. */
+  readonly parentId?: string;
+  /** `true` to include deactivated areas (default: hidden). */
+  readonly includeInactive?: 'true' | 'false';
+}
+
+export const BFF_AREA_ACTIONS = ['created', 'updated', 'activated', 'deactivated'] as const;
+export type BffAreaAction = (typeof BFF_AREA_ACTIONS)[number];
+export const BFF_AREA_FIELDS = ['name', 'code', 'parent', 'responsibles'] as const;
+export type BffAreaField = (typeof BFF_AREA_FIELDS)[number];
+
+/** Who changed what and when. Field names only: no names, codes or user data. */
+export interface BffAreaHistoryEntry {
+  readonly id: string;
+  readonly action: BffAreaAction;
+  readonly fields: readonly BffAreaField[];
+  readonly fromParentId: string | null;
+  readonly toParentId: string | null;
+  readonly actorId: string;
+  readonly version: number;
+  readonly at: ISODateTime;
+}
+
+export interface BffAreaHistoryQuery {
+  readonly limit?: 25 | 50 | 100;
+  readonly cursor?: string;
+}
+
 /** Request and response types of every route. Keys are route ids. */
 export interface BffRouteTypes {
   'auth.csrf': { response: BffCsrfResponse };
@@ -261,6 +337,17 @@ export interface BffRouteTypes {
   'vehicles.history': {
     params: { id: string };
     response: { items: readonly BffVehicleStatusEntry[] };
+  };
+  'areas.list': { query?: BffAreasQuery; response: Page<BffArea> };
+  'areas.create': { body: BffAreaInput; response: BffArea };
+  'areas.get': { params: { id: string }; response: BffAreaDetail };
+  'areas.update': { params: { id: string }; body: BffAreaPatch; response: BffArea };
+  'areas.deactivate': { params: { id: string }; body: { version: number }; response: BffArea };
+  'areas.activate': { params: { id: string }; body: { version: number }; response: BffArea };
+  'areas.history': {
+    params: { id: string };
+    query?: BffAreaHistoryQuery;
+    response: Page<BffAreaHistoryEntry>;
   };
 }
 
@@ -397,6 +484,38 @@ export const BFF_ROUTES = {
   'vehicles.history': {
     method: 'GET',
     path: ['api', 'vehicles', ':id', 'history'],
+    kind: 'session',
+    status: 200,
+  },
+  'areas.list': { method: 'GET', path: ['api', 'areas'], kind: 'session', status: 200 },
+  'areas.create': {
+    method: 'POST',
+    path: ['api', 'areas'],
+    kind: 'session-csrf',
+    status: 201,
+  },
+  'areas.get': { method: 'GET', path: ['api', 'areas', ':id'], kind: 'session', status: 200 },
+  'areas.update': {
+    method: 'PUT',
+    path: ['api', 'areas', ':id'],
+    kind: 'session-csrf',
+    status: 200,
+  },
+  'areas.deactivate': {
+    method: 'POST',
+    path: ['api', 'areas', ':id', 'deactivate'],
+    kind: 'session-csrf',
+    status: 200,
+  },
+  'areas.activate': {
+    method: 'POST',
+    path: ['api', 'areas', ':id', 'activate'],
+    kind: 'session-csrf',
+    status: 200,
+  },
+  'areas.history': {
+    method: 'GET',
+    path: ['api', 'areas', ':id', 'history'],
     kind: 'session',
     status: 200,
   },

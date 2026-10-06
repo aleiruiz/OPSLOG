@@ -3,6 +3,7 @@ import {
   BFF_ERRORS,
   BFF_ROUTES,
   bffRouteIds,
+  createAreasClient,
   createBffClient,
   createVehiclesClient,
   type BffClient,
@@ -241,6 +242,61 @@ describe('typed client against the real BFF', () => {
       value: { archivedAt: expect.any(String) },
     });
     expect(await vehicles.get('desconocido')).toMatchObject({ ok: false, error: { status: 404 } });
+
+    // Areas through the typed client.
+    const areas = createAreasClient(client);
+    const root = await areas.create({
+      name: 'Pais',
+      code: 'mx',
+      responsibleIds: [login.value.user.id],
+    });
+    if (!root.ok) throw new Error('area create failed');
+    expect(root.value).toMatchObject({ code: 'MX', depth: 1, version: 1, parentId: null });
+    const leaf = await areas.create({ name: 'Ciudad', parentId: root.value.id });
+    if (!leaf.ok) throw new Error('area child failed');
+    expect(await areas.create({ name: 'pais' })).toMatchObject({
+      ok: false,
+      error: { status: 409, code: 'duplicate', fieldErrors: [{ field: 'name' }] },
+    });
+    expect(await areas.deactivate(root.value.id, 1)).toMatchObject({
+      ok: false,
+      error: { status: 409, code: 'area_in_use', fieldErrors: [{ field: 'sub_areas' }] },
+    });
+    expect(
+      await areas.update(root.value.id, { version: 1, parentId: leaf.value.id }),
+    ).toMatchObject({
+      ok: false,
+      error: { status: 422, code: 'invalid_hierarchy' },
+    });
+    expect(await areas.update(leaf.value.id, { version: 1, name: 'Ciudad Norte' })).toMatchObject({
+      ok: true,
+      value: { name: 'Ciudad Norte', version: 2 },
+    });
+    expect(await areas.get(root.value.id)).toMatchObject({
+      ok: true,
+      value: { resourceCounts: { vehicles: 0, people: 0 } },
+    });
+    expect(await areas.deactivate(leaf.value.id, 2)).toMatchObject({
+      ok: true,
+      value: { active: false },
+    });
+    expect(await areas.list()).toMatchObject({ ok: true, value: { total: 1 } });
+    expect(await areas.list({ includeInactive: 'true', parentId: root.value.id })).toMatchObject({
+      ok: true,
+      value: { total: 1, items: [{ active: false }] },
+    });
+    expect(await areas.activate(leaf.value.id, 3)).toMatchObject({
+      ok: true,
+      value: { active: true, version: 4 },
+    });
+    const areaTrail = await areas.history(leaf.value.id);
+    expect(areaTrail).toMatchObject({ ok: true, value: { total: 4 } });
+    expect(areaTrail.ok && areaTrail.value.items[0]).toMatchObject({ action: 'activated' });
+    expect(await areas.history(leaf.value.id, { limit: 25 })).toMatchObject({
+      ok: true,
+      value: { nextCursor: null },
+    });
+    expect(await areas.get('desconocido')).toMatchObject({ ok: false, error: { status: 404 } });
 
     // Drafts
     expect(await client.call('drafts.load', { params: { scope: 'form:a' } })).toEqual({

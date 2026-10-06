@@ -8,6 +8,8 @@
     { "path": "./packages/persistence/identity" },
     { "path": "./packages/domain/vehicles" },
     { "path": "./packages/persistence/vehicles" },
+    { "path": "./packages/domain/areas" },
+    { "path": "./packages/persistence/areas" },
     { "path": "./packages/ui" },
     { "path": "./apps/api/tenants" },
     { "path": "./e2e" },
