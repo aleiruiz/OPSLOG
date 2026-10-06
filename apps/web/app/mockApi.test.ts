@@ -344,3 +344,53 @@ describe('fake identity provider', () => {
     expect(fakeOidcSubject('fake-code:')).toBeNull();
   });
 });
+
+describe('mock areas port: permission guards', () => {
+  const status = (result: { ok: boolean; error?: { status: number } }) =>
+    result.ok ? 200 : (result.error?.status ?? 0);
+  const attempts = async (account: keyof typeof demoCredentials) => {
+    const api = await signedIn(account);
+    return {
+      create: status(await api.areas.create({ name: `Nueva ${account}` })),
+      update: status(await api.areas.update('area-sur', { version: 1, name: `Sur ${account}` })),
+      deactivate: status(await api.areas.deactivate('area-sur', 1)),
+      activate: status(await api.areas.activate('area-mty-guadalupe', 5)),
+      read: status(await api.areas.get('area-sur')),
+    };
+  };
+
+  it('lets a read-only role read and nothing else', async () => {
+    expect(await attempts('viewer')).toEqual({
+      create: 403,
+      update: 403,
+      deactivate: 403,
+      activate: 403,
+      read: 200,
+    });
+  });
+
+  it('lets an editor without create edit and activate but not create or deactivate', async () => {
+    expect(await attempts('mechanic')).toEqual({
+      create: 403,
+      update: 200,
+      deactivate: 403,
+      activate: 200,
+      read: 200,
+    });
+  });
+
+  it('lets the dispatcher create, edit and activate but not deactivate', async () => {
+    expect(await attempts('dispatch')).toEqual({
+      create: 200,
+      update: 200,
+      deactivate: 403,
+      activate: 200,
+      read: 200,
+    });
+  });
+
+  it('lets the administrator deactivate', async () => {
+    expect((await attempts('admin')).deactivate).not.toBe(403);
+    expect((await attempts('admin')).activate).toBe(200);
+  });
+});

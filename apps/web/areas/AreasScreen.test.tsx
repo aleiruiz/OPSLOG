@@ -158,6 +158,13 @@ describe('areas tree screen', () => {
     click('Expandir todo');
     expect(screen.getByRole('treeitem', { name: /^Base Guadalupe/ })).toBeInTheDocument();
     expect(screen.getByText('Inactiva')).toBeInTheDocument();
+    // The inactive state is part of the accessible name; an active area's name does not carry it.
+    expect(
+      screen.getByRole('treeitem', { name: /^Base Guadalupe.* Inactiva$/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('treeitem', { name: /^Monterrey/ })).not.toHaveAccessibleName(
+      /Inactiva/,
+    );
   });
 
   it('follows the cursor to the end and warns when a page limit cuts the structure short', async () => {

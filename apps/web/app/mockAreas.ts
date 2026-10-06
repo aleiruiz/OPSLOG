@@ -287,11 +287,11 @@ export function createMockAreaStore(
     },
     update: async (id, patch: AreaPatch) => {
       const { version, ...rest } = patch as unknown as Record<string, unknown>;
-      const current = find(id);
-      if (!current) return notFound();
       const parsed = parseFields(rest);
       if (!validVersion(version) || parsed === null || Object.keys(rest).length === 0)
         return badRequest();
+      const current = find(id);
+      if (!current) return notFound();
       if (!current.active) return conflict('immutable');
       if (current.version !== version) return conflict('stale_version');
       const fields: AreaHistoryEntry['fields'][number][] = [];
@@ -384,7 +384,7 @@ export function createMockAreaStore(
       if (current.version !== version) return conflict('stale_version');
       if (current.active) return conflict('invalid_transition');
       const parent = current.parentId === null ? undefined : find(current.parentId);
-      if (parent && !parent.active) return hierarchy();
+      if (current.parentId !== null && !parent?.active) return hierarchy();
       const next = replace({
         ...current,
         active: true,

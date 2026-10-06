@@ -98,7 +98,7 @@ describe('request bodies', () => {
       name: 'Norte',
       code: '',
       parentId: 'p',
-      responsibleIds: ['user-admin'],
+      responsibleIds: ['admin'],
     });
   });
 

@@ -312,9 +312,7 @@ export function AreaForm({
                     }
                   }}
                   error={Boolean(responsiblesError)}
-                  helperText={
-                    responsiblesError ?? 'Identificador de usuario, por ejemplo user-ana.'
-                  }
+                  helperText={responsiblesError ?? 'Identificador de usuario, por ejemplo ana.'}
                   sx={{
                     flex: '1 1 240px',
                     '& input': { fontFamily: opslogTokens.typography.monoFamily },

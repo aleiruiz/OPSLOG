@@ -35,7 +35,7 @@ const create = (props: Partial<AreaFormProps> = {}) => (
       mode="create"
       choices={createChoices}
       cancelTo="/plantilla/areas"
-      currentUserId="user-admin"
+      currentUserId="admin"
       onSubmit={noop}
       {...props}
     />
@@ -52,7 +52,7 @@ const edit = (props: Partial<AreaFormProps> = {}) => (
       mode="edit"
       initial={valuesOf(area)}
       cancelTo="/plantilla/areas/area-norte-mty"
-      currentUserId="user-viewer"
+      currentUserId="viewer"
       onSubmit={noop}
       {...props}
     />
@@ -82,7 +82,7 @@ const filled: AreaFormValues = {
   name: 'Base Escobedo',
   code: 'ESC',
   parentId: 'area-norte-mty',
-  responsibleIds: ['user-admin', 'user-dispatch'],
+  responsibleIds: ['admin', 'dispatch'],
 };
 const failure = (code: string, status: 400 | 404 | 409 | 422 | 500, field?: string) =>
   describeFailure(

@@ -183,10 +183,6 @@ function Detail({ context }: { context: AreaContext }) {
   );
 }
 
-interface ChildRow extends Area {
-  actions: string;
-}
-
 function SubAreas({ children }: { children: readonly Area[] }) {
   return (
     <Box component="section" aria-labelledby="sub-areas-title" sx={{ mt: 4 }}>
@@ -197,7 +193,7 @@ function SubAreas({ children }: { children: readonly Area[] }) {
         <Typography color="text.secondary">Esta área no tiene sub-áreas.</Typography>
       ) : (
         <Box sx={{ overflowX: 'auto', maxWidth: '100%' }}>
-          <DataTable<ChildRow>
+          <DataTable<Area>
             caption={`Sub-áreas (${children.length})`}
             columns={[
               {
@@ -228,7 +224,7 @@ function SubAreas({ children }: { children: readonly Area[] }) {
                 render: (_, row) => String(row.responsibleIds.length),
               },
             ]}
-            rows={children.map((child) => ({ ...child, actions: child.id }))}
+            rows={[...children]}
           />
         </Box>
       )}
