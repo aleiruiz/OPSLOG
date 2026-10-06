@@ -16,9 +16,7 @@ solo se usan datos sintéticos.
 - Cada adaptador es `in-memory` o `synthetic`. Un adaptador real (S3, RDS, Cognito, SES, SQS) hace fallar la validación.
 - Los servicios no se exponen públicamente (`internal` o `none`) y corren con una sola réplica, porque el estado es local.
 - El descriptor no puede contener ARNs, cuentas, regiones, endpoints, URLs, claves ni secretos.
-- Arranque (`assertStagingOnly`): exige `OPSLOG_ENV=staging` y se niega a iniciar con `NODE_ENV=production`,
-  `OPSLOG_ALLOW_PRODUCTION` o credenciales AWS (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`,
-  `AWS_PROFILE`). El `.env` local con referencias reales no se carga.
+- `assertStagingOnly` (función de guarda, probada): valida el descriptor, exige `OPSLOG_ENV=staging` y se niega con `NODE_ENV=production` (sin distinguir mayúsculas ni espacios), `OPSLOG_ALLOW_PRODUCTION` o credenciales/identidad AWS (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_PROFILE`, `AWS_ROLE_ARN`, `AWS_WEB_IDENTITY_TOKEN_FILE`, `AWS_CONTAINER_CREDENTIALS_*`). **Hoy no está cableada a ningún proceso de arranque**: no existe entrypoint de API ni de worker; quien lo cree debe llamarla antes de componer la plataforma. El `.env` local no se carga.
 
 ## Cómo se usa hoy
 

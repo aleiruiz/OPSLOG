@@ -93,6 +93,7 @@ describe('mock auth port', () => {
       ok: false,
       error: { status: 401, code: 'session_expired' },
     });
+    expect(api.controls.isSignedIn()).toBe(false);
     await api.auth.logout();
     expect((await api.auth.login(demoCredentials.viewer)).ok).toBe(false);
     api.controls.setUserStatus('user-viewer', 'active');

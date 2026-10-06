@@ -144,10 +144,6 @@ class GatedIdentityService extends IdentityService {
   ) {
     super(store, notifier, opaqueTokenGenerator, now);
   }
-  /** Identity-level authentication only; used right after login, before the control-plane session exists. */
-  public authenticateIdentityOnly(token: string, correlationId: string): Promise<TenantContext> {
-    return super.authenticate(token, correlationId);
-  }
   public override async authenticate(token: string, correlationId: string): Promise<TenantContext> {
     const context = await super.authenticate(token, correlationId);
     await this.gate.assertActive(token, context);
@@ -201,6 +197,7 @@ const nonEmpty = (value: unknown): value is string =>
  */
 export class Platform {
   public readonly identity: GatedIdentityService;
+  private readonly identityOnly: IdentityService;
   public readonly auth: AuthApi;
   public readonly files: FilesApi;
   public readonly access: AccessDirectory;
@@ -224,14 +221,24 @@ export class Platform {
     this.records = adapters.records ?? new InMemoryFileRecordStore();
     this.storage = adapters.storage ?? new InMemoryObjectStorage();
     this.access = new AccessDirectory((tenantId) => this.tenants.status(tenantId) === 'active');
-    this.identity = new GatedIdentityService(
-      adapters.identityStore ?? new InMemoryIdentityStore(),
-      adapters.recoveryNotifier ?? {
-        deliver: async () => {
-          throw new Error('recovery notifier is not configured');
-        },
+    const identityStore = adapters.identityStore ?? new InMemoryIdentityStore();
+    const notifier = adapters.recoveryNotifier ?? {
+      deliver: async () => {
+        throw new Error('recovery notifier is not configured');
       },
+    };
+    this.identity = new GatedIdentityService(
+      identityStore,
+      notifier,
       new TenantGate(this.tenants),
+      this.now,
+    );
+    // Ungated view over the same store, private to the composition: used only right after login,
+    // before the control-plane session exists. It is never exposed on the public surface.
+    this.identityOnly = new IdentityService(
+      identityStore,
+      notifier,
+      opaqueTokenGenerator,
       this.now,
     );
     this.auth = new AuthApi(this.identity, this.access);
@@ -409,10 +416,7 @@ export class Platform {
       if (!login.ok || !login.value) return failure(new AuthError('unauthorized'));
       const { token, expiresAt } = login.value;
       try {
-        const context = await this.identity.authenticateIdentityOnly(
-          token,
-          `signin-${randomUUID()}`,
-        );
+        const context = await this.identityOnly.authenticate(token, `signin-${randomUUID()}`);
         const membership = await this.tenants.getMembership(
           context.tenantId as TenantId,
           subjectId(context.actor.subject),

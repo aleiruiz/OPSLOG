@@ -47,6 +47,9 @@ export const REQUIRED_FORBIDDEN_ENV: readonly string[] = [
   'AWS_SECRET_ACCESS_KEY',
   'AWS_SESSION_TOKEN',
   'AWS_PROFILE',
+  'AWS_ROLE_ARN',
+  'AWS_WEB_IDENTITY_TOKEN_FILE',
+  'AWS_CONTAINER_CREDENTIALS_*',
 ];
 
 /** Returns human-readable problems; an empty list means the descriptor meets the staging-only rules. */
@@ -112,12 +115,21 @@ export function validateDescriptor(value: unknown): readonly string[] {
  */
 export function assertStagingOnly(
   env: Readonly<Record<string, string | undefined>>,
-  descriptor: Pick<RuntimeDescriptor, 'forbiddenEnv'>,
+  descriptor: RuntimeDescriptor,
 ): void {
+  const problems = validateDescriptor(descriptor);
+  if (problems.length > 0)
+    throw new Error(`refusing to start: invalid descriptor (${problems.join('; ')})`);
   if (env.OPSLOG_ENV !== 'staging')
     throw new Error('refusing to start: OPSLOG_ENV must be staging');
-  if (env.NODE_ENV === 'production')
+  if (env.NODE_ENV?.trim().toLowerCase() === 'production')
     throw new Error('refusing to start: production mode is not authorized');
-  for (const name of new Set([...REQUIRED_FORBIDDEN_ENV, ...descriptor.forbiddenEnv]))
-    if (env[name]) throw new Error(`refusing to start: ${name} must not be set in staging`);
+  // A trailing `*` forbids every variable with that prefix.
+  for (const name of new Set([...REQUIRED_FORBIDDEN_ENV, ...descriptor.forbiddenEnv])) {
+    const prefix = name.endsWith('*') ? name.slice(0, -1) : null;
+    const hit = Object.keys(env).find(
+      (key) => (prefix === null ? key === name : key.startsWith(prefix)) && env[key],
+    );
+    if (hit) throw new Error(`refusing to start: ${hit} must not be set in staging`);
+  }
 }

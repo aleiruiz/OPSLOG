@@ -275,7 +275,12 @@ export function createMockApi(): MockApi {
   return {
     controls,
     auth: {
-      getSession: () => guarded('getSession', null, () => ok(sessionFor(signedInAs as string))),
+      getSession: () =>
+        guarded('getSession', null, () => ok(sessionFor(signedInAs as string))).then((result) => {
+          // An inactive user's session is gone, consistent with the 401.
+          if (!result.ok && result.error.status === 401) signedInAs = null;
+          return result;
+        }),
       login: (input) => {
         const failed = injected('login');
         if (failed) return Promise.resolve(failed);

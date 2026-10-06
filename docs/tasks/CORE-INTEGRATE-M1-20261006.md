@@ -69,6 +69,11 @@ Comprobaciones de mutación hechas a mano (no versionadas): quitar la llamada a 
 
 ## Límites y pendientes (no se declaran cumplidos)
 
+- **Operaciones de operador sin autorización propia.** `bootstrapTenant`, `suspendTenant` y `reactivateTenant` no autorizan por sí mismas: restringirlas a operadores es tarea del BFF. `reactivateTenant` puede reactivar un tenant cuyo bootstrap falló y que no tiene administrador.
+- **`publish` deja elegir el permiso comprobado** al llamador (parámetro `permission`); el BFF debe fijarlo por ruta.
+- **Relojes distintos.** `TenantContextResolver` usa `Date.now()` mientras identidad usa el reloj inyectado; solo coinciden con `Date` simulado global o reloj real.
+- **Último administrador solo dentro de un proceso.** El bloqueo por tenant es en memoria; con varios procesos exige bloqueo de fila o restricción en el adaptador persistente.
+- La guarda `assertStagingOnly` existe y está probada pero no está cableada a ningún entrypoint (no hay proceso de API/worker).
 - **MySQL real: no ejecutado en este entorno.** No hay `mysqld` ni daemon de Docker, y `OPSLOG_TEST_MYSQL_ADMIN_URL` no está definido; `pnpm test:integration` completo (harness MySQL y `persistence/tenancy`) no pudo correr aquí. Solo se ejecutó `pnpm test:platform` (en memoria). No se añadió código MySQL sin poder probarlo: el uso de `TypeOrmTenantStore` detrás de la composición queda pendiente.
 - Adaptador **TypeORM persistente de autenticación** (`IdentityStore`: identidad+vínculo único, invitación atómica, activación serializada, recuperación, revocación, membresías/roles) bajo `packages/persistence`.
 - **OIDC real** (código de autorización + PKCE, firma, audiencia, nonce/state) y entrega de recuperación/invitación por correo; la invitación se devuelve hoy al administrador que la emite. `FakeOidcVerifier` es sintético.

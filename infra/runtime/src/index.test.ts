@@ -77,7 +77,7 @@ describe('staging descriptor guards', () => {
         mutate({ forbiddenEnv: descriptor.forbiddenEnv.filter((n) => n !== 'AWS_PROFILE') }),
       ),
     ).toEqual(['forbiddenEnv must include AWS_PROFILE']);
-    expect(validateDescriptor(mutate({ forbiddenEnv: undefined }))).toHaveLength(5);
+    expect(validateDescriptor(mutate({ forbiddenEnv: undefined }))).toHaveLength(8);
     expect(validateDescriptor(mutate({ guards: ['Staging only.'] }))).toEqual([
       'guards must state: aws is deferred',
       'guards must state: not production',
@@ -110,17 +110,49 @@ describe('startup guard', () => {
       'OPSLOG_ENV must be staging',
     );
   });
-  it('checks the built-in forbidden names even when the descriptor omits them', () => {
-    const weak = { forbiddenEnv: ['EXTRA_FORBIDDEN'] };
-    expect(() => assertStagingOnly({ ...ok, AWS_ACCESS_KEY_ID: 'x' }, weak)).toThrow(
-      'AWS_ACCESS_KEY_ID',
+  it('validates the descriptor before starting and checks the union of forbidden names', () => {
+    const omitting = {
+      ...descriptor,
+      forbiddenEnv: descriptor.forbiddenEnv.filter((n) => n !== 'AWS_ROLE_ARN'),
+    };
+    expect(() => assertStagingOnly(ok, omitting)).toThrow('invalid descriptor');
+    expect(() => assertStagingOnly(ok, { ...descriptor, production: true } as never)).toThrow(
+      'invalid descriptor',
     );
-    expect(() => assertStagingOnly({ ...ok, OPSLOG_ALLOW_PRODUCTION: '1' }, weak)).toThrow(
-      'OPSLOG_ALLOW_PRODUCTION',
-    );
-    expect(() => assertStagingOnly({ ...ok, EXTRA_FORBIDDEN: '1' }, weak)).toThrow(
+    const extended = {
+      ...descriptor,
+      forbiddenEnv: [...descriptor.forbiddenEnv, 'EXTRA_FORBIDDEN'],
+    };
+    expect(() => assertStagingOnly({ ...ok, EXTRA_FORBIDDEN: '1' }, extended)).toThrow(
       'EXTRA_FORBIDDEN',
     );
+    expect(() => assertStagingOnly({ ...ok, AWS_ROLE_ARN: 'x' }, extended)).toThrow('AWS_ROLE_ARN');
+  });
+  it('refuses AWS web identity and container credential variables', () => {
+    for (const name of [
+      'AWS_ROLE_ARN',
+      'AWS_WEB_IDENTITY_TOKEN_FILE',
+      'AWS_CONTAINER_CREDENTIALS_FULL_URI',
+      'AWS_CONTAINER_CREDENTIALS_RELATIVE_URI',
+    ])
+      expect(() => assertStagingOnly({ ...ok, [name]: 'x' }, descriptor)).toThrow(name);
+    expect(() =>
+      assertStagingOnly({ ...ok, AWS_CONTAINER_CREDENTIALS_FULL_URI: '' }, descriptor),
+    ).not.toThrow();
+  });
+  it('rejects production NODE_ENV in any case or with whitespace, and allows others', () => {
+    for (const value of [
+      'production',
+      'Production',
+      'PRODUCTION',
+      ' production ',
+      '\tProduction\n',
+    ])
+      expect(() => assertStagingOnly({ ...ok, NODE_ENV: value }, descriptor)).toThrow(
+        'production mode is not authorized',
+      );
+    for (const value of ['development', 'test', 'staging', ''])
+      expect(() => assertStagingOnly({ ...ok, NODE_ENV: value }, descriptor)).not.toThrow();
   });
   it('refuses production mode, production switches and cloud credentials', () => {
     expect(() => assertStagingOnly({ ...ok, NODE_ENV: 'production' }, descriptor)).toThrow(
