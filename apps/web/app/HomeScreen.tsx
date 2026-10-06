@@ -19,7 +19,7 @@ export function HomeScreen({
     <>
       <PageHeader
         title="Inicio"
-        description={`Hola, ${session.user.displayName}. Esta es la cuenta de ${session.company.name}.`}
+        description={`Esta es la cuenta de ${session.company.name} con el rol ${session.roleLabel}.`}
       />
       <NextStepPanel title="Siguiente paso" steps={steps} />
     </>

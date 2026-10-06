@@ -56,6 +56,21 @@ describe('RolesScreen', () => {
     expect(await screen.findAllByText('Ya existe un rol con ese nombre.')).not.toHaveLength(0);
   });
 
+  it('asks for a name and reports other server failures without field detail', async () => {
+    const { api } = await renderWithSession(<RolesScreen />);
+    await screen.findByRole('table');
+    click('Ver Consulta');
+    fireTab('Crear copia');
+    click('Crear copia');
+    expect(await screen.findByText('Escribe un nombre.')).toBeInTheDocument();
+    type('Nombre del nuevo rol', 'Auditor externo');
+    api.controls.failNext('copyRole', 500);
+    click('Crear copia');
+    expect(
+      await screen.findByText('No pudimos crear la copia. Intenta nuevamente.'),
+    ).toBeInTheDocument();
+  });
+
   it('shows an empty state, a recoverable error and the forbidden state', async () => {
     const empty = createMockApi();
     empty.roles.listRoles = async () => ({ ok: true, value: [] });

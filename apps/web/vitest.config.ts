@@ -15,10 +15,20 @@ export default defineConfig({
     environment: 'jsdom',
     testTimeout: 10000,
     setupFiles: ['./app/test/setup.ts'],
-    include: ['app/**/*.test.{ts,tsx}', 'auth/**/*.test.{ts,tsx}', 'settings/**/*.test.{ts,tsx}'],
+    include: [
+      'api/**/*.test.{ts,tsx}',
+      'app/**/*.test.{ts,tsx}',
+      'auth/**/*.test.{ts,tsx}',
+      'settings/**/*.test.{ts,tsx}',
+    ],
     coverage: {
       provider: 'v8',
-      include: ['app/**/*.{ts,tsx}', 'auth/**/*.{ts,tsx}', 'settings/**/*.{ts,tsx}'],
+      include: [
+        'api/**/*.{ts,tsx}',
+        'app/**/*.{ts,tsx}',
+        'auth/**/*.{ts,tsx}',
+        'settings/**/*.{ts,tsx}',
+      ],
       exclude: ['**/*.test.*', 'app/test/**', 'app/main.tsx', 'app/types.ts'],
     },
   },

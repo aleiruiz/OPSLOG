@@ -1,16 +1,17 @@
 import Box from '@mui/material/Box';
 import React from 'react';
-import { Button, Field, FormSection, PageHeader, UiState } from '@opslog/ui';
+import { Button, FormSection, PageHeader, UiState } from '@opslog/ui';
 import { useRouter } from '../app/router';
 import { safeNextPath } from '../app/routes';
+import { OidcHintField, useHintMissing } from './OidcHintField';
 import { useSession } from './session';
 
-/** Credentials go to the BFF, which answers with an httpOnly cookie; the password is never kept. */
+/** The identity provider authorizes the sign-in; the BFF verifies the code and answers with an httpOnly cookie. */
 export function LoginScreen() {
   const router = useRouter();
-  const { login } = useSession();
-  const [email, setEmail] = React.useState('');
-  const [password, setPassword] = React.useState('');
+  const { signIn } = useSession();
+  const [hint, setHint] = React.useState('');
+  const missing = useHintMissing(hint);
   const [submitting, setSubmitting] = React.useState(false);
   const [problem, setProblem] = React.useState<'incomplete' | 'rejected' | 'unavailable' | null>(
     null,
@@ -18,36 +19,32 @@ export function LoginScreen() {
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!email.trim() || !password) {
+    if (missing) {
       setProblem('incomplete');
       return;
     }
     setSubmitting(true);
     setProblem(null);
-    const result = await login({ email, password });
+    const result = await signIn(hint);
     setSubmitting(false);
     if (result.ok) {
-      setPassword('');
       router.navigate(safeNextPath(router.search.get('siguiente')), { replace: true });
     } else setProblem(result.error.status === 401 ? 'rejected' : 'unavailable');
   };
 
   return (
     <Box sx={{ maxWidth: 440, mx: 'auto', p: 3 }}>
-      <PageHeader title="Iniciar sesión" description="Entra con tu cuenta de OPSLOG." />
+      <PageHeader title="Iniciar sesión" description="Entra con tu cuenta de identidad." />
       <form onSubmit={(event) => void submit(event)} noValidate aria-label="Inicio de sesión">
-        <FormSection title="Tus credenciales">
+        <FormSection title="Tu identidad">
           {problem === 'incomplete' && (
-            <UiState
-              kind="incomplete"
-              description="Escribe tu correo y tu contraseña para continuar."
-            />
+            <UiState kind="incomplete" description="Indica la cuenta de prueba para continuar." />
           )}
           {problem === 'rejected' && (
             <UiState
               kind="error"
               title="No pudimos iniciar sesión"
-              description="El correo o la contraseña no son correctos."
+              description="No pudimos verificar tu identidad."
             />
           )}
           {problem === 'unavailable' && (
@@ -57,24 +54,7 @@ export function LoginScreen() {
               description="No pudimos iniciar sesión por ahora. Intenta nuevamente."
             />
           )}
-          <Field
-            id="login-email"
-            label="Correo electrónico"
-            type="email"
-            autoComplete="username"
-            required
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-          />
-          <Field
-            id="login-password"
-            label="Contraseña"
-            type="password"
-            autoComplete="current-password"
-            required
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
+          <OidcHintField id="login-account" value={hint} onChange={setHint} />
           <Button type="submit" variant="contained" loading={submitting}>
             Iniciar sesión
           </Button>

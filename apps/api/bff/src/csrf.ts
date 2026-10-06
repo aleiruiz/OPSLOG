@@ -1,7 +1,8 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { CSRF_HEADER } from '../../../../packages/contracts/src/index.js';
 import { singleHeader, type HeaderValue } from './http.js';
 
-export const CSRF_HEADER = 'x-csrf-token';
+export { CSRF_HEADER };
 export const MIN_SECRET_LENGTH = 32;
 
 const subkey = (secret: string, label: string): Buffer =>

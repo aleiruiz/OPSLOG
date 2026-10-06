@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import axe from 'axe-core';
 import { describe, expect, it, vi } from 'vitest';
-import { demoCredentials } from './mockApi';
+import { demoSubjects } from './mockApi';
 import { click, renderApp, screen, type, waitFor } from './test/utils';
 
 // vitest runs test files with __dirname set to the file's directory (jsdom has no file: import.meta.url).
@@ -30,9 +30,8 @@ describe('browser storage', () => {
   it('keeps Web Storage and cookies empty through login, a draft edit and session expiry in jsdom', async () => {
     const setItem = vi.spyOn(Storage.prototype, 'setItem');
     const { api } = await renderApp({ account: null, path: '/configuracion/empresa' });
-    await screen.findByLabelText(/^Correo electrónico/);
-    type('Correo electrónico', demoCredentials.admin.email);
-    type('Contraseña', demoCredentials.admin.password);
+    await screen.findByLabelText(/^Cuenta de prueba/);
+    type('Cuenta de prueba', demoSubjects.admin);
     click('Iniciar sesión');
     await screen.findByDisplayValue('Transportes Demo SA');
     // Edit only once the draft load settled; otherwise the first effects flush after the edit.

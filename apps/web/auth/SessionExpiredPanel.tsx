@@ -1,15 +1,17 @@
 import Box from '@mui/material/Box';
 import React from 'react';
-import { Button, Field, FormSection, UiState } from '@opslog/ui';
+import { Button, FormSection, UiState } from '@opslog/ui';
+import { OidcHintField, useHintMissing } from './OidcHintField';
 import { useSession } from './session';
 
 /**
  * Shown over the current screen when the session expires. The screen below stays mounted (but inert) so
  * its drafts are not lost; signing in again as the same person resumes them.
  */
-export function SessionExpiredPanel({ email }: { email: string }) {
-  const { login } = useSession();
-  const [password, setPassword] = React.useState('');
+export function SessionExpiredPanel() {
+  const { signIn } = useSession();
+  const [hint, setHint] = React.useState('');
+  const missing = useHintMissing(hint);
   const [submitting, setSubmitting] = React.useState(false);
   const [failed, setFailed] = React.useState(false);
   const heading = React.useRef<HTMLDivElement>(null);
@@ -22,10 +24,9 @@ export function SessionExpiredPanel({ email }: { email: string }) {
     event.preventDefault();
     setSubmitting(true);
     setFailed(false);
-    const result = await login({ email, password });
+    const result = await signIn(hint);
     setSubmitting(false);
-    if (result.ok) setPassword('');
-    else setFailed(true);
+    if (!result.ok) setFailed(true);
   };
 
   return (
@@ -46,20 +47,11 @@ export function SessionExpiredPanel({ email }: { email: string }) {
             <UiState
               kind="error"
               title="No pudimos iniciar sesión"
-              description="La contraseña no es correcta o el servicio no está disponible."
+              description="No pudimos verificar tu identidad o el servicio no está disponible."
             />
           )}
-          <Field id="reauth-email" label="Correo electrónico" value={email} disabled />
-          <Field
-            id="reauth-password"
-            label="Contraseña"
-            type="password"
-            autoComplete="current-password"
-            required
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
-          <Button type="submit" variant="contained" loading={submitting} disabled={!password}>
+          <OidcHintField id="reauth-account" value={hint} onChange={setHint} />
+          <Button type="submit" variant="contained" loading={submitting} disabled={missing}>
             Continuar
           </Button>
         </FormSection>

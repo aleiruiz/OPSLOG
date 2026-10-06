@@ -1,3 +1,9 @@
+import {
+  BFF_ERRORS,
+  type BffErrorBody,
+  type BffErrorCode,
+} from '../../../../packages/contracts/src/index.js';
+
 export type HeaderValue = string | readonly string[] | undefined;
 
 /**
@@ -19,40 +25,11 @@ export interface BffResponse {
 
 export type BffHandler = (request: BffRequest) => Promise<BffResponse>;
 
-export type ErrorCode =
-  | 'bad_request'
-  | 'unauthorized'
-  | 'forbidden'
-  | 'csrf_failed'
-  | 'not_found'
-  | 'method_not_allowed'
-  | 'conflict'
-  | 'last_admin'
-  | 'payload_too_large'
-  | 'unsupported_media_type'
-  | 'internal_error';
+export type ErrorCode = BffErrorCode;
+export type ErrorBody = BffErrorBody;
 
-export interface ErrorBody {
-  readonly code: ErrorCode;
-  readonly status: number;
-  readonly message: string;
-  readonly correlationId: string;
-}
-
-/** Fixed, generic texts: nothing from a request, a stack or a store ever reaches an error body. */
-export const ERRORS: Readonly<Record<ErrorCode, { status: number; message: string }>> = {
-  bad_request: { status: 400, message: 'Invalid request' },
-  unauthorized: { status: 401, message: 'Authentication required' },
-  forbidden: { status: 403, message: 'Permission denied' },
-  csrf_failed: { status: 403, message: 'Request rejected' },
-  not_found: { status: 404, message: 'Resource not found' },
-  method_not_allowed: { status: 405, message: 'Method not allowed' },
-  conflict: { status: 409, message: 'Conflict' },
-  last_admin: { status: 409, message: 'Conflict' },
-  payload_too_large: { status: 413, message: 'Payload too large' },
-  unsupported_media_type: { status: 415, message: 'Unsupported media type' },
-  internal_error: { status: 500, message: 'Request failed' },
-};
+/** Fixed, generic texts shared with the web client through the contract module. */
+export const ERRORS: Readonly<Record<ErrorCode, { status: number; message: string }>> = BFF_ERRORS;
 
 /** Applied to every response, including errors. There is no CORS: the API is same-origin only. */
 export const SECURITY_HEADERS: Readonly<Record<string, string>> = {

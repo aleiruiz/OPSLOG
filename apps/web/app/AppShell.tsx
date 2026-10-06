@@ -97,7 +97,7 @@ export function AppShell({
         </Box>
         <Box role="group" aria-label="Usuario" sx={{ minWidth: 0 }}>
           <Typography component="span" variant="body2" data-testid="shell-user">
-            {session.user.displayName} · {session.roleLabel}
+            {session.roleLabel}
           </Typography>
         </Box>
         <Button

@@ -12,7 +12,7 @@ import {
 import { ResourceView, useResource } from '../../app/resource';
 import type { CompanySettings, MfaPolicy } from '../../app/types';
 import { DraftNotice, useServerDraft } from '../../auth/drafts';
-import { fieldErrorMap, useSession } from '../../auth/session';
+import { useSession } from '../../auth/session';
 
 const mfaOptions: ReadonlyArray<{ value: MfaPolicy; label: string }> = [
   { value: 'disabled', label: 'No usar verificación en dos pasos' },
@@ -57,6 +57,21 @@ function CompanyForm({ settings }: { settings: CompanySettings }) {
   const securityChanged =
     values.mfa !== saved.mfa || Number(values.sessionIdleHours) !== saved.sessionIdleHours;
 
+  /** The BFF answers invalid input with a uniform 400 and no field detail, so the form checks first. */
+  const valid = (): boolean => {
+    const invalid: Record<string, string> = {};
+    const hours = Number(values.sessionIdleHours);
+    if (!values.name.trim()) invalid['name'] = 'Escribe el nombre.';
+    if (!Number.isInteger(hours) || hours < 1 || hours > 24)
+      invalid['sessionIdleHours'] = 'Elige entre 1 y 24 horas.';
+    if (Object.keys(invalid).length > 0) {
+      setErrors(invalid);
+      setOutcome('failed');
+      return false;
+    }
+    return true;
+  };
+
   const send = async (reason?: string) => {
     setSubmitting(true);
     setErrors({});
@@ -77,13 +92,14 @@ function CompanyForm({ settings }: { settings: CompanySettings }) {
       markExpired();
       setOutcome('expired');
     } else {
-      setErrors(fieldErrorMap(result.error));
+      setErrors({});
       setOutcome('failed');
     }
   };
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
+    if (!valid()) return;
     if (securityChanged) setConfirming(true);
     else void send();
   };

@@ -13,9 +13,10 @@ import {
 } from '@opslog/ui';
 import { ScrollRegion } from '../../app/ScrollRegion';
 import { NoSubmit, ResourceView, useResource } from '../../app/resource';
-import type { RoleSummary, UserStatus, UserSummary } from '../../app/types';
+import { useRouter } from '../../app/router';
+import type { InvitationIssued, RoleSummary, UserStatus, UserSummary } from '../../app/types';
 import { DraftNotice, useServerDraft } from '../../auth/drafts';
-import { fieldErrorMap, useSession } from '../../auth/session';
+import { useSession } from '../../auth/session';
 
 const statusPresentation: Record<
   UserStatus,
@@ -45,6 +46,7 @@ export function UsersScreen() {
   );
   const [loadingMore, setLoadingMore] = React.useState(false);
   const [target, setTarget] = React.useState<UserSummary | null>(null);
+  const [issued, setIssued] = React.useState<InvitationIssued | null>(null);
   const [notice, setNotice] = React.useState<{
     text: string;
     severity: 'success' | 'error';
@@ -76,7 +78,7 @@ export function UsersScreen() {
     const result = await ports.users.deactivateUser(target.id, reason);
     setTarget(null);
     if (result.ok) {
-      setNotice({ text: `${result.value.displayName} fue desactivado.`, severity: 'success' });
+      setNotice({ text: `La cuenta ${result.value.id} fue desactivada.`, severity: 'success' });
       first.reload();
     } else if (result.error.status === 401) markExpired();
     else
@@ -98,7 +100,7 @@ export function UsersScreen() {
         <FilterBar onClear={() => setSearch('')}>
           <Field
             id="users-search"
-            label="Buscar por nombre o correo"
+            label="Buscar por identificador, rol o estado"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
@@ -125,8 +127,7 @@ export function UsersScreen() {
                 <DataTable<UserRow>
                   caption={`Usuarios (${page.total})`}
                   columns={[
-                    { key: 'displayName', label: 'Nombre' },
-                    { key: 'email', label: 'Correo' },
+                    { key: 'id', label: 'Identificador' },
                     { key: 'roleLabel', label: 'Rol' },
                     {
                       key: 'status',
@@ -142,7 +143,7 @@ export function UsersScreen() {
                       render: (_, row) =>
                         row.status === 'inactive' || row.id === currentUserId ? null : (
                           <Button size="small" onClick={() => setTarget(row)}>
-                            {`Desactivar a ${row.displayName}`}
+                            {`Desactivar a ${row.id}`}
                           </Button>
                         ),
                     },
@@ -165,7 +166,7 @@ export function UsersScreen() {
       </ResourceView>
       {target && (
         <ConfirmWithReason
-          title={`Desactivar a ${target.displayName}`}
+          title={`Desactivar a ${target.id}`}
           reasonLabel="Motivo de la desactivación"
           onConfirm={(reason) => void deactivate(reason)}
           onCancel={() => setTarget(null)}
@@ -174,13 +175,37 @@ export function UsersScreen() {
       {roles.state.status === 'ready' && (
         <InviteForm
           roles={roles.state.data}
-          onInvited={(user) => {
-            setNotice({ text: `Invitación enviada a ${user.email}.`, severity: 'success' });
+          onInvited={(invitation) => {
+            setIssued(invitation);
+            setNotice({ text: 'Invitación creada.', severity: 'success' });
             first.reload();
           }}
         />
       )}
+      {issued && <IssuedInvitation invitation={issued} />}
     </>
+  );
+}
+
+/** Email delivery is not built yet: the administrator receives the one-time link and hands it over. */
+function IssuedInvitation({ invitation }: { invitation: InvitationIssued }) {
+  const router = useRouter();
+  const link = `${window.location.origin}${router.basename}/invitacion/${encodeURIComponent(
+    invitation.invitationToken,
+  )}`;
+  return (
+    <FormSection
+      title="Enlace de invitación"
+      description={`Compártelo con la persona invitada por un canal seguro. Solo se muestra ahora, se puede usar una vez y vence el ${new Date(invitation.expiresAt).toLocaleString('es-MX')}.`}
+    >
+      <Field
+        id="invitation-link"
+        label="Enlace de invitación"
+        value={link}
+        InputProps={{ readOnly: true }}
+        onFocus={(event) => event.target.select()}
+      />
+    </FormSection>
   );
 }
 
@@ -189,25 +214,29 @@ function InviteForm({
   onInvited,
 }: {
   roles: readonly RoleSummary[];
-  onInvited: (user: UserSummary) => void;
+  onInvited: (invitation: InvitationIssued) => void;
 }) {
   const { ports, markExpired } = useSession();
-  const draft = useServerDraft('invite-user', { email: '', roleId: '' });
+  const draft = useServerDraft('invite-user', { roleId: '' });
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [submitting, setSubmitting] = React.useState(false);
   const { values, setField } = draft;
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!values.roleId) {
+      setErrors({ roleId: 'Elige un rol de la lista.' });
+      return;
+    }
     setSubmitting(true);
     setErrors({});
-    const result = await ports.users.inviteUser({ email: values.email, roleId: values.roleId });
+    const result = await ports.users.inviteUser({ roleId: values.roleId });
     setSubmitting(false);
     if (result.ok) {
       await draft.discard();
       onInvited(result.value);
     } else if (result.error.status === 401) markExpired();
-    else setErrors(fieldErrorMap(result.error));
+    else setErrors({ roleId: 'No pudimos crear la invitación. Intenta nuevamente.' });
   };
 
   return (
@@ -216,16 +245,6 @@ function InviteForm({
         title="Invitar a una persona"
         description="La invitación vence en 72 horas y solo se puede usar una vez."
       >
-        <Field
-          id="invite-email"
-          label="Correo de la persona"
-          type="email"
-          required
-          value={values.email}
-          onChange={(event) => setField('email', event.target.value)}
-          error={Boolean(errors.email)}
-          helperText={errors.email}
-        />
         <Field
           id="invite-role"
           label="Rol"
@@ -247,7 +266,7 @@ function InviteForm({
         </Field>
         <DraftNotice status={draft.status} />
         <Button type="submit" variant="contained" loading={submitting}>
-          Enviar invitación
+          Crear invitación
         </Button>
       </FormSection>
     </form>

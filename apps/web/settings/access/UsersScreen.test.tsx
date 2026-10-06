@@ -14,7 +14,7 @@ import {
 import { UsersScreen } from './UsersScreen';
 
 describe('UsersScreen', () => {
-  it('shows a loading state, then the users with labelled statuses and no technical ids', async () => {
+  it('shows a loading state, then the users with labelled statuses and no permission codes', async () => {
     const slow = createMockApi();
     const real = slow.users.listUsers;
     const gate = deferred();
@@ -26,7 +26,8 @@ describe('UsersScreen', () => {
     expect(await screen.findByRole('heading', { name: 'Cargando' })).toBeInTheDocument();
     await act(async () => gate.resolve());
     const table = await screen.findByRole('table', { name: 'Usuarios (27)' });
-    expect(table).toHaveTextContent('Ana Prueba');
+    expect(table).toHaveTextContent('user-admin');
+    expect(table).not.toHaveTextContent('@');
     expect(table).toHaveTextContent('Administrador de empresa');
     expect(table).not.toHaveTextContent('manage_users');
     expect(table).toHaveTextContent('Activo');
@@ -52,7 +53,7 @@ describe('UsersScreen', () => {
   it('shows a no-results state for a search and the table again after clearing the filter', async () => {
     await renderWithSession(<UsersScreen />);
     await screen.findByRole('table');
-    type('Buscar por nombre o correo', 'zzz');
+    type('Buscar por identificador, rol o estado', 'zzz');
     expect(await screen.findByRole('heading', { name: 'Sin resultados' })).toBeInTheDocument();
     click('Limpiar filtros');
     await screen.findByRole('table', { name: 'Usuarios (27)' });
@@ -97,26 +98,26 @@ describe('UsersScreen', () => {
   it('asks for a reason before deactivating, and cannot deactivate yourself', async () => {
     const { api } = await renderWithSession(<UsersScreen />);
     await screen.findByRole('table');
-    expect(screen.queryByRole('button', { name: 'Desactivar a Ana Prueba' })).toBeNull();
-    click('Desactivar a Diana Despacho');
+    expect(screen.queryByRole('button', { name: 'Desactivar a user-admin' })).toBeNull();
+    click('Desactivar a user-dispatch');
     expect(screen.getByRole('button', { name: 'Confirmar' })).toBeDisabled();
     fireEvent.change(screen.getByRole('textbox', { name: /Motivo de la desactivación/ }), {
       target: { value: 'Ya no trabaja aquí' },
     });
     click('Confirmar');
-    expect(await screen.findByText('Diana Despacho fue desactivado.')).toBeInTheDocument();
+    expect(await screen.findByText('La cuenta user-dispatch fue desactivada.')).toBeInTheDocument();
     await waitFor(() => expect(screen.getAllByText('Desactivado').length).toBeGreaterThan(0));
-    const list = await api.users.listUsers({ search: 'Diana' });
+    const list = await api.users.listUsers({ search: 'user-dispatch' });
     expect(list.ok && list.value.items[0]?.status).toBe('inactive');
   });
 
   it('can cancel a deactivation and reports server rejections', async () => {
     const { api } = await renderWithSession(<UsersScreen />);
     await screen.findByRole('table');
-    click('Desactivar a Diana Despacho');
+    click('Desactivar a user-dispatch');
     click('Cancelar');
     expect(screen.queryByRole('button', { name: 'Confirmar' })).toBeNull();
-    click('Desactivar a Diana Despacho');
+    click('Desactivar a user-dispatch');
     fireEvent.change(screen.getByRole('textbox', { name: /Motivo de la desactivación/ }), {
       target: { value: 'x' },
     });
@@ -128,28 +129,30 @@ describe('UsersScreen', () => {
     expect(screen.queryByText(/simulada/)).toBeNull();
   });
 
-  it('invites a person, clears the form and the server draft', async () => {
+  it('invites by role, shows the one-time link and clears the form and the server draft', async () => {
     const { api } = await renderWithSession(<UsersScreen />);
     await screen.findByRole('form', { name: 'Invitar usuario' });
-    type('Correo de la persona', 'nuevo@demo.opslog.test');
     fireEvent.change(getField('Rol'), { target: { value: 'role-fleet' } });
-    click('Enviar invitación');
-    expect(
-      await screen.findByText('Invitación enviada a nuevo@demo.opslog.test.'),
-    ).toBeInTheDocument();
-    await waitFor(() => expect(getField('Correo de la persona')).toHaveValue(''));
+    click('Crear invitación');
+    expect(await screen.findByText('Invitación creada.')).toBeInTheDocument();
+    const link = (await screen.findByLabelText('Enlace de invitación')) as HTMLInputElement;
+    expect(link.value).toMatch(/\/invitacion\/invitacion-emitida-\d+$/);
+    await waitFor(() => expect(getField('Rol')).toHaveValue(''));
     expect(api.controls.storedDrafts()['invite-user']).toBeUndefined();
   });
 
-  it('shows server field errors for an invalid invitation', async () => {
-    await renderWithSession(<UsersScreen />);
+  it('asks for a role before inviting and reports a server failure without field detail', async () => {
+    const { api } = await renderWithSession(<UsersScreen />);
     await screen.findByRole('form', { name: 'Invitar usuario' });
-    type('Correo de la persona', 'mal');
-    click('Enviar invitación');
-    expect(await screen.findByText('Escribe un correo válido.')).toBeInTheDocument();
-    type('Correo de la persona', 'bien@demo.opslog.test');
-    click('Enviar invitación');
+    click('Crear invitación');
     expect(await screen.findByText('Elige un rol de la lista.')).toBeInTheDocument();
+    fireEvent.change(getField('Rol'), { target: { value: 'role-fleet' } });
+    api.controls.failNext('inviteUser', 500);
+    click('Crear invitación');
+    expect(
+      await screen.findByText('No pudimos crear la invitación. Intenta nuevamente.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText('Enlace de invitación')).toBeNull();
   });
 
   it('ignores a further page that arrives after the search changed', async () => {
@@ -163,11 +166,11 @@ describe('UsersScreen', () => {
     await renderWithSession(<UsersScreen />, { api });
     await screen.findByRole('table');
     click('Cargar más usuarios');
-    type('Buscar por nombre o correo', 'Prueba');
+    type('Buscar por identificador, rol o estado', 'admin');
     await screen.findByRole('table', { name: 'Usuarios (1)' });
     await act(async () => gate.resolve());
     await act(async () => undefined);
     expect(screen.getAllByRole('row')).toHaveLength(2);
-    expect(screen.queryByText('Persona sintética 25')).toBeNull();
+    expect(screen.queryByText('user-viewer')).toBeNull();
   });
 });

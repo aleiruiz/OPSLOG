@@ -58,13 +58,27 @@ describe('TenantAdminScreen', () => {
     expect(settings.ok && settings.value.mfa).toBe('required');
   });
 
-  it('shows field errors from the server', async () => {
+  it('validates the form before calling the server, which returns no field detail', async () => {
     await renderWithSession(<TenantAdminScreen />);
     await screen.findByDisplayValue('Transportes Demo SA');
     type('Nombre de la empresa', ' ');
     click('Guardar cambios');
     expect(await screen.findByText('Escribe el nombre.')).toBeInTheDocument();
     expect(screen.getByText('No pudimos guardar los cambios')).toBeInTheDocument();
+    type('Nombre de la empresa', 'Con nombre');
+    type('Cierre de sesión por inactividad', '99');
+    click('Guardar cambios');
+    expect(await screen.findByText('Elige entre 1 y 24 horas.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Confirmar' })).toBeNull();
+  });
+
+  it('shows a generic failure when the server rejects the change', async () => {
+    const { api } = await renderWithSession(<TenantAdminScreen />);
+    await screen.findByDisplayValue('Transportes Demo SA');
+    type('Nombre de la empresa', 'Otro nombre');
+    api.controls.failNext('updateCompanySettings', 500);
+    click('Guardar cambios');
+    expect(await screen.findByText('No pudimos guardar los cambios')).toBeInTheDocument();
   });
 
   it('keeps the form and shows the expired state when saving gets a 401', async () => {

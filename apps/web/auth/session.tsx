@@ -1,13 +1,5 @@
 import React from 'react';
-import type {
-  AcceptInvitationInput,
-  ApiError,
-  ApiPorts,
-  LoginInput,
-  Permission,
-  Result,
-  SessionInfo,
-} from '../app/types';
+import type { ApiError, ApiPorts, Permission, Result, SessionInfo } from '../app/types';
 
 /**
  * Session state mirrored from the BFF. The credential is an httpOnly cookie the browser sends by itself;
@@ -36,8 +28,9 @@ interface SessionContextValue {
   readonly held: HeldDrafts;
   readonly ports: ApiPorts;
   can(permission: Permission): boolean;
-  login(input: LoginInput): Promise<Result<SessionInfo>>;
-  acceptInvitation(token: string, input: AcceptInvitationInput): Promise<Result<SessionInfo>>;
+  /** Authorizes with the identity provider (`hint` selects the account of a fake provider), then signs in. */
+  signIn(hint: string): Promise<Result<SessionInfo>>;
+  acceptInvitation(token: string, hint: string): Promise<Result<SessionInfo>>;
   /** Only a confirmed sign-out clears the session; on failure the person stays signed in. */
   logout(): Promise<Result<null>>;
   /** Called by any screen that receives a 401 from the API. */
@@ -109,9 +102,18 @@ export function SessionProvider({
       can: (permission) =>
         (state.status === 'authenticated' || state.status === 'expired') &&
         state.session.permissions.includes(permission),
-      login: async (input) => established(await ports.auth.login(input)),
-      acceptInvitation: async (token, input) =>
-        established(await ports.auth.acceptInvitation(token, input)),
+      signIn: async (hint) => {
+        const credentials = await ports.oidc.authorize(hint);
+        return credentials.ok
+          ? established(await ports.auth.login(credentials.value))
+          : credentials;
+      },
+      acceptInvitation: async (token, hint) => {
+        const credentials = await ports.oidc.authorize(hint);
+        return credentials.ok
+          ? established(await ports.auth.acceptInvitation(token, credentials.value))
+          : credentials;
+      },
       logout: async () => {
         const result = await ports.auth.logout();
         if (!result.ok) {
@@ -136,9 +138,4 @@ export function useSession(): SessionContextValue {
   const value = React.useContext(SessionContext);
   if (!value) throw new Error('useSession requires a SessionProvider');
   return value;
-}
-
-/** Fields the server reported as invalid, keyed by field name. */
-export function fieldErrorMap(error: ApiError): Record<string, string> {
-  return Object.fromEntries((error.fieldErrors ?? []).map((item) => [item.field, item.message]));
 }
