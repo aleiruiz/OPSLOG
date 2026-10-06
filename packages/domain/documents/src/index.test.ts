@@ -335,6 +335,34 @@ describe('InMemoryDocumentStore', () => {
     expect((await svc.list(A, { status: 'expired', includeArchived: true })).total).toBe(1);
   });
 
+  it('labels the history from the rows read, even when a renewal lands between the reads', async () => {
+    const inner = new InMemoryDocumentStore();
+    let renewNext: (() => Promise<unknown>) | undefined;
+    const store: DocumentStore = {
+      find: (...args) => inner.find(...args),
+      list: (...args) => inner.list(...args),
+      insert: (...args) => inner.insert(...args),
+      replace: (...args) => inner.replace(...args),
+      revisions: async (...args) => {
+        const action = renewNext;
+        renewNext = undefined;
+        if (action) await action();
+        return inner.revisions(...args);
+      },
+    };
+    const { svc } = service({ store });
+    const doc = await svc.create(A, ACTOR, card({ expiresOn: '2026-12-01' }));
+    renewNext = () => svc.renew(A, ACTOR, doc.id, 1, { expiresOn: '2027-12-01' });
+    const history = await svc.history(A, doc.id);
+    expect(history.items.map((r) => [r.revision, r.status])).toEqual([
+      [2, 'valid'],
+      [1, 'replaced'],
+    ]);
+    const older = await svc.history(A, doc.id, { limit: 1, offset: 1 });
+    expect(older.items.map((r) => [r.revision, r.status])).toEqual([[1, 'replaced']]);
+    expect((await svc.history(A, doc.id, { limit: 1, offset: 5 })).items).toEqual([]);
+  });
+
   it('returns defensive copies', async () => {
     const { svc, store } = service();
     const doc = await svc.create(A, ACTOR, card());

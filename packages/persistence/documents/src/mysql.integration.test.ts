@@ -206,6 +206,19 @@ suite('persistent document store on MySQL', () => {
       );
       expect(errnoOf(alter)).toBe(1142);
     });
+
+    it('keeps revisions append-only and documents undeletable for the runtime account', async () => {
+      const tenant = randomUUID();
+      const created = await svcA.create(tenant, ACTOR, input());
+      for (const sql of [
+        `UPDATE ${DOCUMENT_TABLES.revisions} SET expires_on = '2030-01-01' WHERE company_id = ?`,
+        `DELETE FROM ${DOCUMENT_TABLES.revisions} WHERE company_id = ?`,
+        `DELETE FROM ${DOCUMENT_TABLES.documents} WHERE company_id = ?`,
+      ])
+        expect(errnoOf(await rejection(sourceA.query(sql, [tenant]))), sql).toBe(1142);
+      expect((await storeB.revisions(tenant, created.id, window)).total).toBe(1);
+      expect(await storeB.find(tenant, created.id)).toEqual(created);
+    });
   });
 
   describe('round trip and tenant isolation', () => {
@@ -382,7 +395,7 @@ suite('persistent document store on MySQL', () => {
       const d = await svcA.create(
         tenant,
         ACTOR,
-        input({ title: 'Titulo-secreto-77', documentNumber: 'NUM-SECRETO-88' }),
+        input({ title: 'Titulo-ficticio-prueba', documentNumber: 'NUM-FICTICIO-PRUEBA' }),
       );
       const bad: Document = { ...d, id: randomUUID(), version: 0 };
       // `version` 0 violates a CHECK constraint, which the store reports as integrity.
@@ -392,7 +405,13 @@ suite('persistent document store on MySQL', () => {
       expect(error).toBeInstanceOf(DocumentStoreError);
       expect(error).toMatchObject({ code: 'integrity', errno: 3819 });
       const text = `${(error as Error).message}${JSON.stringify(error)}${JSON.stringify(events)}`;
-      for (const secret of ['Titulo-secreto-77', 'NUM-SECRETO-88', tenant, 'INSERT', 'opslog_'])
+      for (const secret of [
+        'Titulo-ficticio-prueba',
+        'NUM-FICTICIO-PRUEBA',
+        tenant,
+        'INSERT',
+        'opslog_',
+      ])
         expect(text).not.toContain(secret);
     });
   });

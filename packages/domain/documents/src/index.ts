@@ -715,14 +715,17 @@ export class DocumentService {
     readonly total: number;
   }> {
     const document = await this.load(tenantId, id);
-    const slice = await this.store.revisions(tenantId, document.id, windowOf(query));
+    const window = windowOf(query);
+    const slice = await this.store.revisions(tenantId, document.id, window);
     const today = dateOf(this.now());
+    // The current revision comes from the rows themselves (newest first, so the first row of the
+    // first page), not from a second read of the document that a concurrent renewal could outdate.
+    // Later pages only hold older rows, which are all replaced.
+    const current =
+      window.offset === 0 ? (slice.items[0]?.revision ?? 0) : Number.POSITIVE_INFINITY;
     return {
       total: slice.total,
-      items: slice.items.map((row) => ({
-        ...row,
-        status: revisionStatus(row, document.revision, today),
-      })),
+      items: slice.items.map((row) => ({ ...row, status: revisionStatus(row, current, today) })),
     };
   }
 

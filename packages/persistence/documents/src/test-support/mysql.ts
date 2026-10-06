@@ -6,6 +6,7 @@ import {
   createDocumentsMigrationDataSource,
   runDocumentsMigrations,
 } from '../data-source.js';
+import { DOCUMENT_TABLES } from '../entities.js';
 
 /**
  * Real MySQL for the documents tests (CI: mysql service, OPSLOG_TEST_MYSQL_ADMIN_URL). Locally the
@@ -49,7 +50,7 @@ export interface DocumentsDatabase {
   close(): Promise<void>;
 }
 
-/** Creates the database, the DML-only runtime account and applies the migrations as the schema owner. */
+/** Creates the database, the least-privilege runtime account and applies the migrations as the schema owner. */
 export async function startDocumentsDatabase(tag: string): Promise<DocumentsDatabase> {
   const suffix = `${Date.now()}_${process.pid}`;
   const databaseName = `opslog_doc_${tag}_${suffix}`;
@@ -63,9 +64,6 @@ export async function startDocumentsDatabase(tag: string): Promise<DocumentsData
   const sources: DataSource[] = [];
   await admin.query(`CREATE DATABASE ${identifier(databaseName)} CHARACTER SET utf8mb4`);
   await admin.query(`CREATE USER '${runtimeUser}'@'%' IDENTIFIED BY ?`, [runtimePassword]);
-  await admin.query(
-    `GRANT SELECT, INSERT, UPDATE, DELETE ON ${identifier(databaseName)}.* TO '${runtimeUser}'@'%'`,
-  );
   const migrations = createDocumentsMigrationDataSource({
     host: adminConfig.host,
     port: adminConfig.port,
@@ -83,6 +81,15 @@ export async function startDocumentsDatabase(tag: string): Promise<DocumentsData
   } finally {
     await migrations.destroy();
   }
+  // Least privilege per table (granted once the tables exist): documents are read, inserted and
+  // updated but never deleted (BR-009 soft delete); revisions are append-only (read and insert).
+  const table = (name: string) => `${identifier(databaseName)}.${identifier(name)}`;
+  await admin.query(
+    `GRANT SELECT, INSERT, UPDATE ON ${table(DOCUMENT_TABLES.documents)} TO '${runtimeUser}'@'%'`,
+  );
+  await admin.query(
+    `GRANT SELECT, INSERT ON ${table(DOCUMENT_TABLES.revisions)} TO '${runtimeUser}'@'%'`,
+  );
   await admin.changeUser({ database: databaseName });
   return {
     databaseName,

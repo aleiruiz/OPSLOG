@@ -664,7 +664,7 @@ describe('adapters and failures', () => {
     const inner = new InMemoryDocumentStore();
     const broken: DocumentStore = {
       insert: async () => {
-        throw new Error('connection to db-prod.internal refused for TC-SECRETO-1');
+        throw new Error('connection to db-prod.internal refused for TC-FICTICIO-1');
       },
       find: (t, id) => inner.find(t, id),
       list: (t, f, w) => inner.list(t, f, w),

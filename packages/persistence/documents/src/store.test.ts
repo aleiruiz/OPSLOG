@@ -430,15 +430,18 @@ describe('failures', () => {
 
   it('sanitizes driver errors: no title, number, tenant or SQL in the message, JSON or event', async () => {
     const { db, store, events } = setup();
-    const d = document(A, 'd1', { title: 'Titulo-secreto-77', documentNumber: 'NUM-SECRETO-88' });
-    db.failNext('insert', CONNECTION_LOST, { entity: DocumentEntity, leak: 'secret-tenant-a' });
+    const d = document(A, 'd1', {
+      title: 'Titulo-ficticio-prueba',
+      documentNumber: 'NUM-FICTICIO-PRUEBA',
+    });
+    db.failNext('insert', CONNECTION_LOST, { entity: DocumentEntity, leak: 'ficticio-tenant-uno' });
     const error = await rejection(store.insert(d, revision(d)));
     expect(error).toBeInstanceOf(DocumentStoreError);
     const text = `${(error as Error).message} ${JSON.stringify(error)} ${JSON.stringify(events)}`;
     for (const secret of [
-      'secret-tenant-a',
-      'Titulo-secreto-77',
-      'NUM-SECRETO-88',
+      'ficticio-tenant-uno',
+      'Titulo-ficticio-prueba',
+      'NUM-FICTICIO-PRUEBA',
       'INSERT INTO',
       'opslog_',
       'QueryFailedError',
@@ -450,11 +453,11 @@ describe('failures', () => {
   it('classifies a non-driver failure as internal and never throws from the sanitizer', async () => {
     const { db, store, events } = setup();
     db.intercept = (operation) => {
-      if (operation === 'find') throw new TypeError('boom with SECRET-VALUE');
+      if (operation === 'find') throw new TypeError('boom with FAKE-VALUE-TEXT');
     };
     const error = await rejection(store.find(A, 'd1'));
     expect(error).toMatchObject({ code: 'internal', errno: null });
-    expect((error as Error).message).not.toContain('SECRET-VALUE');
+    expect((error as Error).message).not.toContain('FAKE-VALUE-TEXT');
     expect(events).toEqual([{ operation: 'find', code: 'internal', errno: null }]);
     db.intercept = () => {
       throw new Proxy(

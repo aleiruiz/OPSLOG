@@ -17,7 +17,7 @@ export interface DocumentsDatabaseConfig {
   readonly connectTimeoutMs?: number;
 }
 
-/** Runtime accounts follow the control-plane naming rule: never root/admin, DML privileges only. */
+/** Runtime accounts follow the control-plane naming rule: never root/admin, DML privileges only. Production grants: SELECT, INSERT, UPDATE on opslog_documents (no DELETE: soft delete) and SELECT, INSERT on opslog_document_revisions (append-only). */
 export const DOCUMENTS_RUNTIME_ACCOUNT = /^opslog_documents_[a-z0-9_]+$/i;
 
 const common = {
