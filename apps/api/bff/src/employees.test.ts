@@ -8,6 +8,7 @@ import {
   EMPLOYEE_KINDS,
   EMPLOYEE_STATUSES,
 } from '../../../../packages/domain/employees/src/index.js';
+import { EnvelopePiiCipher, LocalDevKms } from '../../composition/src/testing.js';
 import { createBffWorld, type BffWorld, type Browser, type Reply } from './test-support.js';
 
 let world: BffWorld;
@@ -494,6 +495,7 @@ describe('errors', () => {
   it('never leaks internals or personal data when the store fails', async () => {
     world = createBffWorld({
       adapters: {
+        pii: new EnvelopePiiCipher(LocalDevKms.ephemeral('test')),
         employees: {
           insert: async () => {
             throw new Error(`connection to db-prod.internal refused for ${SECRETS.nationalId}`);

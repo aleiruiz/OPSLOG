@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
   EnvelopePiiCipher,
@@ -38,6 +39,44 @@ const cause = async (promise: Promise<unknown>): Promise<Error> =>
     },
     (error: unknown) => error as Error,
   );
+
+/** A KMS that ignores the encryption context and the tenant: only the cipher's own AAD and message bind them. */
+const lenientKms = (): KmsPort => {
+  const key = Uint8Array.from({ length: 32 }, (_, i) => i + 1);
+  return {
+    generateDataKey: async () => ({
+      keyId: 'k1',
+      plaintext: Uint8Array.from(key),
+      wrapped: Uint8Array.from([1, 2, 3]),
+    }),
+    decryptDataKey: async () => Uint8Array.from(key),
+    mac: async (input) => Uint8Array.from(createHmac('sha256', key).update(input.message).digest()),
+  };
+};
+
+describe('EnvelopePiiCipher independent of the KMS', () => {
+  it('does not open an envelope moved to another tenant, entity type, entity or field (AAD is load-bearing)', async () => {
+    const cipher = new EnvelopePiiCipher(lenientKms());
+    const sealed = await cipher.seal(ctx, SECRET);
+    expect(await cipher.open(ctx, sealed)).toBe(SECRET);
+    for (const moved of [
+      { ...ctx, tenantId: 'tenant-b' },
+      { ...ctx, entityType: 'vehicle' },
+      { ...ctx, entityId: 'emp-2' },
+      { ...ctx, field: 'phone' },
+    ])
+      expect((await cause(cipher.open(moved, sealed))) as PiiError).toMatchObject({
+        code: 'invalid_sealed',
+      });
+  });
+
+  it('separates blind indexes by tenant even when the KMS adapter does not', async () => {
+    const cipher = new EnvelopePiiCipher(lenientKms());
+    const a = await cipher.blindIndex('tenant-a', 'national_id', 'ABC123');
+    expect(a).not.toBe(await cipher.blindIndex('tenant-b', 'national_id', 'ABC123'));
+    expect(a).toBe(await cipher.blindIndex('tenant-a', 'national_id', 'ABC123'));
+  });
+});
 
 describe('EnvelopePiiCipher', () => {
   it('round-trips and never embeds the plaintext in the envelope', async () => {

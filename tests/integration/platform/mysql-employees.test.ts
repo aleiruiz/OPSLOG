@@ -1,5 +1,9 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { InMemoryTenantStore } from '../../../apps/api/composition/src/index.js';
+import {
+  EnvelopePiiCipher,
+  InMemoryTenantStore,
+  LocalDevKms,
+} from '../../../apps/api/composition/src/index.js';
 import {
   createBffWorld,
   type BffWorld,
@@ -109,7 +113,14 @@ suite('BFF on real MySQL employees and areas stores', () => {
     const areas = new TypeOrmAreaStore(await areasDb.openRuntime());
     const employees = new HeldEmployeeStore(await employeesDb.openRuntime());
     const tenants = new InMemoryTenantStore();
-    world = createBffWorld({ adapters: { tenants, areas, employees } });
+    world = createBffWorld({
+      adapters: {
+        tenants,
+        areas,
+        employees,
+        pii: new EnvelopePiiCipher(LocalDevKms.ephemeral('test')),
+      },
+    });
     tenantA = (await world.tenant('Empresa Alfa', 'subject-admin-a')).tenantId;
     tenantB = (await world.tenant('Empresa Beta', 'subject-admin-b')).tenantId;
     await world.member('subject-admin-a', 'viewer', 'subject-viewer-a');

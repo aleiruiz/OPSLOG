@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   InMemoryAreaStore,
+  EnvelopePiiCipher,
   InMemoryEmployeeStore,
+  LocalDevKms,
   type PlatformResponse,
 } from '../../../apps/api/composition/src/index.js';
 import type {
@@ -219,7 +221,9 @@ describe('BR-021: live employees block deactivating their area', () => {
 describe('employee writes and area deactivation are serialized (BR-021)', () => {
   it('an employee created while the area is being checked blocks the deactivation that waits for it', async () => {
     const employees = new HeldEmployeeStore();
-    const { admin, area } = await setup({ adapters: { employees } });
+    const { admin, area } = await setup({
+      adapters: { employees, pii: new EnvelopePiiCipher(LocalDevKms.ephemeral('test')) },
+    });
     const home = await area(admin, 'Base');
     const { platform } = world;
     let release: () => void = () => undefined;

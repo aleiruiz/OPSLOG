@@ -175,7 +175,7 @@ export class EnvelopePiiCipher implements PiiCipher {
     try {
       mac = await this.kms.mac({
         tenantId,
-        message: Buffer.from(JSON.stringify(['opslog.blind.v1', field, normalized])),
+        message: Buffer.from(JSON.stringify(['opslog.blind.v1', tenantId, field, normalized])),
       });
     } catch {
       throw new PiiError('kms_failure');

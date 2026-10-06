@@ -403,6 +403,10 @@ export class Platform {
       now: this.now,
     });
     const vehicleStore = adapters.vehicles ?? new InMemoryVehicleStore();
+    // A persistent store with the throwaway local KMS would seal rows that cannot be opened after a
+    // restart (and would put real data under a dev key): the cipher must be chosen explicitly.
+    if (adapters.employees && !adapters.pii)
+      throw new Error('adapters.employees requires adapters.pii (no local KMS fallback)');
     const employeeStore = adapters.employees ?? new InMemoryEmployeeStore();
     const areaService = new AreaService(adapters.areas ?? new InMemoryAreaStore(), {
       now: this.now,

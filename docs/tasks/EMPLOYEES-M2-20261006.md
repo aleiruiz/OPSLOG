@@ -108,7 +108,7 @@ Se reutilizan los genéricos igual que en Vehículos: lectura `view`, alta `crea
 1. `pii_reader` puede crear empleados (efecto de `create` genérico). Resolver con permisos por módulo.
 2. **Una sola área por empleado:** se impone con la columna única `areaId`; ¿hace falta pertenencia a varias áreas o un empleado «sin área»?
 3. **Duplicados por índice ciego:** nationalId y email son únicos; la licencia solo se indexa, no es única. ¿Debe serlo (p. ej. por tipo y emisor)?
-4. **Borrado, anonimización y retención de PII:** no hay borrado físico (BR-009). Falta decidir plazo de retención, anonimización al terminar y atención de solicitudes de supresión.
+4. **Borrado, anonimización y retención de PII:** no hay borrado físico (BR-009). Falta decidir plazo de retención, anonimización al terminar y atención de solicitudes de supresión. Relacionado: un empleado archivado conserva su número de empleado, nationalId y email únicos y no hay desarchivado, así que volver a contratar a la misma persona devuelve 409 `duplicate`. Hace falta decidir si se libera o anonimiza la clave al archivar, o si se permite desarchivar.
 5. **KMS local falso (decisión del propietario):** `LocalDevKms` no protege nada real; sirve para pruebas y desarrollo. Antes de cualquier dato real hace falta el adaptador AWS KMS (que pase `describeKmsPortContract`), políticas de claves, rotación y alta disponibilidad. AWS está diferido y producción no autorizada; se pide confirmar el alcance y el momento.
 6. ¿Un empleado `inactive` o `suspended` debe bloquear la desactivación del área (hoy sí; igual que la pregunta 6 de Vehículos)?
 7. Archivado desde cualquier estado (incluido `active`): ¿se exige terminar antes?

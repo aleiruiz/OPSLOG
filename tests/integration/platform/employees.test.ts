@@ -588,7 +588,9 @@ describe('personal data protection (D23)', () => {
 
   it('stores only envelopes and blind indexes: no plaintext in the injected store', async () => {
     const store = new InMemoryEmployeeStore();
-    world = createWorld({ adapters: { employees: store } });
+    world = createWorld({
+      adapters: { employees: store, pii: new EnvelopePiiCipher(LocalDevKms.ephemeral('test')) },
+    });
     const f = await fixture(world);
     const created = await seed(world, f.roles.admin);
     await world.platform.employees.update(f.roles.admin.token, corr(), created.id, 1, {
@@ -680,7 +682,9 @@ describe('personal data protection (D23)', () => {
 
   it('turns an undecryptable value into a generic 500 on the single read only', async () => {
     const store = new InMemoryEmployeeStore();
-    world = createWorld({ adapters: { employees: store } });
+    world = createWorld({
+      adapters: { employees: store, pii: new EnvelopePiiCipher(LocalDevKms.ephemeral('test')) },
+    });
     const f = await fixture(world);
     const created = await seed(world, f.roles.admin);
     const row = await store.find(f.a.tenantId, created.id);
@@ -722,6 +726,12 @@ describe('personal data protection (D23)', () => {
       else process.env['OPSLOG_ENV'] = previous;
       vi.useRealTimers();
     }
+  });
+
+  it('refuses a persistent employee store without an explicit cipher (no local KMS fallback)', () => {
+    expect(() => createWorld({ adapters: { employees: new InMemoryEmployeeStore() } })).toThrow(
+      /adapters\.employees requires adapters\.pii/,
+    );
   });
 
   it('uses the injected cipher instead of the local one', async () => {
@@ -1023,7 +1033,9 @@ describe('concurrency', () => {
 describe('adapters and failures', () => {
   it('uses the injected employee store', async () => {
     const store = new InMemoryEmployeeStore();
-    world = createWorld({ adapters: { employees: store } });
+    world = createWorld({
+      adapters: { employees: store, pii: new EnvelopePiiCipher(LocalDevKms.ephemeral('test')) },
+    });
     const { roles, a } = await fixture(world);
     const e = await seed(world, roles.admin);
     expect(await store.find(a.tenantId, e.id)).toMatchObject({
@@ -1044,7 +1056,9 @@ describe('adapters and failures', () => {
       history: (t, v, w) => inner.history(t, v, w),
       countLiveInArea: (t, a) => inner.countLiveInArea(t, a),
     };
-    world = createWorld({ adapters: { employees: broken } });
+    world = createWorld({
+      adapters: { employees: broken, pii: new EnvelopePiiCipher(LocalDevKms.ephemeral('test')) },
+    });
     const { roles } = await fixture(world);
     const result = await world.platform.employees.create(roles.admin.token, corr(), input());
     expect(result).toEqual({
