@@ -156,9 +156,11 @@ describe('parsing', () => {
     expect(parseDeductible({ kind: 'amount', amountMinor: 1_000_000_000_000, currency: 'USD' }));
   });
 
-  it('detects a write of the deductible (null and absent are not a write)', () => {
+  it('detects a mention of the deductible (null included; only omitting the key is free)', () => {
     expect(writesDeductible({ deductible: { kind: 'percent', basisPoints: 5 } })).toBe(true);
-    for (const input of [{}, { deductible: null }, { deductible: undefined }, null, [], 'x'])
+    for (const input of [{ deductible: null }, { deductible: 0 }, { deductible: undefined }])
+      expect(writesDeductible(input)).toBe(true);
+    for (const input of [{}, { insurer: 'x' }, null, [], 'x'])
       expect(writesDeductible(input)).toBe(false);
   });
 

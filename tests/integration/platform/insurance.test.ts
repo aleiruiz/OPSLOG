@@ -350,6 +350,7 @@ describe('role matrix over the existing generic permissions', () => {
     await api.create('t', 'c', {});
     await api.create('t', 'c', deductible);
     await api.create('t', 'c', { deductible: null });
+    await api.create('t', 'c', { deductible: 0 });
     await api.update('t', 'c', 'x', 1, {});
     await api.renew('t', 'c', 'x', 1, {});
     await api.renew('t', 'c', 'x', 1, deductible);
@@ -360,7 +361,8 @@ describe('role matrix over the existing generic permissions', () => {
       ['view'],
       ['create'],
       ['create', 'view_costs'],
-      ['create'],
+      ['create', 'view_costs'],
+      ['create', 'view_costs'],
       ['edit'],
       ['edit'],
       ['edit', 'view_costs'],
@@ -410,17 +412,101 @@ describe('role matrix over the existing generic permissions', () => {
     expect(
       ok(await platform.insurance.get(f.roles.admin.token, corr(), policy.id)).deductible,
     ).toEqual(AMOUNT);
-    // an explicit null removes it, which also needs the permission only when it writes a value
-    const removed = ok(
-      await platform.insurance.renew(
+    // mentioning the deductible at all, an explicit null included, needs view_costs
+    const attempt = (session: Session, version: number) =>
+      platform.insurance.renew(
+        session.token,
+        corr(),
+        policy.id,
+        version,
+        renewal({ startsOn: '2028-01-01', endsOn: '2028-12-31', deductible: null }),
+      );
+    expect((await attempt(f.roles.editor, 3)).error).toMatchObject({
+      code: 'forbidden',
+      status: 403,
+    });
+    const removed = ok(await attempt(f.roles.admin, 3));
+    expect(removed).toMatchObject({ hasDeductible: false, deductible: null });
+  });
+
+  it('answers 403, not 400, to a caller without view_costs who sends a malformed deductible', async () => {
+    world = createWorld();
+    const f = await fixture(world);
+    const policy = await seed(world, f, f.roles.admin);
+    const audited = auditOf(world, f.a.tenantId).length;
+    for (const deductible of [0, 'x', {}, { kind: 'percent', basisPoints: 0 }, null]) {
+      const created = await world.platform.insurance.create(
+        f.roles.editor.token,
+        corr(),
+        input(f, { deductible }),
+      );
+      const renewed = await world.platform.insurance.renew(
         f.roles.editor.token,
         corr(),
         policy.id,
-        3,
-        renewal({ startsOn: '2028-01-01', endsOn: '2028-12-31', deductible: null }),
-      ),
-    );
-    expect(removed).toMatchObject({ hasDeductible: false, deductible: null });
+        1,
+        renewal({ deductible }),
+      );
+      for (const result of [created, renewed])
+        expect(result.error, JSON.stringify(deductible)).toMatchObject({
+          code: 'forbidden',
+          status: 403,
+        });
+    }
+    // with the permission the same value is a 400
+    expect(
+      (
+        await world.platform.insurance.create(
+          f.roles.admin.token,
+          corr(),
+          input(f, { deductible: 0 }),
+        )
+      ).error,
+    ).toMatchObject({ code: 'invalid_input', status: 400 });
+    expect(auditOf(world, f.a.tenantId)).toHaveLength(audited);
+  });
+
+  it('resolves view_costs before writing: a failure there writes and audits nothing', async () => {
+    const store = new InMemoryPolicyStore();
+    const events: string[] = [];
+    const context = { tenantId: 'tenant-a', actor: { subject: 'sub-1' } } as never;
+    const api = (can: () => Promise<boolean>) =>
+      new InsuranceApi({
+        service: new PolicyService(store),
+        authorize: async () => context,
+        can,
+        audit: (_c, action) => {
+          events.push(action);
+        },
+      });
+    const failing = api(async () => {
+      throw new Error('permission store unavailable');
+    });
+    const valid = {
+      vehicleId: 'veh-1',
+      insurer: 'Aseguradora Ficticia',
+      policyNumber: 'POL-1',
+      coverageType: 'other',
+      startsOn: '2026-01-01',
+      endsOn: '2026-12-31',
+    };
+    const result = await failing.create('t', 'c', valid);
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'internal_error', status: 500, message: 'Request failed' },
+    });
+    expect(events).toEqual([]);
+    expect(
+      (await store.list('tenant-a', { includeArchived: true }, { limit: 10, offset: 0 })).total,
+    ).toBe(0);
+    // once it resolves, the same call writes exactly once
+    const working = api(async () => false);
+    const created = await working.create('t', 'c', valid);
+    expect(created.ok).toBe(true);
+    expect(events).toEqual(['insurance_policy.created']);
+    expect(
+      (await store.list('tenant-a', { includeArchived: true }, { limit: 10, offset: 0 })).total,
+    ).toBe(1);
   });
 });
 

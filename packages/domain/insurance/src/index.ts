@@ -183,14 +183,17 @@ export function parseDeductible(value: unknown): Deductible {
   return invalid();
 }
 
-/** True when the input sets a deductible (a non-null value): the composition then asks for `view_costs`. */
+/**
+ * True when the input mentions the deductible at all, an explicit `null` included: the composition
+ * then asks for `view_costs`. Only omitting the key is free (a renewal then carries it over), so a
+ * caller without the permission can neither set, change nor erase the amount, and a malformed
+ * value is a 403 before it is ever validated.
+ */
 export const writesDeductible = (input: unknown): boolean =>
   typeof input === 'object' &&
   input !== null &&
   !Array.isArray(input) &&
-  Object.hasOwn(input, 'deductible') &&
-  (input as Fields)['deductible'] !== null &&
-  (input as Fields)['deductible'] !== undefined;
+  Object.hasOwn(input, 'deductible');
 
 export const REVISION_FIELDS = [
   'policyNumber',

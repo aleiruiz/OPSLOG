@@ -330,8 +330,8 @@ describe('who may do what', () => {
       expect((await browser.get(`${P}/${p.id}/history`)).json.items[0]).toMatchObject(hidden);
     }
     expect((await editorA.get(`${P}/${p.id}`)).text).not.toContain('500000');
-    // writing a deductible needs view_costs, also for an editor who may create and renew
-    for (const deductible of [AMOUNT, { kind: 'percent', basisPoints: 100 }]) {
+    // mentioning the deductible (even null or a malformed value) needs view_costs: 403, never 400
+    for (const deductible of [AMOUNT, { kind: 'percent', basisPoints: 100 }, null, 0]) {
       const create = await editorA.post(P, { json: body(vehicleA, { deductible }) });
       expect(create.status).toBe(403);
       const renew = await editorA.post(`${P}/${p.id}/renew`, {
@@ -340,9 +340,7 @@ describe('who may do what', () => {
       expect(renew.status).toBe(403);
     }
     // without view_costs a policy is created without deductible and renewed carrying it over
-    expect((await editorA.post(P, { json: body(vehicleA, { deductible: null }) })).status).toBe(
-      201,
-    );
+    expect((await editorA.post(P, { json: body(vehicleA) })).status).toBe(201);
     const renewed = await editorA.post(`${P}/${p.id}/renew`, {
       json: { version: 1, startsOn: '2027-01-01', endsOn: '2027-12-31' },
     });

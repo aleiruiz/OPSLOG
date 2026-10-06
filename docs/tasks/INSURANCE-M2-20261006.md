@@ -67,7 +67,8 @@ Las reglas de vencimiento no se copian: `@opslog/domain-insurance` importa de `@
 Se reutilizan los genéricos igual que en Vehículos, Empleados y Documentos: lectura `view`, alta `create`, cambios (editar, renovar) `edit`, archivar `delete`. **El deducible exige además `view_costs`** (BRD §12.5: «Ver importes (costos, deducibles, facturas)»), del mismo modo que Empleados exige `view_pii` para sus datos personales:
 
 - **Leer:** sin `view_costs`, `deductible` es `null` en toda respuesta (lectura, listado, historial y respuesta de escrituras) y solo `hasDeductible` dice si existe uno. El importe nunca viaja a quien no lo puede ver.
-- **Escribir:** crear o renovar con un `deductible` distinto de `null` pide `view_costs` además del permiso de la operación (403 si falta, sin cambiar nada). Renovar **sin mencionar** el deducible lo conserva (quien no tiene `view_costs` renueva sin leerlo ni borrarlo); un `null` explícito lo elimina y no pide el permiso, porque no escribe un importe.
+- **Escribir:** crear o renovar con la clave `deductible` presente, **incluido un `null` explícito y un valor mal formado**, pide `view_costs` además del permiso de la operación (403 si falta, sin cambiar nada y antes de validar el valor: sin el permiso nunca es un 400). Omitir la clave sigue permitido: al crear no hay deducible y al renovar se conserva (quien no tiene `view_costs` renueva sin leerlo ni borrarlo). Quitar el deducible requiere, por tanto, `view_costs`.
+- **Orden:** el permiso `view_costs` se resuelve **antes** de escribir y auditar, de modo que un fallo al resolverlo no puede ocurrir después de una escritura confirmada (un reintento no duplicaría la póliza).
 
 | Operación                                            | Permiso               | admin | editor | viewer | auditor | pii_reader |
 | ---------------------------------------------------- | --------------------- | ----- | ------ | ------ | ------- | ---------- |
@@ -100,6 +101,10 @@ Se reutilizan los genéricos igual que en Vehículos, Empleados y Documentos: le
 ## Limitación aceptada: vehículo archivado en paralelo
 
 La comprobación de vehículo vivo al crear y renovar es «comprobar y luego actuar» sin bloqueo (best effort), igual que la de propietario de Documentos. Si el vehículo se archiva justo entre la comprobación y la escritura, la póliza se crea o renueva igual; como archivar un vehículo no archiva en cascada sus pólizas, el efecto es el mismo que haber creado la póliza un instante antes del archivado. Se acepta en este slice (pregunta abierta 10).
+
+## Nota de rendimiento
+
+El listado y el conteo filtran por `archived_at IS NULL` sin que ese campo esté en un índice (los índices son `company_id` más vehículo, cobertura o `ends_on`). Con el volumen esperado por empresa no es un problema; si lo fuera, se añadiría `archived_at` a `ix_policies_listing`. No se hace en este slice.
 
 ## Preguntas abiertas
 

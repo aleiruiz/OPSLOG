@@ -208,12 +208,12 @@ export class InsuranceApi {
   ): Promise<PlatformResponse<PolicyView>> {
     try {
       const context = await this.deps.authorize(token, correlationId, permissions);
+      // Resolved before anything is written: a failure here must never follow a committed write
+      // (the caller would retry and write twice).
+      const costs = await this.deps.can(context, 'view_costs');
       const policy = await work(context);
       this.deps.audit(context, action, policy.id, correlationId);
-      return {
-        ok: true,
-        value: this.viewOf(policy, await this.deps.can(context, 'view_costs')),
-      };
+      return { ok: true, value: this.viewOf(policy, costs) };
     } catch (error) {
       return failure(error);
     }
@@ -221,7 +221,7 @@ export class InsuranceApi {
 
   private actorOf = (context: TenantContext): string => `user-${context.actor.subject}`;
 
-  /** Writing a deductible needs `view_costs` on top of the operation's own permission. */
+  /** Mentioning the deductible (even as `null`) needs `view_costs` on top of the operation's own permission. */
   private withCosts(base: readonly Permission[], input: unknown): readonly Permission[] {
     return writesDeductible(input) ? [...base, ...INSURANCE_PERMISSIONS.costs] : base;
   }
