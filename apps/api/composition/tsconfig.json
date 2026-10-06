@@ -18,6 +18,8 @@
     "../../../packages/domain/documents/src/**/*.ts",
     "../../../packages/domain/insurance/src/**/*.ts",
     "../../../packages/domain/assignments/src/**/*.ts",
+    "../../../packages/domain/settings/src/**/*.ts",
+    "../../../packages/domain/alerts/src/**/*.ts",
     "../../../packages/domain/employees/src/**/*.ts",
     "../../../packages/platform/pii/src/**/*.ts",
     "../../../packages/platform/auth/src/**/*.ts",
