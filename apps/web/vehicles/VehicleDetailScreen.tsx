@@ -29,9 +29,10 @@ export function VehicleDetailScreen({ id }: { id: string }) {
   const { ports, can, markExpired } = useSession();
   const router = useRouter();
   const { state, reload, setData } = useResource(() => ports.vehicles.get(id), [ports, id]);
-  const [notice, setNotice] = React.useState<string | null>(
-    () => notices[router.search.get('aviso') ?? ''] ?? null,
-  );
+  const [notice, setNotice] = React.useState<string | null>(() => {
+    const code = router.search.get('aviso') ?? '';
+    return Object.hasOwn(notices, code) ? (notices[code] ?? null) : null;
+  });
   const [archive, setArchive] = React.useState<ArchiveDialogState>(archiveClosed);
 
   // The result of the previous screen is shown once and removed from the address bar.

@@ -448,6 +448,28 @@ describe('edit vehicle', () => {
     expect(api.controls.vehicles()[0]?.make).toBe('Toyota');
   });
 
+  it('restores the edits after the odometer command expires the session once the field changes were saved', async () => {
+    const api = createMockApi();
+    const odometer = vi.fn(async (): Promise<Result<Vehicle>> => error(401, 'unauthorized'));
+    api.vehicles.recordOdometer = odometer;
+    await edit(api);
+    await screen.findByDisplayValue('ECO-001');
+    type('Marca', 'Toyota');
+    type('Odómetro actual', '16000');
+    click('Guardar cambios');
+    await screen.findByRole('group', { name: 'Sesión expirada' });
+    // The field changes were saved (version 2); the draft must follow that version.
+    expect(api.controls.vehicles()[0]?.make).toBe('Toyota');
+    type('Cuenta de prueba', demoSubjects.admin);
+    click('Continuar');
+    await waitFor(() =>
+      expect(screen.queryByRole('group', { name: 'Sesión expirada' })).toBeNull(),
+    );
+    await waitFor(() => expect(getField('Odómetro actual')).toHaveValue('16000'));
+    expect(getField('Marca')).toHaveValue('Toyota');
+    expect(screen.queryByText(/El vehículo cambió desde que empezaste/)).toBeNull();
+  });
+
   it('does not restore edits over a newer version of the vehicle: it loads the current data and says so', async () => {
     const { api } = await edit(createMockApi({ vehicles: demoVehicles(2) }));
     await screen.findByDisplayValue('ECO-001');

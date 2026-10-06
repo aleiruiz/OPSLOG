@@ -31,7 +31,7 @@ write_paths:
   ]
 ```
 
-Pantallas de Vehículos sobre el backend ya fusionado (`VEHICLES-M2-20261006`). ADR-0010 queda satisfecho (Storybook y regresión visual existen desde #45), así que las pantallas nuevas son admisibles **a condición de** tener stories con baselines de píxeles en 1280 y 360: todas las de este documento las tienen. Solo datos sintéticos; sin AWS ni OIDC real; sin cambios de backend. `VIN` sigue siendo único por empresa (pregunta abierta 9 del slice de backend: no se toca).
+Pantallas de Vehículos sobre el backend ya fusionado (`VEHICLES-M2-20261006`). ADR-0010 queda satisfecho (Storybook y regresión visual existen desde #45), así que las pantallas nuevas son admisibles **a condición de** tener stories con baselines de píxeles en 1280 y 360: todas las de este documento las tienen. Solo datos sintéticos; sin AWS ni OIDC real; sin cambios de backend. `VIN` sigue siendo único por empresa (pregunta abierta 9 del slice de backend, resuelta por el propietario el 2026-10-06: no se toca).
 
 ## Alcance entregado
 
@@ -78,6 +78,6 @@ Las stories son CSF plano (sin tipos de Storybook: el paquete web no depende de 
 4. **Edición no atómica:** el odómetro tiene un comando propio, así que guardar campos y lectura son dos llamadas (con el manejo de guardado parcial descrito). Un `PUT` que admita el odómetro, o un comando transaccional, lo simplificaría; no se construyó por no ser necesario para las pantallas.
 5. **Corrección del odómetro hacia abajo** (BR-015, con permiso y motivo): el backend la rechaza siempre; la pantalla lo explica y no la ofrece.
 6. **Restaurar archivados** y **permisos por módulo** (`pii_reader` puede crear vehículos): preguntas abiertas 1 y 2 del slice de backend.
-7. **VIN único por empresa:** desviación del BRD pendiente de visto bueno del propietario (pregunta abierta 9 del backend).
+7. **VIN único por empresa:** desviación del BRD aprobada por el propietario el 2026-10-06 (pregunta abierta 9 del backend, resuelta).
 8. **Sin OIDC real:** el shell solo arranca con el mock en desarrollo (`createHttpApi` ya incluye los vehículos, pero ningún servidor acepta aún el proveedor falso), por lo que la pantalla no se ha probado contra el BFF real en navegador.
 9. En desarrollo, `React.StrictMode` ejecuta dos veces el efecto del atrapa-foco de MUI y descarta `autoFocus`; `ConfirmDialog` lo corrige al terminar la transición de apertura.

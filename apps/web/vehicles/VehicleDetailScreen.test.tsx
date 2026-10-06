@@ -141,6 +141,12 @@ describe('vehicle detail', () => {
     await screen.findByRole('heading', { name: 'Vehículo ECO-001', level: 1 });
     expect(screen.queryByRole('region', { name: 'Notificaciones' })).toBeNull();
   });
+
+  it('does not read notice codes through the object prototype', async () => {
+    await renderApp({ path: '/flota/vehiculos/veh-001?aviso=constructor' });
+    await screen.findByRole('heading', { name: 'Vehículo ECO-001', level: 1 });
+    expect(screen.queryByRole('region', { name: 'Notificaciones' })).toBeNull();
+  });
 });
 
 describe('archive confirmation', () => {

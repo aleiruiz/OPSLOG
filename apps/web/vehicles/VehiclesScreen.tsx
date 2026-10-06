@@ -34,9 +34,10 @@ export function VehiclesScreen() {
   );
   const [loadingMore, setLoadingMore] = React.useState(false);
   const [notice, setNotice] = React.useState<{ text: string; severity: 'error' } | null>(null);
-  const keyRef = React.useRef(queryKey);
-  keyRef.current = queryKey;
+  // Bumped whenever the first page or the filters change: a page requested before that is stale.
+  const generation = React.useRef(0);
   React.useEffect(() => {
+    generation.current += 1;
     setExtra(null);
     setNotice(null);
   }, [queryKey, first.state]);
@@ -44,11 +45,11 @@ export function VehiclesScreen() {
   const loadMore = async (cursor: string) => {
     setLoadingMore(true);
     setNotice(null);
-    const requested = queryKey;
+    const requested = generation.current;
     const result = await ports.vehicles.list(query(cursor));
     setLoadingMore(false);
-    // The filters changed while this page was loading: its rows belong to a different list.
-    if (keyRef.current !== requested) return;
+    // The list was reloaded or its filters changed while this page was loading: it belongs to an older list.
+    if (generation.current !== requested) return;
     if (result.ok)
       setExtra((current) => ({
         items: [...(current?.items ?? []), ...result.value.items],
