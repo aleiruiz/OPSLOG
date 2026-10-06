@@ -11,6 +11,8 @@ export interface OutboxRecord<T = unknown> {
   /** Request correlation and actor of the operation that enqueued the event (SPECS event envelope). */
   readonly correlationId?: string;
   readonly actorRef?: { readonly subject: string; readonly kind: 'user' | 'api_key' | 'system' };
+  /** Permission the actor needed to enqueue; the worker re-checks it against the actor's current role. */
+  readonly requiredPermission?: string;
   readonly entityId?: string;
   readonly schemaVersion?: number;
   status: OutboxStatus;
@@ -111,6 +113,9 @@ export class InMemoryOutboxStore implements OutboxStore {
           idempotencyKey: input.idempotencyKey,
           ...(input.correlationId === undefined ? {} : { correlationId: input.correlationId }),
           ...(input.actorRef === undefined ? {} : { actorRef: structuredClone(input.actorRef) }),
+          ...(input.requiredPermission === undefined
+            ? {}
+            : { requiredPermission: input.requiredPermission }),
           ...(input.entityId === undefined ? {} : { entityId: input.entityId }),
           ...(input.schemaVersion === undefined ? {} : { schemaVersion: input.schemaVersion }),
           status: 'pending',

@@ -257,6 +257,8 @@ export interface EmitInput {
 }
 export type Emit = (event: EmitInput) => void;
 
+const ACTOR_PREFIX = 'user-';
+
 const nonEmpty = (value: unknown): value is string =>
   typeof value === 'string' && value.trim().length > 0 && value.length <= 200;
 
@@ -351,6 +353,18 @@ export class Platform {
     this.runtime = createWorkerRuntime({
       outbox: this.outbox,
       tenants: this.tenants,
+      actors: {
+        // Current role, not the one at enqueue time: a revoked or demoted actor's pending jobs stop.
+        allows: async (tenantId, actor, permission) => {
+          if (!actor.subject.startsWith(ACTOR_PREFIX)) return false;
+          const role = await this.access.effectiveRole(
+            tenantId,
+            actor.subject.slice(ACTOR_PREFIX.length),
+          );
+          if (!role) return false;
+          return permission === undefined || ROLE_PERMISSIONS[role].includes(permission as never);
+        },
+      },
       audit: this.audit,
       pipeline: this.pipeline,
       clock: () => this.now().getTime(),
@@ -748,7 +762,13 @@ export class Platform {
           throw new PlatformError('not_found');
         // A pending invitation (of any role) is revoked: the token can no longer be redeemed. It
         // holds no active seat, so the last-administrator rule does not apply.
-        await this.identity.revokeMembership(context.tenantId, targetIdentityId);
+        try {
+          await this.identity.revokeMembership(context.tenantId, targetIdentityId);
+        } catch (error) {
+          // The store already holds no live membership (revoked elsewhere): the directory entry
+          // must still go, or the member would stay listed as "invited" forever.
+          if (!(error instanceof AuthError && error.code === 'not_found')) throw error;
+        }
         this.access.revokePending(targetIdentityId, context.tenantId);
         this.auditNow(
           this.userActor(context),
@@ -1090,7 +1110,8 @@ export class Platform {
             occurredAt: this.now().toISOString(),
             idempotencyKey: event.idempotencyKey ?? randomUUID(),
             correlationId,
-            actorRef: { subject: `user-${context.actor.subject}`, kind: 'user' },
+            actorRef: { subject: `${ACTOR_PREFIX}${context.actor.subject}`, kind: 'user' },
+            requiredPermission: permission,
             entityId: event.entityId,
             schemaVersion: 1,
           });

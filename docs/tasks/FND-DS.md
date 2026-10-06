@@ -18,13 +18,15 @@ acceptance: ["Given tokens SPECS/artifact, When se renderiza el tema, Then color
 unit_cases: ["tokens completos", "contraste", "focus visible", "disabled/loading", "status y severity separados", "responsive 360px"]
 integration_cases: ["axe sobre stories", "tema Material UI", "visual snapshots representativos"]
 e2e_cases: ["navegación por teclado en DataTable/Wizard/Timeline", "estados comprensibles sin solo color"]
-commands: ["pnpm storybook", "pnpm test --filter ui", "pnpm axe --filter ui", "pnpm lint --filter ui"]
+commands: ["pnpm --filter @opslog/ui test", "pnpm --filter @opslog/ui axe", "pnpm lint"]
 fixtures: ["stories sintéticas", "sin datos reales", "roles y permisos representados como lenguaje de usuario"]
 non_goals: ["pantallas de producto", "API/ORM", "reglas de autorización en componentes", "copiar código del artifact"]
 completion_evidence: ["commit/PR listo para revisión", "stories y axe", "tokens/contraste", "una auditoría independiente del proveedor activo por SHA"]
 rollback: "Revertir cambios del paquete y conservar snapshots/evidencia; no tocar aplicaciones consumidoras."
 max_repair_cycles: 3
 ```
+
+Nota: este repositorio no tiene un script `pnpm storybook`; el catálogo se verifica hoy con las pruebas unitarias y axe de `@opslog/ui` (comandos de arriba). Storybook y las capturas visuales están pendientes de decisión del propietario.
 
 ## Fronteras
 

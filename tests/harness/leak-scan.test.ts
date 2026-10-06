@@ -89,7 +89,7 @@ describe('leak scan', () => {
     const marked = `const fixture = '${aws}'; // secret-scan:allow synthetic negative fixture\n`;
     const ok = scan({ 'a.ts': marked });
     expect(ok.status).toBe(0);
-    expect(ok.out).toContain('a.ts:1: AWS access key id (allowed: synthetic negative fixture)');
+    expect(ok.out).toContain('a.ts:1: AWS access key id (allowed, reason recorded in source)');
     expect(ok.out).not.toContain(aws);
     expect(
       scan({ 'a.py': `fixture = '${aws}'  # secret-scan:allow synthetic fixture\n` }).status,
@@ -107,6 +107,25 @@ describe('leak scan', () => {
       expect(scan({ 'a.ts': line }).status, line).toBe(1);
   });
 
+  it('checks every match on a line and never echoes the allow reason', () => {
+    // A second value after the marker position, or a second match of the same pattern, still fails.
+    const second = `AKIA${'QRSTUVWXYZ234567'}`;
+    expect(scan({ 'a.ts': `const x = ['${aws}', '${second}'];\n` }).status).toBe(1);
+    expect(
+      scan({ 'a.ts': `const x = '${aws}'; const y = '${second}'; // secret-scan:allow ok\n` })
+        .status,
+    ).toBe(0);
+    expect(
+      scan({ 'a.ts': `const x = '${aws}'; // secret-scan:allow ok\nconst y = '${second}';\n` })
+        .status,
+    ).toBe(1);
+    const reasonSecret = `reason-${'zzTOPSECRETzz'}`;
+    const result = scan({ 'a.ts': `const x = '${aws}'; // secret-scan:allow ${reasonSecret}\n` });
+    expect(result.status).toBe(0);
+    expect(result.out).toContain('AWS access key id');
+    expect(result.out).not.toContain(reasonSecret);
+  });
+
   it('finds a value glued to an identifier character and in files with NUL bytes', () => {
     expect(scan({ 'a.ts': `const x = 'x_${aws}';\n` }).status).toBe(1);
     expect(scan({ 'a.ts': `const x = 'x_${github}';\n` }).status).toBe(1);
@@ -122,6 +141,7 @@ describe('leak scan', () => {
       'ok.txt': `see ${'https'}://example.com:8080/path\n`,
     });
     expect(Date.now() - started).toBeLessThan(10_000);
+    expect(result.status).toBe(0);
     expect(result.out).not.toContain('ok.txt');
   });
 
