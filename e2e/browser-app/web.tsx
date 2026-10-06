@@ -15,6 +15,16 @@ bump.textContent = 'Simular que otra persona edita ECO-001 (arnés)';
 bump.addEventListener('click', () =>
   api.controls.changeVehicleExternally('veh-001', { odometerKm: 90000 }),
 );
-harness.append(expire, bump);
+const bumpDocument = document.createElement('button');
+bumpDocument.textContent = 'Simular cambio ajeno en el documento doc-001 (arnés)';
+bumpDocument.addEventListener('click', () =>
+  api.controls.changeDocumentExternally('doc-001', { title: 'Cambiado por otra persona' }),
+);
+const bumpPolicy = document.createElement('button');
+bumpPolicy.textContent = 'Simular cambio ajeno en la póliza pol-001 (arnés)';
+bumpPolicy.addEventListener('click', () =>
+  api.controls.changePolicyExternally('pol-001', { insurer: 'Cambiada por otra persona' }),
+);
+harness.append(expire, bump, bumpDocument, bumpPolicy);
 root.append(app, harness);
 mountApp(app, api, { basename: '/web' });

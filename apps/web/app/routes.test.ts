@@ -34,10 +34,37 @@ describe('route matching', () => {
       params: { id: 'veh-1' },
     });
     expect(resolveRoute('/flota/vehiculos/a/b/c')).toBeNull();
-    // Only the list is in the navigation, under "Flota".
+    // Only the lists are in the navigation, under "Flota".
     expect(routes.filter((route) => route.nav?.group === 'Flota').map((route) => route.id)).toEqual(
-      ['vehicles'],
+      ['vehicles', 'documents', 'policies'],
     );
+  });
+
+  it('resolves the document and policy screens, with "nuevo"/"nueva" taking precedence over the id', () => {
+    expect(resolveRoute('/flota/documentos')?.route.id).toBe('documents');
+    expect(resolveRoute('/flota/documentos/nuevo')?.route.id).toBe('documentNew');
+    expect(resolveRoute('/flota/documentos/d-1')).toMatchObject({
+      route: { id: 'documentDetail' },
+      params: { id: 'd-1' },
+    });
+    expect(resolveRoute('/flota/documentos/d-1/editar')?.route.id).toBe('documentEdit');
+    expect(resolveRoute('/flota/documentos/d-1/renovar')?.route.id).toBe('documentRenew');
+    expect(resolveRoute('/flota/documentos/a/b/c')).toBeNull();
+    expect(resolveRoute('/flota/seguros')?.route.id).toBe('policies');
+    expect(resolveRoute('/flota/seguros/nueva')?.route.id).toBe('policyNew');
+    expect(resolveRoute('/flota/seguros/p-1')).toMatchObject({
+      route: { id: 'policyDetail' },
+      params: { id: 'p-1' },
+    });
+    expect(resolveRoute('/flota/seguros/p-1/editar')?.route.id).toBe('policyEdit');
+    expect(resolveRoute('/flota/seguros/p-1/renovar')?.route.id).toBe('policyRenew');
+    const byId = Object.fromEntries(routes.map((route) => [route.id, route.access]));
+    for (const id of ['documents', 'documentDetail', 'policies', 'policyDetail'])
+      expect(byId[id]).toEqual({ permission: 'view' });
+    for (const id of ['documentNew', 'policyNew'])
+      expect(byId[id]).toEqual({ permission: 'create' });
+    for (const id of ['documentEdit', 'documentRenew', 'policyEdit', 'policyRenew'])
+      expect(byId[id]).toEqual({ permission: 'edit' });
   });
 
   it('resolves the area screens, with "nueva" taking precedence over the id, under the "Plantilla" group', () => {

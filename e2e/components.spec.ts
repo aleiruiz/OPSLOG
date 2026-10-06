@@ -145,10 +145,11 @@ test.describe('OPSLOG UI components in a real browser', () => {
 
 test.describe('OPSLOG stories render and pass accessibility checks', () => {
   test('renders every story and has no WCAG 2.1 A/AA violations', async ({ page }) => {
+    test.setTimeout(120_000); // one axe pass over every story page
     await page.goto('/stories.html');
     await expect(page.getByRole('heading', { name: 'Stories OPSLOG' })).toBeVisible();
     // Foundations: StatusBadge, UiState and the base components each contribute stories.
-    expect(await page.locator('main > section').count()).toBe(112);
+    expect(await page.locator('main > section').count()).toBe(194);
     const results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
       .analyze();

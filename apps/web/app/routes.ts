@@ -20,7 +20,17 @@ export interface RouteDefinition {
     | 'areaNew'
     | 'areaDetail'
     | 'areaEdit'
-    | 'areaMove';
+    | 'areaMove'
+    | 'documents'
+    | 'documentNew'
+    | 'documentDetail'
+    | 'documentEdit'
+    | 'documentRenew'
+    | 'policies'
+    | 'policyNew'
+    | 'policyDetail'
+    | 'policyEdit'
+    | 'policyRenew';
   readonly pattern: string;
   readonly title: string;
   readonly access: RouteAccess;
@@ -105,6 +115,70 @@ export const routes: readonly RouteDefinition[] = [
     id: 'vehicleEdit',
     pattern: '/flota/vehiculos/:id/editar',
     title: 'Editar vehículo',
+    access: { permission: 'edit' },
+  },
+  // Documents with an expiry date: read = `view`, create = `create`, edit/renew = `edit`; archiving (`delete`) is an
+  // action of the detail. Insurance policies follow the same permissions (the deductible also needs `view_costs`).
+  {
+    id: 'documents',
+    pattern: '/flota/documentos',
+    title: 'Documentos',
+    access: { permission: 'view' },
+    nav: { group: 'Flota', label: 'Documentos' },
+  },
+  {
+    id: 'documentNew',
+    pattern: '/flota/documentos/nuevo',
+    title: 'Nuevo documento',
+    access: { permission: 'create' },
+  },
+  {
+    id: 'documentDetail',
+    pattern: '/flota/documentos/:id',
+    title: 'Documento',
+    access: { permission: 'view' },
+  },
+  {
+    id: 'documentEdit',
+    pattern: '/flota/documentos/:id/editar',
+    title: 'Editar documento',
+    access: { permission: 'edit' },
+  },
+  {
+    id: 'documentRenew',
+    pattern: '/flota/documentos/:id/renovar',
+    title: 'Renovar documento',
+    access: { permission: 'edit' },
+  },
+  {
+    id: 'policies',
+    pattern: '/flota/seguros',
+    title: 'Seguros',
+    access: { permission: 'view' },
+    nav: { group: 'Flota', label: 'Seguros' },
+  },
+  {
+    id: 'policyNew',
+    pattern: '/flota/seguros/nueva',
+    title: 'Nueva póliza',
+    access: { permission: 'create' },
+  },
+  {
+    id: 'policyDetail',
+    pattern: '/flota/seguros/:id',
+    title: 'Póliza',
+    access: { permission: 'view' },
+  },
+  {
+    id: 'policyEdit',
+    pattern: '/flota/seguros/:id/editar',
+    title: 'Editar póliza',
+    access: { permission: 'edit' },
+  },
+  {
+    id: 'policyRenew',
+    pattern: '/flota/seguros/:id/renovar',
+    title: 'Renovar póliza',
     access: { permission: 'edit' },
   },
   {

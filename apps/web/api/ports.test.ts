@@ -169,6 +169,73 @@ describe('createHttpApi', () => {
     expect(calls[8]?.input).toEqual({ params: { id: 'a-1' }, query: { limit: 25, cursor: 'c' } });
   });
 
+  it('maps every document and insurance call to its route, with the version in the body', async () => {
+    const { api, calls } = scripted({});
+    await api.documents.list();
+    await api.documents.list({ limit: 25, ownerType: 'vehicle', status: 'expiring' });
+    await api.documents.get('doc-1');
+    await api.documents.create({
+      ownerType: 'vehicle',
+      ownerId: 'veh-1',
+      typeCode: 'registration_card',
+      title: 'Tarjeta',
+      expiresOn: '2027-01-01',
+    });
+    await api.documents.update('doc-1', { version: 2, title: 'Otra' });
+    await api.documents.renew('doc-1', { version: 3, expiresOn: '2028-01-01' });
+    await api.documents.archive('doc-1', 4);
+    await api.documents.history('doc-1');
+    await api.documents.history('doc-1', { limit: 25, cursor: 'c' });
+    await api.insurance.list();
+    await api.insurance.list({ coversOn: '2026-10-06' });
+    await api.insurance.get('pol-1');
+    await api.insurance.create({
+      vehicleId: 'veh-1',
+      insurer: 'Aseguradora',
+      policyNumber: 'P-1',
+      coverageType: 'comprehensive',
+      startsOn: '2026-01-01',
+      endsOn: '2026-12-31',
+    });
+    await api.insurance.update('pol-1', { version: 2, insurer: 'Otra' });
+    await api.insurance.renew('pol-1', {
+      version: 3,
+      startsOn: '2027-01-01',
+      endsOn: '2027-12-31',
+    });
+    await api.insurance.archive('pol-1', 4);
+    await api.insurance.history('pol-1');
+    await api.insurance.history('pol-1', { limit: 50, cursor: 'c' });
+    expect(calls.map((call) => call.id)).toEqual([
+      'documents.list',
+      'documents.list',
+      'documents.get',
+      'documents.create',
+      'documents.update',
+      'documents.renew',
+      'documents.archive',
+      'documents.history',
+      'documents.history',
+      'insurance.list',
+      'insurance.list',
+      'insurance.get',
+      'insurance.create',
+      'insurance.update',
+      'insurance.renew',
+      'insurance.archive',
+      'insurance.history',
+      'insurance.history',
+    ]);
+    expect(calls[4]?.input).toEqual({
+      params: { id: 'doc-1' },
+      body: { version: 2, title: 'Otra' },
+    });
+    expect(calls[6]?.input).toEqual({ params: { id: 'doc-1' }, body: { version: 4 } });
+    expect(calls[8]?.input).toEqual({ params: { id: 'doc-1' }, query: { limit: 25, cursor: 'c' } });
+    expect(calls[10]?.input).toEqual({ query: { coversOn: '2026-10-06' } });
+    expect(calls[15]?.input).toEqual({ params: { id: 'pol-1' }, body: { version: 4 } });
+  });
+
   it('passes failures through untouched and exposes the identity provider', async () => {
     const oidc = createFakeOidc();
     const client = { call: async () => failure } as unknown as BffClient;

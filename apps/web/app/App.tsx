@@ -10,6 +10,20 @@ import { UsersScreen } from '../settings/access/UsersScreen';
 import { AreaDetailScreen } from '../areas/AreaDetailScreen';
 import { AreaCreateScreen, AreaEditScreen, AreaMoveScreen } from '../areas/AreaFormScreen';
 import { AreasScreen } from '../areas/AreasScreen';
+import { DocumentDetailScreen } from '../documents/DocumentDetailScreen';
+import {
+  DocumentCreateScreen,
+  DocumentEditScreen,
+  DocumentRenewScreen,
+} from '../documents/DocumentFormScreen';
+import { DocumentsScreen } from '../documents/DocumentsScreen';
+import { PolicyDetailScreen } from '../insurance/PolicyDetailScreen';
+import {
+  PolicyCreateScreen,
+  PolicyEditScreen,
+  PolicyRenewScreen,
+} from '../insurance/PolicyFormScreen';
+import { PoliciesScreen } from '../insurance/PoliciesScreen';
 import { VehicleDetailScreen } from '../vehicles/VehicleDetailScreen';
 import { VehicleCreateScreen, VehicleEditScreen } from '../vehicles/VehicleFormScreen';
 import { VehiclesScreen } from '../vehicles/VehiclesScreen';
@@ -34,6 +48,15 @@ function navigationRoute(id: string | null): string | null {
   if (id === 'vehicleNew' || id === 'vehicleDetail' || id === 'vehicleEdit') return 'vehicles';
   if (id === 'areaNew' || id === 'areaDetail' || id === 'areaEdit' || id === 'areaMove')
     return 'areas';
+  if (
+    id === 'documentNew' ||
+    id === 'documentDetail' ||
+    id === 'documentEdit' ||
+    id === 'documentRenew'
+  )
+    return 'documents';
+  if (id === 'policyNew' || id === 'policyDetail' || id === 'policyEdit' || id === 'policyRenew')
+    return 'policies';
   return id;
 }
 
@@ -158,6 +181,36 @@ function Routes() {
         break;
       case 'areaMove':
         screen = <AreaMoveScreen key={match.params.id} id={match.params.id as string} />;
+        break;
+      case 'documents':
+        screen = <DocumentsScreen />;
+        break;
+      case 'documentNew':
+        screen = <DocumentCreateScreen />;
+        break;
+      case 'documentDetail':
+        screen = <DocumentDetailScreen key={match.params.id} id={match.params.id as string} />;
+        break;
+      case 'documentEdit':
+        screen = <DocumentEditScreen key={match.params.id} id={match.params.id as string} />;
+        break;
+      case 'documentRenew':
+        screen = <DocumentRenewScreen key={match.params.id} id={match.params.id as string} />;
+        break;
+      case 'policies':
+        screen = <PoliciesScreen />;
+        break;
+      case 'policyNew':
+        screen = <PolicyCreateScreen />;
+        break;
+      case 'policyDetail':
+        screen = <PolicyDetailScreen key={match.params.id} id={match.params.id as string} />;
+        break;
+      case 'policyEdit':
+        screen = <PolicyEditScreen key={match.params.id} id={match.params.id as string} />;
+        break;
+      case 'policyRenew':
+        screen = <PolicyRenewScreen key={match.params.id} id={match.params.id as string} />;
         break;
       case 'invitation':
         screen = (
