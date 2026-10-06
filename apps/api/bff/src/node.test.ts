@@ -99,6 +99,16 @@ describe('node adapter over a loopback socket', () => {
     expect(reply.headers['connection']).toBe('close');
   });
 
+  it('serves a request that carries a header named __proto__', async () => {
+    world = createBffWorld();
+    const port = await listen(world.handler);
+    const headers: Record<string, string> = { host: HOST };
+    Object.defineProperty(headers, '__proto__', { value: 'x', enumerable: true });
+    const reply = await send(port, 'GET', '/api/auth/csrf', headers);
+    expect(reply.status).toBe(200);
+    expect(Object.getPrototypeOf({})).toBe(Object.prototype);
+  });
+
   it('refuses an oversized streamed body announced as chunked', async () => {
     world = createBffWorld({ bff: { maxBodyBytes: 256 } });
     const port = await listen(world.handler);

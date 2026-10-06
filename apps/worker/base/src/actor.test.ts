@@ -105,6 +105,34 @@ describe('worker re-checks the actor that enqueued a job', () => {
     }
   });
 
+  it('fails closed for every kind except system: api_key and unknown kinds need a check', async () => {
+    for (const kind of ['api_key', 'service', ''] as const) {
+      const actorRef = { subject: 'user-x', kind: kind as 'api_key' };
+      const unwired = build(undefined);
+      enqueueAs(unwired.store, actorRef);
+      await unwired.worker.process(Date.now());
+      expect(unwired.calls(), kind).toBe(0);
+      expect(unwired.store.get('tenant-a', 'e1')?.status, kind).toBe('dead_letter');
+      expect(unwired.worker.metrics.rejectedActors, kind).toBe(1);
+
+      const denied = build(() => false);
+      enqueueAs(denied.store, actorRef);
+      await denied.worker.process(Date.now());
+      expect(denied.calls(), kind).toBe(0);
+      expect(denied.store.get('tenant-a', 'e1')?.status, kind).toBe('dead_letter');
+
+      const seen: unknown[] = [];
+      const allowed = build((...args) => {
+        seen.push(args);
+        return true;
+      });
+      enqueueAs(allowed.store, actorRef);
+      await allowed.worker.process(Date.now());
+      expect(seen, kind).toEqual([['tenant-a', actorRef, 'create']]);
+      expect(allowed.calls(), kind).toBe(1);
+    }
+  });
+
   it('does not re-ask once the handler already ran (only the audit append is retried)', async () => {
     const store = new InMemoryOutboxStore();
     const persisted = new InMemoryAuditStore();

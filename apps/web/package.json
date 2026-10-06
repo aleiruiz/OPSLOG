@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test:unit": "vitest run --coverage.enabled --coverage.thresholds.lines=90 --coverage.thresholds.functions=90 --coverage.thresholds.statements=90 --coverage.thresholds.branches=85",
+    "test:unit": "vitest run --coverage.enabled --coverage.thresholds.lines=95 --coverage.thresholds.functions=95 --coverage.thresholds.statements=95 --coverage.thresholds.branches=90",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint . --max-warnings 0"
   },

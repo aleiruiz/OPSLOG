@@ -105,7 +105,8 @@ export class Worker {
     }
     if (
       !record.handlerCompleted &&
-      record.actorRef?.kind === 'user' &&
+      record.actorRef !== undefined &&
+      record.actorRef.kind !== 'system' &&
       !(await this.actorStillAllowed(record))
     ) {
       this.metrics.rejectedActors += 1;

@@ -7,6 +7,19 @@ async function* bodyOf(request: IncomingMessage): AsyncGenerator<Uint8Array> {
     yield chunk;
 }
 
+/**
+ * Every value of every header, lower-cased names, on a prototype-less map. Node's own
+ * `headersDistinct` throws for a header named `__proto__`, which would turn into a 500.
+ */
+function distinctHeaders(rawHeaders: readonly string[]): Record<string, string[]> {
+  const result: Record<string, string[]> = Object.create(null) as Record<string, string[]>;
+  for (let index = 0; index + 1 < rawHeaders.length; index += 2) {
+    const name = (rawHeaders[index] as string).toLowerCase();
+    (result[name] ??= []).push(rawHeaders[index + 1] as string);
+  }
+  return result;
+}
+
 function write(response: ServerResponse, result: BffResponse): void {
   const headers: Record<string, string | string[]> = {};
   for (const [name, value] of Object.entries(result.headers))
@@ -32,7 +45,7 @@ export function createNodeListener(
           url: request.url as string,
           // Distinct values: Node's `headers` silently keeps the first of a repeated host or
           // content-type; the handler must see the repetition to treat it as ambiguous.
-          headers: request.headersDistinct,
+          headers: distinctHeaders(request.rawHeaders),
           body: bodyOf(request),
         });
       } catch {
