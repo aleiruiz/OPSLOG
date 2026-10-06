@@ -9,7 +9,7 @@ const port = Number(process.env.STORYBOOK_STATIC_PORT ?? 6007); // serve.mjs rea
 // locale/timezone/colour profile and no font hinting or LCD antialiasing. Run `pnpm storybook:build` first
 // (the `test:visual` script does).
 // Baselines must be generated with the Chromium build pinned by @playwright/test (1.56.x -> 1194, the one CI
-// installs with `playwright install`); regenerate them with `pnpm test:visual:update` after any Playwright bump.
+// installs with `playwright install`; default headless shell, not OPSLOG_CHROMIUM_PATH full Chrome); regenerate them with `pnpm test:visual:update` after any Playwright bump.
 // Tolerance is therefore tight: a strict per-pixel threshold and at most 0.2% differing pixels.
 export default defineConfig({
   testDir: '.',
