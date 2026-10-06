@@ -2,6 +2,12 @@
 
 Fecha: 2026-10-05, America/Mexico_City. Alcance: acumulativo (M0 FND-REPO/CONTRACTS/DS/AWS/ORCH/INTEGRATE más los slices M1 de audit/outbox #15, tenancy #16, auth #17, seguimientos #20, y los cierres de G0 #19, #21, #22 y #23). Sustituye al informe histórico `docs/audits/G0/2026-10-04-report.md`.
 
+## Decisión del propietario (2026-10-06)
+
+Con ambos auditores aprobando `8b1b61c`, el propietario (Alei Ruiz) **aceptó por escrito que G0 pase con branch protection abierta**: «lets just add a note to G0 that since this is an MVP, we dont need the protection right now». Tras la solicitud de aprobación del 2026-10-05 («run a secondary audit to clean and approve it»), **G0 queda aprobado por decisión del propietario sobre el candidato `8b1b61c`**, con la condición cumplida de esta manera y con los diferimientos y bloqueos externos listados abajo. Este registro lo redacta la sesión autora de #19–#24 y no sustituye esa decisión.
+
+Contexto de la protección: la rama por defecto del repositorio era `codex/fnd-repo-1` y se cambió a `main`; el repositorio se hizo privado y GitHub no aplica rulesets en repositorios privados sin plan Team (existe un ruleset `protect-main` guardado pero sin efecto). Reabrir: activar protección (repo público o plan Team) antes de abrir el repositorio a más colaboradores y, como máximo, al cierre de G1.
+
 ## Resultado
 
 | Auditor                                                                              | Modelo observado  | Candidato | Veredicto | Informe                    |
@@ -21,12 +27,12 @@ Ambos auditores ejecutaron por su cuenta install, `baseline:check`, lint, `forma
 
 ## Condiciones y bloqueos externos explícitos
 
-- **Branch protection en `main`: no configurada.** Solo el propietario o un administrador de GitHub puede configurarla (check `quality` requerido, sin pushes directos). Ambos auditores la registran como criterio de FND-INTEGRATE ("protección de baseline/gates contra cambios del autor") aún no cumplido. **G0 solo debe registrarse como aprobado si el propietario la activa o acepta por escrito que G0 pasa con ella abierta.**
+- **Branch protection en `main`: sin efecto.** Ambos auditores la registran como criterio de FND-INTEGRATE ("protección de baseline/gates contra cambios del autor") no cumplido y condicionaron el registro de G0 a que el propietario la activara o aceptara por escrito su ausencia; el propietario la aceptó el 2026-10-06 por ser un MVP (ver «Decisión del propietario»). Sigue siendo un riesgo abierto: la integridad de baselines solo la comprueba `baseline:check` en CI, sin barrera contra pushes directos.
 - **AWS: diferido (ADR-0002).** La viabilidad queda pendiente; auditor A y B lo aceptan como bloqueo externo registrado.
 - **Diferimiento de FND-ORCH a G1** (GitHub fake, store/proyección de Tasks, `simulate`, e2e): decisión del usuario atestiguada en ADR-0008 (tarjeta de decisión en la app, 2026-10-05); el repositorio no puede verificarla. Fecha límite: cierre de G1.
 - **Storybook como runtime y snapshots de píxeles:** diferidos a antes de la primera pantalla funcional y no más tarde de G1.
 - **Excepción de M1:** #15, #16, #17 y #20 se fusionaron antes de G0 y fueron ratificados por el usuario (ADR-0008); el código M1 está dentro del alcance acumulativo auditado.
-- **Autoría:** la sesión que redactó #19–#23 no declara G0 aprobado. La decisión de aprobación corresponde al usuario.
+- **Autoría:** la sesión que redactó #19–#24 no decide la aprobación; la tomó el propietario (ver arriba).
 
 ## Hallazgos no bloqueantes (a atender en G1)
 
