@@ -67,8 +67,26 @@ describe('sanitizeStoreError', () => {
       expect(safe.message).toBe(`Identity store operation failed: ${expected}`);
       expect(JSON.stringify(safe)).not.toContain('jane.doe');
     }
-    expect(sanitizeStoreError('weird')).toMatchObject({ code: 'unavailable', errno: null });
-    expect(sanitizeStoreError(new Error('plain'))).toMatchObject({ code: 'unavailable' });
+    expect(sanitizeStoreError('weird')).toMatchObject({
+      code: 'internal',
+      errno: null,
+      origin: 'string',
+      frames: [],
+    });
+    expect(sanitizeStoreError(new Error('plain'))).toMatchObject({
+      code: 'internal',
+      origin: 'Error',
+    });
+    // A driver-style error with only a string code (no errno) is still an infrastructure failure.
+    expect(sanitizeStoreError({ code: 'PROTOCOL_CONNECTION_LOST' })).toMatchObject({
+      code: 'unavailable',
+      errno: null,
+      origin: null,
+    });
+    expect(sanitizeStoreError(Object.assign(new Error('x'), { stack: undefined }))).toMatchObject({
+      code: 'internal',
+      frames: [],
+    });
   });
 
   it('marks the last-administrator conflict', () => {

@@ -1024,7 +1024,9 @@ describe('error handling and privacy', () => {
       ].join('|');
       expect(rendered).not.toContain(SECRET);
       expect(rendered).not.toContain('PROTOCOL_CONNECTION_LOST');
-      expect(harness.events).toEqual([{ operation, code: 'unavailable', errno: 2013 }]);
+      expect(harness.events).toEqual([
+        { operation, code: 'unavailable', errno: 2013, origin: null, frames: [] },
+      ]);
       expect((error as { cause?: unknown }).cause).toBeUndefined();
     },
   );
@@ -1064,8 +1066,32 @@ describe('error handling and privacy', () => {
       code: 'contention',
       errno: 1213,
     });
-    expect(events).toEqual([{ operation: 'revokeMembership', code: 'contention', errno: 1213 }]);
+    expect(events).toEqual([
+      { operation: 'revokeMembership', code: 'contention', errno: 1213, origin: null, frames: [] },
+    ]);
     expect(await store.findMembership(tenantA, c.identityId)).toMatchObject({ status: 'active' });
+  });
+
+  it('keeps programming errors distinguishable without exposing their message', async () => {
+    const { store, db, events } = setup();
+    db.intercept = () => {
+      db.intercept = null;
+      throw new TypeError(`boom ${SECRET}`);
+    };
+    const error = await rejection(store.findIdentity('x'));
+    expect(error).toBeInstanceOf(IdentityStoreError);
+    expect(error).toMatchObject({ code: 'internal', errno: null, origin: 'TypeError' });
+    const frames = (error as IdentityStoreError).frames;
+    expect(frames.length).toBeGreaterThan(0);
+    expect(frames.every((frame) => frame.startsWith('at '))).toBe(true);
+    const rendered = [(error as Error).message, JSON.stringify(error), JSON.stringify(events)].join(
+      '|',
+    );
+    expect(rendered).not.toContain(SECRET);
+    expect(rendered).not.toContain('boom');
+    expect(events).toEqual([
+      { operation: 'findIdentity', code: 'internal', errno: null, origin: 'TypeError', frames },
+    ]);
   });
 
   it('works without an error observer and with non-driver exceptions', async () => {

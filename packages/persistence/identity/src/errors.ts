@@ -9,17 +9,23 @@ export class LastAdministratorError extends AuthError {
   }
 }
 
-export type IdentityStoreErrorCode = 'unavailable' | 'contention' | 'integrity';
+/** `internal`: a non-driver failure (programming error, TypeORM misuse); `origin`/`frames` identify it. */
+export type IdentityStoreErrorCode = 'unavailable' | 'contention' | 'integrity' | 'internal';
 
 /**
  * Sanitized infrastructure failure. The driver error is deliberately dropped: MySQL messages and
  * TypeORM `QueryFailedError.parameters` can contain subjects, token hashes or tenant ids (PII/secrets).
- * Only a fixed message, a coarse code and the numeric driver errno survive.
+ * Only a fixed message, a coarse code and the numeric driver errno survive; for non-driver (programming)
+ * errors also the class name and the stack frames, so they stay diagnosable without exposing data.
  */
 export class IdentityStoreError extends Error {
   public constructor(
     public readonly code: IdentityStoreErrorCode,
     public readonly errno: number | null = null,
+    /** Class name of a non-driver cause (never its message). */
+    public readonly origin: string | null = null,
+    /** Stack frames of a non-driver cause, without the message line: locations only, no data. */
+    public readonly frames: readonly string[] = [],
   ) {
     super(`Identity store operation failed: ${code}`);
     this.name = 'IdentityStoreError';
@@ -68,5 +74,19 @@ export function sanitizeStoreError(error: unknown): Error {
   if (isMissingParent(error) || isReferenced(error) || isCheckViolation(error))
     return new IdentityStoreError('integrity', driverErrno(error));
   if (isLockContention(error)) return new IdentityStoreError('contention', driverErrno(error));
+  if (driverErrno(error) === null && driverCode(error) === null) {
+    const stack = error instanceof Error ? (error.stack ?? '') : '';
+    const frames = stack
+      .split('\n')
+      .filter((line) => line.trimStart().startsWith('at '))
+      .slice(0, 8)
+      .map((line) => line.trim());
+    return new IdentityStoreError(
+      'internal',
+      null,
+      error instanceof Error ? error.name : typeof error,
+      frames,
+    );
+  }
   return new IdentityStoreError('unavailable', driverErrno(error));
 }

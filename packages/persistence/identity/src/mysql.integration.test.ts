@@ -130,6 +130,8 @@ suite('persistent identity store on MySQL', () => {
     } finally {
       await migrations.destroy();
     }
+    // Admin reads of the synthetic schema use unqualified table names.
+    await admin.changeUser({ database: databaseName });
     // Two independent pools stand in for two API processes.
     sourceA = createIdentityDataSource(runtimeConfig());
     sourceB = createIdentityDataSource(runtimeConfig());
@@ -142,6 +144,7 @@ suite('persistent identity store on MySQL', () => {
   afterAll(async () => {
     await Promise.allSettled([sourceA?.destroy(), sourceB?.destroy()]);
     if (admin) {
+      await admin.changeUser({ database: 'mysql' });
       await admin.query(`DROP DATABASE IF EXISTS ${identifier(databaseName)}`);
       await admin.query(`DROP USER IF EXISTS '${runtimeUser}'@'%'`);
       await admin.end();
@@ -592,16 +595,26 @@ suite('persistent identity store on MySQL', () => {
       });
       await hasLock;
       let finished = false;
-      const waiting = storeA.revokeMembership(tenant, a.identityId).then((value) => {
-        finished = true;
-        return value;
-      });
+      let failure: unknown = null;
+      const waiting = storeA.revokeMembership(tenant, a.identityId).then(
+        (value) => {
+          finished = true;
+          return value;
+        },
+        (error: unknown) => {
+          failure = error;
+          finished = true;
+          return false;
+        },
+      );
       // Deterministic: wait until MySQL reports a transaction blocked on a lock, not a fixed sleep.
       let blocked = 0;
       for (let attempt = 0; attempt < 200 && blocked === 0; attempt += 1) {
         const waits = await rows<{ n: number }>(
           "SELECT COUNT(*) AS n FROM information_schema.INNODB_TRX WHERE trx_state = 'LOCK WAIT'",
         );
+        // An early failure of the waiting operation must surface as itself, not as a missing wait.
+        if (failure) throw failure;
         blocked = Number(waits[0]?.n);
         if (blocked === 0) await new Promise((resolve) => setTimeout(resolve, 25));
       }
@@ -610,6 +623,7 @@ suite('persistent identity store on MySQL', () => {
       release();
       await holder;
       expect(await waiting).toBe(true);
+      expect(failure).toBeNull();
       expect(await storeA.countActiveAdmins(tenant)).toBe(1);
     }, 60_000);
   });

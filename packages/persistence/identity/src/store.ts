@@ -49,6 +49,9 @@ export interface StoreErrorEvent {
   readonly operation: string;
   readonly code: IdentityStoreErrorCode;
   readonly errno: number | null;
+  /** Class name of a non-driver cause (`internal` only). */
+  readonly origin: string | null;
+  readonly frames: readonly string[];
 }
 
 export interface TypeOrmIdentityStoreOptions {
@@ -154,7 +157,13 @@ export class TypeOrmIdentityStore implements IdentityStore {
   private fail(operation: string, error: unknown): Error {
     const safe = sanitizeStoreError(error);
     if (safe instanceof IdentityStoreError)
-      this.onError?.({ operation, code: safe.code, errno: safe.errno });
+      this.onError?.({
+        operation,
+        code: safe.code,
+        errno: safe.errno,
+        origin: safe.origin,
+        frames: safe.frames,
+      });
     return safe;
   }
 
