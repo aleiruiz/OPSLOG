@@ -33,3 +33,5 @@ jobs:
       - run: pnpm quality
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e
+      # Storybook static build (offline) + pixel snapshots of every story (SPECS §9.1, ADR-0010).
+      - run: pnpm test:visual

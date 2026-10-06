@@ -5,8 +5,10 @@
     "test": "vitest run --environment jsdom --coverage.enabled --coverage.include=src/**/*.{ts,tsx} --coverage.exclude=src/**/*.stories.tsx --coverage.exclude=src/**/*.test.* --coverage.exclude=src/index.ts --coverage.exclude=src/fonts.ts --coverage.thresholds.lines=90 --coverage.thresholds.functions=90 --coverage.thresholds.statements=90 --coverage.thresholds.branches=85",
     "axe": "vitest run src/a11y.test.tsx --environment jsdom",
     "lint": "eslint src --max-warnings 0",
-    "typecheck": "tsc -b",
-    "build": "tsc -b"
+    "typecheck": "tsc -b && tsc -p .storybook",
+    "build": "tsc -b",
+    "storybook": "storybook dev -p 6006 --no-open --disable-telemetry",
+    "storybook:build": "storybook build -o storybook-static --disable-telemetry --quiet"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
@@ -19,12 +21,14 @@
   },
   "devDependencies": {
     "@storybook/react": "8.6.14",
+    "@storybook/react-vite": "8.6.14",
     "@testing-library/jest-dom": "6.6.3",
     "@testing-library/react": "16.2.0",
     "@types/react": "19.1.2",
     "@types/react-dom": "19.1.2",
     "axe-core": "4.10.2",
     "jsdom": "26.0.0",
+    "storybook": "8.6.14",
     "vitest": "3.2.6"
   }
 }

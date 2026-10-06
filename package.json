@@ -7,7 +7,7 @@
   },
   "scripts": {
     "lint": "eslint . --max-warnings 0",
-    "format:check": "prettier --check package.json pnpm-workspace.yaml tsconfig*.json eslint.config.mjs .prettierrc.json apps/*/package.json apps/*/*/package.json apps/*/*/tsconfig.json apps/*/*/src/**/*.ts packages/*/package.json packages/*/tsconfig.json packages/*/*/package.json packages/*/*/tsconfig.json packages/*/*/src/**/*.ts packages/ui/src packages/contracts/src tests/harness e2e .github/workflows/quality.yml docs/design docs/contracts docs/tasks/FND-INTEGRATE.md docs/tasks/CORE-TENANCY-M1-20261004.md docs/traceability/FND-CONTRACTS.md apps/worker/base packages/platform/audit packages/platform/outbox infra/queues docs/tasks/CORE-AUDIT-M1-20261004.md tools/orchestrator tests/orchestrator packages/domain/identity packages/platform/auth apps/api/auth docs/baselines/integrity.mjs docs/tasks/CORE-AUTH-M1-20261004.md docs/tasks/CORE-WEB-M1-20261006.md apps/web/tsconfig.json apps/web/vitest.config.ts apps/web/api apps/web/app apps/web/auth apps/web/settings infra/storage docs/tasks/CORE-FILES-M1-20261006.md tests/integration apps/api/composition apps/api/bff apps/worker/composition infra/runtime docs/tasks/CORE-INTEGRATE-M1-20261006.md docs/tasks/VEHICLES-M2-20261006.md",
+    "format:check": "prettier --check package.json pnpm-workspace.yaml tsconfig*.json eslint.config.mjs .prettierrc.json apps/*/package.json apps/*/*/package.json apps/*/*/tsconfig.json apps/*/*/src/**/*.ts packages/*/package.json packages/*/tsconfig.json packages/*/*/package.json packages/*/*/tsconfig.json packages/*/*/src/**/*.ts packages/ui/src packages/ui/.storybook packages/contracts/src tests/harness e2e .github/workflows/quality.yml docs/design docs/contracts docs/tasks/FND-INTEGRATE.md docs/tasks/CORE-TENANCY-M1-20261004.md docs/traceability/FND-CONTRACTS.md apps/worker/base packages/platform/audit packages/platform/outbox infra/queues docs/tasks/CORE-AUDIT-M1-20261004.md tools/orchestrator tests/orchestrator packages/domain/identity packages/platform/auth apps/api/auth docs/baselines/integrity.mjs docs/tasks/CORE-AUTH-M1-20261004.md docs/tasks/CORE-WEB-M1-20261006.md apps/web/tsconfig.json apps/web/vitest.config.ts apps/web/api apps/web/app apps/web/auth apps/web/settings infra/storage docs/tasks/CORE-FILES-M1-20261006.md tests/integration apps/api/composition apps/api/bff apps/worker/composition infra/runtime docs/tasks/CORE-INTEGRATE-M1-20261006.md docs/tasks/VEHICLES-M2-20261006.md",
     "baseline:check": "node docs/baselines/integrity.mjs",
     "leak:scan": "node tests/harness/leak-scan.mjs",
     "typecheck": "tsc -b",
@@ -15,6 +15,10 @@
     "test:integration": "vitest run tests/harness/mysql.integration.test.ts && pnpm --filter @opslog/persistence-tenancy test:integration && pnpm --filter @opslog/persistence-identity test:integration && pnpm --filter @opslog/persistence-vehicles test:integration && pnpm test:platform",
     "test:platform": "vitest run tests/integration/platform --coverage.enabled --coverage.include=apps/api/composition/src/**/*.ts --coverage.include=apps/worker/composition/src/**/*.ts --coverage.exclude=**/*.test.ts --coverage.thresholds.lines=95 --coverage.thresholds.functions=95 --coverage.thresholds.statements=95 --coverage.thresholds.branches=90",
     "test:e2e": "playwright test --config=e2e/playwright.config.mjs",
+    "storybook": "pnpm --filter @opslog/ui storybook",
+    "storybook:build": "pnpm --filter @opslog/ui storybook:build",
+    "test:visual": "pnpm storybook:build && playwright test --config=e2e/visual/playwright.config.mjs",
+    "test:visual:update": "pnpm storybook:build && playwright test --config=e2e/visual/playwright.config.mjs --update-snapshots",
     "test": "pnpm test:unit && pnpm test:integration",
     "build": "tsc -b",
     "quality": "pnpm baseline:check && pnpm leak:scan && pnpm lint && pnpm format:check && pnpm typecheck && pnpm test:unit && pnpm test:integration && pnpm build"
