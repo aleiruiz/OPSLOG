@@ -56,6 +56,45 @@ describe('RolesScreen', () => {
     expect(await screen.findAllByText('Ya existe un rol con ese nombre.')).not.toHaveLength(0);
   });
 
+  it('asks for a name and reports other server failures without field detail', async () => {
+    const { api } = await renderWithSession(<RolesScreen />);
+    await screen.findByRole('table');
+    click('Ver Consulta');
+    fireTab('Crear copia');
+    click('Crear copia');
+    expect(await screen.findByText('Escribe un nombre.')).toBeInTheDocument();
+    type('Nombre del nuevo rol', 'Auditor externo');
+    expect(screen.queryByText('Escribe un nombre.')).toBeNull();
+    api.controls.failNext('copyRole', 500);
+    click('Crear copia');
+    expect(
+      await screen.findByText('No pudimos crear la copia. Intenta nuevamente.'),
+    ).toBeInTheDocument();
+  });
+
+  it('does not stay stuck when the copy call rejects or the draft cannot be cleared', async () => {
+    const { api } = await renderWithSession(<RolesScreen />);
+    await screen.findByRole('table');
+    click('Ver Consulta');
+    fireTab('Crear copia');
+    type('Nombre del nuevo rol', 'Auditor externo');
+    const real = api.roles.copyRole;
+    api.roles.copyRole = async () => {
+      throw new Error('red');
+    };
+    click('Crear copia');
+    expect(
+      await screen.findByText('No pudimos crear la copia. Intenta nuevamente.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Crear copia' })).toBeEnabled();
+    api.roles.copyRole = real;
+    api.drafts.discard = async () => {
+      throw new Error('red');
+    };
+    click('Crear copia');
+    expect(await screen.findByText('Rol "Auditor externo" creado.')).toBeInTheDocument();
+  });
+
   it('shows an empty state, a recoverable error and the forbidden state', async () => {
     const empty = createMockApi();
     empty.roles.listRoles = async () => ({ ok: true, value: [] });

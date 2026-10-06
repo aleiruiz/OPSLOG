@@ -1,14 +1,14 @@
 import { act } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createMockApi, demoCredentials } from '../app/mockApi';
+import { createMockApi, demoCredentials, demoSubjects } from '../app/mockApi';
 import { deferred, fireEvent, renderWithSession, screen } from '../app/test/utils';
 import { DraftNotice, draftSaveDelayMs, useServerDraft } from './drafts';
 import { useSession } from './session';
 
 function Probe({ scope = 'probe' }: { scope?: string }) {
   const draft = useServerDraft(scope, { note: '' });
-  const { logout, login, state } = useSession();
+  const { logout, signIn, state } = useSession();
   return (
     <div>
       <input
@@ -21,7 +21,7 @@ function Probe({ scope = 'probe' }: { scope?: string }) {
       <button onClick={() => void draft.discard()}>Descartar</button>
       <button onClick={() => void draft.saveNow()}>Guardar ahora</button>
       <button onClick={() => void logout()}>Salir</button>
-      <button onClick={() => void login(demoCredentials.admin)}>Entrar</button>
+      <button onClick={() => void signIn(demoSubjects.admin)}>Entrar</button>
     </div>
   );
 }
@@ -169,12 +169,12 @@ describe('useServerDraft', () => {
 
   function Host() {
     const [shown, setShown] = React.useState(true);
-    const { login } = useSession();
+    const { signIn } = useSession();
     return (
       <div>
         <button onClick={() => setShown((value) => !value)}>Alternar</button>
-        <button onClick={() => void login(demoCredentials.admin)}>Reautenticar</button>
-        <button onClick={() => void login(demoCredentials.viewer)}>Entrar como consulta</button>
+        <button onClick={() => void signIn(demoSubjects.admin)}>Reautenticar</button>
+        <button onClick={() => void signIn(demoSubjects.viewer)}>Entrar como consulta</button>
         {shown && <Probe />}
       </div>
     );
@@ -245,14 +245,14 @@ describe('useServerDraft', () => {
       const realLogin = api.auth.login;
       api.auth.login = async (input) => {
         const result = await realLogin(input);
-        return result.ok && otherCompany && input.email === demoCredentials.viewer.email
+        return result.ok && otherCompany && input.code === demoCredentials.viewer.code
           ? { ok: true, value: { ...result.value, company: { id: otherCompany, name: 'Otra SA' } } }
           : result;
       };
       function Outside() {
-        const { login } = useSession();
+        const { signIn } = useSession();
         return (
-          <button onClick={() => void login(demoCredentials.viewer)}>Entrar como consulta</button>
+          <button onClick={() => void signIn(demoSubjects.viewer)}>Entrar como consulta</button>
         );
       }
       await act(async () => renderWithSession(<Probe />, { api, outside: <Outside /> }));

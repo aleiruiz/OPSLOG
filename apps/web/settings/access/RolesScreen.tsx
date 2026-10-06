@@ -17,7 +17,7 @@ import { ScrollRegion } from '../../app/ScrollRegion';
 import { ResourceView, useResource } from '../../app/resource';
 import type { RoleSummary } from '../../app/types';
 import { DraftNotice, useServerDraft } from '../../auth/drafts';
-import { fieldErrorMap, useSession } from '../../auth/session';
+import { useSession } from '../../auth/session';
 
 interface RoleRow extends RoleSummary {
   actions: string;
@@ -151,15 +151,37 @@ function CopyForm({
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!draft.values.name.trim()) {
+      setErrors({ name: 'Escribe un nombre.' });
+      return;
+    }
     setSubmitting(true);
     setErrors({});
-    const result = await ports.roles.copyRole(role.id, draft.values.name);
-    setSubmitting(false);
+    let result;
+    try {
+      result = await ports.roles.copyRole(role.id, draft.values.name);
+    } catch {
+      setErrors({ name: 'No pudimos crear la copia. Intenta nuevamente.' });
+      return;
+    } finally {
+      setSubmitting(false);
+    }
     if (result.ok) {
-      await draft.discard();
       onCreated(result.value);
+      try {
+        await draft.discard();
+      } catch {
+        // The draft is only a convenience; the next save replaces it.
+      }
     } else if (result.error.status === 401) markExpired();
-    else setErrors(fieldErrorMap(result.error));
+    else
+      // The BFF answers with a uniform error and no per-field detail: a conflict can only be the name.
+      setErrors({
+        name:
+          result.error.status === 409
+            ? 'Ya existe un rol con ese nombre.'
+            : 'No pudimos crear la copia. Intenta nuevamente.',
+      });
   };
 
   return (
@@ -173,7 +195,10 @@ function CopyForm({
           label="Nombre del nuevo rol"
           required
           value={draft.values.name}
-          onChange={(event) => draft.setField('name', event.target.value)}
+          onChange={(event) => {
+            setErrors({});
+            draft.setField('name', event.target.value);
+          }}
           error={Boolean(errors.name)}
           helperText={errors.name}
         />

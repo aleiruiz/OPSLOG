@@ -1,4 +1,13 @@
-import type { Page } from '../../../../packages/contracts/src/index.js';
+import {
+  BFF_ROUTES,
+  type BffCsrfResponse,
+  type BffResponseOf,
+  type BffRouteId,
+  type BffRouteKind,
+  type BffSession,
+  type BffUser,
+  type Page,
+} from '../../../../packages/contracts/src/index.js';
 import type {
   MemberView,
   Platform,
@@ -19,8 +28,8 @@ import {
 import type { BffCrypto } from './csrf.js';
 import { errorResponse, respond, singleHeader, type BffResponse, type ErrorCode } from './http.js';
 
-/** How a route is protected. `session-csrf` also requires the session-bound token on state changes. */
-export type RouteKind = 'public' | 'pre-session' | 'session' | 'session-csrf';
+/** How a route is protected. Declared once, in the contract module. */
+export type RouteKind = BffRouteKind;
 
 export interface RouteContext {
   readonly platform: Platform;
@@ -39,14 +48,23 @@ export interface RouteContext {
   readonly cookies: string[];
 }
 
+/** Method, path and protection come from the contract; only parameter patterns and the handler live here. */
 export interface Route {
-  readonly id: string;
+  readonly id: BffRouteId;
   readonly method: 'GET' | 'POST' | 'PUT' | 'DELETE';
-  /** Path segments; `:name` captures a segment validated by `params[name]`. */
   readonly path: readonly string[];
   readonly kind: RouteKind;
   readonly params?: Readonly<Record<string, RegExp>>;
   readonly handle: (ctx: RouteContext) => Promise<BffResponse>;
+}
+
+function route(
+  id: BffRouteId,
+  handle: Route['handle'],
+  params?: Readonly<Record<string, RegExp>>,
+): Route {
+  const { method, path, kind } = BFF_ROUTES[id];
+  return { id, method, path, kind, ...(params ? { params } : {}), handle };
 }
 
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
@@ -66,20 +84,28 @@ function failure(ctx: RouteContext, error: { code: string } | undefined): BffRes
   return errorResponse(map[error?.code ?? ''] ?? 'internal_error', ctx.correlationId);
 }
 
-function reply<T>(
+/** A successful response typed by the contract, with the status the contract declares. */
+function success<K extends BffRouteId>(
   ctx: RouteContext,
+  id: K,
+  body: BffResponseOf<K>,
+): BffResponse {
+  return respond(BFF_ROUTES[id].status, body, ctx.correlationId);
+}
+
+function reply<K extends BffRouteId, T>(
+  ctx: RouteContext,
+  id: K,
   result: PlatformResponse<T>,
-  status: number,
-  shape: (value: T) => unknown,
+  shape: (value: T) => BffResponseOf<K>,
 ): BffResponse {
   if (!result.ok || result.value === undefined) return failure(ctx, result.error);
-  const body = shape(result.value);
-  return respond(status, body, ctx.correlationId);
+  return success(ctx, id, shape(result.value));
 }
 
 const iso = (date: Date): string => date.toISOString();
 
-function sessionBody(ctx: RouteContext, details: SessionDetails, token: string) {
+function sessionBody(ctx: RouteContext, details: SessionDetails, token: string): BffSession {
   return {
     company: { id: details.tenantId, name: details.companyName },
     user: { id: details.identityId },
@@ -113,7 +139,7 @@ const bad = (ctx: RouteContext): BffResponse => errorResponse('bad_request', ctx
 async function openSession(
   ctx: RouteContext,
   principal: unknown,
-  status: number,
+  id: 'auth.login' | 'auth.invitation.accept',
 ): Promise<BffResponse> {
   const login = await ctx.platform.signIn(principal);
   if (!login.ok || !login.value) {
@@ -132,7 +158,7 @@ async function openSession(
   if (previous !== null && previous !== token) await ctx.platform.signOut(previous);
   const maxAge = (expiresAt.getTime() - ctx.now().getTime()) / 1000;
   ctx.cookies.push(sessionCookie(token, maxAge), clearPreCsrfCookie());
-  return respond(status, sessionBody(ctx, details.value, token), ctx.correlationId);
+  return success(ctx, id, sessionBody(ctx, details.value, token));
 }
 
 function cookieHeader(ctx: RouteContext): string | undefined {
@@ -209,7 +235,7 @@ function listUsers(ctx: RouteContext, members: readonly MemberView[], tenantId: 
   );
   const items = sorted.slice(offset, offset + limit);
   const next = offset + limit < sorted.length ? offset + limit : null;
-  const page: Page<MemberView> = {
+  const page: Page<BffUser> = {
     items,
     nextCursor:
       next === null
@@ -224,182 +250,126 @@ function listUsers(ctx: RouteContext, members: readonly MemberView[], tenantId: 
 const SETTINGS_KEYS = ['name', 'mfa', 'sessionIdleHours', 'reason'] as const;
 
 export const ROUTES: readonly Route[] = [
-  {
-    id: 'auth.csrf',
-    method: 'GET',
-    path: ['api', 'auth', 'csrf'],
-    kind: 'public',
-    handle: async (ctx) => {
-      // Always a fresh nonce: a client-supplied one is never re-issued (no fixation of the pre-login token).
-      const nonce = ctx.crypto.newNonce();
-      ctx.cookies.push(preCsrfCookie(nonce, PRE_CSRF_MAX_AGE));
-      return respond(200, { csrfToken: ctx.crypto.preToken(nonce) }, ctx.correlationId);
-    },
-  },
-  {
-    id: 'auth.login',
-    method: 'POST',
-    path: ['api', 'auth', 'login'],
-    kind: 'pre-session',
-    handle: async (ctx) => {
-      const input = body(ctx, ['code', 'nonce']);
-      if (!input) return bad(ctx);
-      let code: string, nonce: string;
-      try {
-        code = text(input['code'], 512);
-        nonce = text(input['nonce'], 200);
-      } catch {
-        return bad(ctx);
-      }
-      const principal = await ctx.platform.verifyPrincipal(code, nonce);
-      if (!principal.ok) return errorResponse('unauthorized', ctx.correlationId);
-      return openSession(ctx, principal.value, 200);
-    },
-  },
-  {
-    id: 'auth.session',
-    method: 'GET',
-    path: ['api', 'auth', 'session'],
-    kind: 'session',
-    handle: async (ctx) =>
-      respond(
-        200,
-        sessionBody(ctx, ctx.session as SessionDetails, ctx.token as string),
-        ctx.correlationId,
-      ),
-  },
-  {
-    id: 'auth.logout',
-    method: 'POST',
-    path: ['api', 'auth', 'logout'],
-    kind: 'session-csrf',
-    handle: async (ctx) => {
-      const result = await ctx.platform.signOut(ctx.token as string);
-      if (!result.ok) return failure(ctx, result.error);
-      ctx.cookies.push(clearSessionCookie());
-      return respond(204, undefined, ctx.correlationId);
-    },
-  },
-  {
-    id: 'auth.invitation.inspect',
-    method: 'POST',
-    path: ['api', 'auth', 'invitations', 'inspect'],
-    kind: 'pre-session',
-    handle: async (ctx) => {
-      const input = body(ctx, ['token']);
-      if (!input) return bad(ctx);
-      let token: string;
-      try {
-        token = text(input['token'], 512);
-      } catch {
-        return bad(ctx);
-      }
-      return reply(ctx, await ctx.platform.inspectInvitation(token), 200, (value) => value);
-    },
-  },
-  {
-    id: 'auth.invitation.accept',
-    method: 'POST',
-    path: ['api', 'auth', 'invitations', 'accept'],
-    kind: 'pre-session',
-    handle: async (ctx) => {
-      const input = body(ctx, ['token', 'code', 'nonce']);
-      if (!input) return bad(ctx);
-      let token: string, code: string, nonce: string;
-      try {
-        token = text(input['token'], 512);
-        code = text(input['code'], 512);
-        nonce = text(input['nonce'], 200);
-      } catch {
-        return bad(ctx);
-      }
-      const principal = await ctx.platform.verifyPrincipal(code, nonce);
-      if (!principal.ok) return errorResponse('unauthorized', ctx.correlationId);
-      const accepted = await ctx.platform.acceptInvitation(token, principal.value);
-      // Unknown, used, expired or mismatched invitations are indistinguishable.
-      if (!accepted.ok)
-        return accepted.error?.code === 'internal_error'
-          ? failure(ctx, accepted.error)
-          : errorResponse('not_found', ctx.correlationId);
-      return openSession(ctx, principal.value, 201);
-    },
-  },
-  {
-    id: 'company.settings.get',
-    method: 'GET',
-    path: ['api', 'company', 'settings'],
-    kind: 'session',
-    handle: async (ctx) =>
-      reply(
-        ctx,
-        await ctx.platform.getSettings(ctx.token as string, ctx.correlationId),
-        200,
-        (v) => v,
-      ),
-  },
-  {
-    id: 'company.settings.update',
-    method: 'PUT',
-    path: ['api', 'company', 'settings'],
-    kind: 'session-csrf',
-    handle: async (ctx) => {
-      const input = body(ctx, SETTINGS_KEYS, ['name', 'mfa', 'sessionIdleHours']);
-      if (!input) return bad(ctx);
-      return reply(
-        ctx,
-        await ctx.platform.updateSettings(ctx.token as string, ctx.correlationId, {
-          name: input['name'],
-          mfa: input['mfa'],
-          sessionIdleHours: input['sessionIdleHours'],
-          ...(Object.hasOwn(input, 'reason') ? { reason: input['reason'] } : {}),
-        }),
-        200,
-        (v) => v,
-      );
-    },
-  },
-  {
-    id: 'users.list',
-    method: 'GET',
-    path: ['api', 'users'],
-    kind: 'session',
-    handle: async (ctx) => {
-      const result = await ctx.platform.listMembers(ctx.token as string, ctx.correlationId);
-      if (!result.ok || !result.value) return failure(ctx, result.error);
-      const page = listUsers(ctx, result.value.members, result.value.tenantId);
-      return page ? respond(200, page, ctx.correlationId) : bad(ctx);
-    },
-  },
-  {
-    id: 'users.invite',
-    method: 'POST',
-    path: ['api', 'users', 'invitations'],
-    kind: 'session-csrf',
-    handle: async (ctx) => {
-      const input = body(ctx, ['roleId']);
-      if (!input) return bad(ctx);
-      const roleId = input['roleId'];
-      if (typeof roleId !== 'string') return bad(ctx);
-      const invited = await ctx.platform.inviteUser(
-        ctx.token as string,
-        ctx.correlationId,
-        roleId as RoleName,
-      );
-      return reply(ctx, invited, 201, (value) => ({
-        user: { id: value.identityId, roleId, status: 'invited' },
-        // Delivery by email is not built yet: the administrator who issues the invitation receives it.
-        invitationToken: value.invitationToken,
-        expiresAt: iso(value.expiresAt),
-      }));
-    },
-  },
-  {
-    id: 'users.deactivate',
-    method: 'POST',
-    path: ['api', 'users', ':id', 'deactivate'],
-    params: { id: ID },
-    kind: 'session-csrf',
-    handle: async (ctx) => {
+  route('auth.csrf', async (ctx) => {
+    // Always a fresh nonce: a client-supplied one is never re-issued (no fixation of the pre-login token).
+    const nonce = ctx.crypto.newNonce();
+    ctx.cookies.push(preCsrfCookie(nonce, PRE_CSRF_MAX_AGE));
+    const csrf: BffCsrfResponse = { csrfToken: ctx.crypto.preToken(nonce) };
+    return success(ctx, 'auth.csrf', csrf);
+  }),
+  route('auth.login', async (ctx) => {
+    const input = body(ctx, ['code', 'nonce']);
+    if (!input) return bad(ctx);
+    let code: string, nonce: string;
+    try {
+      code = text(input['code'], 512);
+      nonce = text(input['nonce'], 200);
+    } catch {
+      return bad(ctx);
+    }
+    const principal = await ctx.platform.verifyPrincipal(code, nonce);
+    if (!principal.ok) return errorResponse('unauthorized', ctx.correlationId);
+    return openSession(ctx, principal.value, 'auth.login');
+  }),
+  route('auth.session', async (ctx) =>
+    success(
+      ctx,
+      'auth.session',
+      sessionBody(ctx, ctx.session as SessionDetails, ctx.token as string),
+    ),
+  ),
+  route('auth.logout', async (ctx) => {
+    const result = await ctx.platform.signOut(ctx.token as string);
+    if (!result.ok) return failure(ctx, result.error);
+    ctx.cookies.push(clearSessionCookie());
+    return success(ctx, 'auth.logout', undefined);
+  }),
+  route('auth.invitation.inspect', async (ctx) => {
+    const input = body(ctx, ['token']);
+    if (!input) return bad(ctx);
+    let token: string;
+    try {
+      token = text(input['token'], 512);
+    } catch {
+      return bad(ctx);
+    }
+    return reply(
+      ctx,
+      'auth.invitation.inspect',
+      await ctx.platform.inspectInvitation(token),
+      (value) => value,
+    );
+  }),
+  route('auth.invitation.accept', async (ctx) => {
+    const input = body(ctx, ['token', 'code', 'nonce']);
+    if (!input) return bad(ctx);
+    let token: string, code: string, nonce: string;
+    try {
+      token = text(input['token'], 512);
+      code = text(input['code'], 512);
+      nonce = text(input['nonce'], 200);
+    } catch {
+      return bad(ctx);
+    }
+    const principal = await ctx.platform.verifyPrincipal(code, nonce);
+    if (!principal.ok) return errorResponse('unauthorized', ctx.correlationId);
+    const accepted = await ctx.platform.acceptInvitation(token, principal.value);
+    // Unknown, used, expired or mismatched invitations are indistinguishable.
+    if (!accepted.ok)
+      return accepted.error?.code === 'internal_error'
+        ? failure(ctx, accepted.error)
+        : errorResponse('not_found', ctx.correlationId);
+    return openSession(ctx, principal.value, 'auth.invitation.accept');
+  }),
+  route('company.settings.get', async (ctx) =>
+    reply(
+      ctx,
+      'company.settings.get',
+      await ctx.platform.getSettings(ctx.token as string, ctx.correlationId),
+      (v) => v,
+    ),
+  ),
+  route('company.settings.update', async (ctx) => {
+    const input = body(ctx, SETTINGS_KEYS, ['name', 'mfa', 'sessionIdleHours']);
+    if (!input) return bad(ctx);
+    return reply(
+      ctx,
+      'company.settings.update',
+      await ctx.platform.updateSettings(ctx.token as string, ctx.correlationId, {
+        name: input['name'],
+        mfa: input['mfa'],
+        sessionIdleHours: input['sessionIdleHours'],
+        ...(Object.hasOwn(input, 'reason') ? { reason: input['reason'] } : {}),
+      }),
+      (v) => v,
+    );
+  }),
+  route('users.list', async (ctx) => {
+    const result = await ctx.platform.listMembers(ctx.token as string, ctx.correlationId);
+    if (!result.ok || !result.value) return failure(ctx, result.error);
+    const page = listUsers(ctx, result.value.members, result.value.tenantId);
+    return page ? success(ctx, 'users.list', page) : bad(ctx);
+  }),
+  route('users.invite', async (ctx) => {
+    const input = body(ctx, ['roleId']);
+    if (!input) return bad(ctx);
+    const roleId = input['roleId'];
+    if (typeof roleId !== 'string') return bad(ctx);
+    const invited = await ctx.platform.inviteUser(
+      ctx.token as string,
+      ctx.correlationId,
+      roleId as RoleName,
+    );
+    return reply(ctx, 'users.invite', invited, (value) => ({
+      user: { id: value.identityId, roleId, status: 'invited' as const },
+      // Delivery by email is not built yet: the administrator who issues the invitation receives it.
+      invitationToken: value.invitationToken,
+      expiresAt: iso(value.expiresAt),
+    }));
+  }),
+  route(
+    'users.deactivate',
+    async (ctx) => {
       const input = body(ctx, ['reason']);
       if (!input) return bad(ctx);
       try {
@@ -409,102 +379,86 @@ export const ROUTES: readonly Route[] = [
       }
       const id = ctx.params['id'] as string;
       const removed = await ctx.platform.removeMember(ctx.token as string, ctx.correlationId, id);
-      return reply(ctx, removed, 200, () => ({ id, status: 'inactive' }));
+      return reply(ctx, 'users.deactivate', removed, () => ({ id, status: 'inactive' as const }));
     },
-  },
-  {
-    id: 'roles.list',
-    method: 'GET',
-    path: ['api', 'roles'],
-    kind: 'session',
-    handle: async (ctx) =>
-      reply(
-        ctx,
-        await ctx.platform.listRoles(ctx.token as string, ctx.correlationId),
-        200,
-        (items) => ({
-          items,
-        }),
-      ),
-  },
-  {
-    id: 'roles.copy',
-    method: 'POST',
-    path: ['api', 'roles', ':id', 'copy'],
-    params: { id: ID },
-    kind: 'session-csrf',
-    handle: async (ctx) => {
+    { id: ID },
+  ),
+  route('roles.list', async (ctx) =>
+    reply(
+      ctx,
+      'roles.list',
+      await ctx.platform.listRoles(ctx.token as string, ctx.correlationId),
+      (items) => ({
+        items,
+      }),
+    ),
+  ),
+  route(
+    'roles.copy',
+    async (ctx) => {
       const input = body(ctx, ['name']);
       if (!input) return bad(ctx);
       return reply(
         ctx,
+        'roles.copy',
         await ctx.platform.copyRole(
           ctx.token as string,
           ctx.correlationId,
           ctx.params['id'] as string,
           input['name'],
         ),
-        201,
         (v) => v,
       );
     },
-  },
-  {
-    id: 'drafts.load',
-    method: 'GET',
-    path: ['api', 'drafts', ':scope'],
-    params: { scope: SCOPE },
-    kind: 'session',
-    handle: async (ctx) =>
+    { id: ID },
+  ),
+  route(
+    'drafts.load',
+    async (ctx) =>
       reply(
         ctx,
+        'drafts.load',
         await ctx.platform.loadDraft(
           ctx.token as string,
           ctx.correlationId,
           ctx.params['scope'] as string,
         ),
-        200,
         (draft) => ({ draft: draft && { ...draft, savedAt: iso(draft.savedAt) } }),
       ),
-  },
-  {
-    id: 'drafts.save',
-    method: 'PUT',
-    path: ['api', 'drafts', ':scope'],
-    params: { scope: SCOPE },
-    kind: 'session-csrf',
-    handle: async (ctx) => {
+    { scope: SCOPE },
+  ),
+  route(
+    'drafts.save',
+    async (ctx) => {
       const input = body(ctx, ['values']);
       if (!input) return bad(ctx);
       return reply(
         ctx,
+        'drafts.save',
         await ctx.platform.saveDraft(
           ctx.token as string,
           ctx.correlationId,
           ctx.params['scope'] as string,
           input['values'],
         ),
-        200,
         (draft) => ({ ...draft, savedAt: iso(draft.savedAt) }),
       );
     },
-  },
-  {
-    id: 'drafts.discard',
-    method: 'DELETE',
-    path: ['api', 'drafts', ':scope'],
-    params: { scope: SCOPE },
-    kind: 'session-csrf',
-    handle: async (ctx) =>
+    { scope: SCOPE },
+  ),
+  route(
+    'drafts.discard',
+    async (ctx) =>
       reply(
         ctx,
+        'drafts.discard',
         await ctx.platform.discardDraft(
           ctx.token as string,
           ctx.correlationId,
           ctx.params['scope'] as string,
         ),
-        204,
         () => undefined,
       ),
-  },
+    { scope: SCOPE },
+  ),
 ];

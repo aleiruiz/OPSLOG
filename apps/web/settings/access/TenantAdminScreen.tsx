@@ -12,7 +12,7 @@ import {
 import { ResourceView, useResource } from '../../app/resource';
 import type { CompanySettings, MfaPolicy } from '../../app/types';
 import { DraftNotice, useServerDraft } from '../../auth/drafts';
-import { fieldErrorMap, useSession } from '../../auth/session';
+import { useSession } from '../../auth/session';
 
 const mfaOptions: ReadonlyArray<{ value: MfaPolicy; label: string }> = [
   { value: 'disabled', label: 'No usar verificación en dos pasos' },
@@ -51,11 +51,34 @@ function CompanyForm({ settings }: { settings: CompanySettings }) {
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [confirming, setConfirming] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
-  const [outcome, setOutcome] = React.useState<'saved' | 'failed' | 'expired' | null>(null);
-  const { values, setField } = draft;
+  const [outcome, setOutcome] = React.useState<'saved' | 'failed' | 'rejected' | 'expired' | null>(
+    null,
+  );
+  // Editing clears stale validation errors and failure banners.
+  const setField = (name: keyof Form, value: string) => {
+    setErrors({});
+    setOutcome((current) => (current === 'failed' || current === 'rejected' ? null : current));
+    draft.setField(name, value);
+  };
+  const { values } = draft;
 
   const securityChanged =
     values.mfa !== saved.mfa || Number(values.sessionIdleHours) !== saved.sessionIdleHours;
+
+  /** The BFF answers invalid input with a uniform 400 and no field detail, so the form checks first. */
+  const valid = (): boolean => {
+    const invalid: Record<string, string> = {};
+    const hours = Number(values.sessionIdleHours);
+    if (!values.name.trim()) invalid['name'] = 'Escribe el nombre.';
+    if (!Number.isInteger(hours) || hours < 1 || hours > 24)
+      invalid['sessionIdleHours'] = 'Elige entre 1 y 24 horas.';
+    if (Object.keys(invalid).length > 0) {
+      setErrors(invalid);
+      setOutcome('failed');
+      return false;
+    }
+    return true;
+  };
 
   const send = async (reason?: string) => {
     setSubmitting(true);
@@ -77,13 +100,14 @@ function CompanyForm({ settings }: { settings: CompanySettings }) {
       markExpired();
       setOutcome('expired');
     } else {
-      setErrors(fieldErrorMap(result.error));
-      setOutcome('failed');
+      setErrors({});
+      setOutcome('rejected');
     }
   };
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
+    if (!valid()) return;
     if (securityChanged) setConfirming(true);
     else void send();
   };
@@ -109,6 +133,13 @@ function CompanyForm({ settings }: { settings: CompanySettings }) {
             kind="error"
             title="No pudimos guardar los cambios"
             description="Revisa los campos marcados e intenta nuevamente."
+          />
+        )}
+        {outcome === 'rejected' && (
+          <UiState
+            kind="error"
+            title="No pudimos guardar los cambios"
+            description="El servicio no aceptó los cambios. Intenta nuevamente."
           />
         )}
         {outcome === 'expired' && <UiState kind="session-expired" />}

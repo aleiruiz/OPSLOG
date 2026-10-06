@@ -470,3 +470,5 @@ export function serializeApiError(input: unknown): ApiError {
 export function notFoundApiError(correlationId: string): ApiError {
   return serializeApiError({ code: 'not_found', correlationId });
 }
+export * from './bff.js';
+export * from './client.js';

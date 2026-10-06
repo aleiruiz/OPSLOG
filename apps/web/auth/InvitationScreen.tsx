@@ -1,12 +1,11 @@
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import React from 'react';
-import { Button, Field, FormSection, PageHeader, UiState } from '@opslog/ui';
+import { Button, FormSection, PageHeader, UiState } from '@opslog/ui';
 import type { InvitationPreview, Result } from '../app/types';
 import { useRouter } from '../app/router';
-import { fieldErrorMap, useSession } from './session';
-
-export const minimumPasswordLength = 12;
+import { OidcHintField, useHintMissing } from './OidcHintField';
+import { useSession } from './session';
 
 type Preview =
   | { readonly status: 'loading' }
@@ -27,12 +26,12 @@ export function InvitationScreen({
   const { ports, acceptInvitation } = useSession();
   const [preview, setPreview] = React.useState<Preview>({ status: 'loading' });
   const [attempt, setAttempt] = React.useState(0);
-  const [displayName, setDisplayName] = React.useState('');
-  const [password, setPassword] = React.useState('');
-  const [confirmation, setConfirmation] = React.useState('');
-  const [errors, setErrors] = React.useState<Record<string, string>>({});
+  const [hint, setHint] = React.useState('');
+  const missing = useHintMissing(hint);
   const [submitting, setSubmitting] = React.useState(false);
-  const [rejected, setRejected] = React.useState<'fields' | 'unavailable' | false>(false);
+  const [problem, setProblem] = React.useState<'incomplete' | 'rejected' | 'unavailable' | null>(
+    null,
+  );
 
   React.useEffect(() => {
     let cancelled = false;
@@ -71,33 +70,21 @@ export function InvitationScreen({
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    const next: Record<string, string> = {};
-    const flag = (field: string, message: string) => {
-      next[field] = message;
-    };
-    if (!displayName.trim()) flag('displayName', 'Escribe tu nombre.');
-    if (password.length < minimumPasswordLength)
-      flag('password', `Usa al menos ${minimumPasswordLength} caracteres.`);
-    if (confirmation !== password) flag('confirmation', 'Las contraseñas no coinciden.');
-    setErrors(next);
-    setRejected(false);
-    if (Object.keys(next).length > 0) return;
+    if (missing) {
+      setProblem('incomplete');
+      return;
+    }
+    setProblem(null);
     setSubmitting(true);
-    const result = await acceptInvitation(token, { displayName: displayName.trim(), password });
+    const result = await acceptInvitation(token, hint);
     setSubmitting(false);
     if (result.ok) {
-      setPassword('');
-      setConfirmation('');
       onConsumed?.();
       router.navigate('/', { replace: true });
     } else if (result.error.status === 404) {
       onConsumed?.();
       setPreview({ status: 'unavailable' });
-    } else {
-      const fields = fieldErrorMap(result.error);
-      setErrors(fields);
-      setRejected(Object.keys(fields).length > 0 ? 'fields' : 'unavailable');
-    }
+    } else setProblem(result.error.status === 401 ? 'rejected' : 'unavailable');
   };
 
   return (
@@ -108,55 +95,27 @@ export function InvitationScreen({
       />
       <form onSubmit={(event) => void submit(event)} noValidate aria-label="Aceptar invitación">
         <FormSection
-          title="Crea tu acceso"
-          description={`La contraseña debe tener al menos ${minimumPasswordLength} caracteres.`}
+          title="Confirma tu identidad"
+          description="Tu cuenta de identidad queda vinculada a esta invitación."
         >
-          {rejected === 'fields' && (
+          {problem === 'incomplete' && (
+            <UiState kind="incomplete" description="Indica la cuenta de prueba para continuar." />
+          )}
+          {problem === 'rejected' && (
             <UiState
               kind="error"
               title="No pudimos activar tu cuenta"
-              description="Revisa los campos marcados e intenta nuevamente."
+              description="No pudimos verificar tu identidad. Intenta nuevamente."
             />
           )}
-          {rejected === 'unavailable' && (
+          {problem === 'unavailable' && (
             <UiState
               kind="error"
               title="Servicio no disponible"
               description="No pudimos activar tu cuenta por ahora. Intenta nuevamente."
             />
           )}
-          <Field
-            id="invitation-name"
-            label="Nombre completo"
-            autoComplete="name"
-            required
-            value={displayName}
-            onChange={(event) => setDisplayName(event.target.value)}
-            error={Boolean(errors.displayName)}
-            helperText={errors.displayName}
-          />
-          <Field
-            id="invitation-password"
-            label="Contraseña"
-            type="password"
-            autoComplete="new-password"
-            required
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            error={Boolean(errors.password)}
-            helperText={errors.password}
-          />
-          <Field
-            id="invitation-confirmation"
-            label="Confirma la contraseña"
-            type="password"
-            autoComplete="new-password"
-            required
-            value={confirmation}
-            onChange={(event) => setConfirmation(event.target.value)}
-            error={Boolean(errors.confirmation)}
-            helperText={errors.confirmation}
-          />
+          <OidcHintField id="invitation-account" value={hint} onChange={setHint} />
           <Button type="submit" variant="contained" loading={submitting}>
             Activar cuenta
           </Button>

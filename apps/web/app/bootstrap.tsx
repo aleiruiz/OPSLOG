@@ -6,7 +6,7 @@ import { opslogTheme } from '@opslog/ui';
 import { App } from './App';
 import type { ApiPorts } from './types';
 
-/** Mounts the shell. The caller chooses the port implementation (mock now, BFF client later). */
+/** Mounts the shell. The caller chooses the port implementation (mock or the BFF client). */
 export function mountApp(
   container: HTMLElement,
   ports: ApiPorts,

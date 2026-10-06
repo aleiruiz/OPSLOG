@@ -19,7 +19,8 @@
     "./**/*.tsx",
     "../packages/ui/src/**/*.ts",
     "../packages/ui/src/**/*.tsx",
-    "../packages/contracts/src/index.ts",
+    "../packages/contracts/src/*.ts",
+    "../apps/web/api/**/*.ts",
     "../apps/web/app/**/*.ts",
     "../apps/web/app/**/*.tsx",
     "../apps/web/auth/**/*.tsx",
@@ -28,6 +29,7 @@
   "exclude": [
     "../packages/ui/src/**/*.stories.tsx",
     "../packages/ui/src/**/*.test.tsx",
+    "../packages/contracts/src/*.test.ts",
     "../apps/web/**/*.test.ts",
     "../apps/web/**/*.test.tsx",
     "../apps/web/app/test/**"

@@ -1,4 +1,5 @@
-import type { ApiError, FieldError } from '@opslog/contracts';
+import type { ApiError } from '@opslog/contracts';
+import { createFakeOidc, fakeOidcCode, fakeOidcSubject } from '../api/fakeOidc';
 import type {
   ApiPorts,
   CompanySettings,
@@ -13,7 +14,8 @@ import type {
 } from './types';
 
 /**
- * Contract-typed in-memory API used until the real BFF client exists. It models the BFF session as a
+ * Contract-typed in-memory API with the wire shapes of the BFF (opaque identities, OIDC sign-in,
+ * uniform errors). It stays available for UI tests and local work without a server. It models the BFF session as a
  * private boolean (the httpOnly cookie) so nothing session-like is ever handed to browser code.
  * All data is synthetic.
  */
@@ -50,9 +52,16 @@ export interface MockApi extends ApiPorts {
   readonly controls: MockControls;
 }
 
+/** Synthetic accounts of the fake identity provider (what the person types as "Cuenta de prueba"). */
+export const demoSubjects = {
+  admin: 'cuenta-admin',
+  viewer: 'cuenta-consulta',
+} as const;
+
+/** What the fake provider hands the browser for each demo account. */
 export const demoCredentials = {
-  admin: { email: 'admin@demo.opslog.test', password: 'demo-password-123' },
-  viewer: { email: 'consulta@demo.opslog.test', password: 'demo-password-456' },
+  admin: { code: fakeOidcCode(demoSubjects.admin), nonce: 'nonce-demo-admin' },
+  viewer: { code: fakeOidcCode(demoSubjects.viewer), nonce: 'nonce-demo-viewer' },
 } as const;
 
 export const demoInvitations = {
@@ -129,41 +138,20 @@ const systemRoles: RoleSummary[] = [
 ];
 
 const people = [
-  { id: 'user-admin', name: 'Ana Prueba', email: demoCredentials.admin.email, role: 'role-admin' },
-  {
-    id: 'user-viewer',
-    name: 'Luis Consulta',
-    email: demoCredentials.viewer.email,
-    role: 'role-viewer',
-  },
-  {
-    id: 'user-dispatch',
-    name: 'Diana Despacho',
-    email: 'diana@demo.opslog.test',
-    role: 'role-dispatch',
-  },
+  { id: 'user-admin', subject: demoSubjects.admin, role: 'role-admin' },
+  { id: 'user-viewer', subject: demoSubjects.viewer, role: 'role-viewer' },
+  { id: 'user-dispatch', subject: 'cuenta-despacho', role: 'role-dispatch' },
 ] as const;
 
 let correlation = 0;
-function apiError(
-  status: ApiError['status'],
-  code: string,
-  message: string,
-  fieldErrors?: readonly FieldError[],
-): Result<never> {
+/** Uniform error body of the BFF: a code, the status and a generic message; no per-field detail. */
+function apiError(status: ApiError['status'], code: string, message: string): Result<never> {
   correlation += 1;
-  const error: ApiError = {
-    code,
-    status,
-    message,
-    correlationId: `corr-mock-${correlation}`,
-    ...(fieldErrors ? { fieldErrors } : {}),
-  };
+  const error: ApiError = { code, status, message, correlationId: `corr-mock-${correlation}` };
   return { ok: false, error };
 }
 const ok = <T>(value: T): Result<T> => ({ ok: true, value });
-
-const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const badRequest = () => apiError(400, 'bad_request', 'Invalid request');
 
 export function createMockApi(): MockApi {
   let signedInAs: string | null = null;
@@ -175,17 +163,16 @@ export function createMockApi(): MockApi {
     mfa: 'optional',
     sessionIdleHours: 8,
   };
-  // Mock credential store (email -> password). Only active users may authenticate.
-  const usedInvitations = new Set<string>();
-  const credentials = new Map<string, string>(
-    Object.values(demoCredentials).map((item) => [item.email, item.password]),
-  );
   const roles: RoleSummary[] = systemRoles.map((role) => ({ ...role }));
+  // Identity provider accounts (subject -> user id). Only active users may sign in.
+  const subjects = new Map<string, string>(people.map((person) => [person.subject, person.id]));
+  // Invitations by token: the role they grant and, for issued ones, the pending user they activate.
+  const invitations = new Map<string, { roleId: string; userId: string | null }>([
+    [demoInvitations.valid, { roleId: 'role-fleet', userId: null }],
+  ]);
   const users: UserSummary[] = [
     ...people.map((person) => ({
       id: person.id,
-      displayName: person.name,
-      email: person.email,
       roleId: person.role,
       roleLabel: roleName(person.role),
       status: 'active' as const,
@@ -194,8 +181,6 @@ export function createMockApi(): MockApi {
       const n = String(index + 1).padStart(2, '0');
       return {
         id: `user-sintetico-${n}`,
-        displayName: `Persona sintética ${n}`,
-        email: `persona${n}@demo.opslog.test`,
         roleId: 'role-mechanic',
         roleLabel: roleName('role-mechanic'),
         status: 'active' as const,
@@ -213,7 +198,8 @@ export function createMockApi(): MockApi {
     const role = roles.find((item) => item.id === user.roleId) as RoleSummary;
     return {
       company: { id: 'company-demo', name: company.name },
-      user: { id: user.id, displayName: user.displayName, email: user.email },
+      user: { id: user.id },
+      roleId: role.id,
       roleLabel: role.name,
       permissions: role.permissions,
       expiresAt: '2026-10-06T20:00:00Z',
@@ -223,11 +209,10 @@ export function createMockApi(): MockApi {
     const status = failures.get(operation);
     if (status === undefined) return null;
     failures.delete(operation);
-    return apiError(status, 'injected_failure', 'La operación falló de forma simulada.');
+    return apiError(status, 'injected_failure', 'Request failed');
   };
   const draftKey = (scope: string) => `${signedInAs ?? ''}:${scope}`;
-  const unauthorized = () =>
-    apiError(401, 'session_expired', 'La sesión expiró. Inicia sesión de nuevo.');
+  const unauthorized = () => apiError(401, 'unauthorized', 'Authentication required');
   /** Runs `action` only for a live session holding `permission` (when given). */
   function guarded<T>(
     operation: MockOperation,
@@ -240,16 +225,12 @@ export function createMockApi(): MockApi {
     if (!user) return Promise.resolve(unauthorized());
     const role = roles.find((item) => item.id === user.roleId);
     if (permission && !role?.permissions.includes(permission))
-      return Promise.resolve(apiError(403, 'forbidden', 'Tu rol no permite esta acción.'));
+      return Promise.resolve(apiError(403, 'forbidden', 'Permission denied'));
     return Promise.resolve(action());
   }
 
-  const invitationUnavailable = () =>
-    apiError(
-      404,
-      'invitation_unavailable',
-      'La invitación no es válida, ya se usó o expiró. Pide una nueva a tu administrador.',
-    );
+  // Unknown, used, expired or mismatched invitations are indistinguishable.
+  const invitationUnavailable = () => apiError(404, 'not_found', 'Resource not found');
 
   const controls: MockControls = {
     expireSession: () => {
@@ -274,6 +255,7 @@ export function createMockApi(): MockApi {
 
   return {
     controls,
+    oidc: createFakeOidc(),
     auth: {
       getSession: () =>
         guarded('getSession', null, () => ok(sessionFor(signedInAs as string))).then((result) => {
@@ -284,13 +266,11 @@ export function createMockApi(): MockApi {
       login: (input) => {
         const failed = injected('login');
         if (failed) return Promise.resolve(failed);
-        const email = input.email.trim().toLowerCase();
-        const user = users.find((item) => item.email === email);
-        const valid = credentials.has(email) && credentials.get(email) === input.password;
-        if (!user || user.status !== 'active' || !valid)
-          return Promise.resolve(
-            apiError(401, 'invalid_credentials', 'El correo o la contraseña no son correctos.'),
-          );
+        const subject = fakeOidcSubject(input.code);
+        const userId = subject === null || !input.nonce ? undefined : subjects.get(subject);
+        const user = users.find((item) => item.id === userId);
+        // Every login failure is the same 401.
+        if (!user || user.status !== 'active') return Promise.resolve(unauthorized());
         signedInAs = user.id;
         return Promise.resolve(ok(sessionFor(user.id)));
       },
@@ -303,69 +283,56 @@ export function createMockApi(): MockApi {
       inspectInvitation: (token) => {
         const failed = injected('inspectInvitation');
         if (failed) return Promise.resolve(failed);
-        if (token !== demoInvitations.valid) return Promise.resolve(invitationUnavailable());
+        const invitation = invitations.get(token);
+        if (!invitation) return Promise.resolve(invitationUnavailable());
         return Promise.resolve(
-          ok({ companyName: company.name, roleLabel: roleName('role-fleet') }),
+          ok({ companyName: company.name, roleLabel: roleName(invitation.roleId) }),
         );
       },
       acceptInvitation: (token, input) => {
         const failed = injected('acceptInvitation');
         if (failed) return Promise.resolve(failed);
-        if (token !== demoInvitations.valid || usedInvitations.has(token))
-          return Promise.resolve(invitationUnavailable());
-        if (input.password.length < 12)
-          return Promise.resolve(
-            apiError(422, 'weak_password', 'La contraseña no cumple los requisitos.', [
-              {
-                field: 'password',
-                code: 'too_short',
-                message: 'Usa al menos 12 caracteres.',
-              },
-            ]),
-          );
-        const user: UserSummary = {
-          id: 'user-invitada',
-          displayName: input.displayName,
-          email: 'invitada@demo.opslog.test',
-          roleId: 'role-fleet',
-          roleLabel: roleName('role-fleet'),
-          status: 'active',
-        };
+        const subject = fakeOidcSubject(input.code);
+        if (subject === null || !input.nonce) return Promise.resolve(unauthorized());
+        const invitation = invitations.get(token);
         // Never replace an existing account.
-        if (users.some((item) => item.email === user.email))
-          return Promise.resolve(invitationUnavailable());
-        users.push(user);
-        usedInvitations.add(token);
-        credentials.set(user.email, input.password);
-        signedInAs = user.id;
-        return Promise.resolve(ok(sessionFor(user.id)));
+        if (!invitation || subjects.has(subject)) return Promise.resolve(invitationUnavailable());
+        const pending = invitation.userId
+          ? users.findIndex((item) => item.id === invitation.userId)
+          : -1;
+        let userId: string;
+        if (pending >= 0) {
+          userId = (users[pending] as UserSummary).id;
+          users[pending] = { ...(users[pending] as UserSummary), status: 'active' };
+        } else {
+          userId = `user-${subject}`;
+          users.push({
+            id: userId,
+            roleId: invitation.roleId,
+            roleLabel: roleName(invitation.roleId),
+            status: 'active',
+          });
+        }
+        invitations.delete(token);
+        subjects.set(subject, userId);
+        signedInAs = userId;
+        return Promise.resolve(ok(sessionFor(userId)));
       },
     },
     tenant: {
       getCompanySettings: () => guarded('getCompanySettings', 'manage_config', () => ok(company)),
       updateCompanySettings: (input) =>
         guarded('updateCompanySettings', 'manage_config', () => {
-          const fieldErrors: FieldError[] = [];
-          if (!input.name.trim())
-            fieldErrors.push({ field: 'name', code: 'required', message: 'Escribe el nombre.' });
           if (
+            !input.name.trim() ||
             !Number.isInteger(input.sessionIdleHours) ||
             input.sessionIdleHours < 1 ||
             input.sessionIdleHours > 24
           )
-            fieldErrors.push({
-              field: 'sessionIdleHours',
-              code: 'out_of_range',
-              message: 'Elige entre 1 y 24 horas.',
-            });
-          if (fieldErrors.length)
-            return apiError(400, 'invalid_input', 'Revisa los campos marcados.', fieldErrors);
+            return badRequest();
           const securityChanged =
             input.mfa !== company.mfa || input.sessionIdleHours !== company.sessionIdleHours;
-          if (securityChanged && !input.reason?.trim())
-            return apiError(422, 'reason_required', 'Indica el motivo del cambio de seguridad.', [
-              { field: 'reason', code: 'required', message: 'Indica el motivo.' },
-            ]);
+          if (securityChanged && !input.reason?.trim()) return badRequest();
           company = {
             ...company,
             name: input.name.trim(),
@@ -378,69 +345,73 @@ export function createMockApi(): MockApi {
     users: {
       listUsers: (query) =>
         guarded('listUsers', 'manage_users', () => {
+          const sort = query.sort ?? 'id';
+          const direction = query.direction ?? 'asc';
           const needle = (query.search ?? '').trim().toLowerCase();
-          const matches = users.filter(
-            (user) =>
-              !needle ||
-              user.displayName.toLowerCase().includes(needle) ||
-              user.email.toLowerCase().includes(needle),
-          );
           const limit = query.limit ?? 25;
-          const offset = query.cursor ? Number(query.cursor) : 0;
+          const offset =
+            query.cursor === undefined ? 0 : Number(/^mock:(\d+)$/.exec(query.cursor)?.[1]);
+          if (
+            ![25, 50, 100].includes(limit) ||
+            !['id', 'roleLabel', 'status'].includes(sort) ||
+            !['asc', 'desc'].includes(direction) ||
+            needle.length > 100 ||
+            !Number.isSafeInteger(offset)
+          )
+            return badRequest();
+          const sign = direction === 'asc' ? 1 : -1;
+          // Same matching rule as the BFF: identifier or role label substring, or the exact status.
+          const matches = users
+            .filter(
+              (user) =>
+                !needle ||
+                user.id.toLowerCase().includes(needle) ||
+                user.roleLabel.toLowerCase().includes(needle) ||
+                user.status === needle,
+            )
+            .sort((a, b) => sign * a[sort].localeCompare(b[sort]) || a.id.localeCompare(b.id));
           const items = matches.slice(offset, offset + limit);
           const next = offset + limit;
           const page: Page<UserSummary> = {
             items,
-            nextCursor: next < matches.length ? String(next) : null,
+            nextCursor: next < matches.length ? `mock:${next}` : null,
             total: matches.length,
-            sort: { field: 'displayName', direction: 'asc' },
+            sort: { field: sort, direction },
           };
           return ok(page);
         }),
       inviteUser: (input) =>
         guarded('inviteUser', 'manage_users', () => {
-          const email = input.email.trim().toLowerCase();
-          if (!emailPattern.test(email))
-            return apiError(400, 'invalid_input', 'Revisa los campos marcados.', [
-              { field: 'email', code: 'invalid_email', message: 'Escribe un correo válido.' },
-            ]);
-          if (!roles.some((role) => role.id === input.roleId))
-            return apiError(400, 'invalid_input', 'Revisa los campos marcados.', [
-              { field: 'roleId', code: 'unknown_role', message: 'Elige un rol de la lista.' },
-            ]);
-          if (users.some((user) => user.email === email))
-            return apiError(409, 'user_exists', 'Ya existe un usuario con ese correo.', [
-              {
-                field: 'email',
-                code: 'duplicate',
-                message: 'Ya existe un usuario con ese correo.',
-              },
-            ]);
+          if (!roles.some((role) => role.id === input.roleId)) return badRequest();
+          const n = users.length + 1;
           const invited: UserSummary = {
-            id: `user-invitado-${users.length + 1}`,
-            displayName: email,
-            email,
+            id: `user-invitado-${n}`,
             roleId: input.roleId,
             roleLabel: roleName(input.roleId),
             status: 'invited',
           };
           users.push(invited);
-          return ok(invited);
+          const invitationToken = `invitacion-emitida-${n}`;
+          invitations.set(invitationToken, { roleId: input.roleId, userId: invited.id });
+          return ok({
+            user: { id: invited.id, roleId: invited.roleId, status: 'invited' as const },
+            invitationToken,
+            expiresAt: '2026-10-09T12:00:00Z',
+          });
         }),
       deactivateUser: (userId, reason) =>
         guarded('deactivateUser', 'manage_users', () => {
           const index = users.findIndex((user) => user.id === userId);
           const target = users[index];
-          if (!target) return apiError(404, 'not_found', 'No encontramos al usuario.');
-          if (target.id === signedInAs)
-            return apiError(422, 'self_deactivation', 'No puedes desactivar tu propia cuenta.');
-          if (!reason.trim())
-            return apiError(400, 'invalid_input', 'Indica el motivo.', [
-              { field: 'reason', code: 'required', message: 'Indica el motivo.' },
-            ]);
-          const updated: UserSummary = { ...target, status: 'inactive' };
-          users[index] = updated;
-          return ok(updated);
+          if (!target) return apiError(404, 'not_found', 'Resource not found');
+          if (!reason.trim()) return badRequest();
+          const admins = users.filter(
+            (user) => user.roleId === 'role-admin' && user.status === 'active',
+          );
+          if (target.roleId === 'role-admin' && target.status === 'active' && admins.length === 1)
+            return apiError(409, 'last_admin', 'Conflict');
+          users[index] = { ...target, status: 'inactive' };
+          return ok({ id: target.id, status: 'inactive' as const });
         }),
     },
     roles: {
@@ -449,15 +420,10 @@ export function createMockApi(): MockApi {
       copyRole: (roleId, name) =>
         guarded('copyRole', 'manage_users', () => {
           const source = roles.find((role) => role.id === roleId);
-          if (!source) return apiError(404, 'not_found', 'No encontramos el rol.');
-          if (!name.trim())
-            return apiError(400, 'invalid_input', 'Escribe un nombre.', [
-              { field: 'name', code: 'required', message: 'Escribe un nombre.' },
-            ]);
+          if (!source) return apiError(404, 'not_found', 'Resource not found');
+          if (!name.trim()) return badRequest();
           if (roles.some((role) => role.name.toLowerCase() === name.trim().toLowerCase()))
-            return apiError(409, 'role_exists', 'Ya existe un rol con ese nombre.', [
-              { field: 'name', code: 'duplicate', message: 'Ya existe un rol con ese nombre.' },
-            ]);
+            return apiError(409, 'conflict', 'Conflict');
           const copy: RoleSummary = {
             id: `role-custom-${roles.length + 1}`,
             name: name.trim(),

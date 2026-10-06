@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { createFakeOidc, fakeOidcCode, fakeOidcSubject } from '../api/fakeOidc';
 import { createMockApi, demoCredentials, demoInvitations } from './mockApi';
+
+const identity = (subject: string) => ({ code: fakeOidcCode(subject), nonce: 'nonce-test' });
 
 async function signedIn(account: keyof typeof demoCredentials = 'admin') {
   const api = createMockApi();
@@ -8,28 +11,26 @@ async function signedIn(account: keyof typeof demoCredentials = 'admin') {
 }
 
 describe('mock auth port', () => {
-  it('rejects bad credentials with a uniform 401 and accepts valid ones', async () => {
+  it('rejects bad identities with a uniform 401 and accepts valid ones', async () => {
     const api = createMockApi();
-    const bad = await api.auth.login({ email: demoCredentials.admin.email, password: 'x' });
-    const unknown = await api.auth.login({ email: 'nadie@demo.opslog.test', password: 'x' });
-    expect(bad).toMatchObject({ ok: false, error: { status: 401, code: 'invalid_credentials' } });
-    expect(unknown).toEqual(
-      expect.objectContaining({ ok: false, error: expect.objectContaining({ status: 401 }) }),
-    );
+    const unknown = await api.auth.login(identity('nadie'));
+    const foreign = await api.auth.login({ code: 'otro-proveedor', nonce: 'n' });
+    const noNonce = await api.auth.login({ ...demoCredentials.admin, nonce: '' });
+    for (const result of [unknown, foreign, noNonce])
+      expect(result).toMatchObject({ ok: false, error: { status: 401, code: 'unauthorized' } });
     expect(api.controls.isSignedIn()).toBe(false);
-    const good = await api.auth.login({
-      email: ` ${demoCredentials.admin.email.toUpperCase()} `,
-      password: demoCredentials.admin.password,
+    const good = await api.auth.login(demoCredentials.admin);
+    expect(good).toMatchObject({
+      ok: true,
+      value: { user: { id: 'user-admin' }, roleId: 'role-admin' },
     });
-    expect(good.ok).toBe(true);
     expect(api.controls.isSignedIn()).toBe(true);
   });
 
-  it('never exposes a token field in session responses', async () => {
+  it('never carries names, emails or tokens in the session', async () => {
     const api = await signedIn();
     const session = await api.auth.getSession();
-    expect(session.ok).toBe(true);
-    expect(JSON.stringify(session)).not.toMatch(/token|cookie|secret/i);
+    expect(JSON.stringify(session)).not.toMatch(/displayName|email|csrf/i);
   });
 
   it('answers 401 after the session expires or the user logs out', async () => {
@@ -53,10 +54,7 @@ describe('mock auth port', () => {
     api.controls.failNext('inspectInvitation');
     expect((await api.auth.inspectInvitation(demoInvitations.valid)).ok).toBe(false);
     api.controls.failNext('acceptInvitation');
-    expect(
-      (await api.auth.acceptInvitation(demoInvitations.valid, { displayName: 'a', password: 'b' }))
-        .ok,
-    ).toBe(false);
+    expect((await api.auth.acceptInvitation(demoInvitations.valid, identity('x'))).ok).toBe(false);
   });
 
   it('treats unknown and expired invitations identically', async () => {
@@ -66,14 +64,8 @@ describe('mock auth port', () => {
     if (unknown.ok || expired.ok) throw new Error('expected both to fail');
     const shape = ({ code, status, message }: typeof unknown.error) => ({ code, status, message });
     expect(shape(unknown.error)).toEqual(shape(expired.error));
-    const accept = await api.auth.acceptInvitation('desconocida', {
-      displayName: 'x',
-      password: 'y'.repeat(12),
-    });
-    expect(accept).toMatchObject({
-      ok: false,
-      error: { status: 404, code: 'invitation_unavailable' },
-    });
+    const accept = await api.auth.acceptInvitation('desconocida', identity('x'));
+    expect(accept).toMatchObject({ ok: false, error: { status: 404, code: 'not_found' } });
   });
 
   it('rejects login and session for users whose status is not active', async () => {
@@ -82,7 +74,7 @@ describe('mock auth port', () => {
     await admin.auth.logout();
     expect(await admin.auth.login(demoCredentials.viewer)).toMatchObject({
       ok: false,
-      error: { status: 401, code: 'invalid_credentials' },
+      error: { status: 401, code: 'unauthorized' },
     });
     expect(admin.controls.isSignedIn()).toBe(false);
 
@@ -91,7 +83,7 @@ describe('mock auth port', () => {
     api.controls.setUserStatus('user-viewer', 'inactive');
     expect(await api.auth.getSession()).toMatchObject({
       ok: false,
-      error: { status: 401, code: 'session_expired' },
+      error: { status: 401, code: 'unauthorized' },
     });
     expect(api.controls.isSignedIn()).toBe(false);
     await api.auth.logout();
@@ -101,89 +93,63 @@ describe('mock auth port', () => {
     api.controls.setUserStatus('nadie', 'active');
   });
 
-  it('stores the accepted password so the invitee can log in after signing out', async () => {
+  it('binds the accepted identity so the invitee can sign in again after signing out', async () => {
     const api = createMockApi();
-    const password = 'contrasena-de-invitada-1';
-    expect(
-      (await api.auth.acceptInvitation(demoInvitations.valid, { displayName: 'Ana', password })).ok,
-    ).toBe(true);
+    const accepted = await api.auth.acceptInvitation(demoInvitations.valid, identity('invitada'));
+    expect(accepted).toMatchObject({
+      ok: true,
+      value: { roleId: 'role-fleet', user: { id: 'user-invitada' } },
+    });
     await api.auth.logout();
-    expect(
-      await api.auth.login({ email: 'invitada@demo.opslog.test', password: 'otra-contrasena-12' }),
-    ).toMatchObject({ ok: false, error: { status: 401 } });
-    expect((await api.auth.login({ email: 'invitada@demo.opslog.test', password })).ok).toBe(true);
+    expect((await api.auth.login(identity('otra'))).ok).toBe(false);
+    expect((await api.auth.login(identity('invitada'))).ok).toBe(true);
   });
 
-  it('rejects a used invitation token and keeps the first account and password', async () => {
+  it('rejects a used invitation token and keeps the first account', async () => {
     const api = createMockApi();
-    const first = 'primera-contrasena-1';
-    const weak = await api.auth.acceptInvitation(demoInvitations.valid, {
-      displayName: 'Ana',
-      password: 'corta',
-    });
-    expect(weak.ok).toBe(false);
-    expect(
-      (
-        await api.auth.acceptInvitation(demoInvitations.valid, {
-          displayName: 'Ana',
-          password: first,
-        })
-      ).ok,
-    ).toBe(true);
-    await api.auth.logout();
-    const replay = await api.auth.acceptInvitation(demoInvitations.valid, {
-      displayName: 'Intruso',
-      password: 'segunda-contrasena-2',
-    });
-    expect(replay).toMatchObject({
-      ok: false,
-      error: { status: 404, code: 'invitation_unavailable' },
-    });
-    expect(api.controls.isSignedIn()).toBe(false);
-    expect(
-      (
-        await api.auth.login({
-          email: 'invitada@demo.opslog.test',
-          password: 'segunda-contrasena-2',
-        })
-      ).ok,
-    ).toBe(false);
-    expect((await api.auth.login({ email: 'invitada@demo.opslog.test', password: first })).ok).toBe(
+    expect((await api.auth.acceptInvitation(demoInvitations.valid, identity('primera'))).ok).toBe(
       true,
     );
     await api.auth.logout();
-    await api.auth.login(demoCredentials.admin);
-    const listed = await api.users.listUsers({ search: 'invitada' });
-    expect(listed.ok && listed.value.items).toHaveLength(1);
+    const replay = await api.auth.acceptInvitation(demoInvitations.valid, identity('segunda'));
+    expect(replay).toMatchObject({ ok: false, error: { status: 404, code: 'not_found' } });
+    expect(api.controls.isSignedIn()).toBe(false);
+    expect((await api.auth.login(identity('segunda'))).ok).toBe(false);
+    expect((await api.auth.login(identity('primera'))).ok).toBe(true);
   });
 
-  it('does not replace an existing account with the same email', async () => {
-    const api = await signedIn();
-    await api.users.inviteUser({ email: 'invitada@demo.opslog.test', roleId: 'role-viewer' });
-    await api.auth.logout();
-    const result = await api.auth.acceptInvitation(demoInvitations.valid, {
-      displayName: 'Ana',
-      password: 'primera-contrasena-1',
-    });
-    expect(result.ok).toBe(false);
-  });
-
-  it('enforces the 12 character minimum when accepting an invitation', async () => {
+  it('does not replace an existing identity, and rejects an unverifiable code', async () => {
     const api = createMockApi();
-    const weak = await api.auth.acceptInvitation(demoInvitations.valid, {
-      displayName: 'Ana',
-      password: 'x'.repeat(5),
+    const taken = await api.auth.acceptInvitation(demoInvitations.valid, demoCredentials.admin);
+    expect(taken).toMatchObject({ ok: false, error: { status: 404 } });
+    const forged = await api.auth.acceptInvitation(demoInvitations.valid, {
+      code: 'otro-proveedor',
+      nonce: 'n',
     });
-    expect(weak).toMatchObject({
-      ok: false,
-      error: { status: 422, fieldErrors: [{ field: 'password' }] },
+    expect(forged).toMatchObject({ ok: false, error: { status: 401 } });
+    expect(api.controls.isSignedIn()).toBe(false);
+  });
+
+  it('activates the pending user of an invitation issued by an administrator', async () => {
+    const api = await signedIn();
+    const issued = await api.users.inviteUser({ roleId: 'role-viewer' });
+    if (!issued.ok) throw new Error('expected ok');
+    await api.auth.logout();
+    expect(await api.auth.inspectInvitation(issued.value.invitationToken)).toMatchObject({
+      ok: true,
+      value: { companyName: 'Transportes Demo SA', roleLabel: 'Consulta' },
     });
-    const strong = await api.auth.acceptInvitation(demoInvitations.valid, {
-      displayName: 'Ana',
-      password: 'z'.repeat(14),
-    });
-    expect(strong.ok).toBe(true);
-    expect(api.controls.isSignedIn()).toBe(true);
+    const accepted = await api.auth.acceptInvitation(
+      issued.value.invitationToken,
+      identity('nueva'),
+    );
+    expect(accepted).toMatchObject({ ok: true, value: { user: { id: issued.value.user.id } } });
+    await api.auth.logout();
+    await api.auth.login(demoCredentials.admin);
+    const listed = await api.users.listUsers({ search: issued.value.user.id });
+    expect(listed.ok && listed.value.items).toEqual([
+      expect.objectContaining({ id: issued.value.user.id, status: 'active' }),
+    ]);
   });
 });
 
@@ -202,18 +168,14 @@ describe('mock tenant, users and roles ports', () => {
     const api = await signedIn();
     expect(
       await api.tenant.updateCompanySettings({ name: ' ', mfa: 'optional', sessionIdleHours: 99 }),
-    ).toMatchObject({
-      error: { status: 400, fieldErrors: [{ field: 'name' }, { field: 'sessionIdleHours' }] },
-    });
+    ).toMatchObject({ error: { status: 400, code: 'bad_request' } });
     expect(
       await api.tenant.updateCompanySettings({
         name: 'Nueva',
         mfa: 'required',
         sessionIdleHours: 8,
       }),
-    ).toMatchObject({
-      error: { status: 422, code: 'reason_required' },
-    });
+    ).toMatchObject({ error: { status: 400, code: 'bad_request' } });
     const ok = await api.tenant.updateCompanySettings({
       name: ' Nueva ',
       mfa: 'required',
@@ -232,55 +194,66 @@ describe('mock tenant, users and roles ports', () => {
     expect(renamed.ok).toBe(true);
   });
 
-  it('paginates and filters users', async () => {
+  it('paginates, sorts and filters users like the BFF', async () => {
     const api = await signedIn();
     const first = await api.users.listUsers({ limit: 25 });
     if (!first.ok) throw new Error('expected ok');
     expect(first.value.items).toHaveLength(25);
     expect(first.value.total).toBe(27);
-    expect(first.value.nextCursor).toBe('25');
-    const second = await api.users.listUsers({ limit: 25, cursor: '25' });
+    expect(first.value.sort).toEqual({ field: 'id', direction: 'asc' });
+    expect(first.value.nextCursor).toBe('mock:25');
+    const second = await api.users.listUsers({ limit: 25, cursor: 'mock:25' });
     if (!second.ok) throw new Error('expected ok');
     expect(second.value.items).toHaveLength(2);
     expect(second.value.nextCursor).toBeNull();
-    const filtered = await api.users.listUsers({ search: ' PRUEBA ' });
+    const filtered = await api.users.listUsers({ search: ' ADMIN ' });
     if (!filtered.ok) throw new Error('expected ok');
-    expect(filtered.value.items.map((user) => user.displayName)).toEqual(['Ana Prueba']);
+    expect(filtered.value.items.map((user) => user.id)).toEqual(['user-admin']);
+    const byStatus = await api.users.listUsers({ search: 'invited' });
+    expect(byStatus.ok && byStatus.value.total).toBe(0);
+    const descending = await api.users.listUsers({ sort: 'roleLabel', direction: 'desc' });
+    expect(descending.ok && descending.value.sort).toEqual({
+      field: 'roleLabel',
+      direction: 'desc',
+    });
+    for (const query of [
+      { cursor: 'forjado' },
+      { sort: 'email' },
+      { direction: 'up' },
+      { limit: 10 },
+      { search: 'x'.repeat(101) },
+    ])
+      expect(await api.users.listUsers(query as never)).toMatchObject({
+        ok: false,
+        error: { status: 400 },
+      });
   });
 
-  it('validates invitations: email, role and duplicates', async () => {
+  it('validates invitations: the role must exist, and the response carries the one-time token', async () => {
     const api = await signedIn();
-    expect(await api.users.inviteUser({ email: 'mal', roleId: 'role-fleet' })).toMatchObject({
-      error: { fieldErrors: [{ field: 'email' }] },
+    expect(await api.users.inviteUser({ roleId: 'inexistente' })).toMatchObject({
+      error: { status: 400, code: 'bad_request' },
     });
-    expect(
-      await api.users.inviteUser({ email: 'a@demo.opslog.test', roleId: 'inexistente' }),
-    ).toMatchObject({ error: { fieldErrors: [{ field: 'roleId' }] } });
-    expect(
-      await api.users.inviteUser({ email: demoCredentials.admin.email, roleId: 'role-fleet' }),
-    ).toMatchObject({ error: { status: 409 } });
-    const ok = await api.users.inviteUser({
-      email: 'Nueva@Demo.Opslog.Test',
-      roleId: 'role-fleet',
-    });
+    const ok = await api.users.inviteUser({ roleId: 'role-fleet' });
     expect(ok).toMatchObject({
       ok: true,
-      value: { status: 'invited', email: 'nueva@demo.opslog.test' },
+      value: { user: { status: 'invited', roleId: 'role-fleet' } },
     });
+    expect(ok.ok && ok.value.invitationToken).toMatch(/^invitacion-emitida-/);
   });
 
-  it('deactivates others with a reason but not yourself or unknown users', async () => {
+  it('deactivates others with a reason but not unknown users, and keeps the last administrator', async () => {
     const api = await signedIn();
     expect(await api.users.deactivateUser('user-admin', 'x')).toMatchObject({
-      error: { status: 422 },
+      error: { status: 409, code: 'last_admin' },
     });
     expect(await api.users.deactivateUser('nadie', 'x')).toMatchObject({ error: { status: 404 } });
     expect(await api.users.deactivateUser('user-dispatch', ' ')).toMatchObject({
       error: { status: 400 },
     });
-    expect(await api.users.deactivateUser('user-dispatch', 'baja')).toMatchObject({
+    expect(await api.users.deactivateUser('user-dispatch', 'baja')).toEqual({
       ok: true,
-      value: { status: 'inactive' },
+      value: { id: 'user-dispatch', status: 'inactive' },
     });
   });
 
@@ -319,5 +292,25 @@ describe('mock drafts port', () => {
     expect(api.controls.storedDrafts()).toEqual({ scope: { a: '1' } });
     await api.drafts.discard('scope');
     expect(api.controls.storedDrafts()).toEqual({});
+  });
+});
+
+describe('fake identity provider', () => {
+  it('issues a code for the typed account and a fresh nonce each time', async () => {
+    const oidc = createFakeOidc();
+    expect(oidc.hintLabel).toBe('Cuenta de prueba');
+    const first = await oidc.authorize(' cuenta-admin ');
+    const second = await oidc.authorize('cuenta-admin');
+    if (!first.ok || !second.ok) throw new Error('expected ok');
+    expect(fakeOidcSubject(first.value.code)).toBe('cuenta-admin');
+    expect(first.value.nonce).not.toBe(second.value.nonce);
+  });
+
+  it('refuses an empty or oversized account and ignores foreign codes', async () => {
+    const oidc = createFakeOidc();
+    for (const hint of ['  ', 'x'.repeat(129)])
+      expect(await oidc.authorize(hint)).toMatchObject({ ok: false, error: { status: 400 } });
+    expect(fakeOidcSubject('otro')).toBeNull();
+    expect(fakeOidcSubject('fake-code:')).toBeNull();
   });
 });

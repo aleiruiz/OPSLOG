@@ -1,6 +1,6 @@
 import { act } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { createMockApi, demoCredentials, demoInvitations } from './mockApi';
+import { createMockApi, demoCredentials, demoInvitations, demoSubjects } from './mockApi';
 import { fireEvent } from '@testing-library/react';
 import {
   click,
@@ -13,7 +13,10 @@ import {
   waitFor,
 } from './test/utils';
 
-const strongPassword = 'una-contraseña-larga-123';
+const accept = () => {
+  type('Cuenta de prueba', 'cuenta-nueva');
+  click('Activar cuenta');
+};
 
 describe('shell: session, company and user', () => {
   it('shows a loading state while the session is being resolved', async () => {
@@ -38,49 +41,41 @@ describe('shell: session, company and user', () => {
 
   it('logs in, returns to the requested route and shows company and user in the shell', async () => {
     await renderApp({ account: null, path: '/configuracion/usuarios' });
-    await findField('Correo electrónico');
-    type('Correo electrónico', demoCredentials.admin.email);
-    type('Contraseña', demoCredentials.admin.password);
+    await findField('Cuenta de prueba');
+    type('Cuenta de prueba', demoSubjects.admin);
     click('Iniciar sesión');
     await screen.findByRole('heading', { name: 'Usuarios', level: 1 });
     expect(screen.getByTestId('shell-company')).toHaveTextContent('Transportes Demo SA');
-    expect(screen.getByTestId('shell-user')).toHaveTextContent(
-      'Ana Prueba · Administrador de empresa',
-    );
+    expect(screen.getByTestId('shell-user')).toHaveTextContent('Administrador de empresa');
     expect(window.location.pathname).toBe('/configuracion/usuarios');
     expect(document.title).toBe('Usuarios · Transportes Demo SA · OPSLOG');
   });
 
   it('shows incomplete and rejected login states without revealing which field failed', async () => {
     await renderApp({ account: null });
-    await findField('Correo electrónico');
+    await findField('Cuenta de prueba');
     click('Iniciar sesión');
-    expect(
-      await screen.findByText('Escribe tu correo y tu contraseña para continuar.'),
-    ).toBeVisible();
-    type('Correo electrónico', demoCredentials.admin.email);
-    type('Contraseña', 'incorrecta');
+    expect(await screen.findByText('Indica la cuenta de prueba para continuar.')).toBeVisible();
+    type('Cuenta de prueba', 'cuenta-que-no-existe');
     click('Iniciar sesión');
-    expect(await screen.findByText('El correo o la contraseña no son correctos.')).toBeVisible();
+    expect(await screen.findByText('No pudimos verificar tu identidad.')).toBeVisible();
     expect(screen.getByRole('alert')).toBeInTheDocument();
   });
 
   it('shows an unavailable state when login fails for a non-credential reason', async () => {
     const api = createMockApi();
     await renderApp({ api, account: null });
-    await findField('Correo electrónico');
+    await findField('Cuenta de prueba');
     api.controls.failNext('login', 500);
-    type('Correo electrónico', demoCredentials.admin.email);
-    type('Contraseña', demoCredentials.admin.password);
+    type('Cuenta de prueba', demoSubjects.admin);
     click('Iniciar sesión');
     expect(await screen.findByText('Servicio no disponible')).toBeVisible();
   });
 
   it('ignores an unsafe post-login destination', async () => {
     await renderApp({ account: null, path: '/iniciar-sesion?siguiente=//evil.example' });
-    await findField('Correo electrónico');
-    type('Correo electrónico', demoCredentials.admin.email);
-    type('Contraseña', demoCredentials.admin.password);
+    await findField('Cuenta de prueba');
+    type('Cuenta de prueba', demoSubjects.admin);
     click('Iniciar sesión');
     await screen.findByRole('heading', { name: 'Inicio', level: 1 });
     expect(window.location.pathname).toBe('/');
@@ -90,9 +85,8 @@ describe('shell: session, company and user', () => {
     await renderApp({ account: null, path: '/configuracion/usuarios?pagina=2' });
     await screen.findByRole('heading', { name: 'Iniciar sesión', level: 1 });
     expect(window.location.search).toBe('?siguiente=%2Fconfiguracion%2Fusuarios%3Fpagina%3D2');
-    await findField('Correo electrónico');
-    type('Correo electrónico', demoCredentials.admin.email);
-    type('Contraseña', demoCredentials.admin.password);
+    await findField('Cuenta de prueba');
+    type('Cuenta de prueba', demoSubjects.admin);
     click('Iniciar sesión');
     await screen.findByRole('heading', { name: 'Usuarios', level: 1 });
     expect(window.location.pathname + window.location.search).toBe(
@@ -231,55 +225,38 @@ describe('routes respect permissions', () => {
 
 describe('invitation acceptance', () => {
   const path = `/invitacion/${demoInvitations.valid}`;
-
-  it('activates the account and enters the shell', async () => {
+  it('activates the account with the identity provider and enters the shell', async () => {
     await renderApp({ account: null, path });
     await screen.findByText(
       'Te invitaron a Transportes Demo SA con el rol Responsable de flotilla.',
     );
-    type('Nombre completo', 'Nueva Persona');
-    type('Contraseña', strongPassword);
-    type('Confirma la contraseña', strongPassword);
-    click('Activar cuenta');
+    accept();
     await screen.findByRole('heading', { name: 'Inicio', level: 1 });
-    expect(screen.getByTestId('shell-user')).toHaveTextContent('Nueva Persona');
+    expect(screen.getByTestId('shell-user')).toHaveTextContent('Responsable de flotilla');
   });
 
-  it('validates the form before calling the API', async () => {
+  it('asks for the account before calling the API', async () => {
     const api = createMockApi();
     const spy = vi.spyOn(api.auth, 'acceptInvitation');
     await renderApp({ api, account: null, path });
-    await findField('Nombre completo');
-    type('Contraseña', 'corta');
-    type('Confirma la contraseña', 'otra');
+    await findField('Cuenta de prueba');
     click('Activar cuenta');
-    expect(await screen.findByText('Escribe tu nombre.')).toBeVisible();
-    expect(screen.getByText('Usa al menos 12 caracteres.')).toBeVisible();
-    expect(screen.getByText('Las contraseñas no coinciden.')).toBeVisible();
+    expect(await screen.findByText('Indica la cuenta de prueba para continuar.')).toBeVisible();
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it('shows server field errors when the server rejects the password', async () => {
+  it('shows a rejection when the identity cannot be verified, and nothing about fields', async () => {
     const api = createMockApi();
+    await renderApp({ api, account: null, path });
+    await findField('Cuenta de prueba');
     api.auth.acceptInvitation = async () => ({
       ok: false,
-      error: {
-        code: 'weak_password',
-        status: 422,
-        message: 'x',
-        correlationId: 'c',
-        fieldErrors: [
-          { field: 'password', code: 'compromised', message: 'Elige otra contraseña.' },
-        ],
-      },
+      error: { code: 'unauthorized', status: 401, message: 'x', correlationId: 'c' },
     });
-    await renderApp({ api, account: null, path });
-    await findField('Nombre completo');
-    type('Nombre completo', 'Nueva Persona');
-    type('Contraseña', strongPassword);
-    type('Confirma la contraseña', strongPassword);
-    click('Activar cuenta');
-    expect(await screen.findByText('Elige otra contraseña.')).toBeVisible();
+    accept();
+    expect(
+      await screen.findByText('No pudimos verificar tu identidad. Intenta nuevamente.'),
+    ).toBeVisible();
     expect(screen.getByText('No pudimos activar tu cuenta')).toBeVisible();
   });
 
@@ -307,51 +284,45 @@ describe('invitation acceptance', () => {
     api.controls.failNext('inspectInvitation', 500);
     await renderApp({ api, account: null, path });
     fireEvent.click(await screen.findByRole('button', { name: 'Reintentar' }));
-    await findField('Nombre completo');
+    await findField('Cuenta de prueba');
   });
 
   it('turns an invitation consumed in the meantime into the unavailable state', async () => {
     const api = createMockApi();
     await renderApp({ api, account: null, path });
-    await findField('Nombre completo');
+    await findField('Cuenta de prueba');
     api.auth.acceptInvitation = async () => ({
       ok: false,
-      error: { code: 'invitation_unavailable', status: 404, message: 'x', correlationId: 'c' },
+      error: { code: 'not_found', status: 404, message: 'x', correlationId: 'c' },
     });
-    type('Nombre completo', 'Nueva Persona');
-    type('Contraseña', strongPassword);
-    type('Confirma la contraseña', strongPassword);
-    click('Activar cuenta');
+    accept();
     await screen.findByRole('heading', { name: 'Invitación no disponible' });
   });
 
   it('tells a signed-in person to sign out first instead of showing the acceptance form', async () => {
     await renderApp({ path });
     await screen.findByRole('heading', { name: 'Ya tienes una sesión activa' });
-    expect(screen.queryByLabelText(/^Nombre completo/)).toBeNull();
+    expect(screen.queryByLabelText(/^Cuenta de prueba/)).toBeNull();
   });
 
   it('keeps the token in memory only: it leaves the address bar but the form still works', async () => {
     const api = createMockApi();
     const inspect = vi.spyOn(api.auth, 'inspectInvitation');
     await renderApp({ api, account: null, path });
-    await findField('Nombre completo');
+    await findField('Cuenta de prueba');
     expect(window.location.pathname).toBe('/invitacion');
     expect(window.location.href).not.toContain(demoInvitations.valid);
     expect(inspect).toHaveBeenCalledWith(demoInvitations.valid);
   });
 
-  it('shows a generic unavailable state, not field errors, when the server fails without fields', async () => {
+  it('shows a generic unavailable state when the server fails', async () => {
     const api = createMockApi();
     await renderApp({ api, account: null, path });
-    await findField('Nombre completo');
-    type('Nombre completo', 'Nueva Persona');
-    type('Contraseña', strongPassword);
-    type('Confirma la contraseña', strongPassword);
+    await findField('Cuenta de prueba');
+    type('Cuenta de prueba', 'cuenta-nueva');
     api.controls.failNext('acceptInvitation', 500);
     click('Activar cuenta');
     expect(await screen.findByText('Servicio no disponible')).toBeVisible();
-    expect(screen.queryByText('Revisa los campos marcados e intenta nuevamente.')).toBeNull();
   });
 });
 
@@ -359,31 +330,31 @@ describe('expired session', () => {
   it('keeps the screen, restores the server draft and resumes after signing in again', async () => {
     const { api } = await renderApp({ path: '/configuracion/usuarios' });
     await screen.findByRole('heading', { name: 'Usuarios', level: 1 });
-    await findField('Correo de la persona');
-    type('Correo de la persona', 'nueva@demo.opslog.test');
+    await findField('Rol');
+    type('Rol', 'role-fleet');
     await waitFor(() => expect(api.controls.storedDrafts()['invite-user']).toBeDefined(), {
       timeout: 2000,
     });
 
     api.controls.expireSession();
-    type('Correo de la persona', 'nueva2@demo.opslog.test');
+    type('Rol', 'role-viewer');
     await screen.findByRole('group', { name: 'Sesión expirada' });
     await waitFor(() =>
       expect(screen.getByRole('group', { name: 'Sesión expirada' })).toHaveFocus(),
     );
     expect(screen.getByText(/Mantenemos estos cambios en esta pantalla/)).toBeInTheDocument();
     // The screen below the panel is inert while the session is expired.
-    expect(getField('Correo de la persona').closest('[inert]')).not.toBeNull();
+    expect(getField('Rol').closest('[inert]')).not.toBeNull();
 
-    type('Contraseña', demoCredentials.admin.password);
+    type('Cuenta de prueba', demoSubjects.admin);
     click('Continuar');
     await waitFor(() =>
       expect(screen.queryByRole('group', { name: 'Sesión expirada' })).toBeNull(),
     );
-    expect(getField('Correo de la persona')).toHaveValue('nueva2@demo.opslog.test');
+    expect(getField('Rol')).toHaveValue('role-viewer');
     await waitFor(() =>
       expect(api.controls.storedDrafts()['invite-user']).toMatchObject({
-        email: 'nueva2@demo.opslog.test',
+        roleId: 'role-viewer',
       }),
     );
   });
@@ -392,15 +363,15 @@ describe('expired session', () => {
     const { api } = await renderApp({ path: '/configuracion/usuarios' });
     await screen.findByRole('table', { name: /Usuarios/ });
     api.controls.expireSession();
-    type('Buscar por nombre o correo', 'Prueba');
+    type('Buscar por identificador, rol o estado', 'admin');
     await screen.findByRole('group', { name: 'Sesión expirada' });
     expect(
       await screen.findByRole('heading', { name: 'Datos no disponibles' }),
     ).toBeInTheDocument();
-    type('Contraseña', demoCredentials.admin.password);
+    type('Cuenta de prueba', demoSubjects.admin);
     click('Continuar');
     const table = await screen.findByRole('table', { name: 'Usuarios (1)' });
-    expect(table).toHaveTextContent('Ana Prueba');
+    expect(table).toHaveTextContent('user-admin');
   });
 
   it('shows the panel with the previous screen and signs in again with the same account', async () => {
@@ -409,12 +380,14 @@ describe('expired session', () => {
     api.controls.expireSession();
     type('Nombre de la empresa', 'Otra razón social');
     await screen.findByRole('group', { name: 'Sesión expirada' });
-    type('Contraseña', 'incorrecta');
+    type('Cuenta de prueba', 'cuenta-que-no-existe');
     click('Continuar');
     expect(
-      await screen.findByText('La contraseña no es correcta o el servicio no está disponible.'),
+      await screen.findByText(
+        'No pudimos verificar tu identidad o el servicio no está disponible.',
+      ),
     ).toBeVisible();
-    type('Contraseña', demoCredentials.admin.password);
+    type('Cuenta de prueba', demoSubjects.admin);
     click('Continuar');
     await waitFor(() =>
       expect(screen.queryByRole('group', { name: 'Sesión expirada' })).toBeNull(),
@@ -444,11 +417,8 @@ describe('expired session', () => {
     const api = createMockApi();
     const inspect = vi.spyOn(api.auth, 'inspectInvitation');
     await renderApp({ api, account: null, path: `/invitacion/${demoInvitations.valid}` });
-    await findField('Nombre completo');
-    type('Nombre completo', 'Nueva Persona');
-    type('Contraseña', strongPassword);
-    type('Confirma la contraseña', strongPassword);
-    click('Activar cuenta');
+    await findField('Cuenta de prueba');
+    accept();
     await screen.findByRole('heading', { name: 'Inicio', level: 1 });
     click('Cerrar sesión');
     await screen.findByRole('heading', { name: 'Iniciar sesión', level: 1 });

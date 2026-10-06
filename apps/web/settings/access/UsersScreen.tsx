@@ -13,9 +13,10 @@ import {
 } from '@opslog/ui';
 import { ScrollRegion } from '../../app/ScrollRegion';
 import { NoSubmit, ResourceView, useResource } from '../../app/resource';
-import type { RoleSummary, UserStatus, UserSummary } from '../../app/types';
+import { useRouter } from '../../app/router';
+import type { InvitationIssued, RoleSummary, UserStatus, UserSummary } from '../../app/types';
 import { DraftNotice, useServerDraft } from '../../auth/drafts';
-import { fieldErrorMap, useSession } from '../../auth/session';
+import { useSession } from '../../auth/session';
 
 const statusPresentation: Record<
   UserStatus,
@@ -45,12 +46,17 @@ export function UsersScreen() {
   );
   const [loadingMore, setLoadingMore] = React.useState(false);
   const [target, setTarget] = React.useState<UserSummary | null>(null);
+  const [issued, setIssued] = React.useState<InvitationIssued | null>(null);
   const [notice, setNotice] = React.useState<{
     text: string;
     severity: 'success' | 'error';
   } | null>(null);
 
   React.useEffect(() => setExtra(null), [search, first.state]);
+  // A one-time invitation token must not outlive the session that issued it.
+  React.useEffect(() => {
+    if (sessionState.status === 'expired') setIssued(null);
+  }, [sessionState.status]);
 
   const searchRef = React.useRef(search);
   searchRef.current = search;
@@ -76,7 +82,7 @@ export function UsersScreen() {
     const result = await ports.users.deactivateUser(target.id, reason);
     setTarget(null);
     if (result.ok) {
-      setNotice({ text: `${result.value.displayName} fue desactivado.`, severity: 'success' });
+      setNotice({ text: `La cuenta ${result.value.id} fue desactivada.`, severity: 'success' });
       first.reload();
     } else if (result.error.status === 401) markExpired();
     else
@@ -98,7 +104,7 @@ export function UsersScreen() {
         <FilterBar onClear={() => setSearch('')}>
           <Field
             id="users-search"
-            label="Buscar por nombre o correo"
+            label="Buscar por identificador, rol o estado"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
@@ -125,8 +131,7 @@ export function UsersScreen() {
                 <DataTable<UserRow>
                   caption={`Usuarios (${page.total})`}
                   columns={[
-                    { key: 'displayName', label: 'Nombre' },
-                    { key: 'email', label: 'Correo' },
+                    { key: 'id', label: 'Identificador' },
                     { key: 'roleLabel', label: 'Rol' },
                     {
                       key: 'status',
@@ -142,7 +147,7 @@ export function UsersScreen() {
                       render: (_, row) =>
                         row.status === 'inactive' || row.id === currentUserId ? null : (
                           <Button size="small" onClick={() => setTarget(row)}>
-                            {`Desactivar a ${row.displayName}`}
+                            {`Desactivar a ${row.id}`}
                           </Button>
                         ),
                     },
@@ -165,7 +170,7 @@ export function UsersScreen() {
       </ResourceView>
       {target && (
         <ConfirmWithReason
-          title={`Desactivar a ${target.displayName}`}
+          title={`Desactivar a ${target.id}`}
           reasonLabel="Motivo de la desactivación"
           onConfirm={(reason) => void deactivate(reason)}
           onCancel={() => setTarget(null)}
@@ -174,40 +179,86 @@ export function UsersScreen() {
       {roles.state.status === 'ready' && (
         <InviteForm
           roles={roles.state.data}
-          onInvited={(user) => {
-            setNotice({ text: `Invitación enviada a ${user.email}.`, severity: 'success' });
+          onInviteStarted={() => setIssued(null)}
+          onInvited={(invitation) => {
+            setIssued(invitation);
+            setNotice({ text: 'Invitación creada.', severity: 'success' });
             first.reload();
           }}
         />
       )}
+      {issued && <IssuedInvitation invitation={issued} />}
     </>
+  );
+}
+
+/** Email delivery is not built yet: the administrator receives the one-time link and hands it over. */
+function IssuedInvitation({ invitation }: { invitation: InvitationIssued }) {
+  const router = useRouter();
+  const link = `${window.location.origin}${router.basename}/invitacion/${encodeURIComponent(
+    invitation.invitationToken,
+  )}`;
+  return (
+    <FormSection
+      title="Enlace de invitación"
+      description={`Compártelo con la persona invitada por un canal seguro. Solo se muestra ahora, se puede usar una vez y vence el ${new Date(invitation.expiresAt).toLocaleString('es-MX')}.`}
+    >
+      <Field
+        id="invitation-link"
+        label="Enlace de invitación"
+        value={link}
+        InputProps={{ readOnly: true }}
+        onFocus={(event) => event.target.select()}
+      />
+    </FormSection>
   );
 }
 
 function InviteForm({
   roles,
   onInvited,
+  onInviteStarted,
 }: {
   roles: readonly RoleSummary[];
-  onInvited: (user: UserSummary) => void;
+  onInviteStarted: () => void;
+  onInvited: (invitation: InvitationIssued) => void;
 }) {
   const { ports, markExpired } = useSession();
-  const draft = useServerDraft('invite-user', { email: '', roleId: '' });
+  const draft = useServerDraft('invite-user', { roleId: '' });
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [submitting, setSubmitting] = React.useState(false);
   const { values, setField } = draft;
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!values.roleId) {
+      setErrors({ roleId: 'Elige un rol de la lista.' });
+      return;
+    }
     setSubmitting(true);
     setErrors({});
-    const result = await ports.users.inviteUser({ email: values.email, roleId: values.roleId });
-    setSubmitting(false);
+    onInviteStarted();
+    const failed = () =>
+      setErrors({ roleId: 'No pudimos crear la invitación. Intenta nuevamente.' });
+    let result;
+    try {
+      result = await ports.users.inviteUser({ roleId: values.roleId });
+    } catch {
+      failed();
+      return;
+    } finally {
+      setSubmitting(false);
+    }
     if (result.ok) {
-      await draft.discard();
+      // The one-time token must reach the administrator even if clearing the draft fails.
       onInvited(result.value);
+      try {
+        await draft.discard();
+      } catch {
+        // The draft is only a convenience; the next save replaces it.
+      }
     } else if (result.error.status === 401) markExpired();
-    else setErrors(fieldErrorMap(result.error));
+    else failed();
   };
 
   return (
@@ -217,16 +268,6 @@ function InviteForm({
         description="La invitación vence en 72 horas y solo se puede usar una vez."
       >
         <Field
-          id="invite-email"
-          label="Correo de la persona"
-          type="email"
-          required
-          value={values.email}
-          onChange={(event) => setField('email', event.target.value)}
-          error={Boolean(errors.email)}
-          helperText={errors.email}
-        />
-        <Field
           id="invite-role"
           label="Rol"
           select
@@ -234,7 +275,10 @@ function InviteForm({
           SelectProps={{ native: true }}
           InputLabelProps={{ shrink: true }}
           value={values.roleId}
-          onChange={(event) => setField('roleId', event.target.value)}
+          onChange={(event) => {
+            setErrors({});
+            setField('roleId', event.target.value);
+          }}
           error={Boolean(errors.roleId)}
           helperText={errors.roleId}
         >
@@ -247,7 +291,7 @@ function InviteForm({
         </Field>
         <DraftNotice status={draft.status} />
         <Button type="submit" variant="contained" loading={submitting}>
-          Enviar invitación
+          Crear invitación
         </Button>
       </FormSection>
     </form>

@@ -2,7 +2,7 @@
   "name": "@opslog/contracts",
   "private": true,
   "scripts": {
-    "test": "vitest run --coverage.enabled --coverage.include=src/index.ts --coverage.thresholds.lines=90 --coverage.thresholds.functions=90 --coverage.thresholds.statements=90 --coverage.thresholds.branches=85",
+    "test": "vitest run --coverage.enabled --coverage.include=src/index.ts --coverage.include=src/bff.ts --coverage.include=src/client.ts --coverage.thresholds.lines=95 --coverage.thresholds.functions=95 --coverage.thresholds.statements=95 --coverage.thresholds.branches=90",
     "typecheck": "tsc -b"
   },
   "devDependencies": {

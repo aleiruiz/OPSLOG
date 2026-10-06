@@ -16,6 +16,7 @@
     "types": ["node", "react", "react-dom"]
   },
   "include": [
+    "api/**/*.ts",
     "app/**/*.ts",
     "app/**/*.tsx",
     "auth/**/*.ts",
@@ -25,7 +26,11 @@
     "vitest.config.ts",
     "../../packages/ui/src/**/*.ts",
     "../../packages/ui/src/**/*.tsx",
-    "../../packages/contracts/src/index.ts"
+    "../../packages/contracts/src/*.ts"
   ],
-  "exclude": ["../../packages/ui/src/**/*.stories.tsx", "../../packages/ui/src/**/*.test.tsx"]
+  "exclude": [
+    "../../packages/ui/src/**/*.stories.tsx",
+    "../../packages/ui/src/**/*.test.tsx",
+    "../../packages/contracts/src/*.test.ts"
+  ]
 }

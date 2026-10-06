@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import axe from 'axe-core';
 import { describe, expect, it, vi } from 'vitest';
-import { demoCredentials } from './mockApi';
+import { demoSubjects } from './mockApi';
 import { click, renderApp, screen, type, waitFor } from './test/utils';
 
 // vitest runs test files with __dirname set to the file's directory (jsdom has no file: import.meta.url).
@@ -15,13 +15,16 @@ function sourceFiles(dir: string): string[] {
     return /\.(ts|tsx)$/.test(name) && !/\.test\./.test(name) ? [path] : [];
   });
 }
-const sources = ['app', 'auth', 'settings'].flatMap((dir) => sourceFiles(join(webRoot, dir)));
+const sources = ['api', 'app', 'auth', 'settings'].flatMap((dir) =>
+  sourceFiles(join(webRoot, dir)),
+);
 const read = (path: string) => readFileSync(path, 'utf8');
 
 describe('browser storage', () => {
   it('has no source reference to Web Storage, IndexedDB or document.cookie', () => {
     expect(sources.length).toBeGreaterThan(10);
-    const offenders = sources.filter((path) =>
+    const client = resolve(webRoot, '../../packages/contracts/src/client.ts');
+    const offenders = [...sources, client].filter((path) =>
       /localStorage|sessionStorage|indexedDB|document\.cookie/.test(read(path)),
     );
     expect(offenders.map((path) => relative(webRoot, path))).toEqual([]);
@@ -30,9 +33,8 @@ describe('browser storage', () => {
   it('keeps Web Storage and cookies empty through login, a draft edit and session expiry in jsdom', async () => {
     const setItem = vi.spyOn(Storage.prototype, 'setItem');
     const { api } = await renderApp({ account: null, path: '/configuracion/empresa' });
-    await screen.findByLabelText(/^Correo electrónico/);
-    type('Correo electrónico', demoCredentials.admin.email);
-    type('Contraseña', demoCredentials.admin.password);
+    await screen.findByLabelText(/^Cuenta de prueba/);
+    type('Cuenta de prueba', demoSubjects.admin);
     click('Iniciar sesión');
     await screen.findByDisplayValue('Transportes Demo SA');
     // Edit only once the draft load settled; otherwise the first effects flush after the edit.

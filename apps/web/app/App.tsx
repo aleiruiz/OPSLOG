@@ -146,7 +146,7 @@ function Routes() {
           description="Tu sesión sigue abierta. Intenta nuevamente."
         />
       )}
-      {expired && <SessionExpiredPanel email={session.user.email} />}
+      {expired && <SessionExpiredPanel />}
       {/* Keyed by user: signing back in as someone else drops the previous person's screen state. */}
       <div key={session.user.id} inert={expired}>
         {screen}

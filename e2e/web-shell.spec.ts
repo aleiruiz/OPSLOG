@@ -1,16 +1,14 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 
-const admin = { email: 'admin@demo.opslog.test', password: 'demo-password-123' };
-const viewer = { email: 'consulta@demo.opslog.test', password: 'demo-password-456' };
+// Accounts of the fake identity provider used by the mock API.
+const admin = { subject: 'cuenta-admin' };
+const viewer = { subject: 'cuenta-consulta' };
 const wcag = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 
-async function signInWithKeyboard(page: Page, account: { email: string; password: string }) {
-  await page.getByRole('textbox', { name: /Correo electrónico/ }).focus();
-  await page.keyboard.type(account.email);
-  await page.keyboard.press('Tab');
-  await expect(page.getByLabel(/^Contraseña/)).toBeFocused();
-  await page.keyboard.type(account.password);
+async function signInWithKeyboard(page: Page, account: { subject: string }) {
+  await page.getByRole('textbox', { name: /Cuenta de prueba/ }).focus();
+  await page.keyboard.type(account.subject);
   await page.keyboard.press('Enter');
 }
 
@@ -33,9 +31,7 @@ test.describe('web shell: login, shell and navigation', () => {
     await signIn(page, '/configuracion/usuarios');
     await expect(page.getByRole('heading', { name: 'Usuarios', level: 1 })).toBeVisible();
     await expect(page.getByTestId('shell-company')).toHaveText('Transportes Demo SA');
-    await expect(page.getByTestId('shell-user')).toHaveText(
-      'Ana Prueba · Administrador de empresa',
-    );
+    await expect(page.getByTestId('shell-user')).toHaveText('Administrador de empresa');
     expect(new URL(page.url()).pathname).toBe('/web/configuracion/usuarios');
   });
 
@@ -85,7 +81,7 @@ test.describe('web shell: login, shell and navigation', () => {
     const nav = page.getByRole('navigation', { name: 'Principal' });
     await expect(nav.getByRole('link', { name: 'Inicio' })).toBeVisible();
     await expect(nav.getByRole('link', { name: 'Usuarios' })).toHaveCount(0);
-    await expect(page.getByTestId('shell-user')).toHaveText('Luis Consulta · Consulta');
+    await expect(page.getByTestId('shell-user')).toHaveText('Consulta');
   });
 
   test('signs out and sends the person back to login', async ({ page }) => {
@@ -99,15 +95,11 @@ test.describe('web shell: invitation, users and company', () => {
   test('accepts an invitation with the keyboard', async ({ page }) => {
     await page.goto('/web/invitacion/invitacion-vigente');
     await expect(page.getByText('Te invitaron a Transportes Demo SA')).toBeVisible();
-    await page.getByRole('textbox', { name: /Nombre completo/ }).focus();
-    await page.keyboard.type('Nueva Persona');
-    await page.keyboard.press('Tab');
-    await page.keyboard.type('una-contraseña-larga-123');
-    await page.keyboard.press('Tab');
-    await page.keyboard.type('una-contraseña-larga-123');
+    await page.getByRole('textbox', { name: /Cuenta de prueba/ }).focus();
+    await page.keyboard.type('cuenta-nueva');
     await page.keyboard.press('Enter');
     await expect(page.getByRole('heading', { name: 'Inicio', level: 1 })).toBeVisible();
-    await expect(page.getByTestId('shell-user')).toContainText('Nueva Persona');
+    await expect(page.getByTestId('shell-user')).toContainText('Responsable de flotilla');
   });
 
   test('shows the same message for a link that does not exist', async ({ page }) => {
@@ -121,16 +113,16 @@ test.describe('web shell: invitation, users and company', () => {
     await page.getByRole('button', { name: 'Cargar más usuarios' }).click();
     await expect(page.getByRole('row')).toHaveCount(28);
 
-    const search = page.getByRole('textbox', { name: 'Buscar por nombre o correo' });
+    const search = page.getByRole('textbox', { name: 'Buscar por identificador, rol o estado' });
     await search.focus();
-    await page.keyboard.type('Diana');
+    await page.keyboard.type('user-dispatch');
     await page.keyboard.press('Enter');
     expect(new URL(page.url()).pathname).toBe('/web/configuracion/usuarios');
     await expect(page.getByRole('table', { name: 'Usuarios (1)' })).toBeVisible();
-    await page.getByRole('button', { name: 'Desactivar a Diana Despacho' }).click();
+    await page.getByRole('button', { name: 'Desactivar a user-dispatch' }).click();
     await page.getByRole('textbox', { name: /Motivo de la desactivación/ }).fill('Baja de prueba');
     await page.getByRole('button', { name: 'Confirmar' }).click();
-    await expect(page.getByText('Diana Despacho fue desactivado.')).toBeVisible();
+    await expect(page.getByText('La cuenta user-dispatch fue desactivada.')).toBeVisible();
   });
 
   test('saves a security change only after the reason is confirmed', async ({ page }) => {
@@ -162,8 +154,8 @@ test.describe('web shell: expired session and browser storage', () => {
     await expect(panel).toBeFocused();
     await expect(page.getByText(/Mantenemos estos cambios en esta pantalla/)).toBeVisible();
 
-    await page.getByLabel(/^Contraseña/).focus();
-    await page.keyboard.type(admin.password);
+    await page.getByLabel(/^Cuenta de prueba/).focus();
+    await page.keyboard.type(admin.subject);
     await page.keyboard.press('Enter');
     await expect(panel).toHaveCount(0);
     await expect(name).toHaveValue('Razón social en borrador v2');
