@@ -147,7 +147,7 @@ test.describe('vehicles: create, edit and conflicts', () => {
     await fillByKeyboard(page, /Marca/, 'Toyota');
     await fillByKeyboard(page, /Modelo/, 'Hiace');
     await fillByKeyboard(page, /Año/, '2023');
-    await fillByKeyboard(page, /Identificador de área/, 'area-sur');
+    await page.getByRole('combobox', { name: /^Área/ }).selectOption('area-sur');
     await fillByKeyboard(page, /Odómetro/, '1200');
     await page.keyboard.press('Enter');
     await expect(page.getByRole('heading', { name: 'Vehículo ECO-901', level: 1 })).toBeVisible();
@@ -163,7 +163,7 @@ test.describe('vehicles: create, edit and conflicts', () => {
     await fillByKeyboard(page, /Marca/, 'Ford');
     await fillByKeyboard(page, /Modelo/, 'Ranger');
     await fillByKeyboard(page, /Año/, '2022');
-    await fillByKeyboard(page, /Identificador de área/, 'area-sur');
+    await page.getByRole('combobox', { name: /^Área/ }).selectOption('area-sur');
     await fillByKeyboard(page, /Odómetro/, '10');
     await page.keyboard.press('Enter');
     await expect(page.getByText('Ya existe un vehículo con este número económico.')).toBeVisible();

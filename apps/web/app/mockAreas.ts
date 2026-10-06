@@ -36,7 +36,7 @@ export interface MockAreaStore {
   changeExternally(id: string, change: Partial<Pick<Area, 'name'>>): void;
   /** Another actor deactivates the area on the server (no rule checks: a test control). */
   deactivateExternally(id: string): void;
-  /** Sets how many active people the (not yet built) personnel module would report for the area. */
+  /** Adds to the active people the personnel module reports for the area (a test control). */
   setPeople(id: string, people: number): void;
   snapshot(): readonly Area[];
 }
@@ -44,6 +44,8 @@ export interface MockAreaStore {
 export interface MockAreaEnvironment {
   /** Active vehicles of an area (the fleet decides). */
   readonly liveVehicles: (areaId: string) => number;
+  /** Active people of an area (the personnel module decides). Adds to the count set with `setPeople`. */
+  readonly livePeople?: (areaId: string) => number;
   /** Whether the user is an active member of the company. */
   readonly isMember: (userId: string) => boolean;
   /** The signed-in user, recorded in the history. */
@@ -208,7 +210,10 @@ export function createMockAreaStore(
 
   const detail = (area: Area): AreaDetail => ({
     ...area,
-    resourceCounts: { vehicles: env.liveVehicles(area.id), people: people.get(area.id) ?? 0 },
+    resourceCounts: {
+      vehicles: env.liveVehicles(area.id),
+      people: (people.get(area.id) ?? 0) + (env.livePeople?.(area.id) ?? 0),
+    },
   });
   const page = <T>(items: readonly T[], limit: number, offset: number, field: string): Page<T> => {
     const next = offset + limit;
@@ -366,7 +371,8 @@ export function createMockAreaStore(
       if (childrenOf(id).some((child) => child.active))
         return failure(409, 'area_in_use', 'Conflict', 'sub_areas');
       if (env.liveVehicles(id) > 0) return failure(409, 'area_in_use', 'Conflict', 'vehicles');
-      if ((people.get(id) ?? 0) > 0) return failure(409, 'area_in_use', 'Conflict', 'people');
+      if ((people.get(id) ?? 0) + (env.livePeople?.(id) ?? 0) > 0)
+        return failure(409, 'area_in_use', 'Conflict', 'people');
       const next = replace({
         ...current,
         active: false,

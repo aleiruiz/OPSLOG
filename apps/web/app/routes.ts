@@ -20,7 +20,11 @@ export interface RouteDefinition {
     | 'areaNew'
     | 'areaDetail'
     | 'areaEdit'
-    | 'areaMove';
+    | 'areaMove'
+    | 'employees'
+    | 'employeeNew'
+    | 'employeeDetail'
+    | 'employeeEdit';
   readonly pattern: string;
   readonly title: string;
   readonly access: RouteAccess;
@@ -47,6 +51,33 @@ export const routes: readonly RouteDefinition[] = [
     pattern: '/invitacion',
     title: 'Aceptar invitación',
     access: 'public',
+  },
+  // Employees (FLT-PEOPLE, nav group "Plantilla"): read = `view`, create = `create`, change = `edit`; archiving
+  // (`delete`) and the status change are actions of the detail. Personal data needs `view_pii` inside the screens.
+  {
+    id: 'employees',
+    pattern: '/plantilla/empleados',
+    title: 'Empleados',
+    access: { permission: 'view' },
+    nav: { group: 'Plantilla', label: 'Empleados' },
+  },
+  {
+    id: 'employeeNew',
+    pattern: '/plantilla/empleados/nuevo',
+    title: 'Nuevo empleado',
+    access: { permission: 'create' },
+  },
+  {
+    id: 'employeeDetail',
+    pattern: '/plantilla/empleados/:id',
+    title: 'Empleado',
+    access: { permission: 'view' },
+  },
+  {
+    id: 'employeeEdit',
+    pattern: '/plantilla/empleados/:id/editar',
+    title: 'Editar empleado',
+    access: { permission: 'edit' },
   },
   // Areas (BRD S06, nav group "Plantilla"): read = `view`, create = `create`, edit/move/activate = `edit`; deactivating
   // (`delete`) is an action of the detail.

@@ -199,12 +199,12 @@ describe('mock tenant, users and roles ports', () => {
     const first = await api.users.listUsers({ limit: 25 });
     if (!first.ok) throw new Error('expected ok');
     expect(first.value.items).toHaveLength(25);
-    expect(first.value.total).toBe(27);
+    expect(first.value.total).toBe(28);
     expect(first.value.sort).toEqual({ field: 'id', direction: 'asc' });
     expect(first.value.nextCursor).toBe('mock:25');
     const second = await api.users.listUsers({ limit: 25, cursor: 'mock:25' });
     if (!second.ok) throw new Error('expected ok');
-    expect(second.value.items).toHaveLength(2);
+    expect(second.value.items).toHaveLength(3);
     expect(second.value.nextCursor).toBeNull();
     const filtered = await api.users.listUsers({ search: ' ADMIN ' });
     if (!filtered.ok) throw new Error('expected ok');
@@ -287,11 +287,11 @@ describe('mock tenant, users and roles ports', () => {
     expect(active.ok).toBe(true);
   });
 
-  it('lists the seven system templates and copies a role as custom', async () => {
+  it('lists the eight system templates and copies a role as custom', async () => {
     const api = await signedIn();
     const roles = await api.roles.listRoles();
     if (!roles.ok) throw new Error('expected ok');
-    expect(roles.value.filter((role) => role.kind === 'system')).toHaveLength(7);
+    expect(roles.value.filter((role) => role.kind === 'system')).toHaveLength(8);
     expect(await api.roles.copyRole('nadie', 'x')).toMatchObject({ error: { status: 404 } });
     expect(await api.roles.copyRole('role-viewer', ' ')).toMatchObject({ error: { status: 400 } });
     expect(await api.roles.copyRole('role-viewer', 'consulta')).toMatchObject({
@@ -392,5 +392,184 @@ describe('mock areas port: permission guards', () => {
   it('lets the administrator deactivate', async () => {
     expect((await attempts('admin')).deactivate).not.toBe(403);
     expect((await attempts('admin')).activate).toBe(200);
+  });
+});
+
+describe('mock employees port: permission guards', () => {
+  const status = (result: { ok: boolean; error?: { status: number } }) =>
+    result.ok ? 200 : (result.error?.status ?? 0);
+  const person = {
+    kind: 'other',
+    firstName: 'Nora',
+    lastName: 'Quiroga',
+    areaId: 'area-sur',
+  } as const;
+  const attempts = async (account: keyof typeof demoCredentials) => {
+    const api = await signedIn(account);
+    return {
+      read: status(await api.employees.list()),
+      create: status(await api.employees.create({ ...person, lastName: `Quiroga ${account}` })),
+      createWithPii: status(
+        await api.employees.create({
+          ...person,
+          lastName: `Conpii ${account}`,
+          idType: 'ine',
+          nationalId: `EJEM ${account.length}0000`,
+        }),
+      ),
+      update: status(await api.employees.update('emp-002', { version: 1, position: 'Nuevo' })),
+      updateWithPii: status(
+        await api.employees.update('emp-003', { version: 1, phone: '+525555550100' }),
+      ),
+      changeStatus: status(
+        await api.employees.changeStatus('emp-004', {
+          version: 1,
+          status: 'suspended',
+          reason: 'Prueba',
+        }),
+      ),
+      archive: status(await api.employees.archive('emp-006', 1)),
+      pii: (await api.employees.get('emp-001')).ok
+        ? ((await api.employees.get('emp-001')) as { value: { pii: unknown } }).value.pii !== null
+        : null,
+    };
+  };
+
+  it('lets a read-only role read, with masked personal data, and nothing else', async () => {
+    expect(await attempts('viewer')).toEqual({
+      read: 200,
+      create: 403,
+      createWithPii: 403,
+      update: 403,
+      updateWithPii: 403,
+      changeStatus: 403,
+      archive: 403,
+      pii: false,
+    });
+  });
+
+  it('lets the dispatcher create and edit, but never write or see personal data, nor archive', async () => {
+    expect(await attempts('dispatch')).toEqual({
+      read: 200,
+      create: 200,
+      createWithPii: 403,
+      update: 200,
+      updateWithPii: 403,
+      changeStatus: 200,
+      archive: 403,
+      pii: false,
+    });
+  });
+
+  it('lets an editor without create edit and change the status, but not create', async () => {
+    expect(await attempts('mechanic')).toMatchObject({
+      create: 403,
+      update: 200,
+      changeStatus: 200,
+      archive: 403,
+      pii: false,
+    });
+  });
+
+  it('lets the personal-data reader read and create with personal data, but not edit or archive', async () => {
+    expect(await attempts('piiReader')).toEqual({
+      read: 200,
+      create: 200,
+      createWithPii: 200,
+      update: 403,
+      updateWithPii: 403,
+      changeStatus: 403,
+      archive: 403,
+      pii: true,
+    });
+  });
+
+  it('lets the administrator do everything, including personal data and archiving', async () => {
+    expect(await attempts('admin')).toEqual({
+      read: 200,
+      create: 200,
+      createWithPii: 200,
+      update: 200,
+      updateWithPii: 200,
+      changeStatus: 200,
+      archive: 200,
+      pii: true,
+    });
+  });
+
+  it('resolves the permission before validating anything, so a 403 never reveals a duplicate', async () => {
+    const api = await signedIn('dispatch');
+    const result = await api.employees.create({
+      ...person,
+      idType: 'curp',
+      nationalId: 'ejem800101hdfxxx01',
+    });
+    expect(result).toMatchObject({ ok: false, error: { status: 403, code: 'forbidden' } });
+  });
+
+  it('answers 401 without a session and injects one-shot failures per operation', async () => {
+    const api = createMockApi();
+    expect(await api.employees.list()).toMatchObject({ ok: false, error: { status: 401 } });
+    await api.auth.login(demoCredentials.admin);
+    for (const [operation, call] of [
+      ['listEmployees', () => api.employees.list()],
+      ['getEmployee', () => api.employees.get('emp-001')],
+      ['createEmployee', () => api.employees.create(person)],
+      ['updateEmployee', () => api.employees.update('emp-001', { version: 31, position: 'x' })],
+      [
+        'changeEmployeeStatus',
+        () =>
+          api.employees.changeStatus('emp-001', { version: 31, status: 'inactive', reason: 'x' }),
+      ],
+      ['archiveEmployee', () => api.employees.archive('emp-001', 31)],
+      ['employeeHistory', () => api.employees.history('emp-001')],
+    ] as const) {
+      api.controls.failNext(operation, 503 as never);
+      expect(await call()).toMatchObject({ ok: false, error: { code: 'injected_failure' } });
+    }
+  });
+
+  it('exposes the server state and the audit trail for assertions, and external changes', async () => {
+    const api = await signedIn();
+    expect(api.controls.employees()).toHaveLength(28);
+    await api.employees.get('emp-001');
+    expect(api.controls.employeeAudit()).toEqual([
+      { action: 'employee.pii_viewed', id: 'emp-001' },
+    ]);
+    api.controls.changeEmployeeExternally('emp-002', { position: 'Cambiado' });
+    expect(api.controls.employees().find((e) => e.id === 'emp-002')).toMatchObject({
+      position: 'Cambiado',
+      version: 2,
+    });
+    api.controls.archiveEmployeeExternally('emp-002');
+    api.controls.terminateEmployeeExternally('emp-003');
+    expect(api.controls.employees().find((e) => e.id === 'emp-003')?.status).toBe('terminated');
+  });
+
+  it('blocks deactivating an area that still has live employees, and frees it when they leave', async () => {
+    const api = await signedIn();
+    const created = await api.employees.create({ ...person, areaId: 'area-sur-mer' });
+    if (!created.ok) throw new Error('expected ok');
+    const area = await api.areas.get('area-sur-mer');
+    expect(area.ok && area.value.resourceCounts.people).toBe(1);
+    const blocked = await api.areas.deactivate('area-sur-mer', 1);
+    expect(blocked).toMatchObject({
+      ok: false,
+      error: { code: 'area_in_use', fieldErrors: [{ field: 'people' }] },
+    });
+    // Terminating the employee releases the area.
+    await api.employees.changeStatus(created.value.id, {
+      version: 1,
+      status: 'terminated',
+      reason: 'Renuncia',
+    });
+    expect((await api.areas.deactivate('area-sur-mer', 1)).ok).toBe(true);
+  });
+
+  it('starts from a given staff, or none', async () => {
+    const api = createMockApi({ employees: [] });
+    await api.auth.login(demoCredentials.admin);
+    const list = await api.employees.list();
+    expect(list.ok && list.value.total).toBe(0);
   });
 });

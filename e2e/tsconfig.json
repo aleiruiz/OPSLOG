@@ -28,7 +28,9 @@
     "../apps/web/vehicles/**/*.ts",
     "../apps/web/vehicles/**/*.tsx",
     "../apps/web/areas/**/*.ts",
-    "../apps/web/areas/**/*.tsx"
+    "../apps/web/areas/**/*.tsx",
+    "../apps/web/employees/**/*.ts",
+    "../apps/web/employees/**/*.tsx"
   ],
   "exclude": [
     "../packages/ui/src/**/*.stories.tsx",

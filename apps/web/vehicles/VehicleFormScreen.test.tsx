@@ -29,7 +29,7 @@ function fillCreate(overrides: Record<string, string> = {}) {
     Marca: 'Toyota',
     Modelo: 'Hiace',
     Año: '2023',
-    'Identificador de área': 'area-sur',
+    Área: 'area-sur',
     Odómetro: '1200',
     ...overrides,
   };
@@ -41,7 +41,7 @@ describe('create vehicle', () => {
     const api = createMockApi();
     const create = vi.spyOn(api.vehicles, 'create');
     await renderApp({ api, path: '/flota/vehiculos/nuevo' });
-    await screen.findByRole('heading', { name: 'Nuevo vehículo', level: 1 });
+    await screen.findByRole('form', { name: 'Nuevo vehículo' });
     click('Crear vehículo');
     expect(screen.getByText('Escribe el número económico.')).toBeInTheDocument();
     expect(screen.getByText('Escribe la placa.')).toBeInTheDocument();
@@ -62,7 +62,7 @@ describe('create vehicle', () => {
     const api = createMockApi();
     const create = vi.spyOn(api.vehicles, 'create');
     await renderApp({ api, path: '/flota/vehiculos/nuevo' });
-    await screen.findByRole('heading', { name: 'Nuevo vehículo', level: 1 });
+    await screen.findByRole('form', { name: 'Nuevo vehículo' });
     fillCreate({ VIN: '3n6pd23w99zb19999' });
     click('Crear vehículo');
     expect(
@@ -98,7 +98,7 @@ describe('create vehicle', () => {
     'puts a duplicate %s next to its field and focuses it',
     async (_name, change, label, message) => {
       await renderApp({ path: '/flota/vehiculos/nuevo' });
-      await screen.findByRole('heading', { name: 'Nuevo vehículo', level: 1 });
+      await screen.findByRole('form', { name: 'Nuevo vehículo' });
       fillCreate(change);
       click('Crear vehículo');
       expect(await screen.findByText(message)).toBeInTheDocument();
@@ -108,31 +108,84 @@ describe('create vehicle', () => {
     },
   );
 
-  it('puts an unknown or inactive area (422 invalid_area) next to its field and focuses it', async () => {
-    await renderApp({ path: '/flota/vehiculos/nuevo' });
-    await screen.findByRole('heading', { name: 'Nuevo vehículo', level: 1 });
-    for (const area of ['area-inexistente', 'area-mty-guadalupe']) {
-      fillCreate({ 'Identificador de área': area });
-      click('Crear vehículo');
-      expect(await screen.findByText('El área no existe o está inactiva.')).toBeInTheDocument();
-      expect(screen.getByRole('heading', { name: 'El área no es válida' })).toBeInTheDocument();
-      await waitFor(() => expect(getField('Identificador de área')).toHaveFocus());
-      expect(getField('Identificador de área')).toHaveAttribute('aria-invalid', 'true');
-    }
+  it('puts an area that was deactivated meanwhile (422 invalid_area) next to its field and focuses it', async () => {
+    const api = createMockApi();
+    await renderApp({ api, path: '/flota/vehiculos/nuevo' });
+    await screen.findByRole('form', { name: 'Nuevo vehículo' });
+    fillCreate({ Área: 'area-sur' });
+    // Another person deactivates the area after the list of areas was loaded.
+    api.controls.deactivateAreaExternally('area-sur');
+    click('Crear vehículo');
+    expect(await screen.findByText('El área no existe o está inactiva.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'El área no es válida' })).toBeInTheDocument();
+    await waitFor(() => expect(getField('Área')).toHaveFocus());
+    expect(getField('Área')).toHaveAttribute('aria-invalid', 'true');
   });
 
-  it('refuses a move to an unknown area when editing', async () => {
-    await renderApp({ path: '/flota/vehiculos/veh-001/editar' });
+  it('refuses a move to an area that was deactivated meanwhile when editing', async () => {
+    const api = createMockApi();
+    await renderApp({ api, path: '/flota/vehiculos/veh-001/editar' });
     await screen.findByDisplayValue('ECO-001');
-    type('Identificador de área', 'area-inexistente');
+    type('Área', 'area-centro');
+    api.controls.deactivateAreaExternally('area-centro');
     click('Guardar cambios');
     expect(await screen.findByText('El área no existe o está inactiva.')).toBeInTheDocument();
+  });
+
+  it('offers the areas of the company as a tree-ordered selector, never a free-text id', async () => {
+    await renderApp({ path: '/flota/vehiculos/nuevo' });
+    await screen.findByRole('form', { name: 'Nuevo vehículo' });
+    const select = getField('Área') as HTMLSelectElement;
+    expect(select.tagName).toBe('SELECT');
+    const options = Array.from(select.options).map((option) => ({
+      label: option.textContent?.replace(/\u00a0/g, '·'),
+      disabled: option.disabled,
+    }));
+    expect(options[0]).toEqual({ label: 'Elige un área', disabled: false });
+    expect(options.map((option) => option.label)).toContain('··Monterrey');
+    expect(options.map((option) => option.label)).toContain('····Base Guadalupe (inactiva)');
+    expect(options.find((option) => option.label?.includes('Guadalupe'))?.disabled).toBe(true);
+    expect(options.find((option) => option.label === 'Centro')?.disabled).toBe(false);
+  });
+
+  it('keeps the current area of an edited vehicle selectable even when it was deactivated since', async () => {
+    const seed = [makeVehicle({ areaId: 'area-mty-guadalupe' })];
+    await renderApp({
+      api: createMockApi({ vehicles: seed }),
+      path: '/flota/vehiculos/veh-001/editar',
+    });
+    await screen.findByDisplayValue('ECO-001');
+    const select = getField('Área') as HTMLSelectElement;
+    expect(select).toHaveValue('area-mty-guadalupe');
+    expect(
+      Array.from(select.options).find((option) => option.value === 'area-mty-guadalupe')?.disabled,
+    ).toBe(false);
+  });
+
+  it('says so, with a way out, when the company has no active area', async () => {
+    await renderApp({ api: createMockApi({ areas: [] }), path: '/flota/vehiculos/nuevo' });
+    await screen.findByRole('form', { name: 'Nuevo vehículo' });
+    expect(screen.getByText(/Aún no hay áreas activas/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Crea o activa un área' })).toHaveAttribute(
+      'href',
+      '/plantilla/areas',
+    );
+    click('Crear vehículo');
+    expect(screen.getByText('Elige el área del vehículo.')).toBeInTheDocument();
+  });
+
+  it('retries when the areas cannot be loaded, and does not show a form without them', async () => {
+    const api = createMockApi();
+    api.controls.failNext('listAreas', 500);
+    await renderApp({ api, path: '/flota/vehiculos/nuevo' });
+    (await screen.findByRole('button', { name: 'Reintentar' })).click();
+    await screen.findByRole('form', { name: 'Nuevo vehículo' });
   });
 
   it('reports a duplicate VIN', async () => {
     const api = createMockApi({ vehicles: [makeVehicle({ vin: '3N6PD23W05ZB10005' })] });
     await renderApp({ api, path: '/flota/vehiculos/nuevo' });
-    await screen.findByRole('heading', { name: 'Nuevo vehículo', level: 1 });
+    await screen.findByRole('form', { name: 'Nuevo vehículo' });
     fillCreate({ VIN: '3N6PD23W05ZB10005' });
     click('Crear vehículo');
     expect(await screen.findByText('Ya existe un vehículo con este VIN.')).toBeInTheDocument();
@@ -149,7 +202,7 @@ describe('create vehicle', () => {
       const api = createMockApi();
       api.vehicles.create = async () => error(status, code);
       await renderApp({ api, path: '/flota/vehiculos/nuevo' });
-      await screen.findByRole('heading', { name: 'Nuevo vehículo', level: 1 });
+      await screen.findByRole('form', { name: 'Nuevo vehículo' });
       fillCreate();
       click('Crear vehículo');
       expect(await screen.findByRole('heading', { name: title })).toBeInTheDocument();
@@ -173,7 +226,7 @@ describe('create vehicle', () => {
     });
     api.vehicles.create = create;
     await renderApp({ api, path: '/flota/vehiculos/nuevo' });
-    await screen.findByRole('heading', { name: 'Nuevo vehículo', level: 1 });
+    await screen.findByRole('form', { name: 'Nuevo vehículo' });
     fillCreate();
     click('Crear vehículo');
     const busy = await screen.findByRole('button', { name: 'Cargando…' });
@@ -188,7 +241,7 @@ describe('create vehicle', () => {
 
   it('keeps the form and what was typed when the session expires, and saves after signing in again', async () => {
     const { api } = await renderApp({ path: '/flota/vehiculos/nuevo' });
-    await screen.findByRole('heading', { name: 'Nuevo vehículo', level: 1 });
+    await screen.findByRole('form', { name: 'Nuevo vehículo' });
     fillCreate();
     api.controls.expireSession();
     click('Crear vehículo');
@@ -208,7 +261,7 @@ describe('create vehicle', () => {
 
   it('cancels back to the list, and is not available to a role without create permission', async () => {
     const dispatch = await renderApp({ account: 'dispatch', path: '/flota/vehiculos/nuevo' });
-    await screen.findByRole('heading', { name: 'Nuevo vehículo', level: 1 });
+    await screen.findByRole('form', { name: 'Nuevo vehículo' });
     expect(screen.getByRole('link', { name: 'Cancelar' })).toHaveAttribute(
       'href',
       '/flota/vehiculos',
@@ -304,7 +357,7 @@ describe('edit vehicle', () => {
     await screen.findByDisplayValue('ECO-001');
     type('Modelo', 'Frontier');
     type('Año', '2024');
-    type('Identificador de área', 'area-sur');
+    type('Área', 'area-sur');
     type('Número económico', 'ECO-777');
     type('Odómetro actual', '17000');
     click('Guardar cambios');
