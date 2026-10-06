@@ -761,7 +761,7 @@ describe('sessions', () => {
   });
 
   it('requires a membership of the session tenant and a unique token', async () => {
-    const { store, join } = setup();
+    const { store, join, db } = setup();
     const member = await join(tenantA, 'member', 'viewer');
     await expect(
       store.saveSession(session(member.identityId, tenantB, 'token-b')),
@@ -769,6 +769,12 @@ describe('sessions', () => {
     await expect(
       store.saveSession(session('ghost-identity', tenantA, 'token-g')),
     ).rejects.toMatchObject({ code: 'unauthorized' });
+    // The DML-only runtime account sees the missing parent as ER_NO_REFERENCED_ROW (1216).
+    db.missingParentError = { errno: 1216, code: 'ER_NO_REFERENCED_ROW' };
+    await expect(
+      store.saveSession(session(member.identityId, tenantB, 'token-c')),
+    ).rejects.toMatchObject({ code: 'unauthorized' });
+    db.missingParentError = { errno: 1452, code: 'ER_NO_REFERENCED_ROW_2' };
     await store.saveSession(session(member.identityId, tenantA, 'token-dup'));
     await expect(
       store.saveSession(session(member.identityId, tenantA, 'token-dup')),

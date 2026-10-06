@@ -125,6 +125,11 @@ export class FakeDatabase {
   public readonly statements: string[] = [];
   public readonly isolations: unknown[] = [];
   /** Runs at the start of every statement (tests use it to inject a concurrent committed change). */
+  /** MySQL reports a missing parent as 1452 to DDL-capable accounts but 1216 to DML-only ones. */
+  public missingParentError: { errno: number; code: string } = {
+    errno: 1452,
+    code: 'ER_NO_REFERENCED_ROW_2',
+  };
   public intercept: ((operation: string, table: string) => void) | null = null;
   public deadlocks = 0;
   public transactions = 0;
@@ -433,11 +438,9 @@ export class FakeDatabase {
             this.matches(candidate, where),
           );
           if (!parent)
-            throw new FakeQueryFailedError(
-              { errno: 1452, code: 'ER_NO_REFERENCED_ROW_2' },
-              'insert',
-              ['<redacted-by-test>'],
-            );
+            throw new FakeQueryFailedError(this.missingParentError, 'insert', [
+              '<redacted-by-test>',
+            ]);
           const parentKey = this.key(parentTable, this.pk(parentTable, parent));
           const holder = this.owners.get(parentKey);
           if (!holder || holder.owner === t) break;

@@ -56,12 +56,12 @@ const matches = (error: unknown, errno: number, code: string): boolean =>
   driverErrno(error) === errno || driverCode(error) === code;
 
 export const isDuplicateKey = (error: unknown): boolean => matches(error, 1062, 'ER_DUP_ENTRY');
-/** Insert/update would reference a missing parent row (ER_NO_REFERENCED_ROW_2). */
+/** Missing parent row: 1452 (_2), or 1216 which MySQL reports to accounts without DDL privileges. */
 export const isMissingParent = (error: unknown): boolean =>
-  matches(error, 1452, 'ER_NO_REFERENCED_ROW_2');
-/** Delete/update would orphan child rows (ER_ROW_IS_REFERENCED_2). */
+  matches(error, 1452, 'ER_NO_REFERENCED_ROW_2') || matches(error, 1216, 'ER_NO_REFERENCED_ROW');
+/** Would orphan child rows: 1451 (_2) or 1217. */
 export const isReferenced = (error: unknown): boolean =>
-  matches(error, 1451, 'ER_ROW_IS_REFERENCED_2');
+  matches(error, 1451, 'ER_ROW_IS_REFERENCED_2') || matches(error, 1217, 'ER_ROW_IS_REFERENCED');
 export const isCheckViolation = (error: unknown): boolean =>
   matches(error, 3819, 'ER_CHECK_CONSTRAINT_VIOLATED');
 export const isLockContention = (error: unknown): boolean =>

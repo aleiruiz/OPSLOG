@@ -26,6 +26,9 @@ describe('driver error classification', () => {
     expect(isDuplicateKey(undefined)).toBe(false);
     expect(isDuplicateKey({ code: 5 })).toBe(false);
     expect(isMissingParent({ errno: 1452 })).toBe(true);
+    expect(isMissingParent({ errno: 1216 })).toBe(true);
+    expect(isMissingParent({ code: 'ER_NO_REFERENCED_ROW' })).toBe(true);
+    expect(isReferenced({ errno: 1217 })).toBe(true);
     expect(isReferenced({ code: 'ER_ROW_IS_REFERENCED_2' })).toBe(true);
     expect(isCheckViolation({ errno: 3819 })).toBe(true);
     expect(isLockContention({ errno: 1213 })).toBe(true);
@@ -56,6 +59,8 @@ describe('sanitizeStoreError', () => {
     for (const [errno, code, expected] of [
       [1452, 'ER_NO_REFERENCED_ROW_2', 'integrity'],
       [1451, 'ER_ROW_IS_REFERENCED_2', 'integrity'],
+      [1216, 'ER_NO_REFERENCED_ROW', 'integrity'],
+      [1217, 'ER_ROW_IS_REFERENCED', 'integrity'],
       [3819, 'ER_CHECK_CONSTRAINT_VIOLATED', 'integrity'],
       [1213, 'ER_LOCK_DEADLOCK', 'contention'],
       [1205, 'ER_LOCK_WAIT_TIMEOUT', 'contention'],

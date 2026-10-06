@@ -9,7 +9,7 @@ import {
   createIdentityMigrationDataSource,
   runIdentityMigrations,
 } from './data-source.js';
-import { LastAdministratorError } from './errors.js';
+import { IdentityStoreError, LastAdministratorError } from './errors.js';
 import { IDENTITY_CHECKS, IDENTITY_MIGRATION_VERSION } from './migrations.js';
 import { BINARY_COLLATION, IDENTITY_TABLES } from './entities.js';
 import { ADMIN_ROLE, TypeOrmIdentityStore, type StoreErrorEvent } from './store.js';
@@ -613,31 +613,25 @@ suite('persistent identity store on MySQL', () => {
           return false;
         },
       );
-      // Deterministic: wait until MySQL reports a transaction blocked on a lock, not a fixed sleep.
-      let blocked = 0;
-      for (let attempt = 0; attempt < 200 && blocked === 0; attempt += 1) {
-        const waits = await rows<{ n: number }>(
-          "SELECT COUNT(*) AS n FROM information_schema.INNODB_TRX WHERE trx_state = 'LOCK WAIT'",
-        );
-        // An early failure of the waiting operation must surface as itself, not as a missing wait.
-        if (failure) throw failure;
-        blocked = Number(waits[0]?.n);
-        if (blocked === 0) await new Promise((resolve) => setTimeout(resolve, 25));
+      try {
+        // Deterministic: wait until MySQL reports a lock request waiting on the holder's lock.
+        let blocked = 0;
+        for (let attempt = 0; attempt < 200 && blocked === 0; attempt += 1) {
+          // An early failure of the waiting operation must surface as itself, not as a missing wait.
+          if (failure) throw failure;
+          const waits = await rows<{ n: number }>(
+            'SELECT COUNT(*) AS n FROM performance_schema.data_lock_waits',
+          );
+          blocked = Number(waits[0]?.n);
+          if (blocked === 0) await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+        expect(blocked).toBeGreaterThan(0);
+        expect(finished).toBe(false);
+      } finally {
+        // Never leave the holder open: a failed assertion must not turn into a lock wait at teardown.
+        release();
+        await holder;
       }
-      if (blocked === 0) {
-        // Self-describing failure: what MySQL saw and how far the waiting operation got.
-        const transactions = await rows(
-          'SELECT trx_state, trx_query FROM information_schema.INNODB_TRX',
-        );
-        const locks = await rows(
-          'SELECT object_name, lock_type, lock_mode, lock_status FROM performance_schema.data_locks',
-        );
-        expect({ finished, failure: summary(failure), transactions, locks }).toBeNull();
-      }
-      expect(blocked).toBeGreaterThan(0);
-      expect(finished).toBe(false);
-      release();
-      await holder;
       expect(await waiting).toBe(true);
       expect(failure).toBeNull();
       expect(await storeA.countActiveAdmins(tenant)).toBe(1);
@@ -773,7 +767,8 @@ suite('persistent identity store on MySQL', () => {
       expect(error).toBeInstanceOf(AuthError);
       expect(JSON.stringify(error) + String((error as Error).stack)).not.toContain('example.test');
 
-      // A pool that is gone is an infrastructure failure, reported with a fixed message.
+      // A destroyed pool is a non-driver (TypeORM) error: reported as `internal` with a fixed message,
+      // its origin class and frames, and never the cause's message.
       const closed = createIdentityDataSource(runtimeConfig());
       await closed.initialize();
       const closedStore = newStore(closed);
@@ -782,15 +777,15 @@ suite('persistent identity store on MySQL', () => {
         () => null,
         (caught: unknown) => caught,
       );
-      expect(summary(failure)).toEqual({
-        code: 'unavailable',
-        errno: null,
-        origin: null,
-        frames: [],
-      });
+      expect(failure).toBeInstanceOf(IdentityStoreError);
+      expect(failure).toMatchObject({ code: 'internal', errno: null, origin: 'TypeORMError' });
       expect((failure as Error).message).not.toContain(subject);
       expect(JSON.stringify(events)).not.toContain('example.test');
-      expect(events.at(-1)).toMatchObject({ operation: 'findExternal', code: 'unavailable' });
+      expect(events.at(-1)).toMatchObject({
+        operation: 'findExternal',
+        code: 'internal',
+        origin: 'TypeORMError',
+      });
     });
   });
 });
