@@ -6,6 +6,7 @@ import {
   createAreasClient,
   createBffClient,
   createDocumentsClient,
+  createInsuranceClient,
   createEmployeesClient,
   createVehiclesClient,
   type BffClient,
@@ -439,6 +440,79 @@ describe('typed client against the real BFF', () => {
       value: { version: 4 },
     });
     expect(await documents.get('desconocido')).toMatchObject({ ok: false, error: { status: 404 } });
+
+    // Insurance policies through the typed client.
+    const insurance = createInsuranceClient(client);
+    const policy = await insurance.create({
+      vehicleId: truck.value.id,
+      insurer: 'Aseguradora Ficticia',
+      policyNumber: 'POL-1',
+      coverageType: 'comprehensive',
+      startsOn: '2026-01-01',
+      endsOn: '2026-10-20',
+      deductible: { kind: 'percent', basisPoints: 1000 },
+    });
+    if (!policy.ok) throw new Error('policy create failed');
+    expect(policy.value).toMatchObject({
+      status: 'expiring',
+      daysToExpiry: 14,
+      covering: true,
+      hasDeductible: true,
+      deductible: { kind: 'percent', basisPoints: 1000 },
+      revision: 1,
+      version: 1,
+    });
+    expect(
+      await insurance.create({
+        vehicleId: 'nope',
+        insurer: 'Aseguradora Ficticia',
+        policyNumber: 'POL-2',
+        coverageType: 'other',
+        startsOn: '2026-01-01',
+        endsOn: '2026-10-20',
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: {
+        code: 'invalid_vehicle',
+        status: 422,
+        fieldErrors: [expect.objectContaining({ field: 'vehicle_id' })],
+      },
+    });
+    expect(await insurance.update(policy.value.id, { version: 1, insurer: 'Otra' })).toMatchObject({
+      ok: true,
+      value: { version: 2 },
+    });
+    expect(await insurance.update(policy.value.id, { version: 1, insurer: 'Vieja' })).toMatchObject(
+      { ok: false, error: { code: 'stale_version', status: 409 } },
+    );
+    expect(
+      await insurance.renew(policy.value.id, {
+        version: 2,
+        startsOn: '2026-10-21',
+        endsOn: '2027-10-20',
+      }),
+    ).toMatchObject({
+      ok: true,
+      value: { revision: 2, version: 3, status: 'valid', covering: false },
+    });
+    expect(await insurance.list({ status: 'expiring' })).toMatchObject({
+      ok: true,
+      value: { total: 0 },
+    });
+    expect(await insurance.list({ coversOn: '2026-10-06' })).toMatchObject({
+      ok: true,
+      value: { total: 0 },
+    });
+    expect(await insurance.history(policy.value.id, { limit: 25 })).toMatchObject({
+      ok: true,
+      value: { total: 2 },
+    });
+    expect(await insurance.archive(policy.value.id, 3)).toMatchObject({
+      ok: true,
+      value: { version: 4 },
+    });
+    expect(await insurance.get('desconocido')).toMatchObject({ ok: false, error: { status: 404 } });
 
     // Drafts
     expect(await client.call('drafts.load', { params: { scope: 'form:a' } })).toEqual({

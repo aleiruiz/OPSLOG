@@ -30,6 +30,12 @@ import {
   type DocumentStore,
 } from '../../../../packages/domain/documents/src/index.js';
 import {
+  PolicyError,
+  PolicyService,
+  InMemoryPolicyStore,
+  type PolicyStore,
+} from '../../../../packages/domain/insurance/src/index.js';
+import {
   EnvelopePiiCipher,
   LocalDevKms,
   type PiiCipher,
@@ -101,6 +107,7 @@ import {
 import { InMemoryTenantStore } from './tenancy.js';
 import { AreasApi } from './areas.js';
 import { DocumentsApi } from './documents.js';
+import { InsuranceApi } from './insurance.js';
 import { EmployeesApi } from './employees.js';
 import { VehiclesApi } from './vehicles.js';
 
@@ -231,6 +238,8 @@ export interface PlatformAdapters {
   readonly employees?: EmployeeStore;
   /** Persistent document store (the TypeORM adapter of `packages/persistence/documents`); in-memory by default. */
   readonly documents?: DocumentStore;
+  /** Persistent insurance policy store (the TypeORM adapter of `packages/persistence/insurance`); in-memory by default. */
+  readonly insurance?: PolicyStore;
   /**
    * Personal-data protection (SPECS D23): envelope encryption plus blind indexes. Defaults to the
    * local development KMS with a random per-process key, which refuses production-mode
@@ -334,6 +343,7 @@ export class Platform {
   public readonly areas: AreasApi;
   public readonly employees: EmployeesApi;
   public readonly documents: DocumentsApi;
+  public readonly insurance: InsuranceApi;
   public readonly access: AccessDirectory;
   public readonly tenants: InMemoryTenantStore;
   public readonly audit: AuditStore;
@@ -504,6 +514,29 @@ export class Platform {
       authorize: (token, correlationId, required) => this.authorize(token, correlationId, required),
       audit: (context, action, entityId, correlationId) =>
         this.auditNow(this.userActor(context), action, 'document', entityId, correlationId),
+    });
+    this.insurance = new InsuranceApi({
+      service: new PolicyService(adapters.insurance ?? new InMemoryPolicyStore(), {
+        now: this.now,
+        // The vehicle of a policy must be a live (not archived) vehicle of the same tenant.
+        // Unknown, foreign and archived vehicles are indistinguishable (no tenant oracle).
+        // Best effort (check, then act): see the task document.
+        vehicles: {
+          assertLive: async (tenantId, vehicleId) => {
+            const found = await vehicleService.get(tenantId, vehicleId).catch((error: unknown) => {
+              if (error instanceof VehicleError && error.code === 'not_found') return null;
+              throw error;
+            });
+            if (found === null || found.archivedAt !== null)
+              throw new PolicyError('invalid_vehicle', 'vehicle_id');
+          },
+        },
+      }),
+      authorize: (token, correlationId, required) => this.authorize(token, correlationId, required),
+      can: async (context, permission) =>
+        (await this.access.resolvePermissions(context)).includes(permission),
+      audit: (context, action, entityId, correlationId) =>
+        this.auditNow(this.userActor(context), action, 'insurance_policy', entityId, correlationId),
     });
     this.areas = new AreasApi({
       service: areaService,

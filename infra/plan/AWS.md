@@ -6,17 +6,17 @@ Tarea relacionada: FND-AWS. Este plan no acredita pruebas sobre AWS ni autoriza 
 
 ## 1. Información conocida
 
-| Elemento | Información / certeza |
-|---|---|
-| Base de datos | Amazon RDS, confirmado por el usuario. |
-| Motor de destino | MySQL 8.0.45; consulta ejecutada por el usuario en Workbench. |
-| Base lógica inicial | OPSLOG en configuración local; existencia y permisos aún sin verificar. |
-| Entornos existentes | Producción y pruebas, confirmados por el usuario. |
-| Conexión inicial seleccionada | RDS de pruebas en .env local ignorado; sin conexión ejecutada por este proyecto. |
-| Ubicación de RDS | Endpoint suministrado identifica us-west-2; no se hizo inventario en AWS. |
-| AppSync existente | Configuración suministrada indica us-east-1; sin uso verificado. |
-| Sudamérica | Supuesto de planificación del usuario, no ubicación confirmada de recursos existentes. |
-| Buckets existentes | Se proporcionaron referencias en .env; entorno, propiedad, políticas, región y uso compartido pendientes de inventario. |
+| Elemento                      | Información / certeza                                                                                                   |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Base de datos                 | Amazon RDS, confirmado por el usuario.                                                                                  |
+| Motor de destino              | MySQL 8.0.45; consulta ejecutada por el usuario en Workbench.                                                           |
+| Base lógica inicial           | OPSLOG en configuración local; existencia y permisos aún sin verificar.                                                 |
+| Entornos existentes           | Producción y pruebas, confirmados por el usuario.                                                                       |
+| Conexión inicial seleccionada | RDS de pruebas en .env local ignorado; sin conexión ejecutada por este proyecto.                                        |
+| Ubicación de RDS              | Endpoint suministrado identifica us-west-2; no se hizo inventario en AWS.                                               |
+| AppSync existente             | Configuración suministrada indica us-east-1; sin uso verificado.                                                        |
+| Sudamérica                    | Supuesto de planificación del usuario, no ubicación confirmada de recursos existentes.                                  |
+| Buckets existentes            | Se proporcionaron referencias en .env; entorno, propiedad, políticas, región y uso compartido pendientes de inventario. |
 
 No reproducir credenciales en este plan, paquetes, PRs, logs ni prompts. El .env inicial es configuración local; no es el mecanismo definitivo de secretos del runtime.
 
@@ -43,18 +43,18 @@ No cargar automáticamente las credenciales reales del .env en tests/CI. La futu
 
 Arquitectura seleccionada en SPECS §3; reutilizar recursos existentes solo tras inventario:
 
-| Componente | Uso previsto | Control a verificar |
-|---|---|---|
-| RDS MySQL | Control y datos operativos por tenant | Bases/usuarios separados; TLS validado; red privada; pools acotados. |
-| S3 | Documentos, originales, derivados y cuarentena | Objetos privados, límites por tenant, KMS, versionado, policies y descargas autorizadas. |
-| Cognito | Identidad OIDC/MFA | BFF y sesión OPSLOG; configuración de autenticación y revocación. |
-| SES | Correo transaccional | Destinos de pruebas controlados, dominios/verificación y límites. |
-| SQS / EventBridge | Jobs, entregas y activación periódica | DLQ, reintentos, contexto de tenant e idempotencia. |
-| ECS Fargate / ALB | API y worker | Roles por servicio, red, health checks, logs y presupuesto. |
-| S3 / CloudFront | Distribución de SPA React | Origen restringido, HTTPS y configuración pública sin secretos. |
-| Secrets Manager / KMS | Secretos y claves | Runtime sin usuario master y sin claves estáticas en repositorio. |
-| CloudWatch / OpenTelemetry | Observabilidad | Logs sanitizados, métricas, alertas y retención. |
-| GitHub OIDC | Despliegue autorizado a pruebas | Rol limitado a repo/ref/environment; PRs sin credenciales cloud. |
+| Componente                 | Uso previsto                                   | Control a verificar                                                                      |
+| -------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| RDS MySQL                  | Control y datos operativos por tenant          | Bases/usuarios separados; TLS validado; red privada; pools acotados.                     |
+| S3                         | Documentos, originales, derivados y cuarentena | Objetos privados, límites por tenant, KMS, versionado, policies y descargas autorizadas. |
+| Cognito                    | Identidad OIDC/MFA                             | BFF y sesión OPSLOG; configuración de autenticación y revocación.                        |
+| SES                        | Correo transaccional                           | Destinos de pruebas controlados, dominios/verificación y límites.                        |
+| SQS / EventBridge          | Jobs, entregas y activación periódica          | DLQ, reintentos, contexto de tenant e idempotencia.                                      |
+| ECS Fargate / ALB          | API y worker                                   | Roles por servicio, red, health checks, logs y presupuesto.                              |
+| S3 / CloudFront            | Distribución de SPA React                      | Origen restringido, HTTPS y configuración pública sin secretos.                          |
+| Secrets Manager / KMS      | Secretos y claves                              | Runtime sin usuario master y sin claves estáticas en repositorio.                        |
+| CloudWatch / OpenTelemetry | Observabilidad                                 | Logs sanitizados, métricas, alertas y retención.                                         |
+| GitHub OIDC                | Despliegue autorizado a pruebas                | Rol limitado a repo/ref/environment; PRs sin credenciales cloud.                         |
 
 AppSync y buckets suministrados son recursos existentes por evaluar. No se añaden como dependencias del producto automáticamente: la API OPSLOG continúa siendo REST según SPECS; no adaptar el dominio a una integración MOWI sin una tarea explícita.
 
@@ -65,7 +65,7 @@ AppSync y buckets suministrados son recursos existentes por evaluar. No se añad
 3. Confirmar que OPSLOG puede usar su base de control y bases operativas sin modificar datos o permisos de otra aplicación. DB_NAME=OPSLOG no sustituye la estrategia multitenant.
 4. Revisar buckets: región/entorno, acceso público, KMS, versionado, CORS, prefijos, legal hold/retención y scanner. No asumir que un bucket existente es exclusivo o desechable.
 5. Definir roles de runtime, migración/aprovisionamiento y CI; separar credenciales/secretos de producción y pruebas.
-6. Comprobar coste estimado, residencia, disponibilidad de servicios y necesidad de mover o crear recursos en Sudamérica. No migrar automáticamente recursos de EE. UU. Para el coste inicial aplicar el nivel de arranque austero (ADR-0012); todas las cifras son estimaciones sin verificar que se re-comprueban aquí.
+6. Comprobar coste estimado, residencia, disponibilidad de servicios y necesidad de mover o crear recursos en Sudamérica. No migrar automáticamente recursos de EE. UU. Para el coste inicial aplicar la etapa 0 mínima de ADR-0012; todas las cifras son estimaciones sin verificar que se re-comprueban aquí.
 7. Revisar configuración de identidad, colas y correo; documentar qué se reutiliza y qué se crea.
 
 ## 6. Secuencia futura de configuración
@@ -88,6 +88,6 @@ Cambiar un gate para permitir aceptación exclusivamente local requeriría una i
 
 ## 8. Arranque austero (ADR-0012)
 
-Por petición del propietario de un presupuesto inicial muy pequeño, ADR-0012 (aceptado por el propietario el 2026-10-06; no autoriza aprovisionar en AWS) define una etapa 0 con objetivo aproximado de 15–30 USD/mes (estimación sin verificar): RDS de pruebas reutilizado o `db.t4g.micro` Single-AZ, API en una tarea Fargate pequeña en subred pública (RDS privado), sin balanceador, NAT ni endpoints de interfaz, SPA en S3 + CloudFront, Cognito, SES, SQS diferido si no hace falta, SSM Parameter Store, logs de 7–14 días, sin Multi-AZ ni segunda copia de pruebas.
+Por petición del propietario de un presupuesto inicial muy pequeño, ADR-0012 (aceptado por el propietario el 2026-10-06; no autoriza aprovisionar en AWS) define una etapa 0 mínima, elegida por el propietario el 2026-10-06, con objetivo aproximado de 8–12 USD/mes (estimación sin verificar): SPA en S3 + CloudFront (ACM gratuito), una sola instancia pequeña (`t4g.nano`/`t4g.micro`) con la API/BFF, RDS existente reutilizado con base y usuario separados (privado), Cognito gratuito, una clave KMS y logs de 7–14 días. Quedan fuera Fargate, SES, SQS, NAT, ALB, Multi-AZ y segunda copia de pruebas. Salvedades: sin alta disponibilidad (caída al reiniciar), parcheo a cargo del propietario, adaptador real de KMS y cableado de Cognito como tareas posteriores (sin datos personales reales hasta `describeKmsPortContract`), y sin decidir aún si S3 también guarda documentos. La forma anterior con tarea Fargate es la etapa 1 (~15–30 USD/mes, sin verificar).
 
 Solo ajusta el nivel inicial de SPECS §3: no cambia alcance, controles de seguridad ni gates. Cada pieza sube de etapa cuando se cumple su disparador (usuarios, RPS, volumen de datos, disponibilidad); ver tabla y guardarraíles (Budgets, etiquetas, aprobación del propietario) en ADR-0012. AWS sigue diferido y sin aprovisionar.

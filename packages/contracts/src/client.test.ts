@@ -3,6 +3,7 @@ import {
   createAreasClient,
   createBffClient,
   createDocumentsClient,
+  createInsuranceClient,
   createEmployeesClient,
   createVehiclesClient,
   CSRF_HEADER,
@@ -568,6 +569,52 @@ describe('documents client', () => {
       'PUT /api/documents/d1',
       'POST /api/documents/d1/renew',
       'POST /api/documents/d1/archive',
+    ]);
+  });
+});
+
+describe('insurance client', () => {
+  it('maps each method to its route, method and path, and exposes the invalid vehicle field', async () => {
+    const { fetch, seen } = transport((request) => {
+      if (request.url === '/api/auth/csrf') return { status: 200, body: { csrfToken: 'tok' } };
+      if (request.url === '/api/auth/session') return { status: 200, body: session('tok') };
+      if (request.method === 'POST' && request.url === '/api/insurance-policies')
+        return { status: 422, body: { ...errorBody('invalid_vehicle', 422), field: 'vehicle_id' } };
+      return { status: 200, body: { items: [], total: 0 } };
+    });
+    const insurance = createInsuranceClient(createBffClient({ fetch }));
+    await insurance.list();
+    await insurance.list({ status: 'expiring', coversOn: '2026-10-06' });
+    await insurance.get('p1');
+    await insurance.history('p1');
+    await insurance.history('p1', { limit: 25 });
+    const refused = await insurance.create({
+      vehicleId: 'v1',
+      insurer: 'Aseguradora Ficticia',
+      policyNumber: 'POL-1',
+      coverageType: 'comprehensive',
+      startsOn: '2026-01-01',
+      endsOn: '2026-12-31',
+      deductible: { kind: 'percent', basisPoints: 1000 },
+    });
+    expect(refused).toMatchObject({
+      ok: false,
+      error: { code: 'invalid_vehicle', fieldErrors: [{ field: 'vehicle_id' }] },
+    });
+    await insurance.update('p1', { version: 1, insurer: 'Otra Ficticia' });
+    await insurance.renew('p1', { version: 1, startsOn: '2027-01-01', endsOn: '2027-12-31' });
+    await insurance.archive('p1', 1);
+    const calls = seen.filter((entry) => !entry.url.startsWith('/api/auth/'));
+    expect(calls.map((entry) => `${entry.method} ${entry.url}`)).toEqual([
+      'GET /api/insurance-policies',
+      'GET /api/insurance-policies?status=expiring&coversOn=2026-10-06',
+      'GET /api/insurance-policies/p1',
+      'GET /api/insurance-policies/p1/history',
+      'GET /api/insurance-policies/p1/history?limit=25',
+      'POST /api/insurance-policies',
+      'PUT /api/insurance-policies/p1',
+      'POST /api/insurance-policies/p1/renew',
+      'POST /api/insurance-policies/p1/archive',
     ]);
   });
 });

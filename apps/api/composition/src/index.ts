@@ -3,6 +3,7 @@ export * from './areas.js';
 export * from './directory.js';
 export * from './documents.js';
 export * from './employees.js';
+export * from './insurance.js';
 export * from './platform.js';
 export * from './tenancy.js';
 export * from './vehicles.js';
