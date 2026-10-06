@@ -25,6 +25,7 @@
     { "path": "./infra/runtime" },
     { "path": "./apps/worker/composition" },
     { "path": "./apps/api/composition" },
+    { "path": "./apps/api/bff" },
     { "path": "./tests/integration/platform" }
   ]
 }

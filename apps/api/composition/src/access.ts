@@ -39,6 +39,12 @@ interface Member {
   readonly status: 'active' | 'revoked';
 }
 
+export interface MemberRow {
+  readonly identityId: string;
+  readonly role: RoleName;
+  readonly status: 'active' | 'revoked' | 'pending';
+}
+
 const key = (tenantId: string, identityId: string): string =>
   `${tenantId.length}:${tenantId}${identityId.length}:${identityId}`;
 
@@ -84,6 +90,24 @@ export class AccessDirectory implements IdentityAccessResolver {
   public roleOf(tenantId: string, identityId: string): RoleName | null {
     const current = this.members.get(key(tenantId, identityId));
     return current?.status === 'active' ? current.role : null;
+  }
+  /** Members of one tenant, including invitations that have not been accepted yet. */
+  public membersOf(tenantId: string): readonly MemberRow[] {
+    const rows: MemberRow[] = [...this.members.values()]
+      .filter((member) => member.tenantId === tenantId)
+      .map((member) => ({
+        identityId: member.identityId,
+        role: member.role,
+        status: member.status,
+      }));
+    for (const [identityId, expected] of this.pending)
+      if (expected.tenantId === tenantId)
+        rows.push({ identityId, role: expected.role, status: 'pending' });
+    return rows;
+  }
+  /** True while an invitation recorded for this identity and tenant has not been activated. */
+  public hasPending(identityId: string, tenantId: string): boolean {
+    return this.pending.get(identityId)?.tenantId === tenantId;
   }
   public activeAdmins(tenantId: string): readonly string[] {
     return [...this.members.values()]

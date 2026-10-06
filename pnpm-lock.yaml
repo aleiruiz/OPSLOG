@@ -79,6 +79,8 @@ importers:
 
   apps/api/auth: {}
 
+  apps/api/bff: {}
+
   apps/api/composition: {}
 
   apps/api/files: {}
