@@ -226,8 +226,9 @@ describe('deactivation rules (FR-042, BR-021)', () => {
     const { platform } = world;
     const f = await fixture(world);
     const mine = await seed(world, f.roles.admin);
-    // A vehicle of the other company that carries the same opaque area id does not block.
-    ok(await platform.vehicles.create(f.adminB.token, corr(), vehicleInput(mine.id)));
+    // A vehicle of the other company (in its own area) does not block.
+    const theirs = await seed(world, f.adminB);
+    ok(await platform.vehicles.create(f.adminB.token, corr(), vehicleInput(theirs.id)));
     expect(
       ok(await platform.areas.deactivate(f.roles.admin.token, corr(), mine.id, 1)).active,
     ).toBe(false);

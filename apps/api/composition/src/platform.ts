@@ -13,6 +13,7 @@ import {
 } from '../../../../packages/domain/identity/src/index.js';
 import {
   InMemoryVehicleStore,
+  VehicleError,
   VehicleService,
   type VehicleStore,
 } from '../../../../packages/domain/vehicles/src/index.js';
@@ -107,7 +108,7 @@ export interface PlatformResponse<T> {
     readonly code: string;
     readonly status: number;
     readonly message: string;
-    /** Only for a vehicle duplicate: which unique field collided (never its value). */
+    /** Only for a vehicle duplicate or invalid area: the field (never its value). */
     readonly field?: string;
   };
 }
@@ -382,28 +383,40 @@ export class Platform {
       now: this.now,
     });
     const vehicleStore = adapters.vehicles ?? new InMemoryVehicleStore();
+    const areaService = new AreaService(adapters.areas ?? new InMemoryAreaStore(), {
+      now: this.now,
+      resources: {
+        // BR-021: active vehicles are counted through the vehicles store port.
+        vehicles: {
+          countActive: (tenantId, areaId) => vehicleStore.countLiveInArea(tenantId, areaId),
+        },
+        people: adapters.people ?? NO_RESOURCES,
+      },
+      // FR-041: a responsible user must be an active member of the tenant, per the directory.
+      members: {
+        isActiveMember: async (tenantId, userId) =>
+          (await this.access.effectiveRole(tenantId, userId)) !== null,
+      },
+    });
     this.vehicles = new VehiclesApi({
-      service: new VehicleService(vehicleStore, { now: this.now }),
+      service: new VehicleService(vehicleStore, {
+        now: this.now,
+        // BR-021 vs. TOCTOU: a vehicle write that sets or changes `areaId` runs under the same
+        // per-tenant area lock as `AreaService.deactivate`, after checking the area is active.
+        areas: {
+          withActiveArea: async (tenantId, areaId, work) => {
+            const outcome = await areaService.withActiveArea(tenantId, areaId, work);
+            if (!outcome.active) throw new VehicleError('invalid_area', 'area_id');
+            return outcome.value;
+          },
+        },
+      }),
       authorize: (token, correlationId, required) => this.authorize(token, correlationId, required),
       audit: (context, action, entityId, correlationId) =>
         this.auditNow(this.userActor(context), action, 'vehicle', entityId, correlationId),
     });
     this.areas = new AreasApi({
-      service: new AreaService(adapters.areas ?? new InMemoryAreaStore(), {
-        now: this.now,
-        resources: {
-          // BR-021: active vehicles are counted through the vehicles store port.
-          vehicles: {
-            countActive: (tenantId, areaId) => vehicleStore.countLiveInArea(tenantId, areaId),
-          },
-          people: adapters.people ?? NO_RESOURCES,
-        },
-        // FR-041: a responsible user must be an active member of the tenant, per the directory.
-        members: {
-          isActiveMember: async (tenantId, userId) =>
-            (await this.access.effectiveRole(tenantId, userId)) !== null,
-        },
-      }),
+      service: areaService,
       authorize: (token, correlationId, required) => this.authorize(token, correlationId, required),
       audit: (context, action, entityId, correlationId) =>
         this.auditNow(this.userActor(context), action, 'area', entityId, correlationId),

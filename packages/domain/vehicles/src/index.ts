@@ -41,10 +41,12 @@ export type VehicleErrorCode =
   | 'stale_version'
   | 'invalid_transition'
   | 'odometer_decrease'
-  | 'immutable';
+  | 'immutable'
+  /** The target area is unknown, of another tenant or inactive (all indistinguishable). */
+  | 'invalid_area';
 
-/** Which unique key collided. Only ever the field name, never the value. */
-export type VehicleConflictField = 'economic_number' | 'plate' | 'vin';
+/** Which unique key collided (`duplicate`) or which input is invalid (`invalid_area`). Never a value. */
+export type VehicleConflictField = 'economic_number' | 'plate' | 'vin' | 'area_id';
 
 export class VehicleError extends Error {
   public constructor(
@@ -72,7 +74,11 @@ export interface Vehicle {
   readonly make: string;
   readonly model: string;
   readonly year: number;
-  /** Opaque area id; the Areas module does not exist yet, so existence is not checked. */
+  /**
+   * Area of the vehicle. When set or changed it must be an active area of the same tenant (checked
+   * by `VehicleService` through `VehicleAreaGate`); an unchanged value is kept as is, even if that
+   * area has been deactivated since.
+   */
   readonly areaId: string;
   readonly status: VehicleStatus;
   /** Reason of the last status change (BR-004). */
@@ -488,6 +494,18 @@ export class InMemoryVehicleStore implements VehicleStore {
 
 // ---- service -------------------------------------------------------------------------------
 
+/**
+ * Port to the Areas module (BR-021). `withActiveArea` runs `work` only while `areaId` is an ACTIVE
+ * area of `tenantId` and cannot be deactivated: the implementation holds the same per-tenant
+ * serialization the area deactivation runs under for the whole duration of `work`, so a
+ * deactivation cannot commit between the check and the vehicle write. Unknown, foreign and
+ * inactive areas are indistinguishable: it throws `VehicleError('invalid_area', 'area_id')` without
+ * running `work`. Errors of `work` propagate unchanged.
+ */
+export interface VehicleAreaGate {
+  withActiveArea<T>(tenantId: string, areaId: string, work: () => Promise<T>): Promise<T>;
+}
+
 export interface VehicleListQuery {
   readonly status?: unknown;
   readonly areaId?: unknown;
@@ -497,6 +515,11 @@ export interface VehicleListQuery {
 }
 
 export interface VehicleServiceOptions {
+  /**
+   * Validates and serializes writes that set or change `areaId`. Without it the area is not
+   * checked (only for tests of this package); the platform composition always supplies it.
+   */
+  readonly areas?: VehicleAreaGate;
   readonly now?: () => Date;
   readonly newId?: () => string;
 }
@@ -509,6 +532,7 @@ export interface VehicleServiceOptions {
 export class VehicleService {
   private readonly now: () => Date;
   private readonly newId: () => string;
+  private readonly areas: VehicleAreaGate | undefined;
 
   public constructor(
     private readonly store: VehicleStore,
@@ -516,6 +540,12 @@ export class VehicleService {
   ) {
     this.now = options.now ?? (() => new Date());
     this.newId = options.newId ?? randomUUID;
+    this.areas = options.areas;
+  }
+
+  /** Runs a write that sets `areaId` under the area gate (a no-op wrapper without one). */
+  private inArea<T>(tenantId: string, areaId: string, work: () => Promise<T>): Promise<T> {
+    return this.areas ? this.areas.withActiveArea(tenantId, areaId, work) : work();
   }
 
   /** The vehicle of this tenant, or `not_found` (also for ids of other tenants). */
@@ -541,7 +571,8 @@ export class VehicleService {
     requireOpaqueId(actorId);
     const now = this.now();
     const vehicle = newVehicle(tenantId, this.newId(), parseNewVehicle(input, now), now);
-    await this.store.insert(vehicle, statusEntry(vehicle, null, this.newId(), actorId, now));
+    const entry = statusEntry(vehicle, null, this.newId(), actorId, now);
+    await this.inArea(tenantId, vehicle.areaId, () => this.store.insert(vehicle, entry));
     return vehicle;
   }
 
@@ -575,7 +606,11 @@ export class VehicleService {
     const patch = parseVehiclePatch(input, now);
     const version = requireVersion(expectedVersion);
     const current = await this.load(tenantId, id);
-    return this.commit(applyPatch(current, patch, version, now), version);
+    const next = applyPatch(current, patch, version, now);
+    // Only a different area is validated: a vehicle may keep an area that was deactivated since.
+    return next.areaId === current.areaId
+      ? this.commit(next, version)
+      : this.inArea(tenantId, next.areaId, () => this.commit(next, version));
   }
 
   public async changeStatus(

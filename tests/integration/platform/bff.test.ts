@@ -29,7 +29,6 @@ const VEHICLE_NEW = {
   make: 'Nissan',
   model: 'NP300',
   year: 2021,
-  areaId: 'area-1',
   odometerKm: 10,
 };
 const SETTINGS = { name: 'Nombre nuevo', mfa: 'disabled', sessionIdleHours: 8 };
@@ -44,6 +43,8 @@ interface Fixture {
   readonly memberB: { identityId: string };
   readonly vehicleId: string;
   readonly areaId: string;
+  /** Area that holds the fixture vehicle (a vehicle's area must be an active area of its tenant). */
+  readonly fleetAreaId: string;
 }
 
 async function fixture(options: Parameters<typeof createBffWorld>[0] = {}): Promise<Fixture> {
@@ -53,6 +54,8 @@ async function fixture(options: Parameters<typeof createBffWorld>[0] = {}): Prom
   const viewer = await world.member('subject-admin-a', 'viewer', 'subject-viewer-a');
   const memberB = await world.member('subject-admin-b', 'editor', 'subject-editor-b');
   const adminA = await world.loginAs('subject-admin-a');
+  const fleet = await adminA.post('/api/areas', { json: { name: 'Flota' } });
+  if (fleet.status !== 201) throw new Error('fleet area fixture failed');
   const vehicle = await adminA.post('/api/vehicles', {
     json: {
       economicNumber: 'U-001',
@@ -61,7 +64,7 @@ async function fixture(options: Parameters<typeof createBffWorld>[0] = {}): Prom
       make: 'Toyota',
       model: 'Hilux',
       year: 2022,
-      areaId: 'area-1',
+      areaId: fleet.json.id,
       odometerKm: 1000,
     },
   });
@@ -75,6 +78,7 @@ async function fixture(options: Parameters<typeof createBffWorld>[0] = {}): Prom
     adminB: await world.loginAs('subject-admin-b'),
     vehicleId: vehicle.json.id as string,
     areaId: area.json.id as string,
+    fleetAreaId: fleet.json.id as string,
     viewerA: await world.loginAs('subject-viewer-a'),
     viewerAId: viewer.identityId,
     memberB,
@@ -93,7 +97,7 @@ function writes(f: Fixture): [string, string, unknown?][] {
     ['POST', '/api/roles/viewer/copy', { name: 'Copia' }],
     ['PUT', '/api/drafts/form', { values: { a: 'b' } }],
     ['DELETE', '/api/drafts/form'],
-    ['POST', '/api/vehicles', VEHICLE_NEW],
+    ['POST', '/api/vehicles', { ...VEHICLE_NEW, areaId: f.fleetAreaId }],
     ['PUT', `/api/vehicles/${f.vehicleId}`, { version: 1, make: 'Ford' }],
     [
       'POST',

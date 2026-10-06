@@ -131,6 +131,8 @@ describe('node adapter over a loopback socket', () => {
         },
         JSON.stringify(json),
       );
+    const area = await write(a, 'POST', '/api/areas', { name: 'Area 1' });
+    expect(area.status).toBe(201);
     const vehicle = {
       economicNumber: 'U-001',
       plate: 'ABC123',
@@ -138,7 +140,7 @@ describe('node adapter over a loopback socket', () => {
       make: 'Toyota',
       model: 'Hilux',
       year: 2022,
-      areaId: 'area-1',
+      areaId: JSON.parse(area.body).id as string,
       odometerKm: 100,
     };
     expect(

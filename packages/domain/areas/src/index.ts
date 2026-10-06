@@ -55,7 +55,10 @@ export interface Area {
   readonly depth: number;
   /** BRD `activa`. Deactivation is the soft delete of BR-009: rows are never removed. */
   readonly active: boolean;
-  /** Responsible users (FR-041): opaque user ids, sorted, no duplicates. */
+  /**
+   * Responsible users (FR-041): raw identity subjects (without the `user-` prefix that
+   * `AreaHistoryEntry.actorId` carries), sorted, no duplicates.
+   */
   readonly responsibleIds: readonly string[];
   /** Optimistic concurrency token: starts at 1, +1 on every change. */
   readonly version: number;
@@ -79,8 +82,9 @@ export const isAreaField = (value: unknown): value is AreaField =>
 
 /**
  * One row of the area history (BRD §7.2.3: changes are recorded). Who, when and what changed, by
- * field name only: no names, codes or user ids, so the history holds no personal data. A parent
- * change also records the two parent ids (opaque area ids).
+ * field name only: no names, codes or responsible ids. `actorId` is the acting user's id
+ * (`user-<subject>`), the one pseudonymous identifier a row carries. A parent change also records
+ * the two parent ids (opaque area ids).
  */
 export interface AreaHistoryEntry {
   readonly id: string;
@@ -781,6 +785,37 @@ export class AreaService {
       if (!(await tx.replace(next, version, entry))) throw new AreaError('stale_version');
       return next;
     });
+  }
+
+  /**
+   * Runs `work` while `areaId` is an active area of the tenant, holding the tenant lock that
+   * `deactivate` also takes: a deactivation (and its BR-021 resource count) cannot run between the
+   * check and `work`, so a vehicle written inside `work` is always seen by the count. Unknown,
+   * foreign and inactive areas give the same `{ active: false }` and `work` does not run.
+   *
+   * An error of `work` is carried out of the transaction and rethrown unchanged (the store would
+   * otherwise sanitize it). `work` must not call back into this service or store for the same
+   * tenant: it would wait for the lock it already holds.
+   */
+  public async withActiveArea<T>(
+    tenantId: string,
+    id: unknown,
+    work: () => Promise<T>,
+  ): Promise<{ readonly active: true; readonly value: T } | { readonly active: false }> {
+    const areaId = requireOpaqueId(id);
+    requireOpaqueId(tenantId);
+    let failed: { readonly error: unknown } | undefined;
+    const outcome = await this.store.transaction(tenantId, async (tx) => {
+      if (!(await tx.find(areaId))?.active) return { active: false } as const;
+      try {
+        return { active: true, value: await work() } as const;
+      } catch (error) {
+        failed = { error };
+        return { active: false } as const;
+      }
+    });
+    if (failed) throw failed.error;
+    return outcome;
   }
 
   public async history(

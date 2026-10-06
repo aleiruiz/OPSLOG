@@ -651,6 +651,69 @@ describe('deactivation and reactivation (FR-042, BR-021, BR-009)', () => {
   });
 });
 
+describe('withActiveArea (area gate for other modules)', () => {
+  it('runs the work only for an active area of the tenant, holding the tenant lock', async () => {
+    const { svc } = setup();
+    const area = await svc.create(A, ACTOR, { name: 'N' });
+    const order: string[] = [];
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const running = svc.withActiveArea(A, area.id, async () => {
+      order.push('work start');
+      await gate;
+      order.push('work end');
+      return 7;
+    });
+    // A deactivation queued behind the work cannot interleave with it.
+    const deactivating = svc.deactivate(A, ACTOR, area.id, 1).then(() => order.push('deactivated'));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(order).toEqual(['work start']); // the deactivation waits for the lock
+    release();
+    expect(await running).toEqual({ active: true, value: 7 });
+    await deactivating;
+    expect(order).toEqual(['work start', 'work end', 'deactivated']);
+  });
+  it('answers active: false, without running the work, for unknown, foreign and inactive areas', async () => {
+    const { svc } = setup();
+    const mine = await svc.create(A, ACTOR, { name: 'Mia' });
+    const closed = await svc.create(A, ACTOR, { name: 'Cerrada' });
+    await svc.deactivate(A, ACTOR, closed.id, 1);
+    let ran = 0;
+    const work = async () => (ran += 1);
+    for (const [tenant, id] of [
+      [A, 'desconocida'],
+      [B, mine.id],
+      [A, closed.id],
+    ] as const)
+      expect(await svc.withActiveArea(tenant, id, work), `${tenant} ${id}`).toEqual({
+        active: false,
+      });
+    expect(ran).toBe(0);
+  });
+  it('rethrows the error of the work unchanged and leaves the area untouched', async () => {
+    const { svc } = setup();
+    const area = await svc.create(A, ACTOR, { name: 'N' });
+    const boom = new Error('boom');
+    await expect(
+      svc.withActiveArea(A, area.id, async () => {
+        throw boom;
+      }),
+    ).rejects.toBe(boom);
+    // The lock was released and nothing changed.
+    expect((await svc.get(A, area.id)).version).toBe(1);
+    expect(await svc.deactivate(A, ACTOR, area.id, 1)).toMatchObject({ active: false });
+  });
+  it('rejects malformed ids', async () => {
+    const { svc } = setup();
+    expect(await rejection(svc.withActiveArea(A, 'bad id', async () => 1))).toMatchObject({
+      code: 'invalid_input',
+    });
+    expect(await rejection(svc.withActiveArea('', 'x', async () => 1))).toMatchObject({
+      code: 'invalid_input',
+    });
+  });
+});
+
 describe('reads', () => {
   it('lists by name then id, filters by parent and activity, and windows with a total', async () => {
     const { svc } = setup();

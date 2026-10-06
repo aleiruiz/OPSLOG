@@ -22,6 +22,7 @@ export type VehicleApiErrorCode =
   | 'invalid_transition'
   | 'immutable'
   | 'odometer_decrease'
+  | 'invalid_area'
   | 'internal_error';
 
 const STATUS: Readonly<Record<VehicleApiErrorCode, number>> = {
@@ -34,12 +35,13 @@ const STATUS: Readonly<Record<VehicleApiErrorCode, number>> = {
   invalid_transition: 409,
   immutable: 409,
   odometer_decrease: 422,
+  invalid_area: 422,
   internal_error: 500,
 };
 
 /**
  * Maps any failure to a safe payload: a code, its status, a generic message and, for a duplicate,
- * the name of the colliding field. Never a stack, an SQL fragment or a value from the request.
+ * the name of the colliding field (or `area_id` for an invalid area). Never a stack, an SQL fragment or a value from the request.
  */
 function failure(error: unknown): PlatformResponse<never> {
   let code: VehicleApiErrorCode = 'internal_error';
@@ -165,7 +167,8 @@ export const VEHICLE_PERMISSIONS = {
  * Vehicles use cases for the HTTP layer. Every call authenticates the session and re-resolves the
  * role (nothing is cached), takes the tenant only from that session, and audits successful writes.
  * Serialization of concurrent changes is the store's job (unique keys and versioned conditional
- * writes), so no tenant lock is needed here: unlike membership changes, no rule spans several rows.
+ * writes). The one cross-module rule, that a vehicle's area is an active area of the tenant
+ * (BR-021), is enforced by the service through the area gate wired in `platform.ts`.
  */
 export class VehiclesApi {
   public constructor(private readonly deps: VehiclesApiDeps) {}
