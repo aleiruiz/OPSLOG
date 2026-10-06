@@ -6,6 +6,7 @@ import {
   createAreasClient,
   createBffClient,
   createDocumentsClient,
+  createAssignmentsClient,
   createInsuranceClient,
   createEmployeesClient,
   createVehiclesClient,
@@ -513,6 +514,102 @@ describe('typed client against the real BFF', () => {
       value: { version: 4 },
     });
     expect(await insurance.get('desconocido')).toMatchObject({ ok: false, error: { status: 404 } });
+
+    // Driver-vehicle assignments through the typed client.
+    const assignments = createAssignmentsClient(client);
+    const pilot = await employees.create({
+      kind: 'driver',
+      firstName: 'Rosa',
+      lastName: 'Lopez',
+      areaId: fleet.value.id,
+      employeeNumber: 'E-ASG1',
+    });
+    const relief = await employees.create({
+      kind: 'driver',
+      firstName: 'Mario',
+      lastName: 'Ruiz',
+      areaId: fleet.value.id,
+      employeeNumber: 'E-ASG2',
+    });
+    if (!pilot.ok || !relief.ok) throw new Error('driver fixtures failed');
+    const assigned = await assignments.assign({
+      vehicleId: truck.value.id,
+      employeeId: pilot.value.id,
+      type: 'principal',
+      reason: 'Alta de unidad',
+    });
+    if (!assigned.ok) throw new Error('assignment failed');
+    expect(assigned.value).toMatchObject({
+      replaced: null,
+      assignment: { current: true, version: 1, type: 'principal' },
+    });
+    expect(
+      await assignments.assign({
+        vehicleId: truck.value.id,
+        employeeId: relief.value.id,
+        type: 'principal',
+        reason: 'Segundo',
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: {
+        code: 'principal_taken',
+        status: 409,
+        fieldErrors: [expect.objectContaining({ field: 'vehicle_id' })],
+      },
+    });
+    expect(
+      await assignments.assign({
+        vehicleId: truck.value.id,
+        employeeId: 'nope',
+        type: 'temporary',
+        reason: 'Prueba',
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: {
+        code: 'invalid_employee',
+        fieldErrors: [expect.objectContaining({ field: 'employee_id' })],
+      },
+    });
+    const swapped = await assignments.assign({
+      vehicleId: truck.value.id,
+      employeeId: relief.value.id,
+      type: 'principal',
+      reason: 'Relevo',
+      replace: true,
+    });
+    expect(swapped).toMatchObject({
+      ok: true,
+      value: {
+        replaced: { id: assigned.value.assignment.id, endKind: 'replaced', current: false },
+      },
+    });
+    expect(await assignments.list({ vehicleId: truck.value.id, status: 'current' })).toMatchObject({
+      ok: true,
+      value: { total: 1 },
+    });
+    expect(await assignments.list()).toMatchObject({ ok: true, value: { total: 2 } });
+    expect(
+      await assignments.end(assigned.value.assignment.id, { version: 2, reason: 'Otra vez' }),
+    ).toMatchObject({ ok: false, error: { code: 'immutable', status: 409 } });
+    if (!swapped.ok) throw new Error('replace failed');
+    expect(
+      await assignments.end(swapped.value.assignment.id, { version: 1, reason: 'Fin' }),
+    ).toMatchObject({ ok: true, value: { current: false, endKind: 'ended', version: 2 } });
+    expect(await assignments.get(swapped.value.assignment.id)).toMatchObject({ ok: true });
+    expect(await assignments.history(assigned.value.assignment.id)).toMatchObject({
+      ok: true,
+      value: { total: 2 },
+    });
+    expect(await assignments.history(swapped.value.assignment.id, { limit: 25 })).toMatchObject({
+      ok: true,
+      value: { total: 2 },
+    });
+    expect(await assignments.get('desconocido')).toMatchObject({
+      ok: false,
+      error: { status: 404 },
+    });
 
     // Drafts
     expect(await client.call('drafts.load', { params: { scope: 'form:a' } })).toEqual({

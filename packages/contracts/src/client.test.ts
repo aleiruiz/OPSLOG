@@ -3,6 +3,7 @@ import {
   createAreasClient,
   createBffClient,
   createDocumentsClient,
+  createAssignmentsClient,
   createInsuranceClient,
   createEmployeesClient,
   createVehiclesClient,
@@ -615,6 +616,45 @@ describe('insurance client', () => {
       'PUT /api/insurance-policies/p1',
       'POST /api/insurance-policies/p1/renew',
       'POST /api/insurance-policies/p1/archive',
+    ]);
+  });
+});
+
+describe('assignments client', () => {
+  it('maps each method to its route, method and path, and exposes the conflict fields', async () => {
+    const { fetch, seen } = transport((request) => {
+      if (request.url === '/api/auth/csrf') return { status: 200, body: { csrfToken: 'tok' } };
+      if (request.url === '/api/auth/session') return { status: 200, body: session('tok') };
+      if (request.method === 'POST' && request.url === '/api/vehicle-assignments')
+        return { status: 409, body: { ...errorBody('principal_taken', 409), field: 'vehicle_id' } };
+      return { status: 200, body: { items: [], total: 0 } };
+    });
+    const assignments = createAssignmentsClient(createBffClient({ fetch }));
+    await assignments.list();
+    await assignments.list({ vehicleId: 'v1', status: 'current' });
+    await assignments.get('a1');
+    await assignments.history('a1');
+    await assignments.history('a1', { limit: 25 });
+    const refused = await assignments.assign({
+      vehicleId: 'v1',
+      employeeId: 'e1',
+      type: 'principal',
+      reason: 'Alta de unidad',
+    });
+    expect(refused).toMatchObject({
+      ok: false,
+      error: { code: 'principal_taken', fieldErrors: [{ field: 'vehicle_id' }] },
+    });
+    await assignments.end('a1', { version: 1, reason: 'Fin de turno' });
+    const calls = seen.filter((entry) => !entry.url.startsWith('/api/auth/'));
+    expect(calls.map((entry) => `${entry.method} ${entry.url}`)).toEqual([
+      'GET /api/vehicle-assignments',
+      'GET /api/vehicle-assignments?vehicleId=v1&status=current',
+      'GET /api/vehicle-assignments/a1',
+      'GET /api/vehicle-assignments/a1/history',
+      'GET /api/vehicle-assignments/a1/history?limit=25',
+      'POST /api/vehicle-assignments',
+      'POST /api/vehicle-assignments/a1/end',
     ]);
   });
 });
