@@ -88,6 +88,6 @@ Cambiar un gate para permitir aceptación exclusivamente local requeriría una i
 
 ## 8. Arranque austero (ADR-0012)
 
-Por petición del propietario de un presupuesto inicial muy pequeño, ADR-0012 (propuesto; pendiente de confirmación del propietario) define una etapa 0 con objetivo aproximado de 0–25 USD/mes (estimación sin verificar): RDS de pruebas reutilizado o `db.t4g.micro` Single-AZ, API en Lambda con HTTP API (alternativa: una tarea Fargate), sin balanceador ni NAT, SPA en S3 + CloudFront, Cognito, SES, SQS, SSM Parameter Store, logs de 7–14 días, sin Multi-AZ ni segunda copia de pruebas.
+Por petición del propietario de un presupuesto inicial muy pequeño, ADR-0012 (aceptado por el propietario el 2026-10-06; no autoriza aprovisionar en AWS) define una etapa 0 con objetivo aproximado de 15–30 USD/mes (estimación sin verificar): RDS de pruebas reutilizado o `db.t4g.micro` Single-AZ, API en una tarea Fargate pequeña en subred pública (RDS privado), sin balanceador, NAT ni endpoints de interfaz, SPA en S3 + CloudFront, Cognito, SES, SQS diferido si no hace falta, SSM Parameter Store, logs de 7–14 días, sin Multi-AZ ni segunda copia de pruebas.
 
 Solo ajusta el nivel inicial de SPECS §3: no cambia alcance, controles de seguridad ni gates. Cada pieza sube de etapa cuando se cumple su disparador (usuarios, RPS, volumen de datos, disponibilidad); ver tabla y guardarraíles (Budgets, etiquetas, aprobación del propietario) en ADR-0012. AWS sigue diferido y sin aprovisionar.
