@@ -15,6 +15,7 @@
     { "path": "../../../packages/persistence/employees" },
     { "path": "../../../packages/persistence/documents" },
     { "path": "../../../packages/persistence/insurance" },
-    { "path": "../../../packages/persistence/assignments" }
+    { "path": "../../../packages/persistence/assignments" },
+    { "path": "../../../packages/persistence/imports" }
   ]
 }

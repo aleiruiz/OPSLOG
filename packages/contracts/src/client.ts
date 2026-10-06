@@ -22,6 +22,14 @@ import {
   type BffDocumentRenewal,
   type BffDocumentRevision,
   type BffDocumentsQuery,
+  type BffImportEvent,
+  type BffImportHistoryQuery,
+  type BffImportInput,
+  type BffImportJob,
+  type BffImportRow,
+  type BffImportRowsQuery,
+  type BffImportSubmitted,
+  type BffImportsQuery,
   type BffInsurancePoliciesQuery,
   type BffVehicleAssignment,
   type BffVehicleAssignmentCreated,
@@ -489,5 +497,37 @@ export function createAssignmentsClient(client: BffClient): AssignmentsClient {
       query
         ? client.call('assignments.history', { params: { id }, query })
         : client.call('assignments.history', { params: { id } }),
+  };
+}
+
+/**
+ * Typed bulk-import calls over any `BffClient`. Each method is one route of the contract. `submit`
+ * runs a dry run or a commit (`commit_all` / `commit_valid`, which need an `idempotencyKey`): a
+ * retry with the same key and rows returns the stored job (`replayed: true`) instead of importing
+ * again, and the same key with other rows comes back as the `conflict` error value. The per-row
+ * error report is `rows(id, { outcome: 'invalid' })`: row numbers, a code and column names, never a
+ * submitted value.
+ */
+export interface ImportsClient {
+  list(query?: BffImportsQuery): Promise<BffResult<Page<BffImportJob>>>;
+  get(id: string): Promise<BffResult<BffImportJob>>;
+  submit(input: BffImportInput): Promise<BffResult<BffImportSubmitted>>;
+  rows(id: string, query?: BffImportRowsQuery): Promise<BffResult<Page<BffImportRow>>>;
+  history(id: string, query?: BffImportHistoryQuery): Promise<BffResult<Page<BffImportEvent>>>;
+}
+
+export function createImportsClient(client: BffClient): ImportsClient {
+  return {
+    list: (query) => (query ? client.call('imports.list', { query }) : client.call('imports.list')),
+    get: (id) => client.call('imports.get', { params: { id } }),
+    submit: (input) => client.call('imports.create', { body: input }),
+    rows: (id, query) =>
+      query
+        ? client.call('imports.rows', { params: { id }, query })
+        : client.call('imports.rows', { params: { id } }),
+    history: (id, query) =>
+      query
+        ? client.call('imports.history', { params: { id }, query })
+        : client.call('imports.history', { params: { id } }),
   };
 }

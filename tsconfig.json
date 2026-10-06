@@ -18,6 +18,8 @@
     { "path": "./packages/persistence/insurance" },
     { "path": "./packages/domain/assignments" },
     { "path": "./packages/persistence/assignments" },
+    { "path": "./packages/domain/imports" },
+    { "path": "./packages/persistence/imports" },
     { "path": "./packages/platform/pii" },
     { "path": "./packages/ui" },
     { "path": "./apps/api/tenants" },

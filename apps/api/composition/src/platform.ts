@@ -36,6 +36,11 @@ import {
   type AssignmentStore,
 } from '../../../../packages/domain/assignments/src/index.js';
 import {
+  ImportService,
+  InMemoryImportStore,
+  type ImportStore,
+} from '../../../../packages/domain/imports/src/index.js';
+import {
   PolicyError,
   PolicyService,
   InMemoryPolicyStore,
@@ -114,6 +119,8 @@ import { InMemoryTenantStore } from './tenancy.js';
 import { AreasApi } from './areas.js';
 import { DocumentsApi } from './documents.js';
 import { AssignmentsApi } from './assignments.js';
+import { employeeImportTarget, vehicleImportTarget } from './import-targets.js';
+import { ImportsApi } from './imports.js';
 import { InsuranceApi } from './insurance.js';
 import { EmployeesApi } from './employees.js';
 import { VehiclesApi } from './vehicles.js';
@@ -249,6 +256,8 @@ export interface PlatformAdapters {
   readonly insurance?: PolicyStore;
   /** Persistent vehicle assignment store (the TypeORM adapter of `packages/persistence/assignments`); in-memory by default. */
   readonly assignments?: AssignmentStore;
+  /** Persistent import job store (the TypeORM adapter of `packages/persistence/imports`); in-memory by default. */
+  readonly imports?: ImportStore;
   /**
    * Personal-data protection (SPECS D23): envelope encryption plus blind indexes. Defaults to the
    * local development KMS with a random per-process key, which refuses production-mode
@@ -354,6 +363,7 @@ export class Platform {
   public readonly documents: DocumentsApi;
   public readonly insurance: InsuranceApi;
   public readonly assignments: AssignmentsApi;
+  public readonly imports: ImportsApi;
   public readonly access: AccessDirectory;
   public readonly tenants: InMemoryTenantStore;
   public readonly audit: AuditStore;
@@ -603,6 +613,20 @@ export class Platform {
       authorize: (token, correlationId, required) => this.authorize(token, correlationId, required),
       audit: (context, action, entityId, correlationId) =>
         this.auditNow(this.userActor(context), action, 'area', entityId, correlationId),
+    });
+    // FLT-IMPORT: rows are created through the vehicle and employee services above, so VIN/plate
+    // uniqueness per company, the active-area rule and the sealing of personal data all apply.
+    this.imports = new ImportsApi({
+      service: new ImportService(adapters.imports ?? new InMemoryImportStore(), {
+        now: this.now,
+        targets: {
+          vehicle: vehicleImportTarget({ vehicles: vehicleService, areas: areaService }),
+          employee: employeeImportTarget({ employees: employeeService, areas: areaService }),
+        },
+      }),
+      authorize: (token, correlationId, required) => this.authorize(token, correlationId, required),
+      audit: (context, action, entityType, entityId, correlationId) =>
+        this.auditNow(this.userActor(context), action, entityType, entityId, correlationId),
     });
     this.runtime = createWorkerRuntime({
       outbox: this.outbox,

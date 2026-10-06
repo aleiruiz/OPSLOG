@@ -51,6 +51,15 @@ const POLICY_NEW = {
   endsOn: '2026-12-31',
 };
 const ASSIGNMENT_NEW = { type: 'principal', reason: 'Alta de unidad' };
+const IMPORT_ROW = (f: { fleetAreaId: string }) => ({
+  economicNumber: 'IMP-001',
+  plate: 'IMP001',
+  make: 'Nissan',
+  model: 'NP300',
+  year: '2021',
+  areaId: f.fleetAreaId,
+  odometerKm: '10',
+});
 const SETTINGS = { name: 'Nombre nuevo', mfa: 'disabled', sessionIdleHours: 8 };
 
 interface Fixture {
@@ -198,6 +207,7 @@ function writes(f: Fixture): [string, string, unknown?][] {
       { ...ASSIGNMENT_NEW, type: 'temporary', vehicleId: f.vehicleId, employeeId: f.driverId },
     ],
     ['POST', `/api/vehicle-assignments/${f.assignmentId}/end`, { version: 1, reason: 'Fin' }],
+    ['POST', '/api/imports', { entity: 'vehicle', mode: 'dry_run', rows: [IMPORT_ROW(f)] }],
     ['POST', '/api/areas', { name: 'Nueva area' }],
     ['PUT', `/api/areas/${f.areaId}`, { version: 1, name: 'Renombrada' }],
     ['POST', `/api/areas/${f.areaId}/deactivate`, { version: 1 }],
@@ -222,6 +232,8 @@ async function snapshot(f: Fixture) {
     policiesB: await get(f.adminB, '/api/insurance-policies?includeArchived=true&limit=100'),
     assignments: await get(f.adminA, '/api/vehicle-assignments?limit=100'),
     assignmentsB: await get(f.adminB, '/api/vehicle-assignments?limit=100'),
+    imports: await get(f.adminA, '/api/imports?limit=100'),
+    importsB: await get(f.adminB, '/api/imports?limit=100'),
     areas: await get(f.adminA, '/api/areas?includeInactive=true&limit=100'),
     areasB: await get(f.adminB, '/api/areas?includeInactive=true&limit=100'),
     settingsB: await get(f.adminB, '/api/company/settings'),

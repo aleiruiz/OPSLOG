@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { BFF_ERRORS, BFF_ROUTES, bffPath, bffRouteIds, isBffErrorBody } from './index.js';
+import {
+  BFF_ERRORS,
+  BFF_IMPORT_MAX_BODY_BYTES,
+  BFF_IMPORT_MAX_ROWS,
+  BFF_IMPORT_TEMPLATES,
+  BFF_ROUTES,
+  bffPath,
+  bffRouteIds,
+  isBffErrorBody,
+} from './index.js';
 
 describe('BFF contract', () => {
   it('declares unique method and path pairs', () => {
@@ -18,6 +27,16 @@ describe('BFF contract', () => {
     );
     expect(() => bffPath('drafts.load', {})).toThrow(/Missing path parameter :scope/);
     expect(() => bffPath('drafts.load', { scope: '' })).toThrow();
+  });
+
+  it('gives the bulk import route a larger body limit than the default, and nothing else', () => {
+    const limited = Object.entries(BFF_ROUTES).filter(
+      ([, definition]) => 'maxBodyBytes' in definition,
+    );
+    expect(limited.map(([id]) => id)).toEqual(['imports.create']);
+    expect(BFF_IMPORT_MAX_BODY_BYTES).toBeGreaterThan(16 * 1024);
+    expect(BFF_IMPORT_MAX_ROWS).toBe(500);
+    expect(BFF_IMPORT_TEMPLATES.vehicle.required).toContain('plate');
   });
 
   it('recognises uniform error bodies only', () => {
