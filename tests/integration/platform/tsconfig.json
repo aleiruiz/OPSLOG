@@ -6,5 +6,8 @@
     "types": ["node", "vitest/globals"]
   },
   "include": ["**/*.ts"],
-  "references": [{ "path": "../../../apps/api/composition" }]
+  "references": [
+    { "path": "../../../apps/api/composition" },
+    { "path": "../../../packages/persistence/identity" }
+  ]
 }

@@ -5,6 +5,7 @@
     { "path": "./packages/contracts" },
     { "path": "./packages/domain/tenants" },
     { "path": "./packages/persistence/tenancy" },
+    { "path": "./packages/persistence/identity" },
     { "path": "./packages/ui" },
     { "path": "./apps/api/tenants" },
     { "path": "./e2e" },
