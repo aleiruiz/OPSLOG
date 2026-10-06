@@ -80,7 +80,7 @@ describe('mock auth port', () => {
     const api = createMockApi();
     const weak = await api.auth.acceptInvitation(demoInvitations.valid, {
       displayName: 'Ana',
-      password: 'corta',
+      password: 'x'.repeat(5),
     });
     expect(weak).toMatchObject({
       ok: false,
@@ -88,7 +88,7 @@ describe('mock auth port', () => {
     });
     const strong = await api.auth.acceptInvitation(demoInvitations.valid, {
       displayName: 'Ana',
-      password: 'una-contraseña-larga',
+      password: 'z'.repeat(14),
     });
     expect(strong.ok).toBe(true);
     expect(api.controls.isSignedIn()).toBe(true);

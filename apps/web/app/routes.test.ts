@@ -4,14 +4,16 @@ import { isAllowed, matchPattern, resolveRoute, routes, safeNextPath } from './r
 describe('route matching', () => {
   it('matches static and parameterised patterns and decodes parameters', () => {
     expect(matchPattern('/', '/')).toEqual({});
-    expect(matchPattern('/invitacion/:token', '/invitacion/a%20b')).toEqual({ token: 'a b' });
+    expect(matchPattern('/invitacion/:token', '/invitacion/dos%20palabras')).toEqual({
+      token: 'dos palabras',
+    });
     expect(matchPattern('/configuracion/roles', '/configuracion/roles/')).toEqual({});
   });
 
   it('rejects different lengths, different static segments and malformed encoding', () => {
     expect(matchPattern('/a/b', '/a')).toBeNull();
     expect(matchPattern('/a/b', '/a/c')).toBeNull();
-    expect(matchPattern('/invitacion/:token', '/invitacion/%E0%A4%A')).toBeNull();
+    expect(matchPattern('/invitacion/:token', '/invitacion/%zz')).toBeNull();
   });
 
   it('resolves known routes and returns null for unknown ones', () => {

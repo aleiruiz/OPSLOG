@@ -62,10 +62,13 @@ export function InvitationScreen({ token }: { token: string }) {
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     const next: Record<string, string> = {};
-    if (!displayName.trim()) next.displayName = 'Escribe tu nombre.';
+    const flag = (field: string, message: string) => {
+      next[field] = message;
+    };
+    if (!displayName.trim()) flag('displayName', 'Escribe tu nombre.');
     if (password.length < minimumPasswordLength)
-      next.password = `Usa al menos ${minimumPasswordLength} caracteres.`;
-    if (confirmation !== password) next.confirmation = 'Las contraseñas no coinciden.';
+      flag('password', `Usa al menos ${minimumPasswordLength} caracteres.`);
+    if (confirmation !== password) flag('confirmation', 'Las contraseñas no coinciden.');
     setErrors(next);
     setRejected(false);
     if (Object.keys(next).length > 0) return;
