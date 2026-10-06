@@ -51,8 +51,14 @@ describe('pre-login CSRF endpoint', () => {
     for (const attribute of ['HttpOnly', 'Secure', 'SameSite=Strict', 'Path=/api', 'Max-Age=3600'])
       expect(cookie).toContain(attribute);
     expect(first.json.csrfToken).not.toContain(cookie.split(';')[0]!.split('=')[1]!);
-    // The same browser keeps its nonce, so the token is stable; another browser gets another one.
-    expect((await browser.get('/api/auth/csrf')).json.csrfToken).toBe(first.json.csrfToken);
+    // Every call mints a fresh nonce, even when the browser presents one (or a chosen value).
+    const second = await browser.get('/api/auth/csrf');
+    expect(second.json.csrfToken).not.toBe(first.json.csrfToken);
+    expect(second.setCookies[0]).not.toBe(first.setCookies[0]);
+    const chosen = await world.browser().get('/api/auth/csrf', {
+      cookieHeader: `opslog_csrf=${'C'.repeat(43)}`,
+    });
+    expect(chosen.setCookies[0]).not.toContain('C'.repeat(43));
     expect((await world.browser().get('/api/auth/csrf')).json.csrfToken).not.toBe(
       first.json.csrfToken,
     );
@@ -358,11 +364,21 @@ describe('CSRF and same-origin protection', () => {
     expectUniformError(await admin.delete('/api/drafts/form', { csrf: null }), 403, 'csrf_failed');
     // The settings were not changed by any of those.
     expect((await admin.get('/api/company/settings')).json.name).toBe('Empresa Alfa');
-    // A repeated header is ambiguous and refused.
-    expect(
-      (await admin.post('/api/auth/logout', { headers: {}, csrf: `${admin.csrf}`, origin: ORIGIN }))
-        .status,
-    ).toBe(204);
+    // A repeated CSRF header is ambiguous and refused, even when one copy is the right token.
+    const repeated = await world.handler({
+      method: 'POST',
+      url: '/api/auth/logout',
+      headers: {
+        origin: ORIGIN,
+        host: HOST,
+        cookie: [...admin.jar].map(([n, v]) => `${n}=${v}`).join('; '),
+        'x-csrf-token': [admin.csrf!, admin.csrf!],
+      },
+    });
+    expect(repeated.status).toBe(403);
+    expect((await admin.get('/api/auth/session')).status).toBe(200);
+    // With a single copy the same request succeeds.
+    expect((await admin.post('/api/auth/logout')).status).toBe(204);
   });
 
   it('checks Origin and Host on every state-changing route', async () => {
@@ -420,7 +436,7 @@ describe('cookies: forged, malformed, revoked and expired sessions', () => {
       'opslog_session=short',
       'opslog_session=',
       `opslog_session=${real}x`,
-      `opslog_session=${real.slice(0, -1)}A`,
+      `opslog_session=${real.slice(0, -1)}${real.endsWith('A') ? 'B' : 'A'}`,
       `opslog_session=${real}; opslog_session=${'B'.repeat(43)}`,
       `opslog_session=${'B'.repeat(43)}; opslog_session=${real}`,
       `opslog_session=${real.replace(/./, '*')}`,
@@ -1034,7 +1050,10 @@ describe('users', () => {
       [admin, `/api/users?cursor=${encodeURIComponent(cursor)}&sort=status`],
       [admin, `/api/users?cursor=${encodeURIComponent(cursor)}&direction=desc`],
       [admin, `/api/users?cursor=${encodeURIComponent(cursor)}&search=x`],
-      [admin, `/api/users?cursor=${encodeURIComponent(`${cursor.slice(0, -2)}AA`)}`],
+      [
+        admin,
+        `/api/users?cursor=${encodeURIComponent(`${cursor.slice(0, -2)}${cursor.endsWith('AA') ? 'BB' : 'AA'}`)}`,
+      ],
       [admin, '/api/users?cursor=garbage'],
       [admin, '/api/users?cursor=a.b'],
       [admin, `/api/users?cursor=${'x'.repeat(600)}`],

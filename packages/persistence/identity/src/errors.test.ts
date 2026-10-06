@@ -128,9 +128,74 @@ describe('sanitizeStoreError', () => {
       expect(safe.frames.length).toBeGreaterThan(0);
       const renamed = new Error('');
       renamed.name = `jane.doe@example.test\n    at ${SECRET} x:1:2`;
-      expect((sanitizeStoreError(renamed) as IdentityStoreError).frames).toEqual([]);
+      const renamedSafe = sanitizeStoreError(renamed) as IdentityStoreError;
+      expect(JSON.stringify(renamedSafe)).not.toContain(SECRET);
+      expect(JSON.stringify(renamedSafe)).not.toContain('jane.doe');
+      // A stack captured under the old name no longer matches the header: nothing is kept.
+      const stale = new Error('');
+      const staleStack = stale.stack as string;
+      stale.name = 'Renamed';
+      stale.stack = staleStack;
+      expect((sanitizeStoreError(stale) as IdentityStoreError).frames).toEqual([]);
       const noNewline = Object.assign(new Error(''), { stack: 'Error' });
       expect((sanitizeStoreError(noNewline) as IdentityStoreError).frames).toEqual([]);
+    });
+
+    it('keeps nothing when the message was truncated or emptied after the stack was read', () => {
+      const truncated = new Error(`original\n    at ${SECRET} tenant=t-42`);
+      const captured = truncated.stack as string;
+      truncated.message = 'r';
+      truncated.stack = captured;
+      const a = sanitizeStoreError(truncated) as IdentityStoreError;
+      expect(a.frames).toEqual([]);
+      const emptied = new Error(`original\n    at ${SECRET} tenant=t-42`);
+      const stack = emptied.stack as string;
+      emptied.message = '';
+      emptied.stack = stack;
+      const b = sanitizeStoreError(emptied) as IdentityStoreError;
+      expect(b.frames).toEqual([]);
+      expect(serialized(a) + serialized(b)).not.toContain(SECRET);
+    });
+
+    it('refuses frame-shaped lines that carry personal data', () => {
+      const error = new Error('x');
+      error.stack = [
+        'Error: x',
+        '    at carol@example.com (q.js:1:1)',
+        '    at fn (/srv/app/file name.js:3:4)',
+        '    at ok (/srv/app/file.js:3:4)',
+        '    at /srv/app/other.js:5:6',
+      ].join('\n');
+      const safe = sanitizeStoreError(error) as IdentityStoreError;
+      expect(safe.frames).toEqual(['at ok (/srv/app/file.js:3:4)', 'at /srv/app/other.js:5:6']);
+    });
+
+    it('falls back to no frames when reading the error throws', () => {
+      const hostile = new Error('x');
+      Object.defineProperty(hostile, 'stack', {
+        get() {
+          throw new Error(`boom ${SECRET}`);
+        },
+      });
+      const safe = sanitizeStoreError(hostile) as IdentityStoreError;
+      expect(safe).toMatchObject({ code: 'internal', frames: [], origin: 'Error' });
+      const noMessage = new Error('x');
+      Object.defineProperty(noMessage, 'message', {
+        get() {
+          throw new Error('nope');
+        },
+      });
+      expect((sanitizeStoreError(noMessage) as IdentityStoreError).frames).toEqual([]);
+      const badConstructor = new Error('x');
+      Object.defineProperty(badConstructor, 'constructor', {
+        get() {
+          throw new Error('nope');
+        },
+      });
+      expect((sanitizeStoreError(badConstructor) as IdentityStoreError).origin).toBe('Error');
+      const nonString = new Error('x');
+      Object.defineProperty(nonString, 'name', { value: 5 });
+      expect((sanitizeStoreError(nonString) as IdentityStoreError).frames).toEqual([]);
     });
 
     it('takes origin from the constructor, restricted to a safe alphabet', () => {

@@ -68,41 +68,52 @@ export const isLockContention = (error: unknown): boolean =>
   matches(error, 1213, 'ER_LOCK_DEADLOCK') || matches(error, 1205, 'ER_LOCK_WAIT_TIMEOUT');
 
 const ORIGIN_PATTERN = /^[A-Za-z0-9_]{1,64}$/;
-/** A real stack frame ends in `:line:col` (optionally closed by `)`); message text never qualifies once the header is removed. */
-const FRAME_PATTERN = /^at [^\r\n]*:\d+:\d+\)?$/;
+/**
+ * A path-shaped frame: `at fn (file:line:col)` or `at file:line:col`. Function names and locations
+ * use a closed alphabet (no `@`, no whitespace in locations), so e-mail-like or free text is refused.
+ */
+const FRAME_PATTERN =
+  /^at (?:[A-Za-z0-9_$.<>[\] ]{1,120} \()?[A-Za-z0-9_$./\\:+~%=,#-]{1,300}:\d+:\d+\)?$/;
 
 /** Class name of the cause (`constructor.name`, never the mutable `error.name`), restricted to a safe alphabet. */
 function originOf(error: unknown): string {
-  if (!(error instanceof Error)) return typeof error;
-  const name: unknown = (error.constructor as { name?: unknown } | undefined)?.name;
-  return typeof name === 'string' && ORIGIN_PATTERN.test(name) ? name : 'Error';
+  try {
+    if (!(error instanceof Error)) return typeof error;
+    const name: unknown = (error.constructor as { name?: unknown } | undefined)?.name;
+    return typeof name === 'string' && ORIGIN_PATTERN.test(name) ? name : 'Error';
+  } catch {
+    return 'Error';
+  }
 }
 
 /**
- * Stack locations only. V8 prints `${name}: ${message}` before the frames, and the message may span
- * several lines that look like frames, so the header is removed first; when it cannot be located
- * reliably nothing is kept. Remaining lines must end in `:line:col`.
+ * Stack locations only. Frames are kept only when the stack starts with exactly the header V8 prints
+ * for the current state (`${name}: ${message}`, or `${name}` for an empty message) followed by a
+ * newline: then everything after it is genuine frame text. Any mismatch (message or name changed after
+ * the stack was captured, a rewritten stack) or any throwing accessor yields no frames. Each kept line
+ * must also be path-shaped.
  */
 function framesOf(error: unknown): readonly string[] {
-  if (!(error instanceof Error) || typeof error.stack !== 'string') return [];
-  const { stack, message } = error;
-  let body: string;
-  if (message.length > 0) {
-    const at = stack.indexOf(message);
-    if (at < 0) return [];
-    body = stack.slice(at + message.length);
-  } else {
-    // Empty message: the header is the first line, which must start with the error name.
-    const name = String(error.name);
-    if (name.includes('\n') || !stack.startsWith(name)) return [];
-    const newline = stack.indexOf('\n');
-    body = newline < 0 ? '' : stack.slice(newline);
+  try {
+    if (!(error instanceof Error)) return [];
+    const stack: unknown = error.stack;
+    const message: unknown = error.message;
+    const name: unknown = error.name;
+    if (typeof stack !== 'string' || typeof message !== 'string' || typeof name !== 'string')
+      return [];
+    // Empty message: V8 prints `${name}`, some stack formatters print `${name}: `.
+    const headers = message.length > 0 ? [`${name}: ${message}`] : [name, `${name}: `];
+    const header = headers.find((candidate) => stack.startsWith(`${candidate}\n`));
+    if (header === undefined) return [];
+    return stack
+      .slice(header.length + 1)
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => FRAME_PATTERN.test(line))
+      .slice(0, 8);
+  } catch {
+    return [];
   }
-  return body
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => FRAME_PATTERN.test(line))
-    .slice(0, 8);
 }
 
 /** Maps any thrown value to an error that is safe to log and to return upstream. */

@@ -113,7 +113,9 @@ describe('BffCrypto', () => {
     const cursor = crypto.signCursor({ t: 'tenant', o: 25 });
     expect(crypto.openCursor(cursor)).toEqual({ t: 'tenant', o: 25 });
     expect(crypto.openCursor(`${cursor}x`)).toBeNull();
-    expect(crypto.openCursor(`${cursor.slice(0, 3)}A${cursor.slice(4)}`)).toBeNull();
+    expect(
+      crypto.openCursor(`${cursor.slice(0, 3)}${cursor[3] === 'A' ? 'B' : 'A'}${cursor.slice(4)}`),
+    ).toBeNull();
     expect(crypto.openCursor('nodot')).toBeNull();
     expect(crypto.openCursor('.abc')).toBeNull();
     expect(crypto.openCursor('x'.repeat(513))).toBeNull();

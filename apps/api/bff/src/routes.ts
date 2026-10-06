@@ -13,7 +13,6 @@ import {
   preCsrfCookie,
   readCookie,
   sessionCookie,
-  PRE_CSRF_COOKIE,
   SESSION_COOKIE,
   parseCookies,
 } from './cookies.js';
@@ -231,8 +230,8 @@ export const ROUTES: readonly Route[] = [
     path: ['api', 'auth', 'csrf'],
     kind: 'public',
     handle: async (ctx) => {
-      const nonce =
-        readCookie(parseCookies(cookieHeader(ctx)), PRE_CSRF_COOKIE) ?? ctx.crypto.newNonce();
+      // Always a fresh nonce: a client-supplied one is never re-issued (no fixation of the pre-login token).
+      const nonce = ctx.crypto.newNonce();
       ctx.cookies.push(preCsrfCookie(nonce, PRE_CSRF_MAX_AGE));
       return respond(200, { csrfToken: ctx.crypto.preToken(nonce) }, ctx.correlationId);
     },

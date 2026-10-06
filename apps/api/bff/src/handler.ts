@@ -104,7 +104,8 @@ function withCookies(response: BffResponse, cookies: readonly string[]): BffResp
  * Builds the BFF request handler over a `Platform`. The handler is a pure function of the request
  * and the platform state, so it is testable without sockets. Order of checks for every request:
  * route (404/405) -> declared size (413) -> content type (415) -> body read (413) -> same-origin
- * (403) -> session (401) -> CSRF (403) -> permission (403) -> body validation (400) -> operation.
+ * (403) -> session (401) -> CSRF (403) -> body validation (400) -> permission (403, checked by the
+ * composition inside the operation) -> operation.
  */
 export function createBffHandler(options: BffOptions): BffHandler {
   const crypto = new BffCrypto(options.secret);

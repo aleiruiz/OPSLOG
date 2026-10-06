@@ -532,6 +532,9 @@ export class Platform {
       const context = await this.authorize(token, correlationId, ['manage_users']);
       const invitation = await this.identity.issueInvitation(context.tenantId);
       this.access.expectInvitation(invitation.identityId, context.tenantId, role);
+      const nowMs = this.now().getTime();
+      for (const [hash, meta] of this.invitations)
+        if (meta.expiresAt.getTime() <= nowMs) this.invitations.delete(hash);
       this.invitations.set(opaqueTokenGenerator.hash(invitation.token), {
         tenantId: context.tenantId,
         identityId: invitation.identityId,
@@ -564,6 +567,7 @@ export class Platform {
       const activated = await this.auth.activateInvitation(invitationToken, principal);
       if (!activated.ok || !activated.value) return failure(new AuthError('unauthorized'));
       const { identity, membership } = activated.value;
+      this.invitations.delete(opaqueTokenGenerator.hash(invitationToken));
       if (!this.access.activate(identity.id, membership.tenantId)) {
         // No role was recorded for this invitation: it did not come from `inviteUser`; fail closed.
         await this.identity.revokeMembership(membership.tenantId, identity.id);

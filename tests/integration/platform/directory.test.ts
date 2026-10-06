@@ -128,6 +128,33 @@ describe('platform operations behind the BFF', () => {
     expect(b.tenantId).not.toBe(a.tenantId);
   });
 
+  it('does not keep accepted or expired invitations in the registry', async () => {
+    const { a } = await fixture();
+    const registry = () =>
+      (world.platform as unknown as { invitations: Map<string, unknown> }).invitations.size;
+    const first = (await world.platform.inviteUser(a.admin.token, corr(), 'viewer')).value!;
+    const second = (await world.platform.inviteUser(a.admin.token, corr(), 'viewer')).value!;
+    expect(registry()).toBe(2);
+    const accepted = await world.platform.acceptInvitation(
+      first.invitationToken,
+      await world.principal('subject-accepts'),
+    );
+    expect(accepted.ok).toBe(true);
+    expect(registry()).toBe(1);
+    // The remaining one expires; the next invitation prunes it.
+    world.advance(73 * HOUR);
+    const admin = await world.signIn('subject-admin-a', a.tenantId);
+    await world.platform.inviteUser(admin.token, corr(), 'viewer');
+    expect(registry()).toBe(1);
+    expect((await world.platform.inspectInvitation(second.invitationToken)).error?.code).toBe(
+      'not_found',
+    );
+    // A failed acceptance keeps the invitation usable.
+    const third = (await world.platform.inviteUser(admin.token, corr(), 'viewer')).value!;
+    expect((await world.platform.acceptInvitation(third.invitationToken, 'forged')).ok).toBe(false);
+    expect((await world.platform.inspectInvitation(third.invitationToken)).ok).toBe(true);
+  });
+
   it('lists members with their statuses and roles with member counts', async () => {
     const { a, b, viewer } = await fixture();
     await world.platform.inviteUser(a.admin.token, corr(), 'editor');

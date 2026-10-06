@@ -1,5 +1,5 @@
 import { request, type Server } from 'node:http';
-import type { AddressInfo } from 'node:net';
+import { connect, type AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createBffHandler } from './handler.js';
 import type { BffHandler } from './http.js';
@@ -159,5 +159,44 @@ describe('node adapter over a loopback socket', () => {
     const reply = await send(port, 'GET', `/${'a'.repeat(4000)}`, { host: HOST });
     expect(reply.status).toBe(400);
     expect(JSON.parse(reply.body).code).toBe('bad_request');
+  });
+
+  it('rejects repeated Host, Content-Type and CSRF headers instead of keeping the first', async () => {
+    world = createBffWorld();
+    await world.tenant('Empresa Alfa', 'subject-admin-a');
+    const port = await listen(world.handler);
+    const browser = await world.loginAs('subject-admin-a');
+    const cookie = [...browser.jar].map(([n, v]) => `${n}=${v}`).join('; ');
+    const body = JSON.stringify({ name: 'Nuevo', mfa: 'disabled', sessionIdleHours: 8 });
+    const raw = (headers: string[]) =>
+      new Promise<number>((resolve, reject) => {
+        const socket = connect(port, '127.0.0.1', () =>
+          socket.write(
+            [
+              'PUT /api/company/settings HTTP/1.1',
+              ...headers,
+              `Cookie: ${cookie}`,
+              `Content-Length: ${Buffer.byteLength(body)}`,
+              'Connection: close',
+              '',
+              body,
+            ].join('\r\n'),
+          ),
+        );
+        let data = '';
+        socket.on('data', (chunk) => (data += chunk.toString('utf8')));
+        socket.on('close', () => resolve(Number(/^HTTP\/1\.1 (\d{3})/.exec(data)?.[1] ?? 0)));
+        socket.on('error', reject);
+      });
+    const good = [
+      `Host: ${HOST}`,
+      `Origin: ${ORIGIN}`,
+      'Content-Type: application/json',
+      `X-CSRF-Token: ${browser.csrf!}`,
+    ];
+    expect(await raw(good)).toBe(200);
+    expect(await raw([...good, `Host: ${HOST}`])).toBe(403);
+    expect(await raw([...good, 'Content-Type: application/json'])).toBe(415);
+    expect(await raw([...good, `X-CSRF-Token: ${browser.csrf!}`])).toBe(403);
   });
 });

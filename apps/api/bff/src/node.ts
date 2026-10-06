@@ -30,7 +30,9 @@ export function createNodeListener(
         result = await handler({
           method: request.method as string,
           url: request.url as string,
-          headers: request.headers,
+          // Distinct values: Node's `headers` silently keeps the first of a repeated host or
+          // content-type; the handler must see the repetition to treat it as ambiguous.
+          headers: request.headersDistinct,
           body: bodyOf(request),
         });
       } catch {
