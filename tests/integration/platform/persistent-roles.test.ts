@@ -347,7 +347,7 @@ describe('membership roles written through setRole', () => {
     expect(db.committed(MembershipEntity).filter((row) => row.role === 'admin')).toHaveLength(1);
   });
 
-  it('two administrators demoting each other concurrently leave exactly one', async () => {
+  it('two administrators demoting each other concurrently leave exactly one (serialized by the in-process lock; the cross-process guarantee is proven by the store-level MySQL tests)', async () => {
     const { identityStore, db } = persistentWorld();
     const { platform } = world;
     const a = await world.tenant('Empresa Alfa', 'subject-admin-a');
