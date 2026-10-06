@@ -367,6 +367,28 @@ suite('persistent vehicle store on MySQL', () => {
     });
   });
 
+  describe('count port for the Areas module', () => {
+    it('counts, per company and area, the vehicles that are not archived or decommissioned', async () => {
+      const tenant = randomUUID();
+      const other = randomUUID();
+      const svc = new VehicleService(storeA);
+      const live = await svc.create(tenant, ACTOR, fields({ areaId: 'x' }));
+      const idle = await svc.create(tenant, ACTOR, fields({ areaId: 'x' }));
+      const gone = await svc.create(tenant, ACTOR, fields({ areaId: 'x' }));
+      const filed = await svc.create(tenant, ACTOR, fields({ areaId: 'x' }));
+      await svc.create(tenant, ACTOR, fields({ areaId: 'y' }));
+      await svc.create(other, ACTOR, fields({ areaId: 'x' }));
+      await svc.changeStatus(tenant, ACTOR, idle.id, 1, 'inactive', 'Temporada');
+      await svc.changeStatus(tenant, ACTOR, gone.id, 1, 'decommissioned', 'Baja');
+      await svc.archive(tenant, filed.id, 1);
+      expect(live.areaId).toBe('x');
+      expect(await storeB.countLiveInArea(tenant, 'x')).toBe(2);
+      expect(await storeB.countLiveInArea(tenant, 'y')).toBe(1);
+      expect(await storeB.countLiveInArea(other, 'x')).toBe(1);
+      expect(await storeB.countLiveInArea(other, 'y')).toBe(0);
+    });
+  });
+
   describe('listing', () => {
     it('filters by status and area, hides archived rows by default and pages with a stable order', async () => {
       const tenant = randomUUID();

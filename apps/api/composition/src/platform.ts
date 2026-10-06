@@ -17,6 +17,13 @@ import {
   type VehicleStore,
 } from '../../../../packages/domain/vehicles/src/index.js';
 import {
+  AreaService,
+  InMemoryAreaStore,
+  NO_RESOURCES,
+  type AreaResourceCounter,
+  type AreaStore,
+} from '../../../../packages/domain/areas/src/index.js';
+import {
   createAuditEvent,
   InMemoryAuditStore,
   type AuditStore,
@@ -75,6 +82,7 @@ import {
   type RoleDirectoryStore,
 } from './directory.js';
 import { InMemoryTenantStore } from './tenancy.js';
+import { AreasApi } from './areas.js';
 import { VehiclesApi } from './vehicles.js';
 
 export type PlatformErrorCode =
@@ -198,6 +206,13 @@ export interface PlatformAdapters {
   readonly records?: FileRecordStore;
   /** Persistent vehicle store (the TypeORM adapter of `packages/persistence/vehicles`); in-memory by default. */
   readonly vehicles?: VehicleStore;
+  /** Persistent area store (the TypeORM adapter of `packages/persistence/areas`); in-memory by default. */
+  readonly areas?: AreaStore;
+  /**
+   * Counter of the active people assigned to an area (BR-021). The employees module does not exist
+   * yet, so by default no person is ever assigned.
+   */
+  readonly people?: AreaResourceCounter;
   readonly audit?: AuditStore;
   readonly outbox?: OutboxStore;
   readonly tenants?: InMemoryTenantStore;
@@ -287,6 +302,7 @@ export class Platform {
   public readonly auth: AuthApi;
   public readonly files: FilesApi;
   public readonly vehicles: VehiclesApi;
+  public readonly areas: AreasApi;
   public readonly access: AccessDirectory;
   public readonly tenants: InMemoryTenantStore;
   public readonly audit: AuditStore;
@@ -365,13 +381,32 @@ export class Platform {
       audit: this.audit,
       now: this.now,
     });
+    const vehicleStore = adapters.vehicles ?? new InMemoryVehicleStore();
     this.vehicles = new VehiclesApi({
-      service: new VehicleService(adapters.vehicles ?? new InMemoryVehicleStore(), {
-        now: this.now,
-      }),
+      service: new VehicleService(vehicleStore, { now: this.now }),
       authorize: (token, correlationId, required) => this.authorize(token, correlationId, required),
       audit: (context, action, entityId, correlationId) =>
         this.auditNow(this.userActor(context), action, 'vehicle', entityId, correlationId),
+    });
+    this.areas = new AreasApi({
+      service: new AreaService(adapters.areas ?? new InMemoryAreaStore(), {
+        now: this.now,
+        resources: {
+          // BR-021: active vehicles are counted through the vehicles store port.
+          vehicles: {
+            countActive: (tenantId, areaId) => vehicleStore.countLiveInArea(tenantId, areaId),
+          },
+          people: adapters.people ?? NO_RESOURCES,
+        },
+        // FR-041: a responsible user must be an active member of the tenant, per the directory.
+        members: {
+          isActiveMember: async (tenantId, userId) =>
+            (await this.access.effectiveRole(tenantId, userId)) !== null,
+        },
+      }),
+      authorize: (token, correlationId, required) => this.authorize(token, correlationId, required),
+      audit: (context, action, entityId, correlationId) =>
+        this.auditNow(this.userActor(context), action, 'area', entityId, correlationId),
     });
     this.runtime = createWorkerRuntime({
       outbox: this.outbox,

@@ -11,6 +11,7 @@ import {
   applyStatus,
   canTransition,
   economicNumberKey,
+  isLiveVehicle,
   isVehicleStatus,
   newVehicle,
   normalizeEconomicNumber,
@@ -367,6 +368,32 @@ describe('in-memory store', () => {
       1,
     );
   });
+  it('counts live vehicles of one area of one tenant for the Areas module (BR-021 port)', async () => {
+    const store = new InMemoryVehicleStore();
+    const rows: [string, string, Partial<Vehicle>][] = [
+      [A, 'v1', {}],
+      [A, 'v2', { economicNumber: 'U-2', plate: 'P2', vin: null, status: 'inactive' }],
+      [A, 'v3', { economicNumber: 'U-3', plate: 'P3', vin: null, status: 'decommissioned' }],
+      [
+        A,
+        'v4',
+        { economicNumber: 'U-4', plate: 'P4', vin: null, archivedAt: '2026-10-07T00:00:00.000Z' },
+      ],
+      [A, 'v5', { economicNumber: 'U-5', plate: 'P5', vin: null, areaId: 'area-2' }],
+      [B, 'v1', {}],
+    ];
+    for (const [tenant, id, over] of rows) {
+      const v = vehicleOf(tenant, id, over);
+      await store.insert(v, entryOf(v));
+    }
+    // Active and inactive count; decommissioned and archived do not.
+    expect(await store.countLiveInArea(A, 'area-1')).toBe(2);
+    expect(await store.countLiveInArea(A, 'area-2')).toBe(1);
+    expect(await store.countLiveInArea(B, 'area-1')).toBe(1);
+    expect(await store.countLiveInArea('tenant-c', 'area-1')).toBe(0);
+    expect(isLiveVehicle({ status: 'out_of_service', archivedAt: null })).toBe(true);
+    expect(isLiveVehicle({ status: 'decommissioned', archivedAt: null })).toBe(false);
+  });
   it('rejects duplicate id, economic number, plate and VIN within one tenant, naming the field', async () => {
     const store = new InMemoryVehicleStore();
     const a = vehicleOf(A, 'v1');
@@ -507,6 +534,7 @@ describe('VehicleService', () => {
       list: (t, f, w) => inner.list(t, f, w),
       replace: (n, e, h) => inner.replace(n, e, h),
       history: (t, v) => inner.history(t, v),
+      countLiveInArea: (t, a) => inner.countLiveInArea(t, a),
     };
     const { svc } = service(leaky);
     await svc.create(A, ACTOR, input());
@@ -687,6 +715,7 @@ describe('VehicleService', () => {
         return false;
       },
       history: (t, v) => inner.history(t, v),
+      countLiveInArea: (t, a) => inner.countLiveInArea(t, a),
     };
     const { svc } = service(racy);
     await svc.create(A, ACTOR, input());

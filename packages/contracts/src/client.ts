@@ -7,6 +7,13 @@ import {
   type BffCallArgs,
   type BffResponseOf,
   type BffRouteId,
+  type BffArea,
+  type BffAreaDetail,
+  type BffAreaHistoryEntry,
+  type BffAreaHistoryQuery,
+  type BffAreaInput,
+  type BffAreaPatch,
+  type BffAreasQuery,
   type BffSession,
   type BffVehicle,
   type BffVehicleInput,
@@ -275,5 +282,36 @@ export function createVehiclesClient(client: BffClient): VehiclesClient {
     archive: (id, version) =>
       client.call('vehicles.archive', { params: { id }, body: { version } }),
     history: (id) => client.call('vehicles.history', { params: { id } }),
+  };
+}
+
+/**
+ * Typed area calls over any `BffClient`. Each method is one route of the contract; the `version`
+ * of the last read travels with every change, and a lost race comes back as the `stale_version`
+ * error value (never an exception). Moving an area is an `update` with a new `parentId`.
+ */
+export interface AreasClient {
+  list(query?: BffAreasQuery): Promise<BffResult<Page<BffArea>>>;
+  get(id: string): Promise<BffResult<BffAreaDetail>>;
+  create(input: BffAreaInput): Promise<BffResult<BffArea>>;
+  update(id: string, patch: BffAreaPatch): Promise<BffResult<BffArea>>;
+  deactivate(id: string, version: number): Promise<BffResult<BffArea>>;
+  activate(id: string, version: number): Promise<BffResult<BffArea>>;
+  history(id: string, query?: BffAreaHistoryQuery): Promise<BffResult<Page<BffAreaHistoryEntry>>>;
+}
+
+export function createAreasClient(client: BffClient): AreasClient {
+  return {
+    list: (query) => (query ? client.call('areas.list', { query }) : client.call('areas.list')),
+    get: (id) => client.call('areas.get', { params: { id } }),
+    create: (input) => client.call('areas.create', { body: input }),
+    update: (id, patch) => client.call('areas.update', { params: { id }, body: patch }),
+    deactivate: (id, version) =>
+      client.call('areas.deactivate', { params: { id }, body: { version } }),
+    activate: (id, version) => client.call('areas.activate', { params: { id }, body: { version } }),
+    history: (id, query) =>
+      query
+        ? client.call('areas.history', { params: { id }, query })
+        : client.call('areas.history', { params: { id } }),
   };
 }

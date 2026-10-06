@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { IsNull, LessThanOrEqual, type DataSource, type EntityManager } from 'typeorm';
+import { IsNull, LessThanOrEqual, Not, type DataSource, type EntityManager } from 'typeorm';
 import {
   VehicleError,
   economicNumberKey,
@@ -267,6 +267,17 @@ export class TypeOrmVehicleStore implements VehicleStore {
       if (entry) await manager.getRepository(VehicleStatusEntryEntity).insert(toEntryRow(entry));
       return true;
     });
+  }
+
+  public async countLiveInArea(tenantId: string, areaId: string): Promise<number> {
+    return this.single('count', () =>
+      this.dataSource.getRepository(VehicleEntity).countBy({
+        tenantId,
+        areaId,
+        archivedAt: IsNull(),
+        status: Not('decommissioned'),
+      }),
+    );
   }
 
   public async history(

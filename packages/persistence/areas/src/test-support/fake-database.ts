@@ -1,13 +1,22 @@
 import { FindOperator, type DataSource } from 'typeorm';
-import { VEHICLE_ENTITIES, VehicleEntity, VehicleStatusEntryEntity } from '../entities.js';
+import {
+  AREA_ENTITIES,
+  AreaEntity,
+  AreaHistoryEntity,
+  AreaLockEntity,
+  AreaResponsibleEntity,
+} from '../entities.js';
 
 /**
- * Test double of the TypeORM surface the vehicle store uses (DataSource, Repository, transaction).
+ * Test double of the TypeORM surface the area store uses (DataSource, Repository, transaction).
  * It models what the store's correctness depends on, not only return values:
  *  - primary and unique keys derived from the real EntitySchemas (NULLs never collide, as in MySQL),
- *  - the composite foreign key of the history to its vehicle,
+ *  - the composite foreign keys of the children and of the parent link to their area,
  *  - `update(criteria, values)` as one atomic conditional statement that reports `affected`,
- *  - rollback of every write of a failed transaction,
+ *  - rollback of every write of a failed transaction (an undo log, so concurrent transactions of
+ *    other tenants are untouched),
+ *  - row locks: `findOne({ lock })` blocks while another open transaction holds the same row lock,
+ *    which is how the store serializes a tenant's hierarchy changes,
  *  - injected driver failures (duplicate, deadlock, ...), shaped like TypeORM's QueryFailedError.
  * Real MySQL behaviour (collation, CHECKs, true concurrency) is verified by `mysql.integration.test.ts`.
  */
@@ -53,6 +62,17 @@ interface Fault {
   readonly leak: string;
 }
 
+interface Undo {
+  readonly entity: EntityClass;
+  readonly key: string;
+  readonly before: Row | undefined;
+}
+
+interface Transaction {
+  readonly undo: Undo[];
+  readonly held: Set<string>;
+}
+
 const clone = (row: Row): Row => {
   const copy: Row = {};
   for (const [key, value] of Object.entries(row))
@@ -60,10 +80,21 @@ const clone = (row: Row): Row => {
   return copy;
 };
 
+/** Foreign keys: child columns -> parent entity columns (a NULL child column skips the check). */
+const FOREIGN_KEYS: readonly {
+  readonly child: EntityClass;
+  readonly columns: readonly [string, string];
+  readonly parent: EntityClass;
+}[] = [
+  { child: AreaEntity, columns: ['tenantId', 'parentId'], parent: AreaEntity },
+  { child: AreaResponsibleEntity, columns: ['tenantId', 'areaId'], parent: AreaEntity },
+  { child: AreaHistoryEntity, columns: ['tenantId', 'areaId'], parent: AreaEntity },
+];
+
 export class FakeDatabase {
   public readonly options = {
     type: 'mysql',
-    username: 'opslog_vehicles_synthetic',
+    username: 'opslog_areas_synthetic',
     synchronize: false,
   };
   public readonly isolations: unknown[] = [];
@@ -72,11 +103,13 @@ export class FakeDatabase {
   /** Runs at the start of every statement; tests use it to commit a competing change in between. */
   public intercept: ((operation: string, table: string) => void) | null = null;
   private readonly tables = new Map<EntityClass, TableInfo>();
-  private live = new Map<EntityClass, Map<string, Row>>();
+  private readonly live = new Map<EntityClass, Map<string, Row>>();
   private readonly faults: Fault[] = [];
+  private readonly lockOwners = new Map<string, Transaction>();
+  private readonly lockWaiters = new Map<string, (() => void)[]>();
 
   public constructor() {
-    for (const schema of VEHICLE_ENTITIES) {
+    for (const schema of AREA_ENTITIES) {
       const options = schema.options;
       const target = options.target as EntityClass;
       const columns = Object.entries(options.columns as Record<string, { primary?: boolean }>);
@@ -111,14 +144,13 @@ export class FakeDatabase {
 
   /** Writes a row directly, bypassing every constraint (simulates an out-of-band change). */
   public seed(entity: EntityClass, row: Row): void {
-    const table = this.table(entity);
-    this.live.get(entity)?.set(this.pk(table, row), clone(row));
+    this.rows(entity).set(this.pk(this.table(entity), row), clone(row));
   }
 
   // ---- DataSource surface -------------------------------------------------------------------
 
   public getRepository(entity: EntityClass): FakeRepository {
-    return new FakeRepository(this, entity);
+    return new FakeRepository(this, entity, null);
   }
 
   public async transaction<T>(
@@ -127,14 +159,21 @@ export class FakeDatabase {
   ): Promise<T> {
     this.isolations.push(isolation);
     this.transactions += 1;
-    const snapshot = new Map<EntityClass, Map<string, Row>>();
-    for (const [entity, rows] of this.live)
-      snapshot.set(entity, new Map([...rows].map(([key, row]) => [key, clone(row)])));
+    const tx: Transaction = { undo: [], held: new Set() };
     try {
-      return await work({ getRepository: (entity) => new FakeRepository(this, entity) });
+      return await work({ getRepository: (entity) => new FakeRepository(this, entity, tx) });
     } catch (error) {
-      this.live = snapshot;
+      for (const step of tx.undo.reverse()) {
+        const rows = this.rows(step.entity);
+        if (step.before) rows.set(step.key, step.before);
+        else rows.delete(step.key);
+      }
       throw error;
+    } finally {
+      for (const key of tx.held) {
+        this.lockOwners.delete(key);
+        for (const wake of this.lockWaiters.get(key)?.splice(0) ?? []) wake();
+      }
     }
   }
 
@@ -154,6 +193,18 @@ export class FakeDatabase {
     return table.primary.map((column) => String(row[column])).join('\u0000');
   }
 
+  public async acquire(entity: EntityClass, where: Row, tx: Transaction): Promise<void> {
+    const key = `${String(this.table(entity).name)}\u0000${JSON.stringify(where)}`;
+    while (this.lockOwners.has(key) && this.lockOwners.get(key) !== tx)
+      await new Promise<void>((resolve) => {
+        const waiting = this.lockWaiters.get(key) ?? [];
+        waiting.push(resolve);
+        this.lockWaiters.set(key, waiting);
+      });
+    this.lockOwners.set(key, tx);
+    tx.held.add(key);
+  }
+
   public begin(operation: string, entity: EntityClass, where: Row | null, row: Row | null): void {
     const table = this.table(entity);
     this.statements.push({ operation, table: table.name, where });
@@ -168,8 +219,8 @@ export class FakeDatabase {
       fault.remaining -= 1;
       throw new FakeQueryFailedError(fault.failure, `${operation} ${table.name}`, [
         fault.leak,
-        row?.['plate'],
-        row?.['vin'],
+        row?.['name'],
+        row?.['code'],
       ]);
     }
   }
@@ -182,10 +233,8 @@ export class FakeDatabase {
         switch (expected.type) {
           case 'isNull':
             return actual === null || actual === undefined;
-          case 'not':
-            return actual !== value;
-          case 'lessThanOrEqual':
-            return typeof actual === 'number' && typeof value === 'number' && actual <= value;
+          case 'in':
+            return (value as unknown[]).includes(actual);
           default:
             throw new Error(`fake database: unsupported operator ${expected.type}`);
         }
@@ -198,7 +247,7 @@ export class FakeDatabase {
   public assertConstraints(entity: EntityClass, row: Row, except: string | null): void {
     const table = this.table(entity);
     const fail = (failure: DriverFailure) =>
-      new FakeQueryFailedError(failure, `write ${table.name}`, [row['plate'], row['vin']]);
+      new FakeQueryFailedError(failure, `write ${table.name}`, [row['name'], row['code']]);
     for (const [key, other] of this.rows(entity)) {
       if (key === except) continue;
       for (const columns of [table.primary, ...table.uniques]) {
@@ -206,11 +255,14 @@ export class FakeDatabase {
         if (columns.every((column) => row[column] === other[column])) throw fail(DUPLICATE);
       }
     }
-    if (entity === VehicleStatusEntryEntity) {
-      const parent = [...this.rows(VehicleEntity).values()].some(
-        (vehicle) => vehicle['tenantId'] === row['tenantId'] && vehicle['id'] === row['vehicleId'],
+    for (const key of FOREIGN_KEYS.filter((candidate) => candidate.child === entity)) {
+      const [tenantColumn, referenceColumn] = key.columns;
+      if (row[referenceColumn] === null || row[referenceColumn] === undefined) continue;
+      const found = [...this.rows(key.parent).values()].some(
+        (parent) =>
+          parent['tenantId'] === row[tenantColumn] && parent['id'] === row[referenceColumn],
       );
-      if (!parent) throw fail(MISSING_PARENT);
+      if (!found) throw fail(MISSING_PARENT);
     }
   }
 }
@@ -219,16 +271,24 @@ export class FakeRepository {
   public constructor(
     private readonly db: FakeDatabase,
     private readonly entity: EntityClass,
+    private readonly tx: Transaction | null,
   ) {}
 
   private select(where: Row): Row[] {
     return [...this.db.rows(this.entity).values()].filter((row) => this.db.matches(row, where));
   }
 
+  private write(key: string, row: Row | undefined): void {
+    const rows = this.db.rows(this.entity);
+    this.tx?.undo.push({ entity: this.entity, key, before: rows.get(key) });
+    if (row) rows.set(key, row);
+    else rows.delete(key);
+  }
+
   public async insert(row: Row): Promise<void> {
     this.db.begin('insert', this.entity, null, row);
     this.db.assertConstraints(this.entity, row, null);
-    this.db.rows(this.entity).set(this.db.pk(this.db.table(this.entity), row), clone(row));
+    this.write(this.db.pk(this.db.table(this.entity), row), clone(row));
   }
 
   public async findOneBy(where: Row): Promise<Row | null> {
@@ -237,9 +297,13 @@ export class FakeRepository {
     return found ? clone(found) : null;
   }
 
-  public async countBy(where: Row): Promise<number> {
-    this.db.begin('count', this.entity, where, null);
-    return this.select(where).length;
+  /** Only the locking form is used: `SELECT ... FOR UPDATE` of one row. */
+  public async findOne(options: { where: Row; lock: { mode: string } }): Promise<Row | null> {
+    this.db.begin('lock', this.entity, options.where, null);
+    if (!this.tx) throw new Error('fake database: a row lock needs a transaction');
+    await this.db.acquire(this.entity, options.where, this.tx);
+    const found = this.select(options.where)[0];
+    return found ? clone(found) : null;
   }
 
   public async find(options: {
@@ -268,10 +332,17 @@ export class FakeRepository {
     const targets = this.select(where);
     for (const target of targets) {
       const next = { ...target, ...clone(values) };
-      this.db.assertConstraints(this.entity, next, this.db.pk(this.db.table(this.entity), target));
-      Object.assign(target, next);
+      const key = this.db.pk(this.db.table(this.entity), target);
+      this.db.assertConstraints(this.entity, next, key);
+      this.write(key, next);
     }
     return { affected: targets.length };
+  }
+
+  public async delete(where: Row): Promise<void> {
+    this.db.begin('delete', this.entity, where, null);
+    for (const target of this.select(where))
+      this.write(this.db.pk(this.db.table(this.entity), target), undefined);
   }
 
   private sorted(rows: Row[], order: Record<string, 'ASC' | 'DESC'> | undefined): Row[] {
@@ -290,3 +361,4 @@ export class FakeRepository {
 
 /** The fake is not a full DataSource; the store only uses the surface above. */
 export const asDataSource = (db: FakeDatabase): DataSource => db as unknown as DataSource;
+export { AreaEntity, AreaHistoryEntity, AreaLockEntity, AreaResponsibleEntity };

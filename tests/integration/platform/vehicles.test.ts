@@ -529,6 +529,7 @@ describe('adapters and failures', () => {
       list: (t, f, w) => inner.list(t, f, w),
       replace: (n, e, h) => inner.replace(n, e, h),
       history: (t, v) => inner.history(t, v),
+      countLiveInArea: (t, a) => inner.countLiveInArea(t, a),
     };
     world = createWorld({ adapters: { vehicles: broken } });
     const { roles } = await fixture(world);

@@ -308,6 +308,45 @@ describe('replace (optimistic concurrency)', () => {
   });
 });
 
+describe('count port for the Areas module', () => {
+  it('counts vehicles of the tenant in the area that are not archived or decommissioned', async () => {
+    const { db, store } = setup();
+    const rows = [
+      vehicle(A, 'v1'),
+      vehicle(A, 'v2', { economicNumber: 'U-2', plate: 'P2', vin: null, status: 'inactive' }),
+      vehicle(A, 'v3', {
+        economicNumber: 'U-3',
+        plate: 'P3',
+        vin: null,
+        status: 'decommissioned',
+      }),
+      vehicle(A, 'v4', {
+        economicNumber: 'U-4',
+        plate: 'P4',
+        vin: null,
+        archivedAt: NOW.toISOString(),
+      }),
+      vehicle(A, 'v5', { economicNumber: 'U-5', plate: 'P5', vin: null, areaId: 'area-2' }),
+      vehicle(B, 'v1'),
+    ];
+    for (const row of rows) await store.insert(row, entryOf(row));
+    expect(await store.countLiveInArea(A, 'area-1')).toBe(2);
+    expect(await store.countLiveInArea(A, 'area-2')).toBe(1);
+    expect(await store.countLiveInArea(B, 'area-1')).toBe(1);
+    expect(await store.countLiveInArea('tenant-c', 'area-1')).toBe(0);
+    const counts = db.statements.filter((s) => s.operation === 'count');
+    expect(counts).toHaveLength(4);
+    for (const statement of counts) expect(statement.where).toHaveProperty('tenantId');
+  });
+  it('reports a failing count without leaking', async () => {
+    const { db, store } = setup();
+    db.failNext('count', CONNECTION_LOST, { leak: 'area-secret' });
+    const error = await rejection(store.countLiveInArea(A, 'area-secret'));
+    expect(error).toMatchObject({ code: 'unavailable' });
+    expect(JSON.stringify(error)).not.toContain('area-secret');
+  });
+});
+
 describe('list', () => {
   it('filters, orders by economic number then id, and windows with a total', async () => {
     const { store } = setup();

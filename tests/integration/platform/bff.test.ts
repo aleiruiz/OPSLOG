@@ -43,6 +43,7 @@ interface Fixture {
   readonly viewerAId: string;
   readonly memberB: { identityId: string };
   readonly vehicleId: string;
+  readonly areaId: string;
 }
 
 async function fixture(options: Parameters<typeof createBffWorld>[0] = {}): Promise<Fixture> {
@@ -65,12 +66,15 @@ async function fixture(options: Parameters<typeof createBffWorld>[0] = {}): Prom
     },
   });
   if (vehicle.status !== 201) throw new Error('vehicle fixture failed');
+  const area = await adminA.post('/api/areas', { json: { name: 'Operaciones' } });
+  if (area.status !== 201) throw new Error('area fixture failed');
   return {
     a,
     b,
     adminA,
     adminB: await world.loginAs('subject-admin-b'),
     vehicleId: vehicle.json.id as string,
+    areaId: area.json.id as string,
     viewerA: await world.loginAs('subject-viewer-a'),
     viewerAId: viewer.identityId,
     memberB,
@@ -98,6 +102,10 @@ function writes(f: Fixture): [string, string, unknown?][] {
     ],
     ['POST', `/api/vehicles/${f.vehicleId}/odometer`, { version: 1, odometerKm: 2000 }],
     ['POST', `/api/vehicles/${f.vehicleId}/archive`, { version: 1 }],
+    ['POST', '/api/areas', { name: 'Nueva area' }],
+    ['PUT', `/api/areas/${f.areaId}`, { version: 1, name: 'Renombrada' }],
+    ['POST', `/api/areas/${f.areaId}/deactivate`, { version: 1 }],
+    ['POST', `/api/areas/${f.areaId}/activate`, { version: 2 }],
   ];
 }
 
@@ -110,6 +118,8 @@ async function snapshot(f: Fixture) {
     draft: await get(f.adminA, '/api/drafts/form'),
     vehicles: await get(f.adminA, '/api/vehicles?includeArchived=true&limit=100'),
     vehiclesB: await get(f.adminB, '/api/vehicles?includeArchived=true&limit=100'),
+    areas: await get(f.adminA, '/api/areas?includeInactive=true&limit=100'),
+    areasB: await get(f.adminB, '/api/areas?includeInactive=true&limit=100'),
     settingsB: await get(f.adminB, '/api/company/settings'),
     usersB: (await get(f.adminB, '/api/users?limit=100')).items,
   };
@@ -556,6 +566,10 @@ describe('request limits through HTTP', () => {
       ['POST', `/api/vehicles/${f.vehicleId}/status`],
       ['POST', `/api/vehicles/${f.vehicleId}/odometer`],
       ['POST', `/api/vehicles/${f.vehicleId}/archive`],
+      ['POST', '/api/areas'],
+      ['PUT', `/api/areas/${f.areaId}`],
+      ['POST', `/api/areas/${f.areaId}/deactivate`],
+      ['POST', `/api/areas/${f.areaId}/activate`],
     ];
     for (const [method, path] of targets) {
       const reply = await f.adminA.send(method, path, { json: { big } });
