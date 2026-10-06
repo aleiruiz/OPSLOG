@@ -10,6 +10,9 @@ import { UsersScreen } from '../settings/access/UsersScreen';
 import { AreaDetailScreen } from '../areas/AreaDetailScreen';
 import { AreaCreateScreen, AreaEditScreen, AreaMoveScreen } from '../areas/AreaFormScreen';
 import { AreasScreen } from '../areas/AreasScreen';
+import { EmployeeDetailScreen } from '../employees/EmployeeDetailScreen';
+import { EmployeeCreateScreen, EmployeeEditScreen } from '../employees/EmployeeFormScreen';
+import { EmployeesScreen } from '../employees/EmployeesScreen';
 import { VehicleDetailScreen } from '../vehicles/VehicleDetailScreen';
 import { VehicleCreateScreen, VehicleEditScreen } from '../vehicles/VehicleFormScreen';
 import { VehiclesScreen } from '../vehicles/VehiclesScreen';
@@ -29,9 +32,10 @@ export function App({ ports, basename = '' }: { ports: ApiPorts; basename?: stri
   );
 }
 
-/** Sub-screens keep the entry of their list highlighted ("Vehículos", "Áreas"). */
+/** Sub-screens keep the entry of their list highlighted ("Vehículos", "Áreas", "Empleados"). */
 function navigationRoute(id: string | null): string | null {
   if (id === 'vehicleNew' || id === 'vehicleDetail' || id === 'vehicleEdit') return 'vehicles';
+  if (id === 'employeeNew' || id === 'employeeDetail' || id === 'employeeEdit') return 'employees';
   if (id === 'areaNew' || id === 'areaDetail' || id === 'areaEdit' || id === 'areaMove')
     return 'areas';
   return id;
@@ -143,6 +147,18 @@ function Routes() {
         break;
       case 'vehicleEdit':
         screen = <VehicleEditScreen key={match.params.id} id={match.params.id as string} />;
+        break;
+      case 'employees':
+        screen = <EmployeesScreen />;
+        break;
+      case 'employeeNew':
+        screen = <EmployeeCreateScreen />;
+        break;
+      case 'employeeDetail':
+        screen = <EmployeeDetailScreen key={match.params.id} id={match.params.id as string} />;
+        break;
+      case 'employeeEdit':
+        screen = <EmployeeEditScreen key={match.params.id} id={match.params.id as string} />;
         break;
       case 'areas':
         screen = <AreasScreen />;

@@ -169,6 +169,52 @@ describe('createHttpApi', () => {
     expect(calls[8]?.input).toEqual({ params: { id: 'a-1' }, query: { limit: 25, cursor: 'c' } });
   });
 
+  it('maps every employee call to its route, with the version in the body and the cursor in the query', async () => {
+    const { api, calls } = scripted({});
+    await api.employees.list();
+    await api.employees.list({ limit: 25, kind: 'driver', status: 'active', areaId: 'a-1' });
+    await api.employees.get('e-1');
+    await api.employees.create({
+      kind: 'other',
+      firstName: 'Ana',
+      lastName: 'Ruiz',
+      areaId: 'a-1',
+    });
+    await api.employees.update('e-1', { version: 2, position: null });
+    await api.employees.changeStatus('e-1', {
+      version: 3,
+      status: 'suspended',
+      reason: 'Licencia',
+    });
+    await api.employees.archive('e-1', 4);
+    await api.employees.history('e-1');
+    await api.employees.history('e-1', { limit: 25, cursor: 'c' });
+    expect(calls.map((call) => call.id)).toEqual([
+      'employees.list',
+      'employees.list',
+      'employees.get',
+      'employees.create',
+      'employees.update',
+      'employees.status',
+      'employees.archive',
+      'employees.history',
+      'employees.history',
+    ]);
+    expect(calls[1]?.input).toEqual({
+      query: { limit: 25, kind: 'driver', status: 'active', areaId: 'a-1' },
+    });
+    expect(calls[4]?.input).toEqual({
+      params: { id: 'e-1' },
+      body: { version: 2, position: null },
+    });
+    expect(calls[5]?.input).toEqual({
+      params: { id: 'e-1' },
+      body: { version: 3, status: 'suspended', reason: 'Licencia' },
+    });
+    expect(calls[6]?.input).toEqual({ params: { id: 'e-1' }, body: { version: 4 } });
+    expect(calls[8]?.input).toEqual({ params: { id: 'e-1' }, query: { limit: 25, cursor: 'c' } });
+  });
+
   it('passes failures through untouched and exposes the identity provider', async () => {
     const oidc = createFakeOidc();
     const client = { call: async () => failure } as unknown as BffClient;

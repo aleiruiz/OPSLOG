@@ -1,5 +1,7 @@
 import React from 'react';
 import { PageHeader, UiState } from '@opslog/ui';
+import { areaChoices } from '../areas/areaChoices';
+import { demoAreas as demoAreaTree } from '../areas/fixtures';
 import { makeVehicle } from './fixtures';
 import { validate, valuesOf, type VehicleFormValues } from './formModel';
 import { Frame, noop, storyNow } from './storyFrame';
@@ -11,6 +13,8 @@ export default {
   parameters: { layout: 'padded' },
 };
 
+const areas = areaChoices(demoAreaTree());
+
 const vehicle = makeVehicle({ vin: '3N6PD23W05ZB10005', odometerKm: 48250, version: 3 });
 
 const create = (props: Partial<VehicleFormProps> = {}) => (
@@ -21,6 +25,7 @@ const create = (props: Partial<VehicleFormProps> = {}) => (
     />
     <VehicleForm
       mode="create"
+      areas={areas}
       cancelTo="/flota/vehiculos"
       onSubmit={noop}
       now={storyNow}
@@ -37,6 +42,7 @@ const edit = (props: Partial<VehicleFormProps> = {}) => (
     />
     <VehicleForm
       mode="edit"
+      areas={areas}
       initial={valuesOf(vehicle)}
       currentOdometerKm={vehicle.odometerKm}
       cancelTo="/flota/vehiculos/veh-001"
@@ -54,7 +60,7 @@ const invalid: VehicleFormValues = {
   make: 'Nissan',
   model: '',
   year: '1899',
-  areaId: 'área norte',
+  areaId: '',
   odometerKm: '-5',
   registeredOn: '2027-01-01',
 };
@@ -114,6 +120,7 @@ export const CreateDuplicates = {
       },
     }),
 };
+export const CreateNoAreas = { render: () => create({ areas: [] }) };
 export const CreateSaving = { render: () => create({ submitting: true }) };
 export const Edit = { render: () => edit() };
 export const EditSaving = { render: () => edit({ submitting: true }) };

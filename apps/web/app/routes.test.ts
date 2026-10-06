@@ -52,13 +52,33 @@ describe('route matching', () => {
     expect(resolveRoute('/plantilla/areas/a/b/c')).toBeNull();
     expect(
       routes.filter((route) => route.nav?.group === 'Plantilla').map((route) => route.id),
-    ).toEqual(['areas']);
+    ).toEqual(['employees', 'areas']);
     const byId = Object.fromEntries(routes.map((route) => [route.id, route.access]));
     expect(byId.areas).toEqual({ permission: 'view' });
     expect(byId.areaNew).toEqual({ permission: 'create' });
     expect(byId.areaDetail).toEqual({ permission: 'view' });
     expect(byId.areaEdit).toEqual({ permission: 'edit' });
     expect(byId.areaMove).toEqual({ permission: 'edit' });
+  });
+
+  it('resolves the employee screens, with "nuevo" taking precedence over the id, under the "Plantilla" group', () => {
+    expect(resolveRoute('/plantilla/empleados')?.route.id).toBe('employees');
+    expect(resolveRoute('/plantilla/empleados/nuevo')?.route.id).toBe('employeeNew');
+    expect(resolveRoute('/plantilla/empleados/e-1')).toMatchObject({
+      route: { id: 'employeeDetail' },
+      params: { id: 'e-1' },
+    });
+    expect(resolveRoute('/plantilla/empleados/e-1/editar')?.route.id).toBe('employeeEdit');
+    expect(resolveRoute('/plantilla/empleados/e-1/mover')).toBeNull();
+    const byId = Object.fromEntries(routes.map((route) => [route.id, route.access]));
+    expect(byId.employees).toEqual({ permission: 'view' });
+    expect(byId.employeeNew).toEqual({ permission: 'create' });
+    expect(byId.employeeDetail).toEqual({ permission: 'view' });
+    expect(byId.employeeEdit).toEqual({ permission: 'edit' });
+    expect(routes.find((route) => route.id === 'employees')?.nav).toEqual({
+      group: 'Plantilla',
+      label: 'Empleados',
+    });
   });
 
   it('declares a permission for every configuration route and none for public ones', () => {

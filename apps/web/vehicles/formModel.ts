@@ -4,7 +4,6 @@ import {
   LABEL,
   MAX_ODOMETER_KM,
   MIN_MODEL_YEAR,
-  OPAQUE_ID,
   PLATE,
   VIN,
   isInteger,
@@ -111,10 +110,8 @@ export function validate(values: VehicleFormValues, context: Context): FieldErro
   else if (!/^\d{4}$/.test(yearText) || !isInteger(Number(yearText), MIN_MODEL_YEAR, maxYear))
     errors.year = `Escribe un año entre ${MIN_MODEL_YEAR} y ${maxYear}.`;
 
-  const areaId = values.areaId.trim();
-  if (!areaId) errors.areaId = 'Escribe el identificador del área.';
-  else if (!OPAQUE_ID.test(areaId))
-    errors.areaId = 'Usa letras, números, guion o guion bajo, hasta 64 caracteres.';
+  // The area comes from a selector of the company's active areas, so only "none chosen" can be wrong here.
+  if (!values.areaId.trim()) errors.areaId = 'Elige el área del vehículo.';
 
   const odometerText = values.odometerKm.trim();
   if (!odometerText)

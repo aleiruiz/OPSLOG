@@ -23,6 +23,8 @@
     "auth/**/*.tsx",
     "areas/**/*.ts",
     "areas/**/*.tsx",
+    "employees/**/*.ts",
+    "employees/**/*.tsx",
     "settings/**/*.ts",
     "settings/**/*.tsx",
     "vehicles/**/*.ts",
