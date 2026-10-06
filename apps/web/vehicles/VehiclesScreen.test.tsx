@@ -236,6 +236,26 @@ describe('vehicle list', () => {
     expect(rowsOf()).toHaveLength(3);
   });
 
+  it('ignores a further page that arrives after the list was reloaded under the same filters', async () => {
+    const api = createMockApi();
+    const real = api.vehicles.list;
+    const gate = deferred();
+    await renderApp({ api, path: '/flota/vehiculos' });
+    await screen.findByRole('table');
+    api.vehicles.list = async (query) => {
+      if (query?.cursor) await gate.promise;
+      return real(query);
+    };
+    click('Cargar más vehículos');
+    // Changing the filter and changing it back reloads the first page under the original filters.
+    set('Estado', 'active');
+    set('Estado', '');
+    await screen.findByRole('table', { name: /Vehículos/ });
+    await act(async () => gate.resolve());
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(rowsOf()).toHaveLength(25);
+  });
+
   it('navigates from "Nuevo vehículo" like a link: plain clicks stay in the app, modified clicks are left to the browser', async () => {
     await renderApp({ path: '/flota/vehiculos' });
     await screen.findByRole('table');
