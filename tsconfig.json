@@ -20,6 +20,9 @@
     { "path": "./packages/domain/files" },
     { "path": "./packages/platform/files" },
     { "path": "./apps/api/files" },
-    { "path": "./infra/storage" }
+    { "path": "./infra/storage" },
+    { "path": "./apps/worker/composition" },
+    { "path": "./apps/api/composition" },
+    { "path": "./tests/integration/platform" }
   ]
 }

@@ -1,0 +1,5 @@
+{
+  "name": "@opslog/test-platform-integration",
+  "private": true,
+  "type": "module"
+}

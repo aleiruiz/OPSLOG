@@ -1,0 +1,27 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../../",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
+  },
+  "include": [
+    "src/**/*.ts",
+    "../auth/src/**/*.ts",
+    "../files/src/**/*.ts",
+    "../../worker/composition/src/**/*.ts",
+    "../../worker/base/src/**/*.ts",
+    "../../../packages/domain/identity/src/**/*.ts",
+    "../../../packages/domain/files/src/**/*.ts",
+    "../../../packages/platform/auth/src/**/*.ts",
+    "../../../packages/platform/audit/src/**/*.ts",
+    "../../../packages/platform/outbox/src/**/*.ts",
+    "../../../packages/platform/files/src/**/*.ts",
+    "../../../infra/queues/src/**/*.ts"
+  ],
+  "exclude": ["src/**/*.test.ts"],
+  "references": [
+    { "path": "../../../packages/domain/tenants" },
+    { "path": "../../../packages/persistence/tenancy" }
+  ]
+}

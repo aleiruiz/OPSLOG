@@ -1,0 +1,5 @@
+{
+  "name": "@opslog/api-composition",
+  "private": true,
+  "type": "module"
+}
