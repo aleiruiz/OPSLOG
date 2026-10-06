@@ -265,4 +265,33 @@ describe('SQL emitted by the store (real TypeORM builders, stubbed connection)',
     ]);
     expect(sql.at(-1)).toBe('COMMIT');
   });
+
+  it('creates a custom role under the tenant lock: role, then permissions, in one transaction', async () => {
+    const sql = await run(
+      () =>
+        store.createCustomRole(
+          't',
+          { id: 'r', name: ' Regional ', permissions: ['view', 'create'] },
+          5,
+        ),
+      (query) => {
+        if (query.includes('COUNT(1)')) return [{ cnt: '1' }];
+        if (query.includes(table('tenant_locks'))) return [lockRow];
+        return [];
+      },
+    );
+    expect(sql[0]).toContain(table('memberships'));
+    expect(sql).toContain('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
+    const transaction = sql.slice(sql.indexOf('START TRANSACTION'));
+    expect(transaction[1]).toMatch(/^SELECT \* FROM `opslog_identity_tenant_locks`.*FOR UPDATE$/);
+    expect(transaction[2]).toMatch(/^SELECT \* FROM `opslog_identity_roles`/);
+    expect(transaction[2]).not.toContain('FOR UPDATE');
+    const inserts = transaction.filter((statement) => statement.startsWith('INSERT'));
+    expect(inserts.map((statement) => /INTO `(\w+)`/.exec(statement)?.[1])).toEqual([
+      table('roles'),
+      table('role_permissions'),
+      table('role_permissions'),
+    ]);
+    expect(transaction.at(-1)).toBe('COMMIT');
+  });
 });
