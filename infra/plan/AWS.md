@@ -65,7 +65,7 @@ AppSync y buckets suministrados son recursos existentes por evaluar. No se añad
 3. Confirmar que OPSLOG puede usar su base de control y bases operativas sin modificar datos o permisos de otra aplicación. DB_NAME=OPSLOG no sustituye la estrategia multitenant.
 4. Revisar buckets: región/entorno, acceso público, KMS, versionado, CORS, prefijos, legal hold/retención y scanner. No asumir que un bucket existente es exclusivo o desechable.
 5. Definir roles de runtime, migración/aprovisionamiento y CI; separar credenciales/secretos de producción y pruebas.
-6. Comprobar coste estimado, residencia, disponibilidad de servicios y necesidad de mover o crear recursos en Sudamérica. No migrar automáticamente recursos de EE. UU.
+6. Comprobar coste estimado, residencia, disponibilidad de servicios y necesidad de mover o crear recursos en Sudamérica. No migrar automáticamente recursos de EE. UU. Para el coste inicial aplicar el nivel de arranque austero (ADR-0012); todas las cifras son estimaciones sin verificar que se re-comprueban aquí.
 7. Revisar configuración de identidad, colas y correo; documentar qué se reutiliza y qué se crea.
 
 ## 6. Secuencia futura de configuración
@@ -85,3 +85,9 @@ La documentación AWS puede trabajarse en M0 mientras la configuración real esp
 Los gates G0–G5 no se eliminan ni se declaran pasados mediante este plan. Deben distinguir validación local/documental de validación AWS real. Si un gate requiere una comprobación real todavía diferida, sigue pendiente en ese punto; el orquestador no falsifica evidencia ni inicia etapas posteriores para evadir la barrera.
 
 Cambiar un gate para permitir aceptación exclusivamente local requeriría una instrucción explícita y una versión sucesora de la baseline afectada. El diferimiento actual no cambia la seguridad, alcance ni criterios de aceptación del producto.
+
+## 8. Arranque austero (ADR-0012)
+
+Por petición del propietario de un presupuesto inicial muy pequeño, ADR-0012 (propuesto; pendiente de confirmación del propietario) define una etapa 0 con objetivo aproximado de 0–25 USD/mes (estimación sin verificar): RDS de pruebas reutilizado o `db.t4g.micro` Single-AZ, API en Lambda con HTTP API (alternativa: una tarea Fargate), sin balanceador ni NAT, SPA en S3 + CloudFront, Cognito, SES, SQS, SSM Parameter Store, logs de 7–14 días, sin Multi-AZ ni segunda copia de pruebas.
+
+Solo ajusta el nivel inicial de SPECS §3: no cambia alcance, controles de seguridad ni gates. Cada pieza sube de etapa cuando se cumple su disparador (usuarios, RPS, volumen de datos, disponibilidad); ver tabla y guardarraíles (Budgets, etiquetas, aprobación del propietario) en ADR-0012. AWS sigue diferido y sin aprovisionar.
