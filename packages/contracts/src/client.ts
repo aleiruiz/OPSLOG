@@ -22,6 +22,13 @@ import {
   type BffDocumentRenewal,
   type BffDocumentRevision,
   type BffDocumentsQuery,
+  type BffInsurancePoliciesQuery,
+  type BffInsurancePolicy,
+  type BffInsurancePolicyHistoryQuery,
+  type BffInsurancePolicyInput,
+  type BffInsurancePolicyPatch,
+  type BffInsurancePolicyRenewal,
+  type BffInsurancePolicyRevision,
   type BffEmployee,
   type BffEmployeeDetail,
   type BffEmployeeHistoryEntry,
@@ -405,5 +412,43 @@ export function createDocumentsClient(client: BffClient): DocumentsClient {
       query
         ? client.call('documents.history', { params: { id }, query })
         : client.call('documents.history', { params: { id } }),
+  };
+}
+
+/**
+ * Typed insurance policy calls over any `BffClient`. Each method is one route of the contract; the
+ * `version` of the last read travels with every change, and a lost race comes back as the
+ * `stale_version` error value (never an exception). `renew` appends a revision (the previous ones
+ * stay in `history`); `update` only edits the insurer name and the notes. The deductible is
+ * financial data: it is `null` in every response unless the session holds `view_costs`, and
+ * writing one needs that permission too (a `forbidden` error value otherwise).
+ */
+export interface InsuranceClient {
+  list(query?: BffInsurancePoliciesQuery): Promise<BffResult<Page<BffInsurancePolicy>>>;
+  get(id: string): Promise<BffResult<BffInsurancePolicy>>;
+  create(input: BffInsurancePolicyInput): Promise<BffResult<BffInsurancePolicy>>;
+  update(id: string, patch: BffInsurancePolicyPatch): Promise<BffResult<BffInsurancePolicy>>;
+  renew(id: string, renewal: BffInsurancePolicyRenewal): Promise<BffResult<BffInsurancePolicy>>;
+  archive(id: string, version: number): Promise<BffResult<BffInsurancePolicy>>;
+  history(
+    id: string,
+    query?: BffInsurancePolicyHistoryQuery,
+  ): Promise<BffResult<Page<BffInsurancePolicyRevision>>>;
+}
+
+export function createInsuranceClient(client: BffClient): InsuranceClient {
+  return {
+    list: (query) =>
+      query ? client.call('insurance.list', { query }) : client.call('insurance.list'),
+    get: (id) => client.call('insurance.get', { params: { id } }),
+    create: (input) => client.call('insurance.create', { body: input }),
+    update: (id, patch) => client.call('insurance.update', { params: { id }, body: patch }),
+    renew: (id, renewal) => client.call('insurance.renew', { params: { id }, body: renewal }),
+    archive: (id, version) =>
+      client.call('insurance.archive', { params: { id }, body: { version } }),
+    history: (id, query) =>
+      query
+        ? client.call('insurance.history', { params: { id }, query })
+        : client.call('insurance.history', { params: { id } }),
   };
 }
