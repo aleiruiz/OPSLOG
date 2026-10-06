@@ -441,6 +441,24 @@ describe('activateInvitation', () => {
     ).toBeNull();
   });
 
+  it('revoking a pending membership consumes its invitation and cannot be undone by a replay', async () => {
+    const { store, db, invite, clock } = setup();
+    const invited = await invite(tenantA, ADMIN_ROLE);
+    const other = await invite(tenantA, 'viewer');
+    expect(await store.revokeMembership(tenantA, invited.identityId)).toBe(true);
+    const rows = db.committed(InvitationEntity);
+    expect(rows.find((row) => row.id === invited.invitation.id)?.consumedAt).toEqual(clock.now());
+    // Only that membership's invitation is consumed.
+    expect(rows.find((row) => row.id === other.invitation.id)?.consumedAt).toBeNull();
+    expect(await store.revokeMembership(tenantA, invited.identityId)).toBe(false);
+    expect(
+      await store.activateInvitation(invited.tokenHash, PROVIDER, 'subject', clock.now()),
+    ).toBeNull();
+    expect(await store.findMembership(tenantA, invited.identityId)).toMatchObject({
+      status: 'revoked',
+    });
+  });
+
   it('rolls everything back when the external link loses a unique-key race', async () => {
     const { store, db, invite, clock } = setup();
     const invited = await invite(tenantA, 'viewer');

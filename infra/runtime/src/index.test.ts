@@ -89,8 +89,8 @@ describe('staging descriptor guards', () => {
     'arn:aws:s3:::opslog-bucket',
     'bucket.s3.amazonaws.com',
     'db.abc123.us-west-2.rds.example',
-    'AKIAABCDEFGHIJKLMNOP',
-    '-----BEGIN PRIVATE KEY-----',
+    'AKIAABCDEFGHIJKLMNOP', // secret-scan:allow synthetic negative fixture
+    '-----BEGIN PRIVATE KEY-----', // secret-scan:allow synthetic negative fixture
     '123456789012',
     'https://staging.example.test',
     'mysql://user@host/db',

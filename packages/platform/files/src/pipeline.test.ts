@@ -62,6 +62,26 @@ const upload = (tag = 'a', name = 'Photo.jpg') => ({
   bytes: jpegBytes(tag),
 });
 
+describe('defaults', () => {
+  it('uses the system clock and random identifiers when none are injected', async () => {
+    const parts = {
+      records: new InMemoryFileRecordStore(),
+      storage: new InMemoryObjectStorage(),
+      scanner: new FakeScanner(),
+      queue: new InMemoryScanQueue(),
+      audit: new InMemoryAuditStore(),
+    };
+    const pipeline = new FilePipeline(parts);
+    const startedAt = Date.now();
+    const first = await pipeline.ingestOriginal(actorFor('tenant-a'), upload('d1'));
+    const second = await pipeline.ingestOriginal(actorFor('tenant-a'), upload('d2'));
+    expect(first.id).toMatch(/^file-[0-9a-f-]{36}$/);
+    expect(second.id).not.toBe(first.id);
+    expect(first.status).toBe('pending_scan');
+    expect(Math.abs(Date.parse(first.createdAt) - startedAt)).toBeLessThan(60_000);
+  });
+});
+
 describe('upload into quarantine', () => {
   it('stores bytes only under the quarantine prefix and records pending_scan', async () => {
     const t = setup();

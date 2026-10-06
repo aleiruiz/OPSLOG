@@ -3,6 +3,7 @@ import { request, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createBffServer } from '../../../apps/api/bff/src/index.js';
+import { BFF_ROUTES } from '../../../packages/contracts/src/index.js';
 import {
   HOST,
   ORIGIN,
@@ -211,6 +212,51 @@ describe('CSRF through HTTP', () => {
     expect(await snapshot(f)).toEqual(before);
   });
 
+  it('rejects cross-site and mismatched origins on login and invitation routes, even with a valid pre-login token', async () => {
+    const f = await fixture();
+    const token = (await f.adminA.post('/api/users/invitations', { json: { roleId: 'editor' } }))
+      .json.invitationToken as string;
+    const attacks = [
+      { origin: 'https://evil.test' },
+      { origin: null },
+      { origin: 'null' },
+      { host: 'evil.test' },
+      { headers: { 'sec-fetch-site': 'cross-site' } },
+    ];
+    const preLogin = (): [string, unknown][] => [
+      ['/api/auth/login', world.credentials('subject-admin-a')],
+      ['/api/auth/invitations/inspect', { token }],
+      ['/api/auth/invitations/accept', { token, ...world.credentials('subject-invitee') }],
+    ];
+    const visitor = world.browser();
+    await world.prepare(visitor);
+    for (const [path, json] of preLogin())
+      for (const attack of attacks) {
+        const reply = await visitor.post(path, { json, ...attack });
+        expect(reply.status, `${path} ${JSON.stringify(attack)}`).toBe(403);
+        expect(reply.json.code).toBe('csrf_failed');
+      }
+    expect(visitor.jar.has('opslog_session')).toBe(false);
+    // Control: the same requests from the allowed origin work, so the origin was the only cause.
+    for (const [path, json] of preLogin()) {
+      const fresh = world.browser();
+      await world.prepare(fresh);
+      expect([200, 201], path).toContain((await fresh.post(path, { json })).status);
+    }
+  });
+
+  it('covers every state-changing route of the contract in the origin matrices', async () => {
+    const f = await fixture();
+    // Only `public` routes are exempt from the origin check, and none of them changes state.
+    const stateChanging = Object.values(BFF_ROUTES).filter(
+      (definition) => definition.method !== 'GET',
+    );
+    expect(stateChanging.map((definition) => definition.kind)).not.toContain('public');
+    // Session routes: `writes`; pre-login routes: login, inspect and accept above.
+    expect(writes(f).length + 3).toBe(stateChanging.length);
+    expect(stateChanging.filter((definition) => definition.kind === 'pre-session')).toHaveLength(3);
+  });
+
   it('protects login and invitation acceptance against forged requests', async () => {
     const f = await fixture();
     const attacker = world.browser();
@@ -379,6 +425,81 @@ describe('session lifecycle through HTTP', () => {
       (await world.browser().get('/api/auth/session', { cookieHeader: `opslog_session=${chosen}` }))
         .status,
     ).toBe(401);
+  });
+});
+
+describe('invitation lifecycle through HTTP', () => {
+  const accept = async (token: string, subject: string) => {
+    const visitor = world.browser();
+    await world.prepare(visitor);
+    const reply = await visitor.post('/api/auth/invitations/accept', {
+      json: { token, ...world.credentials(subject) },
+    });
+    return { reply, visitor };
+  };
+  const inspect = async (token: string) => {
+    const visitor = world.browser();
+    await world.prepare(visitor);
+    return visitor.post('/api/auth/invitations/inspect', { json: { token } });
+  };
+
+  it('revokes a pending administrator invitation when the pending member is deactivated', async () => {
+    const f = await fixture();
+    const invited = await f.adminA.post('/api/users/invitations', { json: { roleId: 'admin' } });
+    const token = invited.json.invitationToken as string;
+    const id = invited.json.user.id as string;
+    const listed = (await f.adminA.get('/api/users?limit=100')).json.items as { id: string }[];
+    expect(listed.find((user) => user.id === id)).toMatchObject({ status: 'invited' });
+
+    const revoked = await f.adminA.post(`/api/users/${id}/deactivate`, {
+      json: { reason: 'Error' },
+    });
+    expect(revoked.status).toBe(200);
+    expect(revoked.json).toEqual({ id, status: 'inactive' });
+
+    // Same answer as for any invalid token: the invitation is gone for inspect and for accept.
+    expect((await inspect(token)).status).toBe(404);
+    const { reply, visitor } = await accept(token, 'subject-stray');
+    expect(reply.status).toBe(404);
+    expect(reply.json.code).toBe('not_found');
+    expect(visitor.jar.has('opslog_session')).toBe(false);
+    const stray = world.browser();
+    await world.prepare(stray);
+    expect(
+      (await stray.post('/api/auth/login', { json: world.credentials('subject-stray') })).status,
+    ).toBe(401);
+    // The original administrator is untouched and cannot be displaced by the revoked invitation.
+    expect((await f.adminA.get('/api/auth/session')).status).toBe(200);
+    // Revoking twice, or an unknown id, is a plain 404.
+    expect(
+      (await f.adminA.post(`/api/users/${id}/deactivate`, { json: { reason: 'Otra vez' } })).status,
+    ).toBe(404);
+  });
+
+  it('refuses redemption in a suspended tenant with the uniform 404, consumes nothing and works after reactivation', async () => {
+    const f = await fixture();
+    const token = (await f.adminA.post('/api/users/invitations', { json: { roleId: 'viewer' } }))
+      .json.invitationToken as string;
+    const joined = () =>
+      world.platform.audit.list(f.a.tenantId).filter((event) => event.action === 'user.joined')
+        .length;
+    const before = joined();
+    await world.platform.suspendTenant(f.a.tenantId);
+
+    const refused = await accept(token, 'subject-late');
+    expect(refused.reply.status).toBe(404);
+    expect(refused.reply.json.code).toBe('not_found');
+    expect(refused.visitor.jar.has('opslog_session')).toBe(false);
+    expect((await inspect(token)).status).toBe(404);
+    expect(joined()).toBe(before);
+
+    await world.platform.reactivateTenant(f.a.tenantId);
+    expect((await inspect(token)).status).toBe(200);
+    const redeemed = await accept(token, 'subject-late');
+    expect(redeemed.reply.status).toBe(201);
+    expect(joined()).toBe(before + 1);
+    // Single use still holds after the suspension cycle.
+    expect((await accept(token, 'subject-other')).reply.status).toBe(404);
   });
 });
 
