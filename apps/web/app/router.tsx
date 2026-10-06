@@ -1,4 +1,5 @@
 import Link from '@mui/material/Link';
+import { Button } from '@opslog/ui';
 import React from 'react';
 
 /** Minimal History API router: the shell only needs pathname matching, no nested data loading. */
@@ -64,11 +65,14 @@ export function RouterLink({
   to,
   children,
   current = false,
+  label,
   sx,
 }: {
   to: string;
   children: React.ReactNode;
   current?: boolean;
+  /** Accessible name when the visible text alone is ambiguous (several "Editar" links in a table). */
+  label?: string;
   sx?: React.ComponentProps<typeof Link>['sx'];
 }) {
   const router = useRouter();
@@ -76,6 +80,7 @@ export function RouterLink({
     <Link
       href={`${router.basename}${to}`}
       aria-current={current ? 'page' : undefined}
+      aria-label={label}
       underline="none"
       {...(sx ? { sx } : {})}
       onClick={(event: React.MouseEvent<HTMLAnchorElement>) => {
@@ -87,5 +92,32 @@ export function RouterLink({
     >
       {children}
     </Link>
+  );
+}
+
+/** A link that looks like a button: keeps link semantics (open in a new tab, copy address) with SPA navigation. */
+export function RouterButton({
+  to,
+  children,
+  variant = 'outlined',
+}: {
+  to: string;
+  children: React.ReactNode;
+  variant?: 'contained' | 'outlined' | 'text';
+}) {
+  const router = useRouter();
+  return (
+    <Button
+      href={`${router.basename}${to}`}
+      variant={variant}
+      onClick={(event: React.MouseEvent<HTMLElement>) => {
+        if (event.defaultPrevented || event.button !== 0) return;
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        router.navigate(to);
+      }}
+    >
+      {children}
+    </Button>
   );
 }

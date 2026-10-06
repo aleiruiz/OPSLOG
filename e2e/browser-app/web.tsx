@@ -10,6 +10,11 @@ const harness = document.createElement('div');
 const expire = document.createElement('button');
 expire.textContent = 'Simular expiración de sesión (arnés)';
 expire.addEventListener('click', () => api.controls.expireSession());
-harness.append(expire);
+const bump = document.createElement('button');
+bump.textContent = 'Simular que otra persona edita ECO-001 (arnés)';
+bump.addEventListener('click', () =>
+  api.controls.changeVehicleExternally('veh-001', { odometerKm: 90000 }),
+);
+harness.append(expire, bump);
 root.append(app, harness);
 mountApp(app, api, { basename: '/web' });

@@ -8,7 +8,7 @@ import { routes, isAllowed, type NavGroup, type RouteDefinition } from './routes
 
 const { colors, layout } = opslogTokens;
 
-const navGroups: readonly NavGroup[] = ['Inicio', 'Configuración'];
+const navGroups: readonly NavGroup[] = ['Inicio', 'Flota', 'Configuración'];
 
 /** Navigation entries the current permissions allow, grouped in the SPECS §8 order. */
 export function visibleNavigation(

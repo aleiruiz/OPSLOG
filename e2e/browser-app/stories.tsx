@@ -8,24 +8,35 @@ import { opslogTheme } from '@opslog/ui';
 type StoryArgs = Record<string, unknown>;
 interface StoryDefinition {
   args?: StoryArgs;
+  parameters?: { harness?: string };
   render?: (args: StoryArgs) => React.ReactNode;
 }
 interface StoryMeta {
   title?: string;
   component?: React.ComponentType<StoryArgs>;
   args?: StoryArgs;
+  parameters?: { harness?: string };
+  render?: (args: StoryArgs) => React.ReactNode;
 }
 type StoryModule = { default: StoryMeta } & Record<string, unknown>;
 
 const modules = (
   import.meta as unknown as {
-    glob: (pattern: string, options: { eager: true }) => Record<string, StoryModule>;
+    glob: (patterns: string[], options: { eager: true }) => Record<string, StoryModule>;
   }
-).glob('../../packages/ui/src/**/*.stories.tsx', { eager: true });
+).glob(['../../packages/ui/src/**/*.stories.tsx', '../../apps/web/vehicles/**/*.stories.tsx'], {
+  eager: true,
+});
+
+// Stories that open a modal hide the rest of the page (by design), so the all-stories axe page skips them; the
+// dialog is scanned on its own in e2e/vehicles.spec.ts.
+const isModal = (meta: StoryMeta, story: StoryDefinition) =>
+  (story.parameters?.harness ?? meta.parameters?.harness) === 'modal';
 
 function StoryView({ meta, story }: { meta: StoryMeta; story: StoryDefinition }) {
   const args = { ...meta.args, ...story.args };
-  if (story.render) return <>{story.render(args)}</>;
+  const render = story.render ?? meta.render;
+  if (render) return <>{render(args)}</>;
   const Component = meta.component;
   return Component ? <Component {...args} /> : null;
 }
@@ -38,7 +49,10 @@ function Stories() {
       </Typography>
       {Object.entries(modules).flatMap(([path, module]) =>
         Object.entries(module)
-          .filter(([name]) => name !== 'default')
+          .filter(
+            ([name, story]) =>
+              name !== 'default' && !isModal(module.default, story as StoryDefinition),
+          )
           .map(([name, story]) => (
             <section
               key={`${path}:${name}`}

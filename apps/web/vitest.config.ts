@@ -20,6 +20,7 @@ export default defineConfig({
       'app/**/*.test.{ts,tsx}',
       'auth/**/*.test.{ts,tsx}',
       'settings/**/*.test.{ts,tsx}',
+      'vehicles/**/*.test.{ts,tsx}',
     ],
     coverage: {
       provider: 'v8',
@@ -28,8 +29,9 @@ export default defineConfig({
         'app/**/*.{ts,tsx}',
         'auth/**/*.{ts,tsx}',
         'settings/**/*.{ts,tsx}',
+        'vehicles/**/*.{ts,tsx}',
       ],
-      exclude: ['**/*.test.*', 'app/test/**', 'app/main.tsx', 'app/types.ts'],
+      exclude: ['**/*.test.*', '**/*.stories.tsx', 'app/test/**', 'app/main.tsx', 'app/types.ts'],
     },
   },
 });

@@ -2,10 +2,20 @@ import type { Permission } from './types';
 
 export type RouteAccess = 'public' | 'authenticated' | { readonly permission: Permission };
 
-export type NavGroup = 'Inicio' | 'Configuración';
+export type NavGroup = 'Inicio' | 'Flota' | 'Configuración';
 
 export interface RouteDefinition {
-  readonly id: 'home' | 'login' | 'invitation' | 'company' | 'users' | 'roles';
+  readonly id:
+    | 'home'
+    | 'login'
+    | 'invitation'
+    | 'company'
+    | 'users'
+    | 'roles'
+    | 'vehicles'
+    | 'vehicleNew'
+    | 'vehicleDetail'
+    | 'vehicleEdit';
   readonly pattern: string;
   readonly title: string;
   readonly access: RouteAccess;
@@ -32,6 +42,32 @@ export const routes: readonly RouteDefinition[] = [
     pattern: '/invitacion',
     title: 'Aceptar invitación',
     access: 'public',
+  },
+  // Vehicles: read = `view`, create = `create`, change = `edit`; archiving (`delete`) is an action of the detail.
+  {
+    id: 'vehicles',
+    pattern: '/flota/vehiculos',
+    title: 'Vehículos',
+    access: { permission: 'view' },
+    nav: { group: 'Flota', label: 'Vehículos' },
+  },
+  {
+    id: 'vehicleNew',
+    pattern: '/flota/vehiculos/nuevo',
+    title: 'Nuevo vehículo',
+    access: { permission: 'create' },
+  },
+  {
+    id: 'vehicleDetail',
+    pattern: '/flota/vehiculos/:id',
+    title: 'Vehículo',
+    access: { permission: 'view' },
+  },
+  {
+    id: 'vehicleEdit',
+    pattern: '/flota/vehiculos/:id/editar',
+    title: 'Editar vehículo',
+    access: { permission: 'edit' },
   },
   {
     id: 'company',

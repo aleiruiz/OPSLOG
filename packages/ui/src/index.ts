@@ -22,6 +22,8 @@ export {
   UploadQueue,
   Notifications,
 } from './components/BaseComponents';
+export { ConfirmDialog } from './components/ConfirmDialog';
+export type { ConfirmDialogProps } from './components/ConfirmDialog';
 export type {
   ButtonProps,
   FieldProps,

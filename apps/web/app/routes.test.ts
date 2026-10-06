@@ -22,12 +22,34 @@ describe('route matching', () => {
     expect(resolveRoute('/nada')).toBeNull();
   });
 
+  it('resolves the vehicle screens, with "nuevo" taking precedence over the id', () => {
+    expect(resolveRoute('/flota/vehiculos')?.route.id).toBe('vehicles');
+    expect(resolveRoute('/flota/vehiculos/nuevo')?.route.id).toBe('vehicleNew');
+    expect(resolveRoute('/flota/vehiculos/veh-1')).toMatchObject({
+      route: { id: 'vehicleDetail' },
+      params: { id: 'veh-1' },
+    });
+    expect(resolveRoute('/flota/vehiculos/veh-1/editar')).toMatchObject({
+      route: { id: 'vehicleEdit' },
+      params: { id: 'veh-1' },
+    });
+    expect(resolveRoute('/flota/vehiculos/a/b/c')).toBeNull();
+    // Only the list is in the navigation, under "Flota".
+    expect(routes.filter((route) => route.nav?.group === 'Flota').map((route) => route.id)).toEqual(
+      ['vehicles'],
+    );
+  });
+
   it('declares a permission for every configuration route and none for public ones', () => {
     const byId = Object.fromEntries(routes.map((route) => [route.id, route.access]));
     expect(byId.company).toEqual({ permission: 'manage_config' });
     expect(byId.users).toEqual({ permission: 'manage_users' });
     expect(byId.roles).toEqual({ permission: 'manage_users' });
     expect(byId.login).toBe('public');
+    expect(byId.vehicles).toEqual({ permission: 'view' });
+    expect(byId.vehicleNew).toEqual({ permission: 'create' });
+    expect(byId.vehicleDetail).toEqual({ permission: 'view' });
+    expect(byId.vehicleEdit).toEqual({ permission: 'edit' });
     expect(byId.invitation).toBe('public');
   });
 });
