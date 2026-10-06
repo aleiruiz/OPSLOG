@@ -1,7 +1,10 @@
 import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
 import React from 'react';
 import { Button, Field, FormSection, Notifications, opslogTokens, UiState } from '@opslog/ui';
-import { RouterButton } from '../app/router';
+import { RouterButton, RouterLink } from '../app/router';
+import { hasAssignableArea, type AreaChoice } from '../areas/areaChoices';
+import { AreaSelect } from '../areas/AreaSelect';
 import { formatKm } from './labels';
 import {
   emptyValues,
@@ -26,6 +29,8 @@ export interface VehicleFormProps {
   readonly mode: 'create' | 'edit';
   /** Values the form opens with (create: empty; edit: the loaded vehicle). */
   readonly initial?: VehicleFormValues;
+  /** The company's areas, for the area selector. */
+  readonly areas: readonly AreaChoice[];
   /** Edit: the odometer reading loaded with the vehicle; the form refuses a lower one. */
   readonly currentOdometerKm?: number;
   readonly submitting?: boolean;
@@ -46,6 +51,7 @@ export interface VehicleFormProps {
 export function VehicleForm({
   mode,
   initial,
+  areas,
   currentOdometerKm,
   submitting = false,
   serverErrors,
@@ -186,11 +192,31 @@ export function VehicleForm({
         </FormSection>
         <FormSection title="Operación">
           <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' } }}>
-            {text('areaId', 'Identificador de área', {
-              required: true,
-              description: 'Aún no hay catálogo de áreas: usa el identificador asignado.',
-              mono: true,
-            })}
+            <Box>
+              <AreaSelect
+                id={inputId('areaId')}
+                value={values.areaId}
+                choices={areas}
+                onChange={(value) => setField('areaId', value)}
+                required
+                error={errors.areaId}
+                description={
+                  hasAssignableArea(areas) ? 'Solo se pueden elegir áreas activas.' : undefined
+                }
+              />
+              {!hasAssignableArea(areas) && (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                  Aún no hay áreas activas.{' '}
+                  <RouterLink
+                    to="/plantilla/areas"
+                    sx={{ color: 'primary.main', textDecoration: 'underline' }}
+                  >
+                    Crea o activa un área
+                  </RouterLink>{' '}
+                  para poder asignar el vehículo.
+                </Typography>
+              )}
+            </Box>
             {text('odometerKm', odometerLabel, {
               required: true,
               inputMode: 'numeric',

@@ -11,6 +11,7 @@ const config: StorybookConfig = {
     '../src/**/*.stories.tsx',
     '../../../apps/web/vehicles/**/*.stories.tsx',
     '../../../apps/web/areas/**/*.stories.tsx',
+    '../../../apps/web/employees/**/*.stories.tsx',
   ],
   framework: { name: '@storybook/react-vite', options: {} },
   core: { disableTelemetry: true, disableWhatsNewNotifications: true, enableCrashReports: false },

@@ -1,6 +1,7 @@
 import {
   createAreasClient,
   createBffClient,
+  createEmployeesClient,
   createVehiclesClient,
   type BffClient,
   type BffClientOptions,
@@ -33,6 +34,7 @@ export function createHttpApi(
   const { call } = client;
   const vehicles = createVehiclesClient(client);
   const areas = createAreasClient(client);
+  const employees = createEmployeesClient(client);
   return {
     oidc,
     auth: {
@@ -88,6 +90,15 @@ export function createHttpApi(
       deactivate: areas.deactivate,
       activate: areas.activate,
       history: areas.history,
+    },
+    employees: {
+      list: employees.list,
+      get: employees.get,
+      create: employees.create,
+      update: employees.update,
+      changeStatus: employees.changeStatus,
+      archive: employees.archive,
+      history: employees.history,
     },
   };
 }

@@ -57,7 +57,7 @@ describe('vehicle form validation (mirrors the backend rules)', () => {
         make: 'x'.repeat(61),
         model: 'a\nb',
         year: '1899',
-        areaId: 'área',
+        areaId: '',
         odometerKm: '12.5',
         registeredOn: '2027-01-01',
       },
@@ -69,7 +69,7 @@ describe('vehicle form validation (mirrors the backend rules)', () => {
     expect(errors.make).toMatch(/60 caracteres/);
     expect(errors.model).toMatch(/60 caracteres/);
     expect(errors.year).toBe('Escribe un año entre 1950 y 2027.');
-    expect(errors.areaId).toMatch(/guion/);
+    expect(errors.areaId).toBe('Elige el área del vehículo.');
     expect(errors.odometerKm).toMatch(/entero/);
     expect(errors.registeredOn).toMatch(/futura/);
   });

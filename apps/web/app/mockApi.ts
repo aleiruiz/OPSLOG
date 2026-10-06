@@ -1,9 +1,16 @@
 import type { ApiError } from '@opslog/contracts';
 import { createFakeOidc, fakeOidcCode, fakeOidcSubject } from '../api/fakeOidc';
 import { createMockAreaStore, type MockAreaStore } from './mockAreas';
+import {
+  createMockEmployeeStore,
+  type EmployeeAuditAction,
+  type MockEmployeeStore,
+} from './mockEmployees';
 import { createMockVehicleStore, type MockVehicleStore } from './mockVehicles';
 import type {
   ApiPorts,
+  Employee,
+  EmployeeDetail,
   CompanySettings,
   DraftRecord,
   DraftValues,
@@ -51,7 +58,14 @@ export type MockOperation =
   | 'updateArea'
   | 'deactivateArea'
   | 'activateArea'
-  | 'areaHistory';
+  | 'areaHistory'
+  | 'listEmployees'
+  | 'getEmployee'
+  | 'createEmployee'
+  | 'updateEmployee'
+  | 'changeEmployeeStatus'
+  | 'archiveEmployee'
+  | 'employeeHistory';
 
 export interface MockControls {
   /** Simulates the server-side session expiring (cookie no longer valid). */
@@ -80,6 +94,19 @@ export interface MockControls {
   setAreaPeople(id: string, people: number): void;
   /** Areas currently on the server, for assertions. */
   areas(): readonly Area[];
+  /** Another actor edits an employee on the server: its version moves on, so a form that loaded it is stale. */
+  changeEmployeeExternally(
+    id: string,
+    change: Partial<Pick<Employee, 'position' | 'firstName'>>,
+  ): void;
+  /** Another actor archives an employee on the server. */
+  archiveEmployeeExternally(id: string): void;
+  /** Another actor terminates an employee on the server. */
+  terminateEmployeeExternally(id: string): void;
+  /** Employees currently on the server (no personal data), for assertions. */
+  employees(): readonly Employee[];
+  /** The server's audit trail of employee events (action and entity id, never a value), for assertions. */
+  employeeAudit(): readonly { readonly action: EmployeeAuditAction; readonly id: string }[];
 }
 
 export interface MockApi extends ApiPorts {
@@ -90,8 +117,10 @@ export interface MockApi extends ApiPorts {
 export const demoSubjects = {
   admin: 'cuenta-admin',
   viewer: 'cuenta-consulta',
-  /** Can view, create and edit, but not archive (role "Despachador"). */
+  /** Can view, create and edit, but not archive or see personal data (role "Despachador"). */
   dispatch: 'cuenta-despacho',
+  /** Can view and create, and see personal data, but not edit (role "Responsable de datos personales"). */
+  piiReader: 'cuenta-datos',
   /** Can view and edit, but not create or archive (role "Mecánico"). */
   mechanic: 'cuenta-mecanico',
 } as const;
@@ -101,6 +130,7 @@ export const demoCredentials = {
   admin: { code: fakeOidcCode(demoSubjects.admin), nonce: 'nonce-demo-admin' },
   viewer: { code: fakeOidcCode(demoSubjects.viewer), nonce: 'nonce-demo-viewer' },
   dispatch: { code: fakeOidcCode(demoSubjects.dispatch), nonce: 'nonce-demo-dispatch' },
+  piiReader: { code: fakeOidcCode(demoSubjects.piiReader), nonce: 'nonce-demo-pii' },
   mechanic: { code: fakeOidcCode(demoSubjects.mechanic), nonce: 'nonce-demo-mechanic' },
 } as const;
 
@@ -169,6 +199,14 @@ const systemRoles: RoleSummary[] = [
     memberCount: 1,
   },
   {
+    // Mirrors the backend's `pii_reader` template: it can read and create, and is the one that sees personal data.
+    id: 'role-pii',
+    name: 'Responsable de datos personales',
+    kind: 'system',
+    permissions: ['view', 'create', 'view_pii'],
+    memberCount: 1,
+  },
+  {
     id: 'role-viewer',
     name: 'Consulta',
     kind: 'system',
@@ -182,6 +220,7 @@ const people = [
   { id: 'user-viewer', subject: demoSubjects.viewer, role: 'role-viewer' },
   { id: 'user-dispatch', subject: demoSubjects.dispatch, role: 'role-dispatch' },
   { id: 'user-mechanic', subject: demoSubjects.mechanic, role: 'role-mechanic' },
+  { id: 'user-pii', subject: demoSubjects.piiReader, role: 'role-pii' },
 ] as const;
 
 let correlation = 0;
@@ -194,11 +233,24 @@ function apiError(status: ApiError['status'], code: string, message: string): Re
 const ok = <T>(value: T): Result<T> => ({ ok: true, value });
 const badRequest = () => apiError(400, 'bad_request', 'Invalid request');
 
+const PII_KEYS = ['nationalId', 'idType', 'phone', 'email', 'licenseNumber'];
+
+/** Writing personal data needs `view_pii` on top of the operation's own permission (like the server). */
+const withPii = (base: Permission, input: unknown): readonly Permission[] =>
+  typeof input === 'object' &&
+  input !== null &&
+  !Array.isArray(input) &&
+  PII_KEYS.some((key) => Object.hasOwn(input, key))
+    ? [base, 'view_pii']
+    : [base];
+
 export interface MockApiOptions {
   /** Initial fleet: the synthetic demo fleet by default; pass `[]` for a company without vehicles. */
   readonly vehicles?: readonly Vehicle[];
   /** Initial areas: the synthetic demo tree by default; pass `[]` for a company without areas. */
   readonly areas?: readonly Area[];
+  /** Initial staff with their personal data: the synthetic demo staff by default; pass `[]` for none. */
+  readonly employees?: readonly EmployeeDetail[];
 }
 
 export function createMockApi(options: MockApiOptions = {}): MockApi {
@@ -206,6 +258,15 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     orgTree.snapshot().some((area) => area.id === areaId && area.active),
   );
   let signedInAs: string | null = null;
+  const staff: MockEmployeeStore = createMockEmployeeStore(
+    {
+      isActiveArea: (areaId) =>
+        orgTree.snapshot().some((area) => area.id === areaId && area.active),
+      canViewPii: () => can('view_pii'),
+      actorId: () => signedInAs ?? 'user-admin',
+    },
+    options.employees,
+  );
   const orgTree: MockAreaStore = createMockAreaStore(
     {
       liveVehicles: (areaId) =>
@@ -217,6 +278,7 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
               vehicle.archivedAt === null &&
               vehicle.status !== 'decommissioned',
           ).length,
+      livePeople: (areaId) => staff.countLiveInArea(areaId),
       isMember: (subject) =>
         users.some((user) => user.id === `user-${subject}` && user.status === 'active'),
       actorId: () => signedInAs ?? 'user-admin',
@@ -261,6 +323,13 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
   }
   const currentUser = () =>
     users.find((user) => user.id === signedInAs && user.status === 'active');
+  /** Whether the signed-in user's role grants `permission` (the role is looked up on every call). */
+  function can(permission: Permission): boolean {
+    const user = currentUser();
+    return Boolean(
+      user && roles.find((item) => item.id === user.roleId)?.permissions.includes(permission),
+    );
+  }
   const sessionFor = (userId: string): SessionInfo => {
     const user = users.find((item) => item.id === userId) as UserSummary;
     const role = roles.find((item) => item.id === user.roleId) as RoleSummary;
@@ -284,15 +353,15 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
   /** Runs `action` only for a live session holding `permission` (when given). */
   function guarded<T>(
     operation: MockOperation,
-    permission: Permission | null,
+    permission: Permission | readonly Permission[] | null,
     action: () => Result<T> | Promise<Result<T>>,
   ): Promise<Result<T>> {
     const failed = injected(operation);
     if (failed) return Promise.resolve(failed);
     const user = currentUser();
     if (!user) return Promise.resolve(unauthorized());
-    const role = roles.find((item) => item.id === user.roleId);
-    if (permission && !role?.permissions.includes(permission))
+    const required = permission === null ? [] : ([] as Permission[]).concat(permission);
+    if (!required.every(can))
       return Promise.resolve(apiError(403, 'forbidden', 'Permission denied'));
     return Promise.resolve(action());
   }
@@ -326,6 +395,11 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     deactivateAreaExternally: (id) => orgTree.deactivateExternally(id),
     setAreaPeople: (id, people) => orgTree.setPeople(id, people),
     areas: () => orgTree.snapshot(),
+    changeEmployeeExternally: (id, change) => staff.changeExternally(id, change),
+    archiveEmployeeExternally: (id) => staff.archiveExternally(id),
+    terminateEmployeeExternally: (id) => staff.terminateExternally(id),
+    employees: () => staff.snapshot(),
+    employeeAudit: () => staff.auditLog(),
   };
 
   return {
@@ -536,6 +610,20 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
       activate: (id, version) =>
         guarded('activateArea', 'edit', () => orgTree.port.activate(id, version)),
       history: (id, query) => guarded('areaHistory', 'view', () => orgTree.port.history(id, query)),
+    },
+    employees: {
+      list: (query) => guarded('listEmployees', 'view', () => staff.port.list(query)),
+      get: (id) => guarded('getEmployee', 'view', () => staff.port.get(id)),
+      create: (input) =>
+        guarded('createEmployee', withPii('create', input), () => staff.port.create(input)),
+      update: (id, patch) =>
+        guarded('updateEmployee', withPii('edit', patch), () => staff.port.update(id, patch)),
+      changeStatus: (id, change) =>
+        guarded('changeEmployeeStatus', 'edit', () => staff.port.changeStatus(id, change)),
+      archive: (id, version) =>
+        guarded('archiveEmployee', 'delete', () => staff.port.archive(id, version)),
+      history: (id, query) =>
+        guarded('employeeHistory', 'view', () => staff.port.history(id, query)),
     },
     drafts: {
       load: (scope) => guarded('loadDraft', null, () => ok(drafts.get(draftKey(scope)) ?? null)),

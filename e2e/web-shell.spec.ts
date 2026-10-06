@@ -109,9 +109,9 @@ test.describe('web shell: invitation, users and company', () => {
 
   test('searches users, deactivates one with a reason and loads more rows', async ({ page }) => {
     await signIn(page, '/configuracion/usuarios');
-    await expect(page.getByRole('table', { name: 'Usuarios (27)' })).toBeVisible();
+    await expect(page.getByRole('table', { name: 'Usuarios (28)' })).toBeVisible();
     await page.getByRole('button', { name: 'Cargar más usuarios' }).click();
-    await expect(page.getByRole('row')).toHaveCount(28);
+    await expect(page.getByRole('row')).toHaveCount(29);
 
     const search = page.getByRole('textbox', { name: 'Buscar por identificador, rol o estado' });
     await search.focus();
@@ -230,7 +230,7 @@ test.describe('web shell: accessibility and layout', () => {
 
   test('does not overflow horizontally at 360px or 1280px', async ({ page }) => {
     await signIn(page, '/configuracion/usuarios');
-    await expect(page.getByRole('table', { name: 'Usuarios (27)' })).toBeVisible();
+    await expect(page.getByRole('table', { name: 'Usuarios (28)' })).toBeVisible();
     for (const path of ['usuarios', 'roles', 'empresa']) {
       await page.getByRole('link', { name: new RegExp(`^${path}$`, 'i') }).click();
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();

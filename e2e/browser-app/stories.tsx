@@ -29,6 +29,7 @@ const modules = (
     '../../packages/ui/src/**/*.stories.tsx',
     '../../apps/web/vehicles/**/*.stories.tsx',
     '../../apps/web/areas/**/*.stories.tsx',
+    '../../apps/web/employees/**/*.stories.tsx',
   ],
   { eager: true },
 );
