@@ -26,7 +26,7 @@ rollback: "Revertir cambios del paquete y conservar snapshots/evidencia; no toca
 max_repair_cycles: 3
 ```
 
-Nota: este repositorio no tiene un script `pnpm storybook`; el catálogo se verifica hoy con las pruebas unitarias y axe de `@opslog/ui` (comandos de arriba). Storybook y las capturas visuales están pendientes de decisión del propietario.
+Nota: este repositorio no tiene un script `pnpm storybook`; el catálogo se verifica hoy con las pruebas unitarias y axe de `@opslog/ui` (comandos de arriba). Storybook y las capturas visuales (regresión visual) quedan ampliados a G2 como máximo por decisión del propietario (ADR-0010, que supera el plazo «como máximo G1» de ADR-0008; no es una exención).
 
 ## Fronteras
 
