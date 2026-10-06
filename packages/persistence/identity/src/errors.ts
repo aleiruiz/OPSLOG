@@ -67,26 +67,87 @@ export const isCheckViolation = (error: unknown): boolean =>
 export const isLockContention = (error: unknown): boolean =>
   matches(error, 1213, 'ER_LOCK_DEADLOCK') || matches(error, 1205, 'ER_LOCK_WAIT_TIMEOUT');
 
-/** Maps any thrown value to an error that is safe to log and to return upstream. */
+const ORIGIN_PATTERN = /^[A-Za-z0-9_]{1,64}$/;
+/**
+ * Location of a stack frame: an optional `file://` or `node:` prefix, a path over a closed alphabet
+ * (no `=`, `,`, `@` or spaces) and `:line:col`. Function names are never kept.
+ */
+const LOCATION_PATTERN = /^(?:file:\/\/|node:)?[A-Za-z0-9_./-]{1,200}:\d{1,7}:\d{1,7}$/;
+const MAX_FRAMES = 8;
+
+/** The location of a frame line (`at fn (loc)`, `at async fn (loc)` or `at loc`), or null. */
+function locationOf(line: string): string | null {
+  if (!line.startsWith('at ')) return null;
+  const rest = line.slice(3);
+  let location = rest;
+  if (rest.endsWith(')')) {
+    const open = rest.lastIndexOf(' (');
+    if (open < 0) return null;
+    location = rest.slice(open + 2, -1);
+  }
+  return LOCATION_PATTERN.test(location) ? location : null;
+}
+
+/** Class name of the cause (`constructor.name`, never the mutable `error.name`), restricted to a safe alphabet. */
+function originOf(error: unknown): string {
+  try {
+    if (!(error instanceof Error)) return typeof error;
+    const name: unknown = (error.constructor as { name?: unknown } | undefined)?.name;
+    return typeof name === 'string' && ORIGIN_PATTERN.test(name) ? name : 'Error';
+  } catch {
+    return 'Error';
+  }
+}
+
+/**
+ * Stack locations only. Frames are kept only when the stack starts with exactly the header V8 prints
+ * for the current state (`${name}: ${message}`, or `${name}` for an empty message) followed by a
+ * newline: then everything after it is genuine frame text. Any mismatch (message or name changed after
+ * the stack was captured, a rewritten stack) or any throwing accessor yields no frames. Of each
+ * frame only the path-shaped location is kept (no function names), at most MAX_FRAMES of them.
+ */
+function framesOf(error: unknown): readonly string[] {
+  try {
+    if (!(error instanceof Error)) return [];
+    const stack: unknown = error.stack;
+    const message: unknown = error.message;
+    const name: unknown = error.name;
+    if (typeof stack !== 'string' || typeof message !== 'string' || typeof name !== 'string')
+      return [];
+    // Empty message: V8 prints `${name}`, some stack formatters print `${name}: `.
+    const headers = message.length > 0 ? [`${name}: ${message}`] : [name, `${name}: `];
+    const header = headers.find((candidate) => stack.startsWith(`${candidate}\n`));
+    if (header === undefined) return [];
+    const frames: string[] = [];
+    for (const line of stack.slice(header.length + 1).split('\n')) {
+      const location = locationOf(line.trim());
+      if (location !== null) frames.push(`at ${location}`);
+      if (frames.length >= MAX_FRAMES) break;
+    }
+    return frames;
+  } catch {
+    return [];
+  }
+}
+
+/** Maps any thrown value to an error that is safe to log and to return upstream. Never throws. */
 export function sanitizeStoreError(error: unknown): Error {
+  try {
+    return classify(error);
+  } catch {
+    // Hostile values (Proxy traps, throwing accessors) get a generic, data-free error.
+    return new IdentityStoreError('internal', null, 'Error', []);
+  }
+}
+
+function classify(error: unknown): Error {
   if (error instanceof AuthError || error instanceof IdentityStoreError) return error;
   if (isDuplicateKey(error)) return new AuthError('conflict');
   if (isMissingParent(error) || isReferenced(error) || isCheckViolation(error))
     return new IdentityStoreError('integrity', driverErrno(error));
   if (isLockContention(error)) return new IdentityStoreError('contention', driverErrno(error));
   if (driverErrno(error) === null && driverCode(error) === null) {
-    const stack = error instanceof Error ? (error.stack ?? '') : '';
-    const frames = stack
-      .split('\n')
-      .filter((line) => line.trimStart().startsWith('at '))
-      .slice(0, 8)
-      .map((line) => line.trim());
-    return new IdentityStoreError(
-      'internal',
-      null,
-      error instanceof Error ? error.name : typeof error,
-      frames,
-    );
+    return new IdentityStoreError('internal', null, originOf(error), framesOf(error));
   }
   return new IdentityStoreError('unavailable', driverErrno(error));
 }

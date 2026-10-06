@@ -51,7 +51,17 @@ import {
   createWorkerRuntime,
   type WorkerRuntime,
 } from '../../../worker/composition/src/index.js';
-import { AccessDirectory, isRoleName, type RoleName } from './access.js';
+import { AccessDirectory, ROLE_PERMISSIONS, isRoleName, type RoleName } from './access.js';
+import {
+  DraftStore,
+  MAX_CUSTOM_ROLES_PER_TENANT,
+  MFA_POLICIES,
+  ROLE_LABELS,
+  RoleCatalog,
+  TenantSettingsStore,
+  type DraftValues,
+  type MfaPolicy,
+} from './directory.js';
 import { InMemoryTenantStore } from './tenancy.js';
 
 export type PlatformErrorCode =
@@ -177,6 +187,49 @@ export interface PlatformOptions {
   readonly scanHoldMs?: number;
 }
 
+export interface SessionDetails {
+  readonly tenantId: string;
+  readonly companyName: string;
+  readonly identityId: string;
+  readonly roleId: string;
+  readonly roleLabel: string;
+  readonly permissions: readonly Permission[];
+  readonly expiresAt: Date;
+}
+export interface MemberView {
+  readonly id: string;
+  readonly roleId: string;
+  readonly roleLabel: string;
+  readonly status: 'active' | 'invited' | 'inactive';
+}
+export interface RoleView {
+  readonly id: string;
+  readonly name: string;
+  readonly kind: 'system' | 'custom';
+  readonly permissions: readonly Permission[];
+  readonly memberCount: number;
+}
+export interface SettingsView {
+  readonly name: string;
+  readonly status: 'active' | 'suspended';
+  readonly mfa: MfaPolicy;
+  readonly sessionIdleHours: number;
+}
+export interface SettingsInput {
+  readonly name: unknown;
+  readonly mfa: unknown;
+  readonly sessionIdleHours: unknown;
+  readonly reason?: unknown;
+}
+export interface DraftView {
+  readonly scope: string;
+  readonly values: DraftValues;
+  readonly savedAt: Date;
+}
+
+const DRAFT_SCOPE = /^[A-Za-z0-9][A-Za-z0-9:._-]{0,63}$/;
+const DRAFT_LIMITS = { keys: 50, keyLength: 64, valueLength: 2000, totalLength: 16_000 } as const;
+
 export interface EmitInput {
   /** Stable opaque id for idempotent re-publication (same id and content is deduplicated per tenant). */
   readonly eventId?: string;
@@ -209,6 +262,13 @@ export class Platform {
   public readonly pipeline: FilePipeline;
   public readonly scanQueue: TenantAwareScanQueue;
   public readonly runtime: WorkerRuntime;
+  public readonly settings = new TenantSettingsStore();
+  public readonly roles = new RoleCatalog();
+  public readonly drafts = new DraftStore();
+  private readonly invitations = new Map<
+    string,
+    { tenantId: string; identityId: string; role: RoleName; expiresAt: Date }
+  >();
   private readonly locks = new Map<string, Promise<unknown>>();
   private readonly now: () => Date;
 
@@ -472,6 +532,15 @@ export class Platform {
       const context = await this.authorize(token, correlationId, ['manage_users']);
       const invitation = await this.identity.issueInvitation(context.tenantId);
       this.access.expectInvitation(invitation.identityId, context.tenantId, role);
+      const nowMs = this.now().getTime();
+      for (const [hash, meta] of this.invitations)
+        if (meta.expiresAt.getTime() <= nowMs) this.invitations.delete(hash);
+      this.invitations.set(opaqueTokenGenerator.hash(invitation.token), {
+        tenantId: context.tenantId,
+        identityId: invitation.identityId,
+        role,
+        expiresAt: invitation.expiresAt,
+      });
       this.auditNow(
         this.userActor(context),
         'user.invited',
@@ -498,6 +567,7 @@ export class Platform {
       const activated = await this.auth.activateInvitation(invitationToken, principal);
       if (!activated.ok || !activated.value) return failure(new AuthError('unauthorized'));
       const { identity, membership } = activated.value;
+      this.invitations.delete(opaqueTokenGenerator.hash(invitationToken));
       if (!this.access.activate(identity.id, membership.tenantId)) {
         // No role was recorded for this invitation: it did not come from `inviteUser`; fail closed.
         await this.identity.revokeMembership(membership.tenantId, identity.id);
@@ -620,6 +690,289 @@ export class Platform {
       );
       return null;
     });
+  }
+
+  private tenantName(tenantId: string): string {
+    const known = this.tenants.all().find((tenant) => tenant.id === tenantId);
+    return this.settings.get(tenantId, known?.name ?? 'Empresa').name;
+  }
+
+  /** What the browser may know about its own session: never a token. Fails closed like any authentication. */
+  public async sessionDetails(
+    token: string,
+    correlationId: string,
+  ): Promise<PlatformResponse<SessionDetails>> {
+    try {
+      const context = await this.identity.authenticate(token, correlationId);
+      const role = this.access.roleOf(context.tenantId, context.actor.subject);
+      const mirrored = await this.tenants.getSession(sessionIdOf(token));
+      if (!role || !mirrored) throw new AuthError('unauthorized');
+      return success({
+        tenantId: context.tenantId,
+        companyName: this.tenantName(context.tenantId),
+        identityId: context.actor.subject,
+        roleId: role,
+        roleLabel: ROLE_LABELS[role],
+        permissions: await this.access.resolvePermissions(context),
+        expiresAt: mirrored.expiresAt,
+      });
+    } catch (error) {
+      return failure(error);
+    }
+  }
+
+  /**
+   * Public preview of an invitation (company and role) for the person about to accept it. Unknown,
+   * expired, used and revoked invitations are indistinguishable: all answer not_found.
+   */
+  public async inspectInvitation(
+    invitationToken: string,
+  ): Promise<PlatformResponse<{ companyName: string; roleLabel: string }>> {
+    try {
+      if (typeof invitationToken !== 'string' || !invitationToken || invitationToken.length > 512)
+        throw new PlatformError('not_found');
+      const hash = opaqueTokenGenerator.hash(invitationToken);
+      const meta = this.invitations.get(hash);
+      if (!meta) throw new PlatformError('not_found');
+      const expired = meta.expiresAt.getTime() <= this.now().getTime();
+      if (
+        expired ||
+        !this.access.hasPending(meta.identityId, meta.tenantId) ||
+        this.tenants.status(meta.tenantId) !== 'active'
+      ) {
+        if (expired) this.invitations.delete(hash);
+        throw new PlatformError('not_found');
+      }
+      return success({
+        companyName: this.tenantName(meta.tenantId),
+        roleLabel: ROLE_LABELS[meta.role],
+      });
+    } catch (error) {
+      return failure(error);
+    }
+  }
+
+  /** Members and pending invitations of the caller's tenant (`manage_users`). */
+  public async listMembers(
+    token: string,
+    correlationId: string,
+  ): Promise<PlatformResponse<{ tenantId: string; members: readonly MemberView[] }>> {
+    try {
+      const context = await this.authorize(token, correlationId, ['manage_users']);
+      const status = { active: 'active', pending: 'invited', revoked: 'inactive' } as const;
+      return success({
+        tenantId: context.tenantId,
+        members: this.access.membersOf(context.tenantId).map((member) => ({
+          id: member.identityId,
+          roleId: member.role,
+          roleLabel: ROLE_LABELS[member.role],
+          status: status[member.status],
+        })),
+      });
+    } catch (error) {
+      return failure(error);
+    }
+  }
+
+  private roleViews(tenantId: string): readonly RoleView[] {
+    const members = this.access.membersOf(tenantId);
+    const count = (roleId: string) =>
+      members.filter((member) => member.status === 'active' && member.role === roleId).length;
+    const system = (Object.keys(ROLE_LABELS) as RoleName[]).map((id) => ({
+      id,
+      name: ROLE_LABELS[id],
+      kind: 'system' as const,
+      permissions: ROLE_PERMISSIONS[id],
+      memberCount: count(id),
+    }));
+    const custom = this.roles.custom(tenantId).map((role) => ({
+      id: role.id,
+      name: role.name,
+      kind: 'custom' as const,
+      permissions: role.permissions,
+      memberCount: 0,
+    }));
+    return [...system, ...custom];
+  }
+
+  /** System templates plus the tenant's custom roles (`manage_users`). */
+  public async listRoles(
+    token: string,
+    correlationId: string,
+  ): Promise<PlatformResponse<readonly RoleView[]>> {
+    try {
+      const context = await this.authorize(token, correlationId, ['manage_users']);
+      return success(this.roleViews(context.tenantId));
+    } catch (error) {
+      return failure(error);
+    }
+  }
+
+  /** Copies a role of the caller's tenant (or a system template) under a new name (`manage_users`). */
+  public async copyRole(
+    token: string,
+    correlationId: string,
+    roleId: string,
+    name: unknown,
+  ): Promise<PlatformResponse<RoleView>> {
+    try {
+      const context = await this.authorize(token, correlationId, ['manage_users']);
+      const source = typeof roleId === 'string' ? this.roles.find(context.tenantId, roleId) : null;
+      if (!source) throw new PlatformError('not_found');
+      const trimmed = typeof name === 'string' ? name.trim() : '';
+      if (!trimmed || trimmed.length > 80) throw new PlatformError('invalid_input');
+      if (
+        this.roles.nameTaken(context.tenantId, trimmed) ||
+        this.roles.custom(context.tenantId).length >= MAX_CUSTOM_ROLES_PER_TENANT
+      )
+        throw new PlatformError('conflict');
+      const role = { id: `custom-${randomUUID()}`, name: trimmed, permissions: source.permissions };
+      this.roles.add(context.tenantId, role);
+      this.auditNow(this.userActor(context), 'role.copied', 'role', role.id, correlationId);
+      return success({ ...role, kind: 'custom' as const, memberCount: 0 });
+    } catch (error) {
+      return failure(error);
+    }
+  }
+
+  private settingsView(tenantId: string): SettingsView {
+    const stored = this.settings.get(tenantId, 'Empresa');
+    return {
+      ...stored,
+      name: this.tenantName(tenantId),
+      status: this.tenants.status(tenantId) === 'active' ? 'active' : 'suspended',
+    };
+  }
+
+  public async getSettings(
+    token: string,
+    correlationId: string,
+  ): Promise<PlatformResponse<SettingsView>> {
+    try {
+      const context = await this.authorize(token, correlationId, ['manage_config']);
+      return success(this.settingsView(context.tenantId));
+    } catch (error) {
+      return failure(error);
+    }
+  }
+
+  /**
+   * Updates the caller's company settings (`manage_config`). Changing a security setting requires a
+   * reason; it is validated but not stored (free text may carry personal data), and the change is audited.
+   */
+  public async updateSettings(
+    token: string,
+    correlationId: string,
+    input: SettingsInput,
+  ): Promise<PlatformResponse<SettingsView>> {
+    try {
+      const context = await this.authorize(token, correlationId, ['manage_config']);
+      const name = typeof input.name === 'string' ? input.name.trim() : '';
+      const hours = input.sessionIdleHours;
+      if (
+        !name ||
+        name.length > 160 ||
+        !MFA_POLICIES.includes(input.mfa as MfaPolicy) ||
+        typeof hours !== 'number' ||
+        !Number.isInteger(hours) ||
+        hours < 1 ||
+        hours > 24
+      )
+        throw new PlatformError('invalid_input');
+      const reason = input.reason;
+      if (reason !== undefined && (typeof reason !== 'string' || reason.length > 500))
+        throw new PlatformError('invalid_input');
+      const current = this.settingsView(context.tenantId);
+      const securityChanged = current.mfa !== input.mfa || current.sessionIdleHours !== hours;
+      if (securityChanged && !(typeof reason === 'string' && reason.trim()))
+        throw new PlatformError('invalid_input');
+      this.settings.set(context.tenantId, {
+        name,
+        mfa: input.mfa as MfaPolicy,
+        sessionIdleHours: hours,
+      });
+      this.auditNow(
+        this.userActor(context),
+        securityChanged ? 'tenant.security_settings_updated' : 'tenant.settings_updated',
+        'tenant',
+        context.tenantId,
+        correlationId,
+      );
+      return success(this.settingsView(context.tenantId));
+    } catch (error) {
+      return failure(error);
+    }
+  }
+
+  /** Drafts belong to the signed-in person; no permission beyond a valid session is needed. */
+  public async loadDraft(
+    token: string,
+    correlationId: string,
+    scope: string,
+  ): Promise<PlatformResponse<DraftView | null>> {
+    try {
+      const context = await this.identity.authenticate(token, correlationId);
+      if (typeof scope !== 'string' || !DRAFT_SCOPE.test(scope))
+        throw new PlatformError('invalid_input');
+      return success(this.drafts.load(context.tenantId, context.actor.subject, scope));
+    } catch (error) {
+      return failure(error);
+    }
+  }
+
+  public async saveDraft(
+    token: string,
+    correlationId: string,
+    scope: string,
+    values: unknown,
+  ): Promise<PlatformResponse<DraftView>> {
+    try {
+      const context = await this.identity.authenticate(token, correlationId);
+      if (typeof scope !== 'string' || !DRAFT_SCOPE.test(scope))
+        throw new PlatformError('invalid_input');
+      if (typeof values !== 'object' || values === null || Array.isArray(values))
+        throw new PlatformError('invalid_input');
+      const entries = Object.entries(values);
+      let total = 0;
+      for (const [key, value] of entries) {
+        if (
+          typeof value !== 'string' ||
+          key.length === 0 ||
+          key.length > DRAFT_LIMITS.keyLength ||
+          value.length > DRAFT_LIMITS.valueLength
+        )
+          throw new PlatformError('invalid_input');
+        total += key.length + value.length;
+      }
+      if (entries.length > DRAFT_LIMITS.keys || total > DRAFT_LIMITS.totalLength)
+        throw new PlatformError('invalid_input');
+      const record: DraftView = {
+        scope,
+        values: Object.freeze(Object.fromEntries(entries) as Record<string, string>),
+        savedAt: this.now(),
+      };
+      if (!this.drafts.save(context.tenantId, context.actor.subject, record))
+        throw new PlatformError('conflict');
+      return success(record);
+    } catch (error) {
+      return failure(error);
+    }
+  }
+
+  public async discardDraft(
+    token: string,
+    correlationId: string,
+    scope: string,
+  ): Promise<PlatformResponse<null>> {
+    try {
+      const context = await this.identity.authenticate(token, correlationId);
+      if (typeof scope !== 'string' || !DRAFT_SCOPE.test(scope))
+        throw new PlatformError('invalid_input');
+      this.drafts.discard(context.tenantId, context.actor.subject, scope);
+      return success(null);
+    } catch (error) {
+      return failure(error);
+    }
   }
 
   /** Audit trail of the caller's tenant only; there is no way to name another tenant. */
