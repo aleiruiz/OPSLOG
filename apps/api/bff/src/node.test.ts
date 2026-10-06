@@ -199,4 +199,72 @@ describe('node adapter over a loopback socket', () => {
     expect(await raw([...good, 'Content-Type: application/json'])).toBe(415);
     expect(await raw([...good, `X-CSRF-Token: ${browser.csrf!}`])).toBe(403);
   });
+
+  it('revokes the previous session on login and on invitation accept over a real socket', async () => {
+    world = createBffWorld();
+    const a = await world.tenant('Empresa Alfa', 'subject-admin-a');
+    const port = await listen(world.handler);
+    const headers = (cookie: string, csrf: string) => ({
+      host: HOST,
+      origin: ORIGIN,
+      cookie,
+      'content-type': 'application/json',
+      'x-csrf-token': csrf,
+    });
+    const nonce = async () => {
+      const pre = await send(port, 'GET', '/api/auth/csrf', { host: HOST });
+      return {
+        cookie: (pre.headers['set-cookie'] as string[])[0]!.split(';')[0]!,
+        csrf: JSON.parse(pre.body).csrfToken as string,
+      };
+    };
+    const session = (raw: Raw) => (raw.headers['set-cookie'] as string[])[0]!.split(';')[0]!;
+    const status = async (cookie: string) =>
+      (await send(port, 'GET', '/api/auth/session', { host: HOST, cookie })).status;
+
+    const pre1 = await nonce();
+    const login1 = await send(
+      port,
+      'POST',
+      '/api/auth/login',
+      headers(pre1.cookie, pre1.csrf),
+      JSON.stringify(world.credentials('subject-admin-a')),
+    );
+    const first = session(login1);
+    expect(await status(first)).toBe(200);
+
+    // Second login, still carrying the first session cookie: the first is revoked.
+    const pre2 = await nonce();
+    const login2 = await send(
+      port,
+      'POST',
+      '/api/auth/login',
+      headers(`${first}; ${pre2.cookie}`, pre2.csrf),
+      JSON.stringify(world.credentials('subject-admin-a')),
+    );
+    expect(login2.status).toBe(200);
+    const second = session(login2);
+    expect(second).not.toBe(first);
+    expect(await status(first)).toBe(401);
+    expect(await status(second)).toBe(200);
+
+    // Accepting an invitation while holding a session revokes that session too.
+    const admin = await world.platform.signIn(await world.principal('subject-admin-a'));
+    const invited = await world.platform.inviteUser(admin.value!.token, 'fixture', 'viewer');
+    const pre3 = await nonce();
+    const accepted = await send(
+      port,
+      'POST',
+      '/api/auth/invitations/accept',
+      headers(`${second}; ${pre3.cookie}`, pre3.csrf),
+      JSON.stringify({
+        token: invited.value!.invitationToken,
+        ...world.credentials('subject-new-viewer'),
+      }),
+    );
+    expect(accepted.status).toBe(201);
+    expect(await status(second)).toBe(401);
+    expect(await status(session(accepted))).toBe(200);
+    expect(a.tenantId).toBeTruthy();
+  });
 });

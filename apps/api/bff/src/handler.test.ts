@@ -3,10 +3,18 @@ import { serializeApiError } from '../../../../packages/contracts/src/index.js';
 import { ERRORS } from './http.js';
 import * as bff from './index.js';
 import { createBffHandler } from './handler.js';
-import { HOST, ORIGIN, SECRET, createBffWorld, type BffWorld, type Reply } from './test-support.js';
+import {
+  HOST,
+  ORIGIN,
+  SECRET,
+  Browser,
+  createBffWorld,
+  type BffWorld,
+  type Reply,
+} from './test-support.js';
 
 let world: BffWorld;
-afterEach(() => world.dispose());
+afterEach(() => world?.dispose());
 
 const HOUR = 3_600_000;
 const SECURITY_HEADER_NAMES = [
@@ -185,6 +193,49 @@ describe('login, session and logout', () => {
     const replay = await world.browser().get('/api/auth/session', { cookieHeader: old });
     expect(replay.status).toBe(401);
     expect((await browser.get('/api/auth/session')).status).toBe(200);
+  });
+});
+
+describe('header shape parity', () => {
+  it('behaves identically when every header arrives as an array, as Node delivers them', async () => {
+    await fixture();
+    const arrays: typeof world.handler = (request) =>
+      world.handler({
+        ...request,
+        headers: Object.fromEntries(
+          Object.entries(request.headers).map(([name, value]) => [name, [value as string]]),
+        ),
+      });
+    const browser = new Browser(arrays);
+    const prepare = async () => {
+      browser.csrf = (await browser.get('/api/auth/csrf')).json.csrfToken;
+    };
+    await prepare();
+    const login = await browser.post('/api/auth/login', {
+      json: world.credentials('subject-admin-a'),
+    });
+    expect(login.status).toBe(200);
+    browser.csrf = login.json.csrfToken;
+    const first = browser.jar.get('opslog_session')!;
+    expect((await browser.get('/api/auth/session')).status).toBe(200);
+    expect(
+      (
+        await browser.put('/api/company/settings', {
+          json: { name: 'N', mfa: 'disabled', sessionIdleHours: 8 },
+        })
+      ).status,
+    ).toBe(200);
+    // Signing in again revokes the session the browser still held.
+    await prepare();
+    expect(
+      (await browser.post('/api/auth/login', { json: world.credentials('subject-admin-a') }))
+        .status,
+    ).toBe(200);
+    const stale = await world
+      .browser()
+      .get('/api/auth/session', { cookieHeader: `opslog_session=${first}` });
+    expect(stale.status).toBe(401);
+    expect(browser.jar.get('opslog_session')).not.toBe(first);
   });
 });
 

@@ -17,7 +17,7 @@ let server: Server | undefined;
 afterEach(async () => {
   await new Promise<void>((resolve) => (server ? server.close(() => resolve()) : resolve()));
   server = undefined;
-  world.dispose();
+  world?.dispose();
 });
 
 const HOUR = 3_600_000;

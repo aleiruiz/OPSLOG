@@ -167,7 +167,65 @@ describe('sanitizeStoreError', () => {
         '    at /srv/app/other.js:5:6',
       ].join('\n');
       const safe = sanitizeStoreError(error) as IdentityStoreError;
-      expect(safe.frames).toEqual(['at ok (/srv/app/file.js:3:4)', 'at /srv/app/other.js:5:6']);
+      // Function names are dropped; only clean locations survive.
+      expect(safe.frames).toEqual([
+        'at q.js:1:1',
+        'at /srv/app/file.js:3:4',
+        'at /srv/app/other.js:5:6',
+      ]);
+      expect(JSON.stringify(safe)).not.toMatch(/carol|example\.com|file name/);
+    });
+
+    it('keeps only locations when the message is truncated at a line boundary', () => {
+      const error = new Error(
+        'first line\n    at JuanPerez CURP ABCD800101 (calle.js:1:2)\n    at /tenant=t-42/token=abc123:1:2',
+      );
+      const captured = error.stack as string;
+      error.message = 'first line';
+      error.stack = captured;
+      const safe = sanitizeStoreError(error) as IdentityStoreError;
+      expect(JSON.stringify(safe)).not.toMatch(/Juan|CURP|ABCD|tenant=|token=|t-42|abc123/);
+      for (const frame of safe.frames) expect(frame).toMatch(/^at [A-Za-z0-9_./:-]+:\d+:\d+$/);
+    });
+
+    it('accepts file:// and node: locations, refuses unsafe ones and caps count and length', () => {
+      const error = new Error('x');
+      error.stack = [
+        'Error: x',
+        '    at fn (file:///srv/app/a.js:1:2)',
+        '    at node:internal/process/task_queues:105:5',
+        '    at async run (/srv/app/b.ts:10:20)',
+        '    at x (/srv/a,b.js:1:2)',
+        '    at x (/srv/a=b.js:1:2)',
+        '    at x (/srv/a@b.js:1:2)',
+        '    at x (/srv/a b.js:1:2)',
+        '    at x (/srv/a.js:1:2',
+        '    at /srv/a.js:x:2',
+        `    at /${'a'.repeat(201)}.js:1:2`,
+        ...Array.from({ length: 20 }, (_, i) => `    at /srv/f${i}.js:1:1`),
+      ].join('\n');
+      const safe = sanitizeStoreError(error) as IdentityStoreError;
+      expect(safe.frames).toHaveLength(8);
+      expect(safe.frames.slice(0, 4)).toEqual([
+        'at file:///srv/app/a.js:1:2',
+        'at node:internal/process/task_queues:105:5',
+        'at /srv/app/b.ts:10:20',
+        'at /srv/f0.js:1:1',
+      ]);
+    });
+
+    it('never throws, even for Proxy-wrapped or hostile errors', () => {
+      const trap = () => {
+        throw new Error(`boom ${SECRET}`);
+      };
+      const proxy = new Proxy(new Error('x'), { getPrototypeOf: trap, get: trap, has: trap });
+      const safe = sanitizeStoreError(proxy) as IdentityStoreError;
+      expect(safe).toBeInstanceOf(IdentityStoreError);
+      expect(safe).toMatchObject({ code: 'internal', errno: null, origin: 'Error', frames: [] });
+      expect(JSON.stringify(safe)).not.toContain(SECRET);
+      const noLine = new Error('x');
+      noLine.stack = 'Error: x\n    at fn (a.js:1:2';
+      expect((sanitizeStoreError(noLine) as IdentityStoreError).frames).toEqual([]);
     });
 
     it('falls back to no frames when reading the error throws', () => {

@@ -69,11 +69,24 @@ export const isLockContention = (error: unknown): boolean =>
 
 const ORIGIN_PATTERN = /^[A-Za-z0-9_]{1,64}$/;
 /**
- * A path-shaped frame: `at fn (file:line:col)` or `at file:line:col`. Function names and locations
- * use a closed alphabet (no `@`, no whitespace in locations), so e-mail-like or free text is refused.
+ * Location of a stack frame: an optional `file://` or `node:` prefix, a path over a closed alphabet
+ * (no `=`, `,`, `@` or spaces) and `:line:col`. Function names are never kept.
  */
-const FRAME_PATTERN =
-  /^at (?:[A-Za-z0-9_$.<>[\] ]{1,120} \()?[A-Za-z0-9_$./\\:+~%=,#-]{1,300}:\d+:\d+\)?$/;
+const LOCATION_PATTERN = /^(?:file:\/\/|node:)?[A-Za-z0-9_./-]{1,200}:\d{1,7}:\d{1,7}$/;
+const MAX_FRAMES = 8;
+
+/** The location of a frame line (`at fn (loc)`, `at async fn (loc)` or `at loc`), or null. */
+function locationOf(line: string): string | null {
+  if (!line.startsWith('at ')) return null;
+  const rest = line.slice(3);
+  let location = rest;
+  if (rest.endsWith(')')) {
+    const open = rest.lastIndexOf(' (');
+    if (open < 0) return null;
+    location = rest.slice(open + 2, -1);
+  }
+  return LOCATION_PATTERN.test(location) ? location : null;
+}
 
 /** Class name of the cause (`constructor.name`, never the mutable `error.name`), restricted to a safe alphabet. */
 function originOf(error: unknown): string {
@@ -90,8 +103,8 @@ function originOf(error: unknown): string {
  * Stack locations only. Frames are kept only when the stack starts with exactly the header V8 prints
  * for the current state (`${name}: ${message}`, or `${name}` for an empty message) followed by a
  * newline: then everything after it is genuine frame text. Any mismatch (message or name changed after
- * the stack was captured, a rewritten stack) or any throwing accessor yields no frames. Each kept line
- * must also be path-shaped.
+ * the stack was captured, a rewritten stack) or any throwing accessor yields no frames. Of each
+ * frame only the path-shaped location is kept (no function names), at most MAX_FRAMES of them.
  */
 function framesOf(error: unknown): readonly string[] {
   try {
@@ -105,19 +118,29 @@ function framesOf(error: unknown): readonly string[] {
     const headers = message.length > 0 ? [`${name}: ${message}`] : [name, `${name}: `];
     const header = headers.find((candidate) => stack.startsWith(`${candidate}\n`));
     if (header === undefined) return [];
-    return stack
-      .slice(header.length + 1)
-      .split('\n')
-      .map((line) => line.trim())
-      .filter((line) => FRAME_PATTERN.test(line))
-      .slice(0, 8);
+    const frames: string[] = [];
+    for (const line of stack.slice(header.length + 1).split('\n')) {
+      const location = locationOf(line.trim());
+      if (location !== null) frames.push(`at ${location}`);
+      if (frames.length >= MAX_FRAMES) break;
+    }
+    return frames;
   } catch {
     return [];
   }
 }
 
-/** Maps any thrown value to an error that is safe to log and to return upstream. */
+/** Maps any thrown value to an error that is safe to log and to return upstream. Never throws. */
 export function sanitizeStoreError(error: unknown): Error {
+  try {
+    return classify(error);
+  } catch {
+    // Hostile values (Proxy traps, throwing accessors) get a generic, data-free error.
+    return new IdentityStoreError('internal', null, 'Error', []);
+  }
+}
+
+function classify(error: unknown): Error {
   if (error instanceof AuthError || error instanceof IdentityStoreError) return error;
   if (isDuplicateKey(error)) return new AuthError('conflict');
   if (isMissingParent(error) || isReferenced(error) || isCheckViolation(error))

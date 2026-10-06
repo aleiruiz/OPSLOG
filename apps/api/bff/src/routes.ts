@@ -17,7 +17,7 @@ import {
   parseCookies,
 } from './cookies.js';
 import type { BffCrypto } from './csrf.js';
-import { errorResponse, respond, type BffResponse, type ErrorCode } from './http.js';
+import { errorResponse, respond, singleHeader, type BffResponse, type ErrorCode } from './http.js';
 
 /** How a route is protected. `session-csrf` also requires the session-bound token on state changes. */
 export type RouteKind = 'public' | 'pre-session' | 'session' | 'session-csrf';
@@ -136,8 +136,8 @@ async function openSession(
 }
 
 function cookieHeader(ctx: RouteContext): string | undefined {
-  const value = ctx.headers['cookie'];
-  return typeof value === 'string' ? value : undefined;
+  // Through `singleHeader`: Node's adapter delivers every header as an array.
+  return singleHeader(ctx.headers, 'cookie');
 }
 
 const SORT_FIELDS = ['id', 'roleLabel', 'status'] as const;
