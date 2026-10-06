@@ -84,6 +84,81 @@ describe('node adapter over a loopback socket', () => {
     expect(JSON.parse(me.body).company.name).toBe('Empresa Alfa');
   });
 
+  it('serves the vehicles routes over a real socket with session, CSRF and tenant isolation', async () => {
+    world = createBffWorld();
+    await world.tenant('Empresa Alfa', 'subject-admin-a');
+    await world.tenant('Empresa Beta', 'subject-admin-b');
+    const port = await listen(world.handler);
+    const login = async (subject: string) => {
+      const csrf = await send(port, 'GET', '/api/auth/csrf', { host: HOST });
+      const nonceCookie = (csrf.headers['set-cookie'] as string[])[0]!.split(';')[0]!;
+      const reply = await send(
+        port,
+        'POST',
+        '/api/auth/login',
+        {
+          host: HOST,
+          origin: ORIGIN,
+          cookie: nonceCookie,
+          'content-type': 'application/json',
+          'x-csrf-token': JSON.parse(csrf.body).csrfToken,
+        },
+        JSON.stringify(world!.credentials(subject)),
+      );
+      return {
+        cookie: (reply.headers['set-cookie'] as string[])[0]!.split(';')[0]!,
+        csrf: JSON.parse(reply.body).csrfToken as string,
+      };
+    };
+    const a = await login('subject-admin-a');
+    const b = await login('subject-admin-b');
+    const write = (
+      who: { cookie: string; csrf: string | null },
+      method: string,
+      path: string,
+      json: unknown,
+    ) =>
+      send(
+        port,
+        method,
+        path,
+        {
+          host: HOST,
+          origin: ORIGIN,
+          cookie: who.cookie,
+          'content-type': 'application/json',
+          ...(who.csrf ? { 'x-csrf-token': who.csrf } : {}),
+        },
+        JSON.stringify(json),
+      );
+    const vehicle = {
+      economicNumber: 'U-001',
+      plate: 'ABC123',
+      vin: null,
+      make: 'Toyota',
+      model: 'Hilux',
+      year: 2022,
+      areaId: 'area-1',
+      odometerKm: 100,
+    };
+    expect(
+      (await write({ cookie: a.cookie, csrf: null }, 'POST', '/api/vehicles', vehicle)).status,
+    ).toBe(403);
+    expect((await send(port, 'GET', '/api/vehicles', { host: HOST })).status).toBe(401);
+    const created = await write(a, 'POST', '/api/vehicles', vehicle);
+    expect(created.status).toBe(201);
+    const id = JSON.parse(created.body).id as string;
+    const read = (who: { cookie: string }, path: string) =>
+      send(port, 'GET', path, { host: HOST, cookie: who.cookie });
+    expect(JSON.parse((await read(a, `/api/vehicles/${id}`)).body).plate).toBe('ABC123');
+    expect((await read(b, `/api/vehicles/${id}`)).status).toBe(404);
+    expect((await write(b, 'POST', `/api/vehicles/${id}/archive`, { version: 1 })).status).toBe(
+      404,
+    );
+    expect(JSON.parse((await read(b, '/api/vehicles')).body).total).toBe(0);
+    expect(JSON.parse((await read(a, '/api/vehicles')).body).total).toBe(1);
+  });
+
   it('sends the 413 for an oversized body and then drops the connection', async () => {
     world = createBffWorld({ bff: { maxBodyBytes: 256 } });
     const port = await listen(world.handler);

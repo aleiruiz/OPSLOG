@@ -13,6 +13,7 @@
     "../../worker/base/src/**/*.ts",
     "../../../packages/domain/identity/src/**/*.ts",
     "../../../packages/domain/files/src/**/*.ts",
+    "../../../packages/domain/vehicles/src/**/*.ts",
     "../../../packages/platform/auth/src/**/*.ts",
     "../../../packages/platform/audit/src/**/*.ts",
     "../../../packages/platform/outbox/src/**/*.ts",

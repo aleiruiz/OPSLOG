@@ -6,6 +6,8 @@
     { "path": "./packages/domain/tenants" },
     { "path": "./packages/persistence/tenancy" },
     { "path": "./packages/persistence/identity" },
+    { "path": "./packages/domain/vehicles" },
+    { "path": "./packages/persistence/vehicles" },
     { "path": "./packages/ui" },
     { "path": "./apps/api/tenants" },
     { "path": "./e2e" },

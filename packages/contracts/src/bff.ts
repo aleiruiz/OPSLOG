@@ -25,6 +25,11 @@ export const BFF_ERRORS = {
   method_not_allowed: { status: 405, message: 'Method not allowed' },
   conflict: { status: 409, message: 'Conflict' },
   last_admin: { status: 409, message: 'Conflict' },
+  duplicate: { status: 409, message: 'Conflict' },
+  stale_version: { status: 409, message: 'Conflict' },
+  invalid_transition: { status: 409, message: 'Conflict' },
+  immutable: { status: 409, message: 'Conflict' },
+  odometer_decrease: { status: 422, message: 'Unprocessable request' },
   payload_too_large: { status: 413, message: 'Payload too large' },
   unsupported_media_type: { status: 415, message: 'Unsupported media type' },
   internal_error: { status: 500, message: 'Request failed' },
@@ -37,6 +42,8 @@ export interface BffErrorBody {
   readonly status: number;
   readonly message: string;
   readonly correlationId: string;
+  /** Only on `duplicate`: the unique field that collided, never its value. */
+  readonly field?: string;
 }
 
 export const isBffErrorBody = (value: unknown): value is BffErrorBody => {
@@ -47,7 +54,8 @@ export const isBffErrorBody = (value: unknown): value is BffErrorBody => {
     Object.hasOwn(BFF_ERRORS, body.code) &&
     typeof body.status === 'number' &&
     typeof body.message === 'string' &&
-    typeof body.correlationId === 'string'
+    typeof body.correlationId === 'string' &&
+    (body.field === undefined || typeof body.field === 'string')
   );
 };
 
@@ -131,6 +139,81 @@ export interface BffDraft {
   readonly savedAt: ISODateTime;
 }
 
+export const BFF_VEHICLE_STATUSES = [
+  'active',
+  'restricted',
+  'in_maintenance',
+  'out_of_service',
+  'inactive',
+  'decommissioned',
+] as const;
+export type BffVehicleStatus = (typeof BFF_VEHICLE_STATUSES)[number];
+
+/** A fleet vehicle. The company is implicit (the session's); `version` is the concurrency token. */
+export interface BffVehicle {
+  readonly id: string;
+  readonly economicNumber: string;
+  readonly plate: string;
+  readonly vin: string | null;
+  readonly make: string;
+  readonly model: string;
+  readonly year: number;
+  readonly areaId: string;
+  readonly status: BffVehicleStatus;
+  readonly statusReason: string;
+  readonly odometerKm: number;
+  /** `YYYY-MM-DD`. */
+  readonly registeredOn: string;
+  readonly version: number;
+  readonly createdAt: ISODateTime;
+  readonly updatedAt: ISODateTime;
+  readonly archivedAt: ISODateTime | null;
+}
+
+export interface BffVehicleInput {
+  readonly economicNumber: string;
+  readonly plate: string;
+  readonly vin?: string | null;
+  readonly make: string;
+  readonly model: string;
+  readonly year: number;
+  readonly areaId: string;
+  readonly odometerKm: number;
+  /** `YYYY-MM-DD`, not in the future; defaults to today. */
+  readonly registeredOn?: string;
+}
+
+/** Fields that can be edited in place; at least one besides `version`. Status and odometer have their own commands. */
+export interface BffVehiclePatch {
+  readonly version: number;
+  readonly economicNumber?: string;
+  readonly plate?: string;
+  readonly vin?: string | null;
+  readonly make?: string;
+  readonly model?: string;
+  readonly year?: number;
+  readonly areaId?: string;
+}
+
+export interface BffVehiclesQuery {
+  readonly limit?: 25 | 50 | 100;
+  readonly cursor?: string;
+  readonly status?: BffVehicleStatus;
+  readonly areaId?: string;
+  /** `true` to include archived vehicles (default: hidden). */
+  readonly includeArchived?: 'true' | 'false';
+}
+
+export interface BffVehicleStatusEntry {
+  readonly id: string;
+  readonly from: BffVehicleStatus | null;
+  readonly to: BffVehicleStatus;
+  readonly reason: string;
+  readonly actorId: string;
+  readonly version: number;
+  readonly at: ISODateTime;
+}
+
 /** Request and response types of every route. Keys are route ids. */
 export interface BffRouteTypes {
   'auth.csrf': { response: BffCsrfResponse };
@@ -160,6 +243,25 @@ export interface BffRouteTypes {
     response: BffDraft;
   };
   'drafts.discard': { params: { scope: string }; response: void };
+  'vehicles.list': { query?: BffVehiclesQuery; response: Page<BffVehicle> };
+  'vehicles.create': { body: BffVehicleInput; response: BffVehicle };
+  'vehicles.get': { params: { id: string }; response: BffVehicle };
+  'vehicles.update': { params: { id: string }; body: BffVehiclePatch; response: BffVehicle };
+  'vehicles.status': {
+    params: { id: string };
+    body: { version: number; status: BffVehicleStatus; reason: string };
+    response: BffVehicle;
+  };
+  'vehicles.odometer': {
+    params: { id: string };
+    body: { version: number; odometerKm: number };
+    response: BffVehicle;
+  };
+  'vehicles.archive': { params: { id: string }; body: { version: number }; response: BffVehicle };
+  'vehicles.history': {
+    params: { id: string };
+    response: { items: readonly BffVehicleStatusEntry[] };
+  };
 }
 
 export type BffRouteId = keyof BffRouteTypes;
@@ -254,6 +356,49 @@ export const BFF_ROUTES = {
     path: ['api', 'drafts', ':scope'],
     kind: 'session-csrf',
     status: 204,
+  },
+  'vehicles.list': { method: 'GET', path: ['api', 'vehicles'], kind: 'session', status: 200 },
+  'vehicles.create': {
+    method: 'POST',
+    path: ['api', 'vehicles'],
+    kind: 'session-csrf',
+    status: 201,
+  },
+  'vehicles.get': {
+    method: 'GET',
+    path: ['api', 'vehicles', ':id'],
+    kind: 'session',
+    status: 200,
+  },
+  'vehicles.update': {
+    method: 'PUT',
+    path: ['api', 'vehicles', ':id'],
+    kind: 'session-csrf',
+    status: 200,
+  },
+  'vehicles.status': {
+    method: 'POST',
+    path: ['api', 'vehicles', ':id', 'status'],
+    kind: 'session-csrf',
+    status: 200,
+  },
+  'vehicles.odometer': {
+    method: 'POST',
+    path: ['api', 'vehicles', ':id', 'odometer'],
+    kind: 'session-csrf',
+    status: 200,
+  },
+  'vehicles.archive': {
+    method: 'POST',
+    path: ['api', 'vehicles', ':id', 'archive'],
+    kind: 'session-csrf',
+    status: 200,
+  },
+  'vehicles.history': {
+    method: 'GET',
+    path: ['api', 'vehicles', ':id', 'history'],
+    kind: 'session',
+    status: 200,
   },
 } as const satisfies Record<BffRouteId, BffRouteDefinition>;
 

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createBffClient, CSRF_HEADER, type FetchLike } from './index.js';
+import { createBffClient, createVehiclesClient, CSRF_HEADER, type FetchLike } from './index.js';
 
 interface Seen {
   method: string;
@@ -400,5 +400,52 @@ describe('BFF client: another tab changed the signed-in person', () => {
     expect(
       (await client.call('drafts.save', { params: { scope: 's' }, body: { values: {} } })).ok,
     ).toBe(false);
+  });
+});
+
+describe('vehicles client', () => {
+  it('maps each method to its route, method and path, and exposes the colliding field', async () => {
+    const { fetch, seen } = transport((request) => {
+      if (request.url === '/api/auth/csrf') return { status: 200, body: { csrfToken: 'tok' } };
+      if (request.url === '/api/auth/session') return { status: 200, body: session('tok') };
+      if (request.method === 'POST' && request.url === '/api/vehicles/v1/odometer')
+        return { status: 409, body: { ...errorBody('duplicate', 409), field: 'plate' } };
+      return { status: 200, body: { items: [], total: 0 } };
+    });
+    const vehicles = createVehiclesClient(createBffClient({ fetch }));
+    await vehicles.list();
+    await vehicles.list({ status: 'inactive' });
+    await vehicles.get('v1');
+    await vehicles.history('v1');
+    await vehicles.create({
+      economicNumber: 'U-1',
+      plate: 'A1',
+      vin: null,
+      make: 'm',
+      model: 'm',
+      year: 2020,
+      areaId: 'a',
+      odometerKm: 0,
+    });
+    await vehicles.update('v1', { version: 1, make: 'x' });
+    await vehicles.changeStatus('v1', { version: 1, status: 'inactive', reason: 'x' });
+    await vehicles.archive('v1', 1);
+    const clash = await vehicles.recordOdometer('v1', { version: 1, odometerKm: 5 });
+    expect(clash).toMatchObject({
+      ok: false,
+      error: { code: 'duplicate', fieldErrors: [{ field: 'plate' }] },
+    });
+    const calls = seen.filter((entry) => !entry.url.startsWith('/api/auth/'));
+    expect(calls.map((entry) => `${entry.method} ${entry.url}`)).toEqual([
+      'GET /api/vehicles',
+      'GET /api/vehicles?status=inactive',
+      'GET /api/vehicles/v1',
+      'GET /api/vehicles/v1/history',
+      'POST /api/vehicles',
+      'PUT /api/vehicles/v1',
+      'POST /api/vehicles/v1/status',
+      'POST /api/vehicles/v1/archive',
+      'POST /api/vehicles/v1/odometer',
+    ]);
   });
 });
