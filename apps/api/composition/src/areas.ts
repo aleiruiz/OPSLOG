@@ -173,7 +173,7 @@ export const AREA_PERMISSIONS = {
 /**
  * Area use cases for the HTTP layer. Every call authenticates the session and re-resolves the role
  * (nothing is cached), takes the tenant only from that session, and audits successful writes with
- * the action, the entity id and the actor: no names, codes or user ids. Serialization of concurrent
+ * the action, the entity id and the actor (`user-<subject>`): no names, codes or responsible ids. Serialization of concurrent
  * hierarchy changes is the store's job (a per-tenant transaction lock).
  */
 export class AreasApi {

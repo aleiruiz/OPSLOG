@@ -31,6 +31,7 @@ export const BFF_ERRORS = {
   immutable: { status: 409, message: 'Conflict' },
   area_in_use: { status: 409, message: 'Conflict' },
   odometer_decrease: { status: 422, message: 'Unprocessable request' },
+  invalid_area: { status: 422, message: 'Unprocessable request' },
   invalid_hierarchy: { status: 422, message: 'Unprocessable request' },
   invalid_responsible: { status: 422, message: 'Unprocessable request' },
   payload_too_large: { status: 413, message: 'Payload too large' },
@@ -46,8 +47,9 @@ export interface BffErrorBody {
   readonly message: string;
   readonly correlationId: string;
   /**
-   * Only on `duplicate` (the unique field that collided) and `area_in_use` (the kind of resource
-   * that blocks: `sub_areas`, `vehicles` or `people`); never a value or a count.
+   * Only on `duplicate` (the unique field that collided), `area_in_use` (the kind of resource
+   * that blocks: `sub_areas`, `vehicles` or `people`) and `invalid_area` (`area_id`); never a value
+   * or a count.
    */
   readonly field?: string;
 }
@@ -230,7 +232,10 @@ export interface BffArea {
   /** Level in the tree: 1 for a root, at most 4. */
   readonly depth: number;
   readonly active: boolean;
-  /** Opaque ids of the responsible users, sorted. Names and emails never reach the browser. */
+  /**
+   * Responsible users as raw identity subjects (no `user-` prefix, unlike `BffAreaHistoryEntry.actorId`),
+   * sorted. Names and emails never reach the browser.
+   */
   readonly responsibleIds: readonly string[];
   readonly version: number;
   readonly createdAt: ISODateTime;
@@ -273,7 +278,11 @@ export type BffAreaAction = (typeof BFF_AREA_ACTIONS)[number];
 export const BFF_AREA_FIELDS = ['name', 'code', 'parent', 'responsibles'] as const;
 export type BffAreaField = (typeof BFF_AREA_FIELDS)[number];
 
-/** Who changed what and when. Field names only: no names, codes or user data. */
+/**
+ * Who changed what and when. Field names only: no names, codes or responsible ids. `actorId` is the
+ * acting user's id with the `user-` prefix (`user-<subject>`); `BffArea.responsibleIds` are the raw
+ * identity subjects without that prefix.
+ */
 export interface BffAreaHistoryEntry {
   readonly id: string;
   readonly action: BffAreaAction;

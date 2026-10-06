@@ -25,6 +25,7 @@ import {
   requireVersion,
   statusEntry,
   type Vehicle,
+  type VehicleAreaGate,
   type VehicleStore,
 } from './index.js';
 
@@ -721,6 +722,56 @@ describe('VehicleService', () => {
     await svc.create(A, ACTOR, input());
     expect(await rejection(svc.update(A, 'id-1', 1, { make: 'x' }))).toMatchObject({
       code: 'not_found',
+    });
+  });
+  it('validates and serializes a set or changed area through the area gate', async () => {
+    const calls: string[] = [];
+    const active = new Set(['area-1', 'area-2']);
+    const areas: VehicleAreaGate = {
+      withActiveArea: async (tenantId, areaId, work) => {
+        calls.push(`${tenantId}:${areaId}`);
+        if (!active.has(areaId)) throw new VehicleError('invalid_area', 'area_id');
+        return work();
+      },
+    };
+    let ids = 0;
+    const svc = new VehicleService(new InMemoryVehicleStore(), {
+      now: () => NOW,
+      newId: () => `id-${(ids += 1)}`,
+      areas,
+    });
+    const car = await svc.create(A, ACTOR, input({ areaId: 'area-1' }));
+    expect(calls).toEqual([`${A}:area-1`]);
+    expect(await rejection(svc.create(A, ACTOR, input({ areaId: 'gone', plate: 'ZZ9' })))).toEqual(
+      new VehicleError('invalid_area', 'area_id'),
+    );
+    expect((await svc.list(A)).total).toBe(1);
+    // Unchanged area (omitted or the same id): the gate is not consulted, even if it is inactive now.
+    calls.length = 0;
+    active.clear();
+    const kept = await svc.update(A, car.id, 1, { make: 'Ford', areaId: 'area-1' });
+    expect(kept).toMatchObject({ make: 'Ford', areaId: 'area-1', version: 2 });
+    expect(calls).toEqual([]);
+    // A different area is checked; a failed check or a stale version changes nothing.
+    expect(await rejection(svc.update(A, car.id, 2, { areaId: 'area-2' }))).toMatchObject({
+      code: 'invalid_area',
+      field: 'area_id',
+    });
+    active.add('area-2');
+    expect(await rejection(svc.update(A, car.id, 1, { areaId: 'area-2' }))).toMatchObject({
+      code: 'stale_version',
+    });
+    expect(await svc.update(A, car.id, 2, { areaId: 'area-2' })).toMatchObject({
+      areaId: 'area-2',
+      version: 3,
+    });
+    // (the stale version was refused before the gate was reached)
+    expect(calls).toEqual([`${A}:area-2`, `${A}:area-2`]);
+  });
+  it('does not check the area when no gate is configured', async () => {
+    const { svc } = service();
+    expect(await svc.create(A, ACTOR, input({ areaId: 'whatever' }))).toMatchObject({
+      areaId: 'whatever',
     });
   });
   it('uses the real clock and random ids by default', async () => {

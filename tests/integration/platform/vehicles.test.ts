@@ -14,6 +14,9 @@ import { corr, createWorld, type Session, type World } from './world.js';
 let world: World;
 afterEach(() => world.dispose());
 
+/** Real areas of the current fixture: a vehicle's area must be an active area of its tenant. */
+const areas = { a1: '', a2: '', b1: '' };
+
 const input = (over: Record<string, unknown> = {}) => ({
   economicNumber: 'U-001',
   plate: 'ab-123 c',
@@ -21,7 +24,7 @@ const input = (over: Record<string, unknown> = {}) => ({
   make: 'Toyota',
   model: 'Hilux',
   year: 2022,
-  areaId: 'area-1',
+  areaId: areas.a1,
   odometerKm: 1000,
   ...over,
 });
@@ -43,6 +46,11 @@ async function fixture(w: World): Promise<Fixture> {
     auditor: await w.member(a.admin, 'auditor', 'subject-auditor-a'),
     pii_reader: await w.member(a.admin, 'pii_reader', 'subject-pii-a'),
   } as const;
+  const area = async (session: Session, name: string): Promise<string> =>
+    (await w.platform.areas.create(session.token, corr(), { name })).value?.id ?? '';
+  areas.a1 = await area(a.admin, 'Area 1');
+  areas.a2 = await area(a.admin, 'Area 2');
+  areas.b1 = await area(b.admin, 'Area 1');
   return { a, b, roles, adminB: b.admin };
 }
 
@@ -143,7 +151,7 @@ describe('vehicle lifecycle through the platform', () => {
     const { roles } = await fixture(world);
     const admin = roles.admin;
     const one = await seed(world, admin, { economicNumber: 'B-2', plate: 'P2', vin: null });
-    await seed(world, admin, { economicNumber: 'a-1', plate: 'P1', vin: null, areaId: 'area-2' });
+    await seed(world, admin, { economicNumber: 'a-1', plate: 'P1', vin: null, areaId: areas.a2 });
     await seed(world, admin, { economicNumber: 'C-3', plate: 'P3', vin: null });
     ok(
       await platform.vehicles.changeStatus(admin.token, corr(), one.id, 1, 'inactive', 'Temporada'),
@@ -154,7 +162,7 @@ describe('vehicle lifecycle through the platform', () => {
     expect((await list({ status: 'inactive' })).items.map((v) => v.economicNumber)).toEqual([
       'B-2',
     ]);
-    expect((await list({ areaId: 'area-2' })).items.map((v) => v.economicNumber)).toEqual(['a-1']);
+    expect((await list({ areaId: areas.a2 })).items.map((v) => v.economicNumber)).toEqual(['a-1']);
     const page = await list({ limit: 1, offset: 1 });
     expect(page.items.map((v) => v.economicNumber)).toEqual(['B-2']);
     expect(page.total).toBe(3);
@@ -277,12 +285,16 @@ describe('tenant isolation', () => {
     const f = await fixture(world);
     const mine = await seed(world, f.roles.admin);
     // The very same economic number, plate and VIN are free in the other company.
-    const theirs = ok(await platform.vehicles.create(f.adminB.token, corr(), input()));
+    const theirs = ok(
+      await platform.vehicles.create(f.adminB.token, corr(), input({ areaId: areas.b1 })),
+    );
     expect(theirs.id).not.toBe(mine.id);
     expect(ok(await platform.vehicles.list(f.adminB.token, corr(), {})).items).toEqual([theirs]);
     expect(ok(await platform.vehicles.list(f.roles.admin.token, corr(), {})).items).toEqual([mine]);
     // ... and a second copy is still a duplicate inside each company.
-    expect((await platform.vehicles.create(f.adminB.token, corr(), input())).error).toMatchObject({
+    expect(
+      (await platform.vehicles.create(f.adminB.token, corr(), input({ areaId: areas.b1 }))).error,
+    ).toMatchObject({
       code: 'duplicate',
       status: 409,
       field: 'economic_number',
