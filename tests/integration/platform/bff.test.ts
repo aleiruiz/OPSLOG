@@ -43,6 +43,13 @@ const DOCUMENT_NEW = {
   title: 'Tarjeta de circulación',
   expiresOn: '2027-03-31',
 };
+const POLICY_NEW = {
+  insurer: 'Aseguradora Ficticia',
+  policyNumber: 'POL-001',
+  coverageType: 'comprehensive',
+  startsOn: '2026-01-01',
+  endsOn: '2026-12-31',
+};
 const SETTINGS = { name: 'Nombre nuevo', mfa: 'disabled', sessionIdleHours: 8 };
 
 interface Fixture {
@@ -56,6 +63,7 @@ interface Fixture {
   readonly vehicleId: string;
   readonly employeeId: string;
   readonly documentId: string;
+  readonly policyId: string;
   readonly areaId: string;
   /** Area that holds the fixture vehicle (a vehicle's area must be an active area of its tenant). */
   readonly fleetAreaId: string;
@@ -97,6 +105,10 @@ async function fixture(options: Parameters<typeof createBffWorld>[0] = {}): Prom
     json: { ...DOCUMENT_NEW, ownerId: vehicle.json.id },
   });
   if (document.status !== 201) throw new Error('document fixture failed');
+  const policy = await adminA.post('/api/insurance-policies', {
+    json: { ...POLICY_NEW, vehicleId: vehicle.json.id },
+  });
+  if (policy.status !== 201) throw new Error('policy fixture failed');
   const area = await adminA.post('/api/areas', { json: { name: 'Operaciones' } });
   if (area.status !== 201) throw new Error('area fixture failed');
   return {
@@ -107,6 +119,7 @@ async function fixture(options: Parameters<typeof createBffWorld>[0] = {}): Prom
     vehicleId: vehicle.json.id as string,
     employeeId: employee.json.id as string,
     documentId: document.json.id as string,
+    policyId: policy.json.id as string,
     areaId: area.json.id as string,
     fleetAreaId: fleet.json.id as string,
     viewerA: await world.loginAs('subject-viewer-a'),
@@ -148,6 +161,14 @@ function writes(f: Fixture): [string, string, unknown?][] {
     ['PUT', `/api/documents/${f.documentId}`, { version: 1, title: 'Otra' }],
     ['POST', `/api/documents/${f.documentId}/renew`, { version: 1, expiresOn: '2028-03-31' }],
     ['POST', `/api/documents/${f.documentId}/archive`, { version: 1 }],
+    ['POST', '/api/insurance-policies', { ...POLICY_NEW, vehicleId: f.vehicleId }],
+    ['PUT', `/api/insurance-policies/${f.policyId}`, { version: 1, insurer: 'Otra Ficticia' }],
+    [
+      'POST',
+      `/api/insurance-policies/${f.policyId}/renew`,
+      { version: 1, startsOn: '2027-01-01', endsOn: '2027-12-31' },
+    ],
+    ['POST', `/api/insurance-policies/${f.policyId}/archive`, { version: 1 }],
     ['POST', '/api/areas', { name: 'Nueva area' }],
     ['PUT', `/api/areas/${f.areaId}`, { version: 1, name: 'Renombrada' }],
     ['POST', `/api/areas/${f.areaId}/deactivate`, { version: 1 }],
@@ -168,6 +189,8 @@ async function snapshot(f: Fixture) {
     employeesB: await get(f.adminB, '/api/employees?includeArchived=true&limit=100'),
     documents: await get(f.adminA, '/api/documents?includeArchived=true&limit=100'),
     documentsB: await get(f.adminB, '/api/documents?includeArchived=true&limit=100'),
+    policies: await get(f.adminA, '/api/insurance-policies?includeArchived=true&limit=100'),
+    policiesB: await get(f.adminB, '/api/insurance-policies?includeArchived=true&limit=100'),
     areas: await get(f.adminA, '/api/areas?includeInactive=true&limit=100'),
     areasB: await get(f.adminB, '/api/areas?includeInactive=true&limit=100'),
     settingsB: await get(f.adminB, '/api/company/settings'),
@@ -624,6 +647,10 @@ describe('request limits through HTTP', () => {
       ['PUT', `/api/documents/${f.documentId}`],
       ['POST', `/api/documents/${f.documentId}/renew`],
       ['POST', `/api/documents/${f.documentId}/archive`],
+      ['POST', '/api/insurance-policies'],
+      ['PUT', `/api/insurance-policies/${f.policyId}`],
+      ['POST', `/api/insurance-policies/${f.policyId}/renew`],
+      ['POST', `/api/insurance-policies/${f.policyId}/archive`],
       ['POST', '/api/areas'],
       ['PUT', `/api/areas/${f.areaId}`],
       ['POST', `/api/areas/${f.areaId}/deactivate`],

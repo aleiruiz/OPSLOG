@@ -13,6 +13,7 @@
     { "path": "../../../packages/persistence/vehicles" },
     { "path": "../../../packages/persistence/areas" },
     { "path": "../../../packages/persistence/employees" },
-    { "path": "../../../packages/persistence/documents" }
+    { "path": "../../../packages/persistence/documents" },
+    { "path": "../../../packages/persistence/insurance" }
   ]
 }

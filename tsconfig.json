@@ -14,6 +14,8 @@
     { "path": "./packages/persistence/employees" },
     { "path": "./packages/domain/documents" },
     { "path": "./packages/persistence/documents" },
+    { "path": "./packages/domain/insurance" },
+    { "path": "./packages/persistence/insurance" },
     { "path": "./packages/platform/pii" },
     { "path": "./packages/ui" },
     { "path": "./apps/api/tenants" },
