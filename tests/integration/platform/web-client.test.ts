@@ -8,6 +8,7 @@ import {
   createDocumentsClient,
   createAlertsClient,
   createAssignmentsClient,
+  createImportsClient,
   createInsuranceClient,
   createEmployeesClient,
   createVehiclesClient,
@@ -612,6 +613,56 @@ describe('typed client against the real BFF', () => {
       error: { status: 404 },
     });
 
+    // Bulk import through the typed client.
+    const imports = createImportsClient(client);
+    const importRows = [
+      {
+        economicNumber: 'IMP-1',
+        plate: 'IMP001',
+        make: 'Toyota',
+        model: 'Hilux',
+        year: '2022',
+        areaId: fleet.value.id,
+        odometerKm: '5',
+      },
+    ];
+    const validated = await imports.submit({
+      entity: 'vehicle',
+      mode: 'dry_run',
+      rows: importRows,
+    });
+    if (!validated.ok) throw new Error('import dry run failed');
+    expect(validated.value).toMatchObject({
+      replayed: false,
+      job: { status: 'validated', validRows: 1 },
+    });
+    const imported = await imports.submit({
+      entity: 'vehicle',
+      mode: 'commit_all',
+      idempotencyKey: 'web-client-import-1',
+      dryRunJobId: validated.value.job.id,
+      rows: importRows,
+    });
+    expect(imported).toMatchObject({ ok: true, value: { job: { status: 'imported' } } });
+    expect(await imports.list({ status: 'imported' })).toMatchObject({
+      ok: true,
+      value: { total: 1 },
+    });
+    expect(await imports.list()).toMatchObject({ ok: true, value: { total: 2 } });
+    expect(await imports.get(validated.value.job.id)).toMatchObject({ ok: true });
+    expect(await imports.rows(validated.value.job.id)).toMatchObject({
+      ok: true,
+      value: { total: 1 },
+    });
+    expect(await imports.rows(validated.value.job.id, { outcome: 'valid' })).toMatchObject({
+      ok: true,
+      value: { total: 1 },
+    });
+    expect(await imports.history(validated.value.job.id)).toMatchObject({ ok: true });
+    expect(await imports.history(validated.value.job.id, { limit: 25 })).toMatchObject({
+      ok: true,
+    });
+    expect(await imports.get('desconocido')).toMatchObject({ ok: false, error: { status: 404 } });
     // Expiry alerts and their settings through the typed client.
     const alerts = createAlertsClient(client);
     const permit = await documents.create({

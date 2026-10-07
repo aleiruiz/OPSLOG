@@ -17,6 +17,7 @@ export { InMemoryDocumentStore } from '../../../../packages/domain/documents/src
 export { InMemoryPolicyStore } from '../../../../packages/domain/insurance/src/index.js';
 export { InMemorySettingsStore } from '../../../../packages/domain/settings/src/index.js';
 export { InMemoryAssignmentStore } from '../../../../packages/domain/assignments/src/index.js';
+export { InMemoryImportStore } from '../../../../packages/domain/imports/src/index.js';
 export { InMemoryEmployeeStore } from '../../../../packages/domain/employees/src/index.js';
 export { EnvelopePiiCipher, LocalDevKms } from '../../../../packages/platform/pii/src/index.js';
 export { InMemoryVehicleStore } from '../../../../packages/domain/vehicles/src/index.js';

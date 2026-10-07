@@ -129,19 +129,21 @@ export function createBffHandler(options: BffOptions): BffHandler {
       const { route, params } = found.match;
       routeId = route.id;
       const headers = normalizeHeaders(request.headers);
+      // Bulk import is the only route that takes more than the default (it carries up to 500 rows).
+      const bodyLimit = route.maxBodyBytes ?? maxBody;
 
       // Body limits come before anything that depends on identity.
       let body = new Uint8Array(0);
       if (BODY_METHODS.has(method)) {
         const length = declaredLength(headers);
         if (length === 'invalid') return errorResponse('bad_request', correlationId);
-        if (length !== null && length > maxBody)
+        if (length !== null && length > bodyLimit)
           return errorResponse('payload_too_large', correlationId, { connection: 'close' });
         const contentType = singleHeader(headers, 'content-type');
         if (headers['content-type'] !== undefined && !isJsonContentType(contentType))
           return errorResponse('unsupported_media_type', correlationId);
         try {
-          body = await readBody(request, maxBody);
+          body = await readBody(request, bodyLimit);
         } catch (error) {
           if (error instanceof BodyTooLarge)
             return errorResponse('payload_too_large', correlationId, { connection: 'close' });

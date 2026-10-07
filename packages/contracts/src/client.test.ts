@@ -5,6 +5,7 @@ import {
   createDocumentsClient,
   createAlertsClient,
   createAssignmentsClient,
+  createImportsClient,
   createInsuranceClient,
   createEmployeesClient,
   createVehiclesClient,
@@ -656,6 +657,44 @@ describe('assignments client', () => {
       'GET /api/vehicle-assignments/a1/history?limit=25',
       'POST /api/vehicle-assignments',
       'POST /api/vehicle-assignments/a1/end',
+    ]);
+  });
+});
+
+describe('imports client', () => {
+  it('maps each method to its route, method and path, and returns the conflict as a value', async () => {
+    const { fetch, seen } = transport((request) => {
+      if (request.url === '/api/auth/csrf') return { status: 200, body: { csrfToken: 'tok' } };
+      if (request.url === '/api/auth/session') return { status: 200, body: session('tok') };
+      if (request.method === 'POST' && request.url === '/api/imports')
+        return { status: 409, body: errorBody('conflict', 409) };
+      return { status: 200, body: { items: [], total: 0 } };
+    });
+    const imports = createImportsClient(createBffClient({ fetch }));
+    await imports.list();
+    await imports.list({ entity: 'vehicle', status: 'validated' });
+    await imports.get('j1');
+    await imports.rows('j1');
+    await imports.rows('j1', { outcome: 'invalid', limit: 50 });
+    await imports.history('j1');
+    await imports.history('j1', { limit: 25 });
+    const refused = await imports.submit({
+      entity: 'vehicle',
+      mode: 'commit_valid',
+      idempotencyKey: 'key-12345678',
+      csv: 'plate\nABC1',
+    });
+    expect(refused).toMatchObject({ ok: false, error: { code: 'conflict' } });
+    const calls = seen.filter((entry) => !entry.url.startsWith('/api/auth/'));
+    expect(calls.map((entry) => `${entry.method} ${entry.url}`)).toEqual([
+      'GET /api/imports',
+      'GET /api/imports?entity=vehicle&status=validated',
+      'GET /api/imports/j1',
+      'GET /api/imports/j1/rows',
+      'GET /api/imports/j1/rows?outcome=invalid&limit=50',
+      'GET /api/imports/j1/history',
+      'GET /api/imports/j1/history?limit=25',
+      'POST /api/imports',
     ]);
   });
 });
