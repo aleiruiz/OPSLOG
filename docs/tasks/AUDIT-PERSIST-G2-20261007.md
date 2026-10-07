@@ -9,7 +9,8 @@ milestone: M2
 kind: implementation
 base_sha: a324fb9cd9e288fe2b4147e19b8f8691e7758b00
 status: package-ready; implementation not started
-depends_on: [CORE-AUDIT-M1-20261004, CORE-INTEGRATE-M1-20261006, FLT-INTEGRATE-G2-20261007]
+depends_on: [CORE-AUDIT-M1-20261004, CORE-INTEGRATE-M1-20261006]
+blocked_consumers: [FLT-INTEGRATE-G2-20261007 (blocked until durable audit remediation is accepted)]
 requirements:
   [FR-170, FR-171 (tenant-scoped backend prerequisite only), NFR-SC2, SPECS-4, SPECS-4.4, SPECS-5.2]
 source_decisions: [ADR-0004, ADR-0005, ADR-0006, ADR-0001, ADR-0002]
@@ -27,6 +28,7 @@ write_paths:
     tests/e2e/fleet/**,
     tests/harness/**,
     package.json,
+    pnpm-lock.yaml,
     tsconfig*.json,
     docs/tasks/AUDIT-PERSIST-G2-20261007.md,
   ]
@@ -62,7 +64,6 @@ forbidden_paths:
     Tasks.md,
     .orchestrator/**,
     .env*,
-    pnpm-lock.yaml,
     packages/contracts/**,
     infra/aws/**,
   ]
@@ -73,6 +74,8 @@ acceptance:
   - 'Given raw audit input containing unknown fields, PII or credentials, When it reaches the persistence boundary, Then only the allowlisted sanitized representation is stored and returned.'
   - 'Given the runtime database account, When it attempts DDL, UPDATE or DELETE on audit rows, Then MySQL denies the operation; the separate migrator can apply/revert versioned schema changes.'
   - 'Given a synthetic MySQL 8 database and concurrent writers/readers, When restart, transient DB failure, retries and tenant A/B races are exercised, Then committed events remain immutable, deduplicated and tenant-isolated, and CI actually executes every scenario.'
+  - 'Given NFR-SC2, When the schema is applied to MySQL 8, Then the audit event log is partitioned by date and queries constrain tenant plus the relevant time range; partition rollover is tested without deleting retained audit data.'
+  - 'Given the same (tenantId,eventId) is retried with a different event date/partition, When MySQL persists the retry, Then global idempotency still holds and the original event is never duplicated or overwritten.'
 commands:
   [
     pnpm baseline:check,
@@ -103,6 +106,8 @@ integration_cases:
     two-connection concurrent append,
     retry after transient failure,
     A/B same eventId isolation,
+    date partition creation/rollover and partition-pruned tenant/time reads,
+    duplicate eventId across dates remains globally idempotent,
     permission-gated tenant-scoped read,
     worker checkpoint/retry without handler replay,
     fail-closed behavior per approved atomicity decision,
@@ -125,13 +130,14 @@ non_goals:
     cross-tenant query,
     UI/S26 export,
     public contract changes,
-    unapproved retention/partitioning,
+    unapproved retention policy,
     AWS,
     production,
     M3,
     real data,
   ]
 max_repair_cycles: 3
+lockfile_scope: 'Coordinator-authorized only for the new packages/persistence/audit importer and dependencies strictly required by that package; add the minimal importer/dependency delta, with no broad lockfile regeneration or unrelated importer changes.'
 completion_evidence:
   [
     exact base/head SHA,
@@ -147,6 +153,8 @@ rollback: 'Revert application/adapter code and the additive versioned migration;
 ## Objetivo y frontera
 
 Reemplazar el adaptador de auditoría en memoria por una implementación TypeORM/MySQL durable que conserve el contrato de auditoría y la idempotencia por tenant. “Global” significa consultar el registro de auditoría de toda la empresa/tenant autorizado, conforme a FR-171 y S26; no significa una consulta multi-tenant ni una capacidad de soporte que pueda enumerar empresas. El tenant se deriva del contexto de sesión confiable y se valida en toda lectura y escritura. No añadir endpoint de consulta cross-tenant, filtro de tenant proporcionado por el cliente, impersonación ni acceso global de operador.
+
+`FLT-INTEGRATE-G2-20261007` es un consumidor bloqueado por la ausencia de audit durable y el contexto de remediación que este paquete busca desbloquear; no es dependencia previa para iniciar esta tarea.
 
 El estado actual en `packages/platform/audit/src/index.ts` es `append(event): void` y `list(tenantId): readonly PersistedAuditEvent[]`; `Platform.listAudit` autentica y exige `view_audit`, y entrega `context.tenantId` al store. El valor predeterminado de composición continúa siendo `InMemoryAuditStore`. Los registros de historial de cada dominio no sustituyen el AuditStore global persistente.
 
@@ -164,13 +172,14 @@ El paquete no adopta una semántica incompatible por inferencia. El orquestador/
 | Atomicidad con el comando | SPECS §5.2 exige comando + historial + audit local + outbox atómicos. BRD §16.3 describe almacenamiento de audit separado del transaccional. El worker ya checkpointa el handler antes de append y reintenta audit sin repetir el handler. | Elegir y documentar una estrategia compatible antes de declarar durable: escritura audit dentro de la transacción del comando en la misma base tenant, o un outbox de auditoría durable escrito atómicamente con el comando y consumido idempotentemente. No afirmar atomicidad ni aceptar “el comando respondió éxito, se perdió audit”. Determinar qué operación queda bloqueada/reintentable si la persistencia falla. Sin esta decisión el requisito permanece P1 y la tarea/gate no puede aceptarse. |
 | Conflicto idempotente     | El store en memoria conserva silenciosamente el primer evento para la misma clave.                                                                                                                                                         | Definir igualdad canónica para retry idéntico y respuesta estable de conflicto cuando `(tenantId,eventId)` coincide con contenido diferente; nunca actualizar una fila existente.                                                                                                                                                                                                                                                                                                                         |
 | Consulta y FR-171         | El endpoint actual entrega la lista completa del tenant autorizado; el BRD pide filtros/exportación y el UI S26.                                                                                                                           | Esta tarea cubre persistencia y lectura tenant-scoped necesarias para G2. No crear UI, exportación ni capacidades nuevas de filtros; aclarar paginación/orden/límite para evitar lectura ilimitada. FR-171 de producto sigue parcialmente abierto hasta su paquete UI/API propio.                                                                                                                                                                                                                         |
-| NFR-SC2 / retención       | BRD propone particionar auditoría por fecha y BRD §16.3 pide retención mínima de cinco años como decisión normativa pendiente.                                                                                                             | Confirmar si partición/retención se implementan ahora o se mantienen explícitamente pendientes; no borrar filas ni fijar una retención normativa por inferencia. Índices comienzan por tenant y usan los filtros/orden acordados.                                                                                                                                                                                                                                                                         |
+| NFR-SC2 / retención       | NFR-SC2 exige particionar audit log y notificaciones por fecha; para esta tarea aplica audit log. BRD §16.3 etiqueta la retención mínima de cinco años como `[DECISION REQUIRED — normativa]`.                                             | Implementar particiones de audit por fecha y demostrar creación/rotación y lecturas tenant+tiempo. Mantener cinco años como requisito pendiente de decisión normativa; no borrar filas ni inventar política de retención. Índices/query plans empiezan por tenant y acotan fecha cuando aplique.                                                                                                                                                                                                          |
 
 La lista actual de call sites que debe migrar/probar incluye: `PlatformKernel.auditNow` y sus usos en `apps/api/composition/src/platform/{apis,invitations,members,sessions,settings}.ts`; la lectura `listAudit` en `apps/api/composition/src/platform/events.ts`; `packages/platform/files/src/pipeline.ts`; `apps/api/files/src/index.ts` (escrituras y rutas de error); y `apps/worker/base/src/index.ts` (append posterior al checkpoint). Composición/inyección está en `apps/api/composition/src/platform.ts`, `platform/types.ts` y `apps/worker/composition/src/index.ts`. Actualizar pruebas/mocks que consumen esos ports; buscar todos los usos antes de editar y no asumir que esta lista sustituye al grep del implementador.
 
 ## Requisitos de persistencia y seguridad
 
 - Tabla append-only con identidad compuesta `(tenant_id,event_id)` (o mapeo `company_id` equivalente), `tenant_id` presente en claves/índices, timestamps UTC, campos tipados y datos allowlisted. Mismo `eventId` en tenants diferentes es válido.
+- NFR-SC2 es requisito explícito: particionar el audit log por fecha. La política de retención de cinco años está separadamente marcada como `[DECISION REQUIRED — normativa]` en BRD §16.3 y permanece pendiente; particionar no autoriza a eliminar datos. MySQL 8 exige que toda columna de la expresión de partición esté en cada clave única de una tabla particionada ([MySQL 8.0 Reference Manual, §26.6.1](https://dev.mysql.com/doc/refman/8.0/en/partitioning-limitations-partitioning-keys-unique-keys.html)). Como el requisito de idempotencia `(tenant_id,event_id)` debe aplicar entre fechas/particiones, implementar una tabla-registro no particionada con esa clave compuesta y huella del evento, escrita atómicamente con la fila append-only en la partición temporal; comparar duplicados con la huella y rechazar contenido distinto sin actualizar. Si se propone otra estructura, demostrar la misma unicidad global en MySQL real antes de aceptarla.
 - Sanitizar de nuevo en el límite del adaptador, incluso si quien llama entrega un evento raw. Persistir solo los campos tipados actuales y `AuditData` allowlisted; no guardar cuerpos HTTP, secretos, credenciales, PII libre, valores previos/nuevos sin política aprobada, ni campos extra. Verificar actor/correlation/entity IDs y manejo de entrada inválida con las reglas actuales de `packages/platform/audit`.
 - Consultas parametrizadas siempre restringidas por tenant y filtros permitidos. `view_audit` se exige antes de ejecutar la lectura; se deriva tenant desde `TenantContext`, sin aceptar tenant de body/query/header. No debe existir API de store para `listAllTenants`.
 - Runtime DB user obtiene solo `SELECT`/`INSERT` (y permisos mínimos expresamente justificados) sobre la tabla de auditoría; nunca DDL, `UPDATE`, `DELETE`, `GRANT` o privilegio master. Cuenta/rol de migración independiente, limitado a DDL. Probar grants efectivos contra MySQL, no solo inspeccionar configuración.
@@ -192,16 +201,16 @@ La lista actual de call sites que debe migrar/probar incluye: `PlatformKernel.au
 | Requisito/fuente                   | Contrato actual / brecha                                                                                                | Implementación propuesta (no escrita aún)                                                                                                                                                                    | Prueba/evidencia requerida                                                                                               |
 | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
 | FR-170; BRD §16.1–16.3; SPECS §5.2 | `AuditStore` sync e in-memory; append deduplica por tenant/evento; `PersistedAuditEvent` allowlisted.                   | `packages/platform/audit/**` (port async/semántica acordada) y nuevo `packages/persistence/audit/**` (entidad, store TypeORM, migración).                                                                    | Unitarias sanitización/idempotencia/conflicto; MySQL insert/read/restart/concurrencia/grants.                            |
-| SPECS §4 y §4.4; NFR-SC2 propuesto | `listAudit` requiere `view_audit` y deriva tenant de sesión; no debe ampliarse a una consulta cross-tenant.             | `apps/api/composition/**`, `apps/api/files/**`, `packages/platform/files/**`, `apps/worker/base/**`, `apps/worker/composition/**`, `infra/runtime/**`: inyección, awaits, fallo/retry y query tenant-scoped. | A/B con IDs iguales, role deny/allow, inspección de filas/resultado SQL y ausencia de datos ajenos.                      |
+| SPECS §4 y §4.4; NFR-SC2           | `listAudit` requiere `view_audit` y deriva tenant de sesión; no debe ampliarse a una consulta cross-tenant.             | `apps/api/composition/**`, `apps/api/files/**`, `packages/platform/files/**`, `apps/worker/base/**`, `apps/worker/composition/**`, `infra/runtime/**`: inyección, awaits, fallo/retry y query tenant-scoped. | A/B con IDs iguales, role deny/allow, inspección de filas/resultado SQL y ausencia de datos ajenos.                      |
 | FR-171 / S26 (parcial)             | BRD pide consulta global filtrable/exportable; el endpoint actual lista audit del tenant sin filtros y sin UI completa. | Mantener endpoint actual tenant-scoped y límites de lectura; filtros/export/UI quedan fuera hasta paquete propio.                                                                                            | Contrato HTTP autorizado y prueba de tenant/permisos; documentar gap restante sin atribuir cumplimiento total de FR-171. |
 | Outbox M1 / worker                 | Worker guarda `handlerCompleted` antes de audit append y, ante error, recupera para retry sin reejecutar handler.       | Preservar/revisar `apps/worker/base/**` y añadir adapter durable en esa ruta después de decidir atomicidad.                                                                                                  | MySQL crash/restart con checkpoint + audit retry, error SQL, dedup y contador/efecto de handler exactamente una vez.     |
 | SPECS §5.2 vs BRD §16.3            | Alcance de atomicidad/almacenamiento separado requiere resolución explícita.                                            | Decisión/contrato antes de código; luego incluir transacción/outbox que corresponda dentro de rutas reservadas.                                                                                              | Escenario crash de aceptación 6, evidencia durable y documentación de límites.                                           |
 
 ## Paths, dependencias y límites de implementación
 
-Paths propuestos son los `write_paths` del frontmatter. El paquete `packages/persistence/audit/**` es nuevo; confirmar su registro en los globs de workspace y las referencias TypeScript. Si configuración compartida adicional, workflow, `packages/contracts/**`, manifests, migración fuera del slice, o código consumidor no enumerado resulta necesario, detenerse y pedir paquete/lease ampliado antes de tocarlo. `pnpm-lock.yaml` no se edita salvo coordinación explícita separada.
+Paths propuestos son los `write_paths` del frontmatter. El paquete `packages/persistence/audit/**` es nuevo; confirmar su registro en los globs de workspace y las referencias TypeScript. Se autoriza `pnpm-lock.yaml` exclusivamente para agregar el importer de ese paquete y sus dependencias indispensables, con lease de path explícito del coordinador; no regenerar el lockfile completo ni modificar importers ajenos. Si configuración compartida adicional, workflow, `packages/contracts/**`, manifests, migración fuera del slice, o código consumidor no enumerado resulta necesario, detenerse y pedir paquete/lease ampliado antes de tocarlo.
 
-No cambiar baselines, contratos públicos BFF/HTTP, modelo de permisos, UI, exportación S26, formato de reportes, retención normativa, particionamiento, flujos M3, AWS, producción ni datos reales. La aprobación de este paquete no equivale a aceptación de implementación o G2. Dependencia crítica: resolución de interfaz async y atomicidad arriba; hasta que exista, son bloqueantes explícitos, no supuestos del autor.
+No cambiar baselines, contratos públicos BFF/HTTP, modelo de permisos, UI, exportación S26, formato de reportes, política de retención de cinco años, flujos M3, AWS, producción ni datos reales. La partición temporal del audit log es requisito de NFR-SC2 y sí forma parte del alcance. La aprobación de este paquete no equivale a aceptación de implementación o G2. Dependencia crítica: resolución de interfaz async y atomicidad arriba; hasta que exista, son bloqueantes explícitos, no supuestos del autor.
 
 ## Comandos y evidencia
 
