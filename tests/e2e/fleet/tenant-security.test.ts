@@ -23,11 +23,36 @@ suite('integrated tenant and permission boundaries on real MySQL', () => {
     const areaB = await fleet.area(fleet.adminB, 'Área privada B');
     const vehicleA = await fleet.vehicle(fleet.adminA, areaA, 'SEC-A');
     const driverA = await fleet.driver(fleet.adminA, areaA, 'SEC-DRIVER');
+    const document = await fleet.adminA.post('/api/documents', {
+      json: {
+        ownerType: 'vehicle',
+        ownerId: vehicleA,
+        typeCode: 'registration_card',
+        title: 'Tarjeta sintética privada',
+        documentNumber: 'SYNTH-DOC-SEC-A',
+        issuedOn: '2025-10-01',
+        expiresOn: '2027-10-01',
+      },
+    });
+    expect(document.status, document.text).toBe(201);
+    const policy = await fleet.adminA.post('/api/insurance-policies', {
+      json: {
+        vehicleId: vehicleA,
+        insurer: 'Aseguradora Sintética',
+        policyNumber: 'SYNTH-POL-SEC-A',
+        coverageType: 'comprehensive',
+        startsOn: '2026-01-01',
+        endsOn: '2027-01-01',
+      },
+    });
+    expect(policy.status, policy.text).toBe(201);
 
     for (const foreignRead of [
       fleet.adminB.get(`/api/areas/${areaA}`),
       fleet.adminB.get(`/api/vehicles/${vehicleA}`),
       fleet.adminB.get(`/api/employees/${driverA}`),
+      fleet.adminB.get(`/api/documents/${document.json.id}`),
+      fleet.adminB.get(`/api/insurance-policies/${policy.json.id}`),
     ])
       expect((await foreignRead).status).toBe(404);
 
@@ -59,6 +84,8 @@ suite('integrated tenant and permission boundaries on real MySQL', () => {
     });
     expect(employeeView.text).not.toContain('SYNTH-ID');
     expect(employeeView.text).not.toContain('LIC-');
+    expect(employeeView.text).not.toContain('+52 555 100');
+    expect(employeeView.text).not.toContain('@synthetic.example');
 
     const vehicleRows = await database.rows<{ company_id: string; economic_number: string }>(
       'SELECT company_id, economic_number FROM opslog_vehicles WHERE id = ?',

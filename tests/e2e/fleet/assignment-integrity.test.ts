@@ -43,6 +43,24 @@ suite('integrated assignment integrity on real MySQL', () => {
 
     const hidden = await fleet.adminB.get(`${ASSIGNMENTS}/${oldId}`);
     expect(hidden.status).toBe(404);
+    const foreignMutation = await fleet.adminB.post(ASSIGNMENTS, {
+      json: {
+        vehicleId,
+        employeeId: expiredDriver,
+        type: 'principal',
+        reason: 'IDs de otro tenant',
+      },
+    });
+    expect(foreignMutation.status).toBe(422);
+    expect(foreignMutation.json).toMatchObject({ code: 'invalid_vehicle' });
+    expect(foreignMutation.text).not.toContain(vehicleId);
+    expect(foreignMutation.text).not.toContain(expiredDriver);
+    expect(
+      await database.rows(
+        'SELECT id FROM opslog_vehicle_assignments WHERE company_id = ? AND vehicle_id = ?',
+        [fleet.tenantB, vehicleId],
+      ),
+    ).toEqual([]);
     expect(
       (
         await fleet.viewerA.post(ASSIGNMENTS, {

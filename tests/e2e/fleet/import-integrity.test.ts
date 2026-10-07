@@ -103,6 +103,45 @@ suite('integrated CSV import on real MySQL', () => {
     });
     expect(forbidden.status).toBe(403);
 
+    const foreignAreaCsv = [
+      'economicNumber,plate,make,model,year,areaId,odometerKm,vin',
+      `FOREIGN-001,FRGN001,Toyota,Hilux,2022,${areaId},10,`,
+      '',
+    ].join('\r\n');
+    const vehicleCountB = await database.rows<{ count: number }>(
+      'SELECT COUNT(*) AS count FROM opslog_vehicles WHERE company_id = ?',
+      [fleet.tenantB],
+    );
+    const foreignPreview = await fleet.adminB.post(IMPORTS, {
+      json: { entity: 'vehicle', mode: 'dry_run', csv: foreignAreaCsv },
+    });
+    expect(foreignPreview.status, foreignPreview.text).toBe(201);
+    expect(foreignPreview.json.job).toMatchObject({ validRows: 0, invalidRows: 1 });
+    const foreignCommit = await fleet.adminB.post(IMPORTS, {
+      json: {
+        entity: 'vehicle',
+        mode: 'commit_valid',
+        idempotencyKey: 'flt-foreign-area-commit-01',
+        dryRunJobId: foreignPreview.json.job.id,
+        csv: foreignAreaCsv,
+      },
+    });
+    expect(foreignCommit.status, foreignCommit.text).toBe(201);
+    expect(foreignCommit.json.job).toMatchObject({
+      status: 'failed',
+      importedRows: 0,
+      invalidRows: 1,
+    });
+    expect(foreignCommit.text).not.toContain(areaId);
+    expect(await fleet.adminA.get(`${IMPORTS}/${foreignCommit.json.job.id}`)).toMatchObject({
+      status: 404,
+    });
+    const vehicleCountBAfter = await database.rows<{ count: number }>(
+      'SELECT COUNT(*) AS count FROM opslog_vehicles WHERE company_id = ?',
+      [fleet.tenantB],
+    );
+    expect(vehicleCountBAfter).toEqual(vehicleCountB);
+
     const storedJob = await database.rows<{ company_id: string; total_rows: number }>(
       'SELECT company_id, total_rows FROM opslog_import_jobs WHERE id = ?',
       [committed.json.job.id],
