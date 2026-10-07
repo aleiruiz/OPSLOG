@@ -306,6 +306,60 @@ describe('createHttpApi', () => {
     });
   });
 
+  it('maps every assignment and import call to its route', async () => {
+    const { api, calls } = scripted({});
+    await api.assignments.list();
+    await api.assignments.list({ vehicleId: 'veh-1', current: true });
+    await api.assignments.get('asg-1');
+    await api.assignments.assign({
+      vehicleId: 'veh-1',
+      employeeId: 'emp-1',
+      type: 'principal',
+      reason: 'Ruta',
+      replace: true,
+    });
+    await api.assignments.end('asg-1', { version: 2, reason: 'Fin' });
+    await api.assignments.history('asg-1');
+    await api.assignments.history('asg-1', { limit: 50, cursor: 'c' });
+    await api.imports.list();
+    await api.imports.list({ entity: 'vehicle' });
+    await api.imports.get('imp-1');
+    await api.imports.submit({ entity: 'vehicle', mode: 'dry_run', csv: 'a' });
+    await api.imports.rows('imp-1');
+    await api.imports.rows('imp-1', { outcome: 'invalid', limit: 25 });
+    await api.imports.history('imp-1');
+    await api.imports.history('imp-1', { limit: 25 });
+    expect(calls.map((call) => call.id)).toEqual([
+      'assignments.list',
+      'assignments.list',
+      'assignments.get',
+      'assignments.create',
+      'assignments.end',
+      'assignments.history',
+      'assignments.history',
+      'imports.list',
+      'imports.list',
+      'imports.get',
+      'imports.create',
+      'imports.rows',
+      'imports.rows',
+      'imports.history',
+      'imports.history',
+    ]);
+    expect(calls[1]?.input).toEqual({ query: { vehicleId: 'veh-1', current: true } });
+    expect(calls[4]?.input).toEqual({
+      params: { id: 'asg-1' },
+      body: { version: 2, reason: 'Fin' },
+    });
+    expect(calls[10]?.input).toEqual({
+      body: { entity: 'vehicle', mode: 'dry_run', csv: 'a' },
+    });
+    expect(calls[12]?.input).toEqual({
+      params: { id: 'imp-1' },
+      query: { outcome: 'invalid', limit: 25 },
+    });
+  });
+
   it('passes failures through untouched and exposes the identity provider', async () => {
     const oidc = createFakeOidc();
     const client = { call: async () => failure } as unknown as BffClient;

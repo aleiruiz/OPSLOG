@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { fileSignatureOf, inspect, signatureOf, toInput, validate, type ImportFormValues } from './formModel';
+import {
+  fileSignatureOf,
+  inspect,
+  signatureOf,
+  toInput,
+  validate,
+  type ImportFormValues,
+} from './formModel';
 import { MAX_CSV_LENGTH } from './rules';
 
 const vehicleHeader = 'economicNumber,plate,make,model,year,areaId,odometerKm';
@@ -26,10 +33,16 @@ describe('import file rules', () => {
   });
 
   it('explains header problems: too many, unknown, repeated and missing columns', () => {
-    expect(errorOf(Array.from({ length: 17 }, (_, i) => `c${i}`).join(','))).toMatch(/más de 16 columnas/);
-    expect(errorOf(`${vehicleHeader},color\n${vehicleRow},rojo`)).toMatch(/no están en la plantilla: color/);
+    expect(errorOf(Array.from({ length: 17 }, (_, i) => `c${i}`).join(','))).toMatch(
+      /más de 16 columnas/,
+    );
+    expect(errorOf(`${vehicleHeader},color\n${vehicleRow},rojo`)).toMatch(
+      /no están en la plantilla: color/,
+    );
     expect(errorOf(`${vehicleHeader},plate\n${vehicleRow},x`)).toMatch(/repite columnas: plate/);
-    expect(errorOf('economicNumber,plate\nECO-9,ABC-9')).toMatch(/Faltan columnas obligatorias.*Marca \(make\)/);
+    expect(errorOf('economicNumber,plate\nECO-9,ABC-9')).toMatch(
+      /Faltan columnas obligatorias.*Marca \(make\)/,
+    );
   });
 
   it('explains row problems: none, too many and ragged', () => {
@@ -72,14 +85,23 @@ describe('import file rules', () => {
       mode: 'dry_run',
       csv,
     });
-    expect(toInput(values(csv, { mode: 'commit_all' }), { idempotencyKey: 'k-12345678', dryRunJobId: 'imp-1' })).toEqual({
+    expect(
+      toInput(values(csv, { mode: 'commit_all' }), {
+        idempotencyKey: 'k-12345678',
+        dryRunJobId: 'imp-1',
+      }),
+    ).toEqual({
       entity: 'vehicle',
       mode: 'commit_all',
       csv,
       idempotencyKey: 'k-12345678',
       dryRunJobId: 'imp-1',
     });
-    expect(toInput(values(csv, { mode: 'commit_valid' }))).toEqual({ entity: 'vehicle', mode: 'commit_valid', csv });
+    expect(toInput(values(csv, { mode: 'commit_valid' }))).toEqual({
+      entity: 'vehicle',
+      mode: 'commit_valid',
+      csv,
+    });
   });
 
   it('tells apart requests and files by their signature', () => {

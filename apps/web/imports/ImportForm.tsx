@@ -163,6 +163,15 @@ export function ImportForm({
                   },
                 ]
               : []),
+            ...(values.mode !== 'dry_run'
+              ? [
+                  {
+                    id: 'commit-note',
+                    text: 'Este modo crea registros reales. Te recomendamos validar el archivo antes. Si reintentas por un fallo de conexión, la importación no se duplica.',
+                    severity: 'warning' as const,
+                  },
+                ]
+              : []),
           ]}
         />
         <FormSection
@@ -290,17 +299,6 @@ export function ImportForm({
             fullWidth
           />
         </FormSection>
-        {values.mode !== 'dry_run' && (
-          <Notifications
-            messages={[
-              {
-                id: 'commit-note',
-                text: 'Este modo crea registros reales. Te recomendamos validar el archivo antes. Si reintentas por un fallo de conexión, la importación no se duplica.',
-                severity: 'warning',
-              },
-            ]}
-          />
-        )}
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
           <Button
             type="submit"

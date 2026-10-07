@@ -36,7 +36,7 @@ describe('route matching', () => {
     expect(resolveRoute('/flota/vehiculos/a/b/c')).toBeNull();
     // Only the lists are in the navigation, under "Flota".
     expect(routes.filter((route) => route.nav?.group === 'Flota').map((route) => route.id)).toEqual(
-      ['vehicles', 'documents', 'policies', 'alerts'],
+      ['vehicles', 'assignments', 'documents', 'policies', 'alerts', 'imports'],
     );
   });
 
@@ -65,6 +65,30 @@ describe('route matching', () => {
       expect(byId[id]).toEqual({ permission: 'create' });
     for (const id of ['documentEdit', 'documentRenew', 'policyEdit', 'policyRenew'])
       expect(byId[id]).toEqual({ permission: 'edit' });
+  });
+
+  it('resolves the assignment and import screens, with "nueva" taking precedence over the id', () => {
+    expect(resolveRoute('/flota/asignaciones')?.route.id).toBe('assignments');
+    expect(resolveRoute('/flota/asignaciones/nueva')?.route.id).toBe('assignmentNew');
+    expect(resolveRoute('/flota/asignaciones/a-1')).toMatchObject({
+      route: { id: 'assignmentDetail' },
+      params: { id: 'a-1' },
+    });
+    expect(resolveRoute('/flota/asignaciones/a-1/cerrar')?.route.id).toBe('assignmentEnd');
+    expect(resolveRoute('/flota/asignaciones/a/b/c')).toBeNull();
+    expect(resolveRoute('/flota/importaciones')?.route.id).toBe('imports');
+    expect(resolveRoute('/flota/importaciones/nueva')?.route.id).toBe('importNew');
+    expect(resolveRoute('/flota/importaciones/i-1')).toMatchObject({
+      route: { id: 'importDetail' },
+      params: { id: 'i-1' },
+    });
+    expect(resolveRoute('/flota/importaciones/i-1/x')).toBeNull();
+    const byId = Object.fromEntries(routes.map((route) => [route.id, route.access]));
+    for (const id of ['assignments', 'assignmentDetail', 'imports', 'importDetail'])
+      expect(byId[id]).toEqual({ permission: 'view' });
+    for (const id of ['assignmentNew', 'importNew'])
+      expect(byId[id]).toEqual({ permission: 'create' });
+    expect(byId['assignmentEnd']).toEqual({ permission: 'edit' });
   });
 
   it('resolves the area screens, with "nueva" taking precedence over the id, under the "Plantilla" group', () => {

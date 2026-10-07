@@ -1,7 +1,8 @@
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import React from 'react';
-import { Button, Notifications, UiState } from '@opslog/ui';
+import { Button, UiState } from '@opslog/ui';
 import type { ResourceState } from '../app/resource';
 import { RouterLink } from '../app/router';
 import type { ImportJob, ImportMode, ImportRow } from '../app/types';
@@ -36,15 +37,9 @@ export function ImportValidationPanel({
   const stale = result.fileSignature !== fileSignatureOf(values);
   if (stale)
     return (
-      <Notifications
-        messages={[
-          {
-            id: 'stale',
-            text: 'Cambiaste el archivo después de validarlo. Valida de nuevo antes de importar.',
-            severity: 'warning',
-          },
-        ]}
-      />
+      <Alert severity="warning" sx={{ mb: 2 }}>
+        {'Cambiaste el archivo después de validarlo. Valida de nuevo antes de importar.'}
+      </Alert>
     );
   const allValid = job.invalidRows === 0;
   return (
@@ -80,26 +75,15 @@ export function ImportValidationPanel({
         ))}
       </Box>
       {allValid ? (
-        <Notifications
-          messages={[
-            {
-              id: 'all-valid',
-              text: 'Todas las filas son válidas. No se creó ningún registro todavía.',
-              severity: 'success',
-            },
-          ]}
-        />
+        <Alert severity="success" sx={{ mb: 2 }}>
+          {'Todas las filas son válidas. No se creó ningún registro todavía.'}
+        </Alert>
       ) : (
         <>
-          <Notifications
-            messages={[
-              {
-                id: 'some-invalid',
-                text: `${number(job.invalidRows)} filas tienen errores y no se importarán. No se creó ningún registro todavía.`,
-                severity: 'warning',
-              },
-            ]}
-          />
+          <Alert
+            severity="warning"
+            sx={{ mb: 2 }}
+          >{`${number(job.invalidRows)} filas tienen errores y no se importarán. No se creó ningún registro todavía.`}</Alert>
           {result.rows.status === 'ready' ? (
             <>
               <ImportRowsTable
