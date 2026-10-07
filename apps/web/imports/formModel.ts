@@ -72,7 +72,9 @@ export function inspect(csv: string, entity: ImportEntity): CsvInspection {
 }
 
 const names = (columns: readonly string[]): string =>
-  [...new Set(columns)].map((name) => columnLabel(name) + (columnLabel(name) === name ? '' : ` (${name})`)).join(', ');
+  [...new Set(columns)]
+    .map((name) => columnLabel(name) + (columnLabel(name) === name ? '' : ` (${name})`))
+    .join(', ');
 
 interface Context {
   /** Whether the session holds `view_pii`: only then employee files may carry personal-data columns. */
@@ -105,7 +107,8 @@ export function validate(values: ImportFormValues, context: Context): FieldError
     errors.csv = `El encabezado repite columnas: ${found.duplicated.join(', ')}.`;
   else if (found.missing.length > 0)
     errors.csv = `Faltan columnas obligatorias en el encabezado: ${names(found.missing)}.`;
-  else if (found.rows === 0) errors.csv = 'El archivo solo tiene el encabezado: agrega al menos una fila.';
+  else if (found.rows === 0)
+    errors.csv = 'El archivo solo tiene el encabezado: agrega al menos una fila.';
   else if (found.rows > MAX_ROWS)
     errors.csv = `El archivo tiene ${found.rows} filas y el máximo es ${MAX_ROWS} por importación. Divídelo en varios archivos.`;
   else if (found.raggedLine !== null)

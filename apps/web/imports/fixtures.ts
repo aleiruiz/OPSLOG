@@ -86,7 +86,12 @@ export function demoImports(count = 28): DemoImport[] {
       : [
           makeEvent({
             seq: 2,
-            kind: job.status === 'validated' ? 'validated' : job.status === 'failed' ? 'failed' : 'imported',
+            kind:
+              job.status === 'validated'
+                ? 'validated'
+                : job.status === 'failed'
+                  ? 'failed'
+                  : 'imported',
             acceptedRows: job.validRows,
             rejectedRows: job.invalidRows,
             at: job.finishedAt,
@@ -109,7 +114,9 @@ export function demoImports(count = 28): DemoImport[] {
         finishedAt: '2026-10-05T15:50:01.000Z',
         version: 2,
       }),
-      rows: rows.map((row) => (row.outcome === 'imported' ? { ...row, outcome: 'valid', entityId: null } : row)),
+      rows: rows.map((row) =>
+        row.outcome === 'imported' ? { ...row, outcome: 'valid', entityId: null } : row,
+      ),
       events: [],
     },
     {
@@ -182,23 +189,28 @@ export function demoImports(count = 28): DemoImport[] {
       events: [],
     },
   ];
-  const filler: DemoImport[] = Array.from({ length: Math.max(0, count - curated.length) }, (_, index) => {
-    const n = curated.length + index + 1;
-    const day = String(Math.max(1, 28 - index)).padStart(2, '0');
-    return {
-      job: makeJob({
-        id: `imp-${String(n).padStart(3, '0')}`,
-        totalRows: 20,
-        validRows: 20,
-        invalidRows: 0,
-        importedRows: 20,
-        createdAt: `2026-09-${day}T10:00:00.000Z`,
-        finishedAt: `2026-09-${day}T10:00:02.000Z`,
-      }),
-      rows: Array.from({ length: 20 }, (_, i) => makeRow({ rowNumber: i + 1, entityId: `veh-${String(100 + i)}` })),
-      events: [],
-    };
-  });
+  const filler: DemoImport[] = Array.from(
+    { length: Math.max(0, count - curated.length) },
+    (_, index) => {
+      const n = curated.length + index + 1;
+      const day = String(Math.max(1, 28 - index)).padStart(2, '0');
+      return {
+        job: makeJob({
+          id: `imp-${String(n).padStart(3, '0')}`,
+          totalRows: 20,
+          validRows: 20,
+          invalidRows: 0,
+          importedRows: 20,
+          createdAt: `2026-09-${day}T10:00:00.000Z`,
+          finishedAt: `2026-09-${day}T10:00:02.000Z`,
+        }),
+        rows: Array.from({ length: 20 }, (_, i) =>
+          makeRow({ rowNumber: i + 1, entityId: `veh-${String(100 + i)}` }),
+        ),
+        events: [],
+      };
+    },
+  );
   return [...curated, ...filler]
     .slice(0, count)
     .map((entry) => ({ ...entry, events: events(entry.job) }));

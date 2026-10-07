@@ -135,7 +135,8 @@ function Report({ job, props }: { job: ImportJob; props: ImportDetailViewProps['
         Informe por fila
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Muestra la fila, el resultado, el motivo y las columnas con problema. Nunca el contenido de las celdas.
+        Muestra la fila, el resultado, el motivo y las columnas con problema. Nunca el contenido de
+        las celdas.
       </Typography>
       <NoSubmit>
         <Box sx={{ maxWidth: 320, mb: 2 }}>

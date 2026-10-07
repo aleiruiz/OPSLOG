@@ -72,7 +72,10 @@ function Detail({
     ],
     [
       'Conductor',
-      <RouterLink to={`/plantilla/empleados/${encodeURIComponent(assignment.employeeId)}`} sx={linkSx}>
+      <RouterLink
+        to={`/plantilla/empleados/${encodeURIComponent(assignment.employeeId)}`}
+        sx={linkSx}
+      >
         {driverName ?? 'Ver conductor'}
       </RouterLink>,
     ],

@@ -88,7 +88,11 @@ describe('mock assignments store', () => {
     // Replacing does not skip BR-003.
     await store.port.assign(input({ vehicleId: 'veh-300', employeeId: 'emp-300' }));
     expect(
-      errorOf(await store.port.assign(input({ vehicleId: 'veh-300', employeeId: 'emp-100', replace: true }))),
+      errorOf(
+        await store.port.assign(
+          input({ vehicleId: 'veh-300', employeeId: 'emp-100', replace: true }),
+        ),
+      ),
     ).toMatchObject({ code: 'principal_taken', fieldErrors: [{ field: 'employee_id' }] });
     // Secondary and temporary have no limit.
     for (const type of ['secondary', 'temporary'])
@@ -121,17 +125,28 @@ describe('mock assignments store', () => {
       'assigned',
     ]);
     // `replace` without a principal to replace just assigns.
-    expect((await store.port.assign(input({ vehicleId: 'veh-9', employeeId: 'emp-9', replace: true }))).ok).toBe(true);
+    expect(
+      (await store.port.assign(input({ vehicleId: 'veh-9', employeeId: 'emp-9', replace: true })))
+        .ok,
+    ).toBe(true);
   });
 
   it('closes an assignment once: unknown is 404, closed is immutable, an old version is stale', async () => {
     const store = fresh();
     const created = await store.port.assign(input());
     const id = created.ok ? created.value.assignment.id : '';
-    expect(errorOf(await store.port.end('nope', { version: 1, reason: 'x' }))).toMatchObject({ status: 404 });
-    expect(errorOf(await store.port.end(id, { version: 0, reason: 'x' }))).toMatchObject({ status: 400 });
-    expect(errorOf(await store.port.end(id, { version: 1, reason: '' }))).toMatchObject({ status: 400 });
-    expect(errorOf(await store.port.end(id, { version: 1, reason: 'x', extra: 1 } as never))).toMatchObject({ status: 400 });
+    expect(errorOf(await store.port.end('nope', { version: 1, reason: 'x' }))).toMatchObject({
+      status: 404,
+    });
+    expect(errorOf(await store.port.end(id, { version: 0, reason: 'x' }))).toMatchObject({
+      status: 400,
+    });
+    expect(errorOf(await store.port.end(id, { version: 1, reason: '' }))).toMatchObject({
+      status: 400,
+    });
+    expect(
+      errorOf(await store.port.end(id, { version: 1, reason: 'x', extra: 1 } as never)),
+    ).toMatchObject({ status: 400 });
     expect(errorOf(await store.port.end(id, { version: 5, reason: 'x' }))).toMatchObject({
       code: 'stale_version',
     });
@@ -150,11 +165,9 @@ describe('mock assignments store', () => {
   it('lists newest first with filters and cursor pages, and answers 404 for an unknown id', async () => {
     const store = createMockAssignmentStore(env(), demoAssignments());
     const first = await store.port.list();
-    expect(first.ok && [first.value.items.length, first.value.total, first.value.nextCursor]).toEqual([
-      25,
-      28,
-      'mock:25',
-    ]);
+    expect(
+      first.ok && [first.value.items.length, first.value.total, first.value.nextCursor],
+    ).toEqual([25, 28, 'mock:25']);
     const second = await store.port.list({ cursor: 'mock:25' });
     expect(second.ok && second.value.items).toHaveLength(3);
     const current = await store.port.list({ status: 'current' });
@@ -178,6 +191,9 @@ describe('mock assignments store', () => {
     expect(snapshot[0]).toMatchObject({ current: false, endedBy: 'user-otra', version: 2 });
     expect(snapshot[1]?.version).toBe(2);
     const events = await store.port.history('asg-002');
-    expect(events.ok && events.value.items.map((event) => event.kind)).toEqual(['ended', 'assigned']);
+    expect(events.ok && events.value.items.map((event) => event.kind)).toEqual([
+      'ended',
+      'assigned',
+    ]);
   });
 });

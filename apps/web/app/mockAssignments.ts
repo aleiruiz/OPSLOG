@@ -181,7 +181,8 @@ export function createMockAssignmentStore(
             (query.vehicleId === undefined || assignment.vehicleId === query.vehicleId) &&
             (query.employeeId === undefined || assignment.employeeId === query.employeeId) &&
             (query.type === undefined || assignment.type === query.type) &&
-            (query.status === undefined || (assignment.endedAt === null) === (query.status === 'current')),
+            (query.status === undefined ||
+              (assignment.endedAt === null) === (query.status === 'current')),
         )
         .sort((a, b) =>
           a.startedAt < b.startedAt ? 1 : a.startedAt > b.startedAt ? -1 : a.id < b.id ? -1 : 1,
@@ -268,7 +269,8 @@ export function createMockAssignmentStore(
     port,
     endExternally: (id) => {
       const current = rows[index(id)];
-      if (current && current.endedAt === null) closeRow(current, 'ended', 'Cierre de otra persona', 'user-otra');
+      if (current && current.endedAt === null)
+        closeRow(current, 'ended', 'Cierre de otra persona', 'user-otra');
     },
     snapshot: () => rows.map((assignment) => ({ ...assignment })),
   };

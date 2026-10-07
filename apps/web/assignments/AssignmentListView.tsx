@@ -88,7 +88,9 @@ export function AssignmentListView({
   onLoadMore,
 }: AssignmentListViewProps) {
   const uid = React.useId();
-  const vehicleNames = new Map((vehicles?.items ?? []).map((item) => [item.id, item.economicNumber]));
+  const vehicleNames = new Map(
+    (vehicles?.items ?? []).map((item) => [item.id, item.economicNumber]),
+  );
   const driverNames = new Map((drivers?.items ?? []).map((item) => [item.id, item.name]));
   const select = (
     id: string,

@@ -31,11 +31,12 @@ describe('assignment list', () => {
     expect(table).not.toHaveTextContent(/principal_taken|replaced|secondary|temporary/);
     expect(rowsOf()[0]).toHaveTextContent('Vigente');
     await waitFor(() => expect(table).toHaveTextContent('Ana García López'));
-    expect(within(table).getAllByRole('link', { name: /^Vehículo ECO-\d+$/ }).length).toBeGreaterThan(0);
-    expect(within(table).getAllByRole('link', { name: /^Conductor Ana García López$/ })[0]).toHaveAttribute(
-      'href',
-      '/plantilla/empleados/emp-001',
-    );
+    expect(
+      within(table).getAllByRole('link', { name: /^Vehículo ECO-\d+$/ }).length,
+    ).toBeGreaterThan(0);
+    expect(
+      within(table).getAllByRole('link', { name: /^Conductor Ana García López$/ })[0],
+    ).toHaveAttribute('href', '/plantilla/empleados/emp-001');
     click('Cargar más asignaciones');
     await waitFor(() => expect(rowsOf()).toHaveLength(28));
     expect(screen.queryByRole('button', { name: 'Cargar más asignaciones' })).toBeNull();
@@ -57,7 +58,10 @@ describe('assignment list', () => {
     const link = await screen.findByRole('link', { name: 'Asignaciones' });
     link.click();
     await screen.findByRole('heading', { name: 'Asignaciones', level: 1 });
-    expect(screen.getByRole('link', { name: 'Asignaciones' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: 'Asignaciones' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
     expect(document.title).toBe('Asignaciones · Transportes Demo SA · OPSLOG');
   });
 
@@ -66,8 +70,12 @@ describe('assignment list', () => {
     const spy = vi.spyOn(api.assignments, 'list');
     await list({ api });
     await screen.findByRole('table', { name: 'Asignaciones (28)' });
-    await waitFor(() => expect(within(exact('Vehículo')).getAllByRole('option').length).toBeGreaterThan(20));
-    await waitFor(() => expect(within(exact('Conductor')).getAllByRole('option').length).toBeGreaterThan(5));
+    await waitFor(() =>
+      expect(within(exact('Vehículo')).getAllByRole('option').length).toBeGreaterThan(20),
+    );
+    await waitFor(() =>
+      expect(within(exact('Conductor')).getAllByRole('option').length).toBeGreaterThan(5),
+    );
     set('Estado', 'current');
     set('Vehículo', 'veh-001');
     set('Conductor', 'emp-001');
@@ -97,12 +105,16 @@ describe('assignment list', () => {
     expect(spy).toHaveBeenCalledWith({ limit: 25, status: 'ended', vehicleId: 'veh-001' });
     expect(table).toHaveTextContent('Reemplazada por un nuevo principal');
     expect(exact('Estado')).toHaveValue('ended');
-    expect(filtersFromSearch(new URLSearchParams('conductor=emp-001&estado=vigente'))).toMatchObject({
+    expect(
+      filtersFromSearch(new URLSearchParams('conductor=emp-001&estado=vigente')),
+    ).toMatchObject({
       employeeId: 'emp-001',
       status: 'current',
     });
     // Anything that is not an identifier or a known state is ignored.
-    expect(filtersFromSearch(new URLSearchParams('vehiculo=../x&conductor=%20&estado=otro'))).toEqual({
+    expect(
+      filtersFromSearch(new URLSearchParams('vehiculo=../x&conductor=%20&estado=otro')),
+    ).toEqual({
       status: '',
       vehicleId: '',
       employeeId: '',
@@ -112,7 +124,9 @@ describe('assignment list', () => {
 
   it('shows no results for filters that match nothing, and keeps Enter from submitting', async () => {
     await list({ api: createMockApi({ assignments: [] }) });
-    expect(await screen.findByRole('heading', { name: 'Aún no hay asignaciones' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Aún no hay asignaciones' }),
+    ).toBeInTheDocument();
     set('Tipo', 'temporary');
     expect(await screen.findByRole('heading', { name: 'Sin resultados' })).toBeInTheDocument();
     const form = screen.getByRole('search', { name: 'Filtros' });
@@ -126,7 +140,9 @@ describe('assignment list', () => {
     expect(await screen.findByText(/Asigna el primer conductor/)).toBeInTheDocument();
     admin.unmount();
     await list({ api: createMockApi({ assignments: [] }), account: 'viewer' });
-    expect(await screen.findByText('Cuando se asignen conductores aparecerán aquí.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Cuando se asignen conductores aparecerán aquí.'),
+    ).toBeInTheDocument();
   });
 
   it('offers to assign and to close only to roles that hold create and edit', async () => {
@@ -136,7 +152,9 @@ describe('assignment list', () => {
       'href',
       '/flota/asignaciones/nueva',
     );
-    expect(screen.getAllByRole('link', { name: /^Cerrar asignación de / }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /^Cerrar asignación de / }).length).toBeGreaterThan(
+      0,
+    );
     // Only current assignments can be closed.
     const rows = rowsOf();
     const ended = rows.find((row) => within(row).queryByText('Finalizada'));
@@ -159,7 +177,9 @@ describe('assignment list', () => {
     await screen.findByRole('table');
     api.controls.failNext('listAssignments');
     set('Estado', 'current');
-    expect(await screen.findByRole('heading', { name: 'No pudimos cargar la información' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'No pudimos cargar la información' }),
+    ).toBeInTheDocument();
     click('Reintentar');
     await screen.findByRole('table');
     api.controls.failNext('listAssignments', 403);
@@ -196,7 +216,9 @@ describe('assignment list', () => {
     };
     click('Cargar más asignaciones');
     set('Estado', 'current');
-    await waitFor(() => expect(screen.getByRole('table', { name: /Asignaciones \(\d+\)/ })).toBeVisible());
+    await waitFor(() =>
+      expect(screen.getByRole('table', { name: /Asignaciones \(\d+\)/ })).toBeVisible(),
+    );
     const filtered = rowsOf().length;
     await act(async () => gate.resolve());
     await new Promise((resolve) => setTimeout(resolve, 20));

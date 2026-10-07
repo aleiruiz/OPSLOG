@@ -19,10 +19,9 @@ const PAGE = 25;
 /** Keeps the first page of a resource plus the pages loaded after it (a reload of the first page drops them). */
 function usePaged<I, P extends { items: readonly I[]; nextCursor: string | null; total: number }>(
   first: ReturnType<typeof useResource<P>>,
-  fetchPage: (cursor: string) => Promise<
-    | { ok: true; value: P }
-    | { ok: false; error: { status: number } }
-  >,
+  fetchPage: (
+    cursor: string,
+  ) => Promise<{ ok: true; value: P } | { ok: false; error: { status: number } }>,
   failureText: string,
   resetKey: string,
   markExpired: () => void,
@@ -63,7 +62,13 @@ function usePaged<I, P extends { items: readonly I[]; nextCursor: string | null;
           },
         }
       : first.state;
-  return { state, loadingMore, notice, onRetry: first.reload, onLoadMore: (c: string) => void loadMore(c) };
+  return {
+    state,
+    loadingMore,
+    notice,
+    onRetry: first.reload,
+    onLoadMore: (c: string) => void loadMore(c),
+  };
 }
 
 /** Import detail screen. Requires `view`: the report and the history never include a cell value. */

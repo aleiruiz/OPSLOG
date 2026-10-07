@@ -2,34 +2,23 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import React from 'react';
 import { Button, Field, FormSection, Notifications, opslogTokens, UiState } from '@opslog/ui';
-import type { ResourceState } from '../app/resource';
-import { RouterButton, RouterLink } from '../app/router';
-import type { ImportEntity, ImportJob, ImportMode, ImportRow } from '../app/types';
+import { RouterButton } from '../app/router';
+import type { ImportEntity, ImportMode } from '../app/types';
 import type { FormAlert } from '../documents/DocumentForm';
 import {
   emptyValues,
   fieldOrder,
-  fileSignatureOf,
   inspect,
   validate,
   type FieldErrors,
   type FieldKey,
   type ImportFormValues,
 } from './formModel';
-import { ImportRowsTable } from './ImportRowsTable';
-import { importPath } from './ImportMessages';
+import { ImportValidationPanel, type ValidationResult } from './ImportValidationPanel';
 import { columnLabel, entityLabels, modeDescriptions, modeLabels, modeOrder } from './labels';
 import { MAX_CSV_LENGTH, MAX_ROWS, IMPORT_ENTITIES, templateOf } from './rules';
 
-export type { FormAlert };
-
-/** The result of the last validation of the file in the form, and the failure reports of its rows. */
-export interface ValidationResult {
-  readonly job: ImportJob;
-  /** `fileSignatureOf` the values it validated: another file makes it stale. */
-  readonly fileSignature: string;
-  readonly rows: ResourceState<{ readonly items: readonly ImportRow[]; readonly total: number }>;
-}
+export type { FormAlert, ValidationResult };
 
 export interface ImportFormProps {
   readonly initial?: Partial<ImportFormValues>;
@@ -64,151 +53,6 @@ export const templateHref = (entity: ImportEntity): string => {
   const header = [...template.required, ...template.optional].join(',');
   return `data:text/csv;charset=utf-8,${encodeURIComponent(`﻿${header}\n`)}`;
 };
-
-function ValidationPanel({
-  result,
-  values,
-  submitting,
-  onConfirm,
-  onRetryRows,
-}: {
-  result: ValidationResult;
-  values: ImportFormValues;
-  submitting: ImportMode | null;
-  onConfirm: ImportFormProps['onConfirm'];
-  onRetryRows: (() => void) | undefined;
-}) {
-  const { job } = result;
-  const stale = result.fileSignature !== fileSignatureOf(values);
-  if (stale)
-    return (
-      <Notifications
-        messages={[
-          {
-            id: 'stale',
-            text: 'Cambiaste el archivo después de validarlo. Valida de nuevo antes de importar.',
-            severity: 'warning',
-          },
-        ]}
-      />
-    );
-  const allValid = job.invalidRows === 0;
-  return (
-    <Box component="section" aria-labelledby="validation-title">
-      <Typography id="validation-title" component="h2" variant="h2" sx={{ mb: 1 }}>
-        Resultado de la validación
-      </Typography>
-      <Box
-        component="dl"
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: { xs: '1fr', sm: 'minmax(160px, 220px) 1fr' },
-          columnGap: 3,
-          m: 0,
-          mb: 2,
-        }}
-      >
-        {(
-          [
-            ['Filas revisadas', number(job.totalRows)],
-            ['Filas válidas', number(job.validRows)],
-            ['Filas con error', number(job.invalidRows)],
-          ] as const
-        ).map(([label, value]) => (
-          <React.Fragment key={label}>
-            <Typography component="dt" variant="body2" color="text.secondary">
-              {label}
-            </Typography>
-            <Typography component="dd" variant="body1" sx={{ m: 0, mb: 0.5 }}>
-              {value}
-            </Typography>
-          </React.Fragment>
-        ))}
-      </Box>
-      {allValid ? (
-        <Notifications
-          messages={[
-            {
-              id: 'all-valid',
-              text: 'Todas las filas son válidas. No se creó ningún registro todavía.',
-              severity: 'success',
-            },
-          ]}
-        />
-      ) : (
-        <>
-          <Notifications
-            messages={[
-              {
-                id: 'some-invalid',
-                text: `${number(job.invalidRows)} filas tienen errores y no se importarán. No se creó ningún registro todavía.`,
-                severity: 'warning',
-              },
-            ]}
-          />
-          {result.rows.status === 'ready' ? (
-            <>
-              <ImportRowsTable
-                rows={result.rows.data.items}
-                entity={values.entity}
-                caption={`Filas con error (${result.rows.data.total})`}
-                label="Tabla de filas con error"
-              />
-              {result.rows.data.total > result.rows.data.items.length && (
-                <Typography variant="body2" sx={{ mb: 1 }}>
-                  Se muestran las primeras {result.rows.data.items.length} filas.{' '}
-                  <RouterLink
-                    to={importPath(job.id)}
-                    sx={{ color: 'primary.main', textDecoration: 'underline' }}
-                  >
-                    Ver el informe completo
-                  </RouterLink>
-                </Typography>
-              )}
-            </>
-          ) : (
-            <Box sx={{ my: 1 }}>
-              {result.rows.status === 'error' ? (
-                <UiState
-                  kind="error"
-                  title="No pudimos cargar el informe de errores"
-                  actionLabel="Reintentar"
-                  {...(onRetryRows ? { onAction: onRetryRows } : {})}
-                />
-              ) : (
-                <UiState kind="loading" />
-              )}
-            </Box>
-          )}
-        </>
-      )}
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 2 }}>
-        <Button
-          variant="contained"
-          disabled={job.validRows === 0 || submitting !== null}
-          loading={submitting === 'commit_valid'}
-          onClick={() => onConfirm(values, 'commit_valid')}
-        >
-          {`Importar las ${number(job.validRows)} filas válidas`}
-        </Button>
-        <Button
-          variant="outlined"
-          disabled={!allValid || submitting !== null}
-          loading={submitting === 'commit_all'}
-          onClick={() => onConfirm(values, 'commit_all')}
-        >
-          Importar todo
-        </Button>
-      </Box>
-      {!allValid && (
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-          «Importar todo» se habilita cuando no queda ninguna fila con error. Corrige el archivo y
-          valídalo de nuevo, o importa solo las válidas.
-        </Typography>
-      )}
-    </Box>
-  );
-}
 
 /** Bulk-import form: entity, mode, and the CSV pasted or loaded from a file. Validation mirrors the backend. */
 export function ImportForm({
@@ -471,7 +315,7 @@ export function ImportForm({
           </RouterButton>
         </Box>
         {validation && (
-          <ValidationPanel
+          <ImportValidationPanel
             result={validation}
             values={values}
             submitting={submitting ? submittingMode : null}

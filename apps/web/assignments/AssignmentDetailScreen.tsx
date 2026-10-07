@@ -10,7 +10,8 @@ import { assignmentPath } from './AssignmentMessages';
 
 const notices: Record<string, string> = {
   creada: 'Asignación creada.',
-  reemplazada: 'Asignación creada. La principal anterior se cerró y quedó en el historial como reemplazada.',
+  reemplazada:
+    'Asignación creada. La principal anterior se cerró y quedó en el historial como reemplazada.',
   cerrada: 'Asignación cerrada. Quedó en el historial con su fecha de fin.',
 };
 

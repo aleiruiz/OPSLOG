@@ -66,19 +66,22 @@ describe('describeFailure', () => {
     expect(driver.alert).toMatchObject({ title: 'El conductor ya es principal de otro vehículo' });
     expect(driver.alert?.message).toMatch(/BR-003/);
     expect(driver.fields.employeeId).toBe('Este conductor ya es el principal de otro vehículo.');
-    expect(describeFailure(apiError(409, 'already_assigned', 'employee_id'), 'assign').alert?.title).toBe(
-      'El conductor ya está asignado a este vehículo',
-    );
+    expect(
+      describeFailure(apiError(409, 'already_assigned', 'employee_id'), 'assign').alert?.title,
+    ).toBe('El conductor ya está asignado a este vehículo');
     const ineligible = describeFailure(apiError(422, 'invalid_vehicle', 'vehicle_id'), 'assign');
     expect(ineligible.alert?.message).toMatch(/BR-014/);
     expect(ineligible.fields.vehicleId).toBeDefined();
-    expect(describeFailure(apiError(422, 'invalid_employee', 'employee_id'), 'assign').alert?.title).toBe(
-      'El conductor no se puede asignar',
-    );
+    expect(
+      describeFailure(apiError(422, 'invalid_employee', 'employee_id'), 'assign').alert?.title,
+    ).toBe('El conductor no se puede asignar');
   });
 
   it('explains the other failures and shows nothing for an expired session', () => {
-    expect(describeFailure(apiError(401, 'unauthorized'), 'assign')).toEqual({ alert: null, fields: {} });
+    expect(describeFailure(apiError(401, 'unauthorized'), 'assign')).toEqual({
+      alert: null,
+      fields: {},
+    });
     expect(describeFailure(apiError(409, 'stale_version'), 'end').alert?.actionLabel).toBe(
       'Cargar datos actuales',
     );
@@ -88,9 +91,15 @@ describe('describeFailure', () => {
     expect(describeFailure(apiError(400, 'bad_request'), 'assign').alert?.title).toBe(
       'El servidor rechazó los datos',
     );
-    expect(describeFailure(apiError(403, 'forbidden'), 'assign').alert?.message).toMatch(/crear y para editar/);
-    expect(describeFailure(apiError(403, 'forbidden'), 'end').alert?.message).toMatch(/cerrar asignaciones/);
-    expect(describeFailure(apiError(404, 'not_found'), 'end').alert?.title).toBe('La asignación ya no existe');
+    expect(describeFailure(apiError(403, 'forbidden'), 'assign').alert?.message).toMatch(
+      /crear y para editar/,
+    );
+    expect(describeFailure(apiError(403, 'forbidden'), 'end').alert?.message).toMatch(
+      /cerrar asignaciones/,
+    );
+    expect(describeFailure(apiError(404, 'not_found'), 'end').alert?.title).toBe(
+      'La asignación ya no existe',
+    );
     expect(describeFailure(apiError(500, 'internal_error'), 'end').alert?.title).toBe(
       'No pudimos cerrar la asignación',
     );
@@ -106,7 +115,11 @@ describe('assign a driver', () => {
     const assign = vi.spyOn(api.assignments, 'assign');
     await openCreate({ api });
     click('Crear asignación');
-    for (const message of ['Elige el vehículo.', 'Elige el conductor.', 'Escribe el motivo de la asignación.'])
+    for (const message of [
+      'Elige el vehículo.',
+      'Elige el conductor.',
+      'Escribe el motivo de la asignación.',
+    ])
       expect(screen.getByText(message)).toBeInTheDocument();
     expect(getField('Vehículo')).toHaveFocus();
     expect(getField('Vehículo')).toHaveAttribute('aria-invalid', 'true');
@@ -189,7 +202,9 @@ describe('assign a driver', () => {
     const assign = vi.spyOn(api.assignments, 'assign');
     await openCreate({ api });
     fill({ Vehículo: 'veh-001', Conductor: 'emp-010' });
-    fireEvent.click(screen.getByRole('checkbox', { name: /Reemplazar al conductor principal actual/ }));
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: /Reemplazar al conductor principal actual/ }),
+    );
     expect(screen.getByText(/se cerrará con la fecha de hoy/)).toBeInTheDocument();
     click('Crear asignación');
     await screen.findByText(/La principal anterior se cerró/);
@@ -232,7 +247,9 @@ describe('assign a driver', () => {
     expect(
       await screen.findByRole('heading', { name: 'El conductor ya es principal de otro vehículo' }),
     ).toBeInTheDocument();
-    expect(screen.getByText('Este conductor ya es el principal de otro vehículo.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Este conductor ya es el principal de otro vehículo.'),
+    ).toBeInTheDocument();
     await waitFor(() => expect(getField('Conductor')).toHaveFocus());
     expect(screen.queryByRole('button', { name: 'Reemplazar al principal actual' })).toBeNull();
   });
@@ -250,7 +267,9 @@ describe('assign a driver', () => {
     api.assignments.assign = async () => fail(422, 'invalid_vehicle', 'vehicle_id');
     fill({ Vehículo: 'veh-005', Conductor: 'emp-010' });
     click('Crear asignación');
-    expect(await screen.findByRole('heading', { name: 'El vehículo no se puede asignar' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'El vehículo no se puede asignar' }),
+    ).toBeInTheDocument();
     expect(screen.getByText(/archivado, inactivo o dado de baja/)).toBeInTheDocument();
     await waitFor(() => expect(getField('Vehículo')).toHaveFocus());
   });
@@ -298,7 +317,9 @@ describe('assign a driver', () => {
     expect(getField('Motivo de la asignación')).toHaveValue('Ruta de prueba');
     type('Cuenta de prueba', demoSubjects.admin);
     click('Continuar');
-    await waitFor(() => expect(screen.queryByRole('group', { name: 'Sesión expirada' })).toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByRole('group', { name: 'Sesión expirada' })).toBeNull(),
+    );
     click('Crear asignación');
     await screen.findByText('Asignación creada.');
   });
@@ -307,21 +328,29 @@ describe('assign a driver', () => {
     const api = createMockApi();
     api.controls.failNext('listVehicles');
     const failed = await renderApp({ api, path: '/flota/asignaciones/nueva' });
-    expect(await screen.findByRole('heading', { name: 'No pudimos cargar la información' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'No pudimos cargar la información' }),
+    ).toBeInTheDocument();
     click('Reintentar');
     await screen.findByRole('option', { name: /ECO-001/ });
     failed.unmount();
     const drivers = createMockApi();
     drivers.controls.failNext('listEmployees');
     const noDrivers = await renderApp({ api: drivers, path: '/flota/asignaciones/nueva' });
-    expect(await screen.findByRole('heading', { name: 'No pudimos cargar la información' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'No pudimos cargar la información' }),
+    ).toBeInTheDocument();
     noDrivers.unmount();
     const empty = await renderApp({
       api: createMockApi({ vehicles: [], employees: [] }),
       path: '/flota/asignaciones/nueva',
     });
-    expect(await screen.findByRole('heading', { name: 'No hay vehículos disponibles' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'No hay conductores disponibles' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'No hay vehículos disponibles' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'No hay conductores disponibles' }),
+    ).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Registrar un conductor nuevo' })).toHaveAttribute(
       'href',
       '/plantilla/empleados/nuevo',
@@ -331,10 +360,19 @@ describe('assign a driver', () => {
 
   it('says when only part of the fleet is offered, cancels back to the list and is closed to a role without create', async () => {
     const vehicles = Array.from({ length: 501 }, (_, index) =>
-      makeVehicle({ id: `v${index}`, economicNumber: `E-${String(index).padStart(4, '0')}`, plate: `P-${index}` }),
+      makeVehicle({
+        id: `v${index}`,
+        economicNumber: `E-${String(index).padStart(4, '0')}`,
+        plate: `P-${index}`,
+      }),
     );
-    const big = await renderApp({ api: createMockApi({ vehicles }), path: '/flota/asignaciones/nueva' });
-    expect(await screen.findByText('Se muestran los primeros vehículos del listado.')).toBeInTheDocument();
+    const big = await renderApp({
+      api: createMockApi({ vehicles }),
+      path: '/flota/asignaciones/nueva',
+    });
+    expect(
+      await screen.findByText('Se muestran los primeros vehículos del listado.'),
+    ).toBeInTheDocument();
     big.unmount();
     const view = await openCreate();
     fireEvent.click(screen.getByRole('link', { name: 'Cancelar' }));
@@ -347,8 +385,11 @@ describe('assign a driver', () => {
 });
 
 describe('close an assignment', () => {
-  const end = (api = createMockApi(), id = 'asg-001', account: 'admin' | 'viewer' | 'piiReader' = 'admin') =>
-    renderApp({ api, account, path: `/flota/asignaciones/${id}/cerrar` });
+  const end = (
+    api = createMockApi(),
+    id = 'asg-001',
+    account: 'admin' | 'viewer' | 'piiReader' = 'admin',
+  ) => renderApp({ api, account, path: `/flota/asignaciones/${id}/cerrar` });
 
   it('shows what is being closed and explains that it cannot be undone', async () => {
     await end();
@@ -372,7 +413,9 @@ describe('close an assignment', () => {
     expect(spy).not.toHaveBeenCalled();
     type('Motivo del cierre', ' Fin   de ruta ');
     click('Cerrar asignación');
-    expect(await screen.findByText(/Asignación cerrada\. Quedó en el historial/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Asignación cerrada\. Quedó en el historial/),
+    ).toBeInTheDocument();
     expect(spy).toHaveBeenCalledWith('asg-001', { version: 1, reason: 'Fin de ruta' });
     expect(window.location.pathname).toBe('/flota/asignaciones/asg-001');
     expect(screen.getByRole('heading', { name: 'Asignación cerrada' })).toBeInTheDocument();
@@ -384,22 +427,31 @@ describe('close an assignment', () => {
     api.controls.endAssignmentExternally('asg-001');
     type('Motivo del cierre', 'Mi motivo');
     click('Cerrar asignación');
-    expect(await screen.findByRole('heading', { name: 'La asignación ya estaba cerrada' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'La asignación ya estaba cerrada' }),
+    ).toBeInTheDocument();
   });
 
   it('on a stale version offers the current data and starts over from the server', async () => {
     const api = createMockApi();
     const real = api.assignments.end;
     let stale = true;
-    api.assignments.end = async (id, input) => (stale ? fail(409, 'stale_version') : real(id, input));
+    api.assignments.end = async (id, input) =>
+      stale ? fail(409, 'stale_version') : real(id, input);
     await end(api);
     await screen.findByRole('textbox', { name: /Motivo del cierre/ });
     type('Motivo del cierre', 'Mi motivo');
     click('Cerrar asignación');
-    expect(await screen.findByRole('heading', { name: 'Otra persona modificó esta asignación' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Otra persona modificó esta asignación' }),
+    ).toBeInTheDocument();
     stale = false;
     click('Cargar datos actuales');
-    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Otra persona modificó esta asignación' })).toBeNull());
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('heading', { name: 'Otra persona modificó esta asignación' }),
+      ).toBeNull(),
+    );
     // Loading the current data starts over: the person decides again.
     await waitFor(() => expect(getField('Motivo del cierre')).toHaveValue(''));
   });
@@ -424,24 +476,32 @@ describe('close an assignment', () => {
     await screen.findByRole('heading', { name: 'Otra persona modificó esta asignación' });
     // The old assignment is closed now: reloading it shows a read-only record.
     click('Cargar datos actuales');
-    expect(await screen.findByRole('heading', { name: 'Esta asignación ya está cerrada' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Esta asignación ya está cerrada' }),
+    ).toBeInTheDocument();
   });
 
   it('is read-only for a closed assignment, and for an unknown one', async () => {
     const closedOne = await end(createMockApi({ assignments: [closed(makeAssignment())] }));
-    expect(await screen.findByRole('heading', { name: 'Esta asignación ya está cerrada' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Esta asignación ya está cerrada' }),
+    ).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Volver a la asignación' })).toHaveAttribute(
       'href',
       '/flota/asignaciones/asg-001',
     );
     closedOne.unmount();
     const missing = await end(createMockApi(), 'no-existe');
-    expect(await screen.findByRole('heading', { name: 'Asignación no encontrada' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Asignación no encontrada' }),
+    ).toBeInTheDocument();
     missing.unmount();
     const failed = createMockApi();
     failed.controls.failNext('getAssignment');
     await end(failed);
-    expect(await screen.findByRole('heading', { name: 'No pudimos cargar la información' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'No pudimos cargar la información' }),
+    ).toBeInTheDocument();
   });
 
   it.each([

@@ -1,20 +1,16 @@
 import type { ApiError } from '@opslog/contracts';
 import { BFF_IMPORT_OUTCOMES, BFF_IMPORT_STATUSES } from '@opslog/contracts';
-import { parseCsv } from '../imports/csv';
 import { demoImports, type DemoImport } from '../imports/fixtures';
+import { IDEMPOTENCY_KEY, MAX_ROWS, isEntity, isMode } from '../imports/rules';
+import { OPAQUE_ID } from '../vehicles/rules';
 import {
-  IDEMPOTENCY_KEY,
-  MAX_CELL_LENGTH,
-  MAX_CSV_LENGTH,
-  MAX_HEADER_COLUMNS,
-  MAX_ROWS,
-  columnsOf,
-  isEntity,
-  isMode,
-  templateOf,
-} from '../imports/rules';
-import { NAME } from '../employees/rules';
-import { ECONOMIC_NUMBER, OPAQUE_ID, PLATE, normalizePlate } from '../vehicles/rules';
+  INPUT_KEYS,
+  fingerprintOf,
+  keysOf,
+  prepare,
+  rowsOf,
+  type Issue,
+} from './mockImportsSupport';
 import type {
   ImportEntity,
   ImportEvent,
@@ -72,145 +68,6 @@ const ok = <T>(value: T): Result<T> => ({ ok: true, value });
 const badRequest = () => failure(400, 'bad_request', 'Invalid request');
 const notFound = () => failure(404, 'not_found', 'Resource not found');
 const conflict = () => failure(409, 'conflict', 'Conflict');
-
-type RawRow = Readonly<Record<string, string | number | null>>;
-
-const INPUT_KEYS = ['entity', 'mode', 'idempotencyKey', 'dryRunJobId', 'rows', 'csv'];
-const PHONE_LIKE = /^\+[0-9][0-9 ().-]{5,24}$/;
-const DIGITS = /^\d{1,7}$/;
-
-const isFormula = (column: string, text: string): boolean =>
-  /^[=@]/.test(text) || (/^[+-]/.test(text) && !(column === 'phone' && PHONE_LIKE.test(text)));
-
-interface Issue {
-  readonly code: ImportRowCode;
-  readonly columns: readonly string[];
-}
-
-/** The columns of a request that hold personal data (what the caller needs `view_pii` for). */
-export function importWritesPii(input: unknown): boolean {
-  if (typeof input !== 'object' || input === null) return false;
-  const fields = input as Readonly<Record<string, unknown>>;
-  if (fields['entity'] !== 'employee') return false;
-  const pii = templateOf('employee').pii;
-  if (typeof fields['csv'] === 'string') {
-    const header = parseCsv(fields['csv'])?.[0] ?? [];
-    return header.some((name) => pii.includes(name.trim()));
-  }
-  const rows = fields['rows'];
-  return (
-    Array.isArray(rows) &&
-    rows.some(
-      (row) => typeof row === 'object' && row !== null && Object.keys(row).some((key) => pii.includes(key)),
-    )
-  );
-}
-
-function rowsOf(input: Readonly<Record<string, unknown>>, entity: ImportEntity): RawRow[] | null {
-  const allowed = columnsOf(entity);
-  if (typeof input['csv'] === 'string') {
-    if (input['csv'].length > MAX_CSV_LENGTH) return null;
-    const table = parseCsv(input['csv']);
-    const [header, ...body] = table ?? [];
-    if (!header || header.length > MAX_HEADER_COLUMNS) return null;
-    const names = header.map((name) => name.trim());
-    if (
-      new Set(names).size !== names.length ||
-      names.some((name) => !allowed.includes(name)) ||
-      templateOf(entity).required.some((name) => !names.includes(name))
-    )
-      return null;
-    if (body.some((cells) => cells.length !== names.length)) return null;
-    return body.map((cells) => Object.fromEntries(names.map((name, i) => [name, cells[i] ?? ''])));
-  }
-  const rows = input['rows'];
-  if (!Array.isArray(rows)) return null;
-  const list: RawRow[] = [];
-  for (const row of rows) {
-    if (typeof row !== 'object' || row === null || Array.isArray(row)) return null;
-    if (Object.keys(row).some((key) => !allowed.includes(key))) return null;
-    list.push(row as RawRow);
-  }
-  return list;
-}
-
-/** The create request of a row, or the issue that makes it invalid (columns only). */
-function prepare(
-  entity: ImportEntity,
-  raw: RawRow,
-): { input: Record<string, unknown> } | { issue: Issue } {
-  const template = templateOf(entity);
-  const values: Record<string, unknown> = {};
-  const formulas: string[] = [];
-  const bad: string[] = [];
-  for (const column of columnsOf(entity)) {
-    const cell = Object.hasOwn(raw, column) ? raw[column] : undefined;
-    if (cell === undefined || cell === null) continue;
-    const text = typeof cell === 'number' ? String(cell) : cell.trim();
-    if (typeof cell === 'number' && (!Number.isSafeInteger(cell) || cell < 0)) {
-      bad.push(column);
-      continue;
-    }
-    if (text === '') continue;
-    if (text.length > MAX_CELL_LENGTH) bad.push(column);
-    else if (isFormula(column, text)) formulas.push(column);
-    else values[column] = text;
-  }
-  if (formulas.length > 0) return { issue: { code: 'formula_injection', columns: formulas } };
-  const missing = template.required.filter(
-    (column) => !Object.hasOwn(values, column) && !bad.includes(column),
-  );
-  if (missing.length > 0) return { issue: { code: 'missing_value', columns: missing } };
-  for (const column of entity === 'vehicle' ? ['year', 'odometerKm'] : []) {
-    const text = values[column];
-    if (typeof text !== 'string') continue;
-    if (DIGITS.test(text)) values[column] = Number(text);
-    else bad.push(column);
-  }
-  if (entity === 'vehicle') {
-    if (typeof values['economicNumber'] === 'string' && !ECONOMIC_NUMBER.test(values['economicNumber']))
-      bad.push('economicNumber');
-    if (typeof values['plate'] === 'string' && !PLATE.test(normalizePlate(values['plate'])))
-      bad.push('plate');
-  } else {
-    if (!['driver', 'dispatcher', 'other'].includes(String(values['kind']))) bad.push('kind');
-    for (const column of ['firstName', 'lastName'])
-      if (typeof values[column] === 'string' && !NAME.test(values[column])) bad.push(column);
-  }
-  if (bad.length > 0) return { issue: { code: 'invalid_value', columns: [...new Set(bad)] } };
-  return { input: values };
-}
-
-/** Unique keys of a prepared row, as `column:value`. */
-function keysOf(entity: ImportEntity, input: Readonly<Record<string, unknown>>): string[] {
-  const keys: string[] = [];
-  const push = (column: string, value: unknown, normalize = (text: string) => text) => {
-    if (typeof value === 'string') keys.push(`${column}:${normalize(value)}`);
-  };
-  if (entity === 'vehicle') {
-    push('economicNumber', input['economicNumber'], (text) => text.toLowerCase());
-    push('plate', input['plate'], (text) => normalizePlate(text));
-    push('vin', input['vin'], (text) => text.toUpperCase());
-  } else push('employeeNumber', input['employeeNumber'], (text) => text.toLowerCase());
-  return keys;
-}
-
-/** Stable text of the rows: personal-data columns count only as present or absent, never as a value. */
-function fingerprintOf(entity: ImportEntity, rows: readonly RawRow[]): string {
-  const pii = templateOf(entity).pii;
-  return JSON.stringify([
-    entity,
-    rows.map((row) =>
-      Object.keys(row)
-        .sort()
-        .map((column) => {
-          const cell = row[column];
-          const text = typeof cell === 'string' ? cell.trim() : cell === null ? '' : String(cell);
-          return [column, pii.includes(column) ? text !== '' : text];
-        }),
-    ),
-  ]);
-}
 
 interface Stored {
   job: ImportJob;
@@ -293,10 +150,14 @@ export function createMockImportStore(
     history: async (id, query = {}) => {
       const item = find(id);
       if (!item) return notFound();
-      return pageOf([...item.events].sort((a, b) => b.seq - a.seq), query, {
-        field: 'seq',
-        direction: 'desc',
-      });
+      return pageOf(
+        [...item.events].sort((a, b) => b.seq - a.seq),
+        query,
+        {
+          field: 'seq',
+          direction: 'desc',
+        },
+      );
     },
     submit: async (input: ImportInput) => {
       const fields = input as unknown as Readonly<Record<string, unknown>>;
@@ -307,7 +168,10 @@ export function createMockImportStore(
       if (key !== undefined && (typeof key !== 'string' || !IDEMPOTENCY_KEY.test(key)))
         return badRequest();
       if (mode !== 'dry_run' && key === undefined) return badRequest();
-      if (dryRunJobId !== undefined && (mode === 'dry_run' || typeof dryRunJobId !== 'string' || !OPAQUE_ID.test(dryRunJobId)))
+      if (
+        dryRunJobId !== undefined &&
+        (mode === 'dry_run' || typeof dryRunJobId !== 'string' || !OPAQUE_ID.test(dryRunJobId))
+      )
         return badRequest();
       const raw = rowsOf(fields, entity);
       if (raw === null || raw.length < 1 || raw.length > MAX_ROWS) return badRequest();
@@ -340,7 +204,10 @@ export function createMockImportStore(
         const inFile = keys.find((item) => seen.has(item));
         if (inFile)
           return {
-            issue: { code: 'duplicate_in_file', columns: [inFile.split(':')[0] as string] } as Issue,
+            issue: {
+              code: 'duplicate_in_file',
+              columns: [inFile.split(':')[0] as string],
+            } as Issue,
             input: null,
           };
         keys.forEach((item) => seen.add(item));
@@ -415,7 +282,11 @@ export function createMockImportStore(
         }
       }
       const status: ImportJob['status'] =
-        mode === 'dry_run' ? 'validated' : mode === 'commit_all' && invalid > 0 ? 'failed' : 'imported';
+        mode === 'dry_run'
+          ? 'validated'
+          : mode === 'commit_all' && invalid > 0
+            ? 'failed'
+            : 'imported';
       const stillValid = results.filter((row) => row.outcome !== 'invalid').length;
       const job: ImportJob = {
         id,
@@ -452,3 +323,5 @@ export function createMockImportStore(
 
   return { port, snapshot: () => stored.map((item) => ({ ...item.job })) };
 }
+
+export { importWritesPii } from './mockImportsSupport';

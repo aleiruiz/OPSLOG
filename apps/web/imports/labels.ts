@@ -29,10 +29,8 @@ export const modeLabels: Record<ImportMode, string> = {
   commit_all: 'Importar todo o nada',
 };
 export const modeDescriptions: Record<ImportMode, string> = {
-  dry_run:
-    'Revisa el archivo fila por fila y muestra el informe. No crea ningún registro.',
-  commit_valid:
-    'Crea los registros de las filas válidas y deja un informe de las demás.',
+  dry_run: 'Revisa el archivo fila por fila y muestra el informe. No crea ningún registro.',
+  commit_valid: 'Crea los registros de las filas válidas y deja un informe de las demás.',
   commit_all:
     'Crea los registros solo si todas las filas son válidas; si alguna no lo es, no crea ninguno.',
 };

@@ -57,11 +57,7 @@ export function App({ ports, basename = '' }: { ports: ApiPorts; basename?: stri
 /** Sub-screens keep the entry of their list highlighted ("Vehículos", "Áreas", "Empleados"). */
 function navigationRoute(id: string | null): string | null {
   if (id === 'vehicleNew' || id === 'vehicleDetail' || id === 'vehicleEdit') return 'vehicles';
-  if (
-    id === 'assignmentNew' ||
-    id === 'assignmentDetail' ||
-    id === 'assignmentEnd'
-  )
+  if (id === 'assignmentNew' || id === 'assignmentDetail' || id === 'assignmentEnd')
     return 'assignments';
   if (id === 'importNew' || id === 'importDetail') return 'imports';
   if (id === 'employeeNew' || id === 'employeeDetail' || id === 'employeeEdit') return 'employees';

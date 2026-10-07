@@ -6,12 +6,7 @@ import type { ApiError, ImportMode, ImportRow } from '../app/types';
 import { useSession } from '../auth/session';
 import { ImportForm, type FormAlert, type ValidationResult } from './ImportForm';
 import { importPath, importsPath } from './ImportMessages';
-import {
-  fileSignatureOf,
-  signatureOf,
-  toInput,
-  type ImportFormValues,
-} from './formModel';
+import { fileSignatureOf, signatureOf, toInput, type ImportFormValues } from './formModel';
 import { newIdempotencyKey } from './idempotency';
 
 interface Failure {
@@ -157,9 +152,7 @@ export function ImportCreateScreen() {
         }}
         cancelTo={importsPath}
         onSubmit={(values) => void run(values)}
-        onConfirm={(values, mode) =>
-          void run({ ...values, mode }, validation?.job.id)
-        }
+        onConfirm={(values, mode) => void run({ ...values, mode }, validation?.job.id)}
       />
     </>
   );

@@ -1,9 +1,4 @@
-import type {
-  ApiError,
-  AssignmentEnd,
-  AssignmentInput,
-  AssignmentType,
-} from '../app/types';
+import type { ApiError, AssignmentEnd, AssignmentInput, AssignmentType } from '../app/types';
 import { ASSIGNMENT_TYPES, OPAQUE_ID, REASON, normalizeReason } from './rules';
 
 /** What the person types and picks, as text. `replace` is a checkbox. */

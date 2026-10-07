@@ -144,7 +144,9 @@ export function AssignmentCreateScreen() {
   const submit = async (values: AssignFormValues) => {
     setSubmitting(true);
     setFailure(none);
-    const result = await ports.assignments.assign(toInput({ ...values, replace: values.replace && canReplace }));
+    const result = await ports.assignments.assign(
+      toInput({ ...values, replace: values.replace && canReplace }),
+    );
     setSubmitting(false);
     if (result.ok)
       router.navigate(

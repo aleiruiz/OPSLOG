@@ -19,7 +19,6 @@ import {
   type AssignFieldKey,
   type AssignFormValues,
   type EndFieldErrors,
-  type EndFormValues,
   type FormMode,
 } from './formModel';
 import { formatDateTime, typeLabel, typeLabels, typeOrder } from './labels';
@@ -108,7 +107,6 @@ export function AssignmentForm({
     const first = order.find((key) => serverErrors?.[key]);
     if (first) focusField(first);
     else if (alert) alertRef.current?.focus();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serverErrors, alert]);
 
   const changed = React.useRef(false);
