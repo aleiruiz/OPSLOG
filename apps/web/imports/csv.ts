@@ -1,3 +1,6 @@
+import type { ImportRow } from '../app/types';
+import { codeLabel, columnLabel, outcomePresentation } from './labels';
+
 /**
  * RFC 4180 reader, the same one the server uses: comma separated, double-quoted cells with `""` escapes, CRLF or LF,
  * an optional byte-order mark, blank lines skipped. Anything else (a quote inside an unquoted cell, text after a
@@ -46,4 +49,25 @@ export function parseCsv(text: string): string[][] | null {
   if (quoted) return null;
   if (cell !== '' || wasQuoted || row.length > 0) endRow();
   return rows;
+}
+/** Downloadable error report: metadata only, never a submitted cell value. */
+export function errorReportCsv(rows: readonly ImportRow[]): string {
+  const fields = [
+    ['Fila', 'Resultado', 'Código', 'Motivo', 'Columnas'],
+    ...rows
+      .filter((row) => row.outcome === 'invalid')
+      .map((row) => [
+        String(row.rowNumber),
+        outcomePresentation.invalid.label,
+        row.code ?? '',
+        row.code ? codeLabel(row.code) : 'Error de validación',
+        row.columns.map(columnLabel).join(', '),
+      ]),
+  ];
+  return fields.map((row) => row.map(encodeCsvCell).join(',')).join('\r\n');
+}
+
+export function encodeCsvCell(value: string): string {
+  const safe = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+  return `"${safe.replaceAll('"', '""')}"`;
 }

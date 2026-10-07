@@ -52,6 +52,9 @@ export interface ImportDetailViewProps {
   };
   readonly history: PagedProps<HistoryPage>;
   readonly notice?: string | null;
+  readonly downloadingErrors?: boolean;
+  readonly downloadNotice?: string | null;
+  readonly onDownloadErrors?: () => void;
   readonly onRetry: () => void;
 }
 
@@ -127,7 +130,19 @@ function LoadMore({
   ) : null;
 }
 
-function Report({ job, props }: { job: ImportJob; props: ImportDetailViewProps['rows'] }) {
+function Report({
+  job,
+  props,
+  downloadingErrors = false,
+  downloadNotice = null,
+  onDownloadErrors,
+}: {
+  job: ImportJob;
+  props: ImportDetailViewProps['rows'];
+  downloadingErrors?: boolean;
+  downloadNotice?: string | null;
+  onDownloadErrors?: () => void;
+}) {
   const uid = React.useId();
   return (
     <Box component="section" aria-labelledby="report-title" sx={{ mt: 4 }}>
@@ -138,6 +153,20 @@ function Report({ job, props }: { job: ImportJob; props: ImportDetailViewProps['
         Muestra la fila, el resultado, el motivo y las columnas con problema. Nunca el contenido de
         las celdas.
       </Typography>
+      {job.invalidRows > 0 && onDownloadErrors && (
+        <Box sx={{ mb: 2 }}>
+          <Button variant="outlined" loading={downloadingErrors} onClick={onDownloadErrors}>
+            Descargar CSV de errores
+          </Button>
+          {downloadNotice && (
+            <Box sx={{ mt: 1 }}>
+              <Notifications
+                messages={[{ id: 'download-errors', text: downloadNotice, severity: 'error' }]}
+              />
+            </Box>
+          )}
+        </Box>
+      )}
       <NoSubmit>
         <Box sx={{ maxWidth: 320, mb: 2 }}>
           <Field
@@ -246,6 +275,9 @@ export function ImportDetailView({
   rows,
   history,
   notice = null,
+  downloadingErrors = false,
+  downloadNotice = null,
+  onDownloadErrors,
   onRetry,
 }: ImportDetailViewProps) {
   if (state.status === 'error' && state.error.status === 404) return <ImportNotFound />;
@@ -289,7 +321,13 @@ export function ImportDetailView({
               Resumen
             </Typography>
             <Summary job={job} />
-            <Report job={job} props={rows} />
+            <Report
+              job={job}
+              props={rows}
+              downloadingErrors={downloadingErrors}
+              downloadNotice={downloadNotice}
+              {...(onDownloadErrors ? { onDownloadErrors } : {})}
+            />
             <History props={history} />
           </>
         )}

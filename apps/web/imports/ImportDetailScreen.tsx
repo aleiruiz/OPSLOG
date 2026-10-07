@@ -5,6 +5,7 @@ import type { ImportEvent, ImportOutcome, ImportRow } from '../app/types';
 import { useSession } from '../auth/session';
 import { ImportDetailView, type HistoryPage, type RowsPage } from './ImportDetailView';
 import { importPath } from './ImportMessages';
+import { errorReportCsv } from './csv';
 
 const notices: Record<string, string> = {
   importada: 'Importación terminada. Revisa el informe por fila.',
@@ -76,6 +77,8 @@ export function ImportDetailScreen({ id }: { id: string }) {
   const { ports, markExpired } = useSession();
   const router = useRouter();
   const [outcome, setOutcome] = React.useState<ImportOutcome | ''>('');
+  const [downloadingErrors, setDownloadingErrors] = React.useState(false);
+  const [downloadNotice, setDownloadNotice] = React.useState<string | null>(null);
   const { state, reload } = useResource(() => ports.imports.get(id), [ports, id]);
   const rowsFirst = useResource<RowsPage>(
     () => ports.imports.rows(id, { limit: PAGE, ...(outcome === '' ? {} : { outcome }) }),
@@ -110,12 +113,56 @@ export function ImportDetailScreen({ id }: { id: string }) {
     if (router.search.has('aviso')) router.navigate(importPath(id), { replace: true });
   }, [router, id]);
 
+  const downloadErrors = async () => {
+    setDownloadingErrors(true);
+    setDownloadNotice(null);
+    const allRows: ImportRow[] = [];
+    let cursor: string | undefined;
+    for (let page = 0; page < 5; page += 1) {
+      const result = await ports.imports.rows(id, {
+        limit: 100,
+        outcome: 'invalid',
+        ...(cursor ? { cursor } : {}),
+      });
+      if (!result.ok) {
+        setDownloadingErrors(false);
+        if (result.error.status === 401) markExpired();
+        else setDownloadNotice('No pudimos preparar el informe. Intenta nuevamente.');
+        return;
+      }
+      allRows.push(...result.value.items);
+      cursor = result.value.nextCursor ?? undefined;
+      if (!cursor) break;
+    }
+    setDownloadingErrors(false);
+    if (
+      cursor ||
+      allRows.length > 500 ||
+      allRows.length !== (state.status === 'ready' ? state.data.invalidRows : 0)
+    ) {
+      setDownloadNotice('El informe supera el límite disponible o no está completo.');
+      return;
+    }
+    const blob = new Blob([`\uFEFF${errorReportCsv(allRows)}`], {
+      type: 'text/csv;charset=utf-8',
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `importacion-${id}-errores.csv`;
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  };
+
   return (
     <ImportDetailView
       state={state}
       rows={{ ...rows, outcome, onOutcomeChange: setOutcome }}
       history={history}
       notice={notice}
+      downloadingErrors={downloadingErrors}
+      downloadNotice={downloadNotice}
+      onDownloadErrors={() => void downloadErrors()}
       onRetry={() => {
         reload();
         rowsFirst.reload();

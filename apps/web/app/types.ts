@@ -1,5 +1,6 @@
 import type {
   AlertsClient,
+  AssignmentsClient,
   ApiError,
   AreasClient,
   BffAlert,
@@ -10,6 +11,9 @@ import type {
   BffAlertSeverity,
   BffAlertSource,
   BffAlertsQuery,
+  BffAssignmentEndKind,
+  BffAssignmentStatus,
+  BffAssignmentType,
   BffArea,
   BffAreaDetail,
   BffAreaHistoryEntry,
@@ -45,6 +49,19 @@ import type {
   BffEmployeePatch,
   BffEmployeeStatus,
   BffEmployeesQuery,
+  BffImportEntity,
+  BffImportEvent,
+  BffImportHistoryQuery,
+  BffImportInput,
+  BffImportJob,
+  BffImportMode,
+  BffImportOutcome,
+  BffImportRow,
+  BffImportRowCode,
+  BffImportRowsQuery,
+  BffImportStatus,
+  BffImportSubmitted,
+  BffImportsQuery,
   BffFitness,
   BffFitnessReason,
   BffOidcCredentials,
@@ -52,6 +69,13 @@ import type {
   BffUsersQuery,
   BffUserStatus,
   BffVehicle,
+  BffVehicleAssignment,
+  BffVehicleAssignmentCreated,
+  BffVehicleAssignmentEnd,
+  BffVehicleAssignmentEvent,
+  BffVehicleAssignmentHistoryQuery,
+  BffVehicleAssignmentInput,
+  BffVehicleAssignmentsQuery,
   BffVehicleInput,
   BffVehiclePatch,
   BffVehicleStatus,
@@ -59,6 +83,7 @@ import type {
   DocumentsClient,
   InsuranceClient,
   EmployeesClient,
+  ImportsClient,
   ISODateTime,
   Page,
   Permission,
@@ -308,6 +333,35 @@ export type AlertRecipientRole = BffAlertRecipientRole;
  */
 export type AlertsPort = AlertsClient;
 
+export type VehicleAssignment = BffVehicleAssignment;
+export type AssignmentType = BffAssignmentType;
+export type AssignmentStatus = BffAssignmentStatus;
+export type AssignmentEndKind = BffAssignmentEndKind;
+export type AssignmentInput = BffVehicleAssignmentInput;
+export type AssignmentCreated = BffVehicleAssignmentCreated;
+export type AssignmentEnd = BffVehicleAssignmentEnd;
+export type AssignmentEvent = BffVehicleAssignmentEvent;
+export type AssignmentListQuery = BffVehicleAssignmentsQuery;
+export type AssignmentHistoryQuery = BffVehicleAssignmentHistoryQuery;
+/** Assignments are closed, never edited or deleted; conflicts and permissions are enforced by the BFF. */
+export type AssignmentsPort = AssignmentsClient;
+
+export type ImportEntity = BffImportEntity;
+export type ImportMode = BffImportMode;
+export type ImportStatus = BffImportStatus;
+export type ImportOutcome = BffImportOutcome;
+export type ImportRowCode = BffImportRowCode;
+export type ImportInput = BffImportInput;
+export type ImportJob = BffImportJob;
+export type ImportSubmitted = BffImportSubmitted;
+export type ImportRow = BffImportRow;
+export type ImportEvent = BffImportEvent;
+export type ImportListQuery = BffImportsQuery;
+export type ImportRowsQuery = BffImportRowsQuery;
+export type ImportHistoryQuery = BffImportHistoryQuery;
+/** Reports contain row numbers/codes/columns only; employee PII requires view_pii server-side. */
+export type ImportsPort = ImportsClient;
+
 export interface ApiPorts {
   readonly auth: AuthPort;
   readonly tenant: TenantAdminPort;
@@ -320,5 +374,7 @@ export interface ApiPorts {
   readonly insurance: InsurancePort;
   readonly employees: EmployeesPort;
   readonly alerts: AlertsPort;
+  readonly assignments: AssignmentsPort;
+  readonly imports: ImportsPort;
   readonly oidc: OidcPort;
 }

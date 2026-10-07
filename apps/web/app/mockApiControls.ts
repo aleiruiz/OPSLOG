@@ -20,7 +20,7 @@ export function createControls(
   cover: MockInsuranceStore,
   staff: MockEmployeeStore,
   warnings: MockAlertsStore,
-): MockControls {
+): Omit<MockControls, 'endAssignmentExternally' | 'assignments' | 'imports'> {
   return {
     expireSession: () => {
       session.clear();

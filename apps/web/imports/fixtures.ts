@@ -77,6 +77,19 @@ export interface DemoImport {
  */
 export function demoImports(count = 28): DemoImport[] {
   const rows = demoRows(30);
+  let invalidCount = 0;
+  const firstJobRows = demoRows(300).map((row) => {
+    if (row.outcome !== 'invalid') return row;
+    invalidCount += 1;
+    if (invalidCount <= 12) return row;
+    return {
+      ...row,
+      outcome: 'imported' as const,
+      code: null,
+      columns: [],
+      entityId: `veh-${String(900 + row.rowNumber).padStart(3, '0')}`,
+    };
+  });
   const invalid = rows.filter((row) => row.outcome === 'invalid');
   const imported = rows.filter((row) => row.outcome === 'imported');
   const events = (job: ImportJob): ImportEvent[] => [
@@ -100,7 +113,7 @@ export function demoImports(count = 28): DemoImport[] {
         ]),
   ];
   const curated: DemoImport[] = [
-    { job: makeJob(), rows, events: [] },
+    { job: makeJob(), rows: firstJobRows, events: [] },
     {
       job: makeJob({
         id: 'imp-002',

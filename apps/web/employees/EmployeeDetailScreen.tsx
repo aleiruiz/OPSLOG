@@ -3,6 +3,7 @@ import { useResource, type ResourceState } from '../app/resource';
 import { useRouter } from '../app/router';
 import type { Employee, EmployeeHistoryEntry, EmployeeStatus } from '../app/types';
 import { useSession } from '../auth/session';
+import { AssignmentHistorySection } from '../assignments/AssignmentHistorySection';
 import {
   dialogClosed,
   EmployeeDetailView,
@@ -152,36 +153,41 @@ export function EmployeeDetailScreen({ id }: { id: string }) {
   };
 
   return (
-    <EmployeeDetailView
-      state={state}
-      history={{
-        state: historyState,
-        loadingMore,
-        notice: historyNotice,
-        onRetry: history.reload,
-        onLoadMore: (cursor) => void loadMore(cursor),
-      }}
-      can={can}
-      notice={notice}
-      dialog={dialog}
-      statusPanel={panel}
-      onRetry={reload}
-      onStatusOpen={() => setPanel({ open: true, busy: false })}
-      onStatusCancel={() => setPanel(statusPanelClosed)}
-      onStatusSubmit={(to, reason) =>
-        to === 'terminated'
-          ? setDialog({ kind: 'terminate', busy: false, reason })
-          : void changeStatus(to, reason, 'panel')
-      }
-      onStatusErrorAction={recover}
-      onArchiveRequest={() => setDialog({ kind: 'archive', busy: false })}
-      onDialogConfirm={() =>
-        dialog.kind === 'terminate'
-          ? void changeStatus('terminated', dialog.reason ?? '', 'dialog')
-          : void archive()
-      }
-      onDialogCancel={() => setDialog(dialogClosed)}
-      onDialogErrorAction={recover}
-    />
+    <>
+      <EmployeeDetailView
+        state={state}
+        history={{
+          state: historyState,
+          loadingMore,
+          notice: historyNotice,
+          onRetry: history.reload,
+          onLoadMore: (cursor) => void loadMore(cursor),
+        }}
+        can={can}
+        notice={notice}
+        dialog={dialog}
+        statusPanel={panel}
+        onRetry={reload}
+        onStatusOpen={() => setPanel({ open: true, busy: false })}
+        onStatusCancel={() => setPanel(statusPanelClosed)}
+        onStatusSubmit={(to, reason) =>
+          to === 'terminated'
+            ? setDialog({ kind: 'terminate', busy: false, reason })
+            : void changeStatus(to, reason, 'panel')
+        }
+        onStatusErrorAction={recover}
+        onArchiveRequest={() => setDialog({ kind: 'archive', busy: false })}
+        onDialogConfirm={() =>
+          dialog.kind === 'terminate'
+            ? void changeStatus('terminated', dialog.reason ?? '', 'dialog')
+            : void archive()
+        }
+        onDialogCancel={() => setDialog(dialogClosed)}
+        onDialogErrorAction={recover}
+      />
+      {state.status === 'ready' && state.data.employee.kind === 'driver' && (
+        <AssignmentHistorySection employeeId={state.data.employee.id} />
+      )}
+    </>
   );
 }

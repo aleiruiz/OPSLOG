@@ -39,6 +39,17 @@ async function expectNoViolations(page: Page) {
 }
 
 test.describe('imports: history, permissions and accessibility', () => {
+  test('downloads a complete error report without original cell values', async ({ page }) => {
+    await signIn(page, '/flota/importaciones/imp-001');
+    await expect(
+      page.getByRole('heading', { name: 'Importación de vehículos', level: 1 }),
+    ).toBeVisible();
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Descargar CSV de errores' }).click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toBe('importacion-imp-001-errores.csv');
+  });
+
   test('lists the jobs with filters and cursor pagination, reachable from the navigation', async ({
     page,
   }) => {

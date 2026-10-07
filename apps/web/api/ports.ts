@@ -1,10 +1,12 @@
 import {
   createAlertsClient,
   createAreasClient,
+  createAssignmentsClient,
   createBffClient,
   createDocumentsClient,
   createInsuranceClient,
   createEmployeesClient,
+  createImportsClient,
   createVehiclesClient,
   type BffClient,
   type BffClientOptions,
@@ -109,5 +111,7 @@ export function createHttpApi(
       history: employees.history,
     },
     alerts,
+    assignments: createAssignmentsClient(client),
+    imports: createImportsClient(client),
   };
 }

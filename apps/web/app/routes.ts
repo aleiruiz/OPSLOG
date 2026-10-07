@@ -16,6 +16,13 @@ export interface RouteDefinition {
     | 'vehicleNew'
     | 'vehicleDetail'
     | 'vehicleEdit'
+    | 'assignments'
+    | 'assignmentNew'
+    | 'assignmentDetail'
+    | 'assignmentEnd'
+    | 'imports'
+    | 'importNew'
+    | 'importDetail'
     | 'areas'
     | 'areaNew'
     | 'areaDetail'
@@ -155,6 +162,32 @@ export const routes: readonly RouteDefinition[] = [
     title: 'Editar vehículo',
     access: { permission: 'edit' },
   },
+  // Replacing a principal requires create + edit in the screen and on the BFF.
+  {
+    id: 'assignments',
+    pattern: '/flota/asignaciones',
+    title: 'Asignaciones',
+    access: { permission: 'view' },
+    nav: { group: 'Flota', label: 'Asignaciones' },
+  },
+  {
+    id: 'assignmentNew',
+    pattern: '/flota/asignaciones/nueva',
+    title: 'Nueva asignación',
+    access: { permission: 'create' },
+  },
+  {
+    id: 'assignmentDetail',
+    pattern: '/flota/asignaciones/:id',
+    title: 'Asignación',
+    access: { permission: 'view' },
+  },
+  {
+    id: 'assignmentEnd',
+    pattern: '/flota/asignaciones/:id/cerrar',
+    title: 'Cerrar asignación',
+    access: { permission: 'edit' },
+  },
   // Documents with an expiry date: read = `view`, create = `create`, edit/renew = `edit`; archiving (`delete`) is an
   // action of the detail. Insurance policies follow the same permissions (the deductible also needs `view_costs`).
   {
@@ -228,6 +261,25 @@ export const routes: readonly RouteDefinition[] = [
     title: 'Alertas',
     access: { permission: 'view' },
     nav: { group: 'Flota', label: 'Alertas' },
+  },
+  {
+    id: 'imports',
+    pattern: '/flota/importaciones',
+    title: 'Importaciones',
+    access: { permission: 'view' },
+    nav: { group: 'Flota', label: 'Importaciones' },
+  },
+  {
+    id: 'importNew',
+    pattern: '/flota/importaciones/nueva',
+    title: 'Nueva importación',
+    access: { permission: 'create' },
+  },
+  {
+    id: 'importDetail',
+    pattern: '/flota/importaciones/:id',
+    title: 'Importación',
+    access: { permission: 'view' },
   },
   {
     id: 'alertSettings',

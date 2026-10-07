@@ -3,6 +3,7 @@ import { useResource } from '../app/resource';
 import { useRouter } from '../app/router';
 import type { ApiError } from '../app/types';
 import { useSession } from '../auth/session';
+import { AssignmentHistorySection } from '../assignments/AssignmentHistorySection';
 import { archiveClosed, VehicleDetailView, type ArchiveDialogState } from './VehicleDetailView';
 
 const notices: Record<string, string> = {
@@ -57,19 +58,22 @@ export function VehicleDetailScreen({ id }: { id: string }) {
   };
 
   return (
-    <VehicleDetailView
-      state={state}
-      can={can}
-      notice={notice}
-      archive={archive}
-      onRetry={reload}
-      onArchiveRequest={() => setArchive({ open: true, busy: false })}
-      onArchiveConfirm={() => void confirm()}
-      onArchiveCancel={() => setArchive(archiveClosed)}
-      onArchiveErrorAction={() => {
-        setArchive(archiveClosed);
-        reload();
-      }}
-    />
+    <>
+      <VehicleDetailView
+        state={state}
+        can={can}
+        notice={notice}
+        archive={archive}
+        onRetry={reload}
+        onArchiveRequest={() => setArchive({ open: true, busy: false })}
+        onArchiveConfirm={() => void confirm()}
+        onArchiveCancel={() => setArchive(archiveClosed)}
+        onArchiveErrorAction={() => {
+          setArchive(archiveClosed);
+          reload();
+        }}
+      />
+      {state.status === 'ready' && <AssignmentHistorySection vehicleId={state.data.id} />}
+    </>
   );
 }

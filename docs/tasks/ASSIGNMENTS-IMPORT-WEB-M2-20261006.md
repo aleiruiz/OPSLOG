@@ -1,0 +1,158 @@
+# ASSIGNMENTS-IMPORT-WEB-M2-20261006 — interfaz de Asignaciones e Importaciones
+
+```yaml
+id: ASSIGNMENTS-IMPORT-WEB-M2-20261006
+baseline: [SPEC-1.3, ORCH-1.3, inherited: SPEC-1.0/ORCH-1.0, SPEC-1.1/ORCH-1.1, SPEC-1.2/ORCH-1.2]
+milestone: M2
+kind: implementation
+slice: web
+baseSHA: 351b67ebbb94070e347ea7fc6bbdc64a8299c530
+depends_on:
+  [
+    G1,
+    CORE-WEB-M1-20261006,
+    VEHICLES-WEB-M2-20261006,
+    EMPLOYEES-WEB-M2-20261006,
+    ASSIGNMENTS-M2-20261006,
+    IMPORT-M2-20261006,
+    ADR-0010,
+    FND-BROWSER-E2E,
+  ]
+write_paths:
+  [
+    apps/web/assignments/**,
+    apps/web/imports/**,
+    apps/web/vehicles/**,
+    apps/web/employees/**,
+    apps/web/app/**,
+    apps/web/api/**,
+    apps/web/tsconfig.json,
+    apps/web/vitest.config.ts,
+    packages/ui/.storybook/main.ts,
+    e2e/**,
+    docs/tasks/ASSIGNMENTS-IMPORT-WEB-M2-20261006.md,
+    package.json,
+  ]
+forbidden_paths:
+  [
+    docs/baselines/**,
+    apps/api/**,
+    packages/domain/**,
+    packages/persistence/**,
+    packages/contracts/**,
+    pnpm-lock.yaml,
+    Tasks.md,
+    .env*,
+    infra/**,
+  ]
+```
+
+## Baseline y estado inicial
+
+La instrucción directa vigente del propietario fija SPEC/ORCH-1.3 para este trabajo; el pin OpenAI observado al asignar esta tarea es `gpt-6-luna`. En el worktree, `docs/baselines/ACTIVE.md` y `AGENTS.md` declaran SPEC/ORCH-1.4. Se registra como discrepancia del repositorio: esta tarea conserva la autoridad 1.3 indicada por el propietario y no adopta ni modifica 1.4, baselines o manifests. Las tareas backend relacionadas ya enumeran 1.4; sus decisiones de producto y contratos se consumen aquí solo en lo compatible con la instrucción vigente.
+
+La rama asignada parte de `351b67ebbb94070e347ea7fc6bbdc64a8299c530` y contiene una implementación candidata de ambas áreas, pruebas unitarias, specs de Playwright y stories. Al preparar este paquete no se había confirmado ejecución de esos comandos ni existían baselines de píxeles rastreados para las 72 stories nuevas (34 de Asignaciones y 38 de Importaciones). La presencia de pruebas, stories o código no equivale a resultado aprobado. Este documento tampoco declara tests, CI, PR, auditoría o gate pasados.
+
+G1 tiene una aceptación del propietario registrada en `docs/audits/G1/a9270686a0c3a531de916b57abd4a9689a29df57/report.md`, condicionada allí a la fusión del PR documental. G2 permanece pendiente de su integración y auditoría acumulativa. ADR-0010 extiende hasta antes del cierre de G2, pero no elimina, el requisito de Storybook y regresión visual.
+
+## Objetivo y límites
+
+Entregar las pantallas web que llevan las asignaciones conductor–vehículo e importaciones de vehículos y empleados desde sus contratos BFF existentes hasta flujos utilizables, accesibles y trazables. Usar React/TypeScript, los patrones del shell y `@opslog/ui`, los clientes tipados de `@opslog/contracts` ya expuestos por `apps/web/api/ports.ts`, y mocks sintéticos fieles para las pruebas web.
+
+No cambiar dominio, persistencia, BFF ni contratos compartidos; no usar AWS, OIDC real, datos personales reales o servicios de producción. El archivo elegido por la persona se lee en el navegador y su contenido se envía al BFF como CSV. Las rutas web son `/flota/asignaciones`, `/flota/asignaciones/nueva`, `/flota/asignaciones/:id`, `/flota/asignaciones/:id/cerrar`, `/flota/importaciones`, `/flota/importaciones/nueva` y `/flota/importaciones/:id`.
+
+La asignación es conductor–vehículo; el backend excluye asignación histórica a áreas y no ofrece cambios retroactivos. La importación cubre las entidades `vehicle` y `employee`, CSV/JSON según el contrato backend, con `dry_run`, `commit_valid` y `commit_all`. El backend no acepta XLSX ni adjunta un reporte descargable de errores; esos límites se registran abajo y no deben presentarse en la UI como capacidades disponibles.
+
+## Trazabilidad requisito → contrato → interfaz → prueba → evidencia
+
+| Requisito / fuente                                                                            | Contrato que consume la interfaz                                                                                  | Resultado web                                                                                                                                                                 | Prueba exigida                                                                                                               | Evidencia de aceptación                                                                                                   |
+| --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| FR-075, BRD §8.7: asignar/desasignar con tipo, fechas y motivo                                | `assignments.list/create/get/end/history`; tipos principal, secundaria y temporal; timestamps del servidor        | Lista filtrable y paginada, ficha e historial, alta y cierre con motivos                                                                                                      | Unitaria de modelo/formulario/pantalla/puerto; Playwright de listado, alta, cierre e historial                               | Resultado de `@opslog/web test:unit` y Playwright sobre SHA candidato                                                     |
+| FR-076 / BR-002 y US-013: una principal vigente por vehículo; conflicto y reemplazo explícito | `principal_taken`; `create` con `replace: true`; `create` + `edit` para reemplazar                                | Explicar el conflicto en el campo y permitir reemplazar con confirmación; el backend actual solo devuelve campo/código y no identifica al conductor en conflicto              | Unitaria y navegador: rechazo sin crear; reemplazo cierra la previa y deja la nueva vigente                                  | Reporte browser y resultado del cliente tipado en el SHA candidato                                                        |
+| BR-003 / BR-014: unicidad principal por conductor y elegibilidad de vehículo/conductor        | `principal_taken`, `already_assigned`, `invalid_vehicle`, `invalid_employee`; opciones de vehículos y conductores | Mostrar error junto al selector sin filtrar causa o datos de otro tenant; solo opciones elegibles al cargar                                                                   | Unitaria de errores y opciones; navegador: conductor ya asignado, vehículo/conductor inválidos, sin opciones o carga fallida | Resultados unitarios y Playwright                                                                                         |
+| US-013 §22 y FR-053: asignación vigente e historial en ambas fichas                           | API permite listar por `vehicleId` y `employeeId`; rutas de vehículos y empleados separadas                       | La pantalla dedicada resuelve el trabajo de asignar y consultar; las fichas de vehículo y empleado deben enlazar y mostrar la asignación vigente/historial para cerrar FR-053 | Prueba de integración de navegación desde ambas fichas, además de listado filtrado por entidad                               | Playwright de ambas rutas y trazabilidad del vínculo                                                                      |
+| FR-054 / FR-074: importar conductores y vehículos con plantilla y validación previa           | `imports.create/list/get/rows/history`; plantillas `BFF_IMPORT_TEMPLATES`                                         | Descargar plantilla CSV; cargar CSV local o pegarlo; revisar columnas, filas y límite antes de validar                                                                        | Unitaria del parser/modelo y pantallas; Playwright de archivo, plantilla, formato inválido y validación                      | Resultado unitario y reporte de navegador                                                                                 |
+| US-016 §22: validación previa; 12 errores de 300; importar 288 válidas; audit                 | `dry_run`, luego `commit_valid`; job, filas paginadas y audit del backend                                         | Mostrar resumen y errores por fila/columna; confirmar explícitamente la importación válida; no enseñar valores de celdas                                                      | Unitarias y Playwright con fixture sintético 300/12, y comprobación del job/audit mediante el flujo integrado de G2          | Reporte browser y evidencia BFF/MySQL del candidato integrado; las pruebas web aisladas con mock no prueban audit durable |
+| S27: historial, estados y acciones por permiso                                                | `running`, `validated`, `imported`, `failed`; `view`, `create`, `view_pii`                                        | Lista, ficha, filtros, informe paginado, vacíos/errores/401/403; bloquear columnas PII si falta `view_pii`                                                                    | Matrices de permisos unitarias y Playwright; comprobar que respuestas, rutas, logs e informes no repiten valores personales  | Resultados unitarios y browser; evidencia de seguridad sin PII                                                            |
+| SPECS §9.1, ADR-0010 y FND-BROWSER-E2E                                                        | Storybook CSF y suite Playwright Chromium                                                                         | Cada estado visual tiene story y baseline desktop 1280/mobile 360; axe y comportamiento real en navegador                                                                     | `pnpm test:e2e`, `pnpm test:e2e -- --project=chromium`, `pnpm test:visual`                                                   | SHA, browser, comando, resultado y reporte/artefacto; baselines revisadas y rastreadas                                    |
+
+## Aceptación Given/When/Then
+
+### Asignaciones
+
+1. **Lista e historial:** Given una persona con `view`, When abre Asignaciones y cambia filtros de vehículo, conductor, tipo o estado, Then ve los resultados paginados de ese filtro, con etiquetas legibles y sin PII; errores recuperables ofrecen reintento y cursor vencido no mezcla filtros.
+2. **Alta:** Given una persona con `create` y opciones válidas, When crea una asignación con tipo y motivo, Then se muestra la asignación guardada con fechas del servidor; campos inválidos, sesión expirada, 403, 409 y 422 se comunican sin eco de datos sensibles.
+3. **Reemplazo:** Given una principal vigente y una persona con `create` y `edit`, When intenta asignar otra principal, Then se explica el conflicto y no se reemplaza hasta confirmación; al confirmar, la anterior aparece cerrada y la nueva vigente. Un usuario sin ambos permisos no puede iniciar ni completar ese reemplazo.
+4. **Cierre:** Given una asignación vigente y `edit`, When la cierra con motivo, Then queda en el historial con fin y el detalle pasa a solo lectura; un conflicto de versión preserva el borrador y permite recargar datos actuales.
+5. **Ambas fichas:** Given una asignación vigente o anterior, When se abre el detalle del vehículo y el del conductor correspondiente, Then cada ficha identifica la vigente y permite consultar su historial sin exponer PII. La asignación dedicada en rutas de flota no sustituye este criterio de FR-053.
+
+### Importaciones
+
+6. **Plantilla y entrada:** Given una persona con permiso `create`, When abre una importación, Then puede descargar la plantilla CSV correcta, elegir un CSV local leído en el navegador o pegar contenido, y corregir encabezados/filas mal formadas antes de enviarlo. XLSX no se acepta ni se etiqueta como soportado.
+7. **Validar primero:** Given un CSV válido de 300 vehículos con 12 errores, When selecciona solo validar, Then ve 300 filas revisadas, 288 válidas y 12 con número de fila, columnas y motivo; no se crea ningún vehículo. La tabla, los mensajes, las URLs y el historial no exponen el contenido de celdas.
+8. **Confirmar filas válidas:** Given el mismo archivo ya validado sin cambios, When confirma `commit_valid`, Then el cliente reutiliza el `dryRunJobId`, crea/reutiliza la clave idempotente correcta y muestra 288 creadas y el informe de las 12 restantes. Una edición del archivo invalida la validación anterior.
+9. **Todo o nada:** Given errores pendientes, When la persona intenta `commit_all`, Then la acción queda deshabilitada en UI; si el BFF devuelve fallo/conflicto, se explica el resultado sin afirmar que no hubo altas parciales cuando la semántica del backend no lo garantiza.
+10. **Permiso PII:** Given un archivo de empleados con columnas personales y una sesión sin `view_pii`, When lo selecciona o pega, Then la UI avisa y bloquea el envío; con permiso puede continuar, pero no se muestran ni se registran los valores personales en el reporte por fila.
+11. **Historial e informe:** Given jobs previos, When la persona abre una importación, Then ve estado, conteos, modo, entidad, actor opaco, fechas y filas paginadas, sin tenant, idempotency key, fingerprint ni valores de celdas. Reportes de carga vacíos, error, 401/403/404 y paginación tienen estados recuperables.
+12. **Archivo descargable de errores:** Given una importación parcial con filas inválidas, When solicita descargar el informe, Then obtiene CSV con número de fila, resultado, código/motivo localizado y columnas erróneas, sin valores originales; se neutralizan celdas que pudieran convertirse en fórmulas. El artefacto respeta permisos y paginación completa hasta el límite de 500 filas.
+
+### Calidad de interfaz
+
+13. **Accesibilidad y tamaños:** Given los estados y diálogos incluidos, When se ejecuta Playwright, Then axe no reporta violaciones WCAG 2.1 A/AA, las interacciones funcionan por teclado y no hay desbordamiento horizontal a 360 px ni a 1280 px.
+14. **Historias visuales:** Given las 72 stories actuales (34 de Asignaciones y 38 de Importaciones), When se compara Storybook en Chromium, Then existe una baseline revisada para cada story a 1280 px y 360 px, sin tolerancia/reintentos ampliados para silenciar diferencias. Son 144 capturas esperadas si el catálogo no cambia.
+15. **Candidato verificable:** Given el SHA de aprobación, When se corre el gate, Then unitarias, Playwright, regresión visual y CI corresponden al mismo SHA; falla, omisión o artefacto ausente bloquea aceptación. Las pruebas Playwright de esta pantalla usan fixtures sintéticos y el mock web; la integración BFF/TypeORM/MySQL real se acredita separadamente en `FLT-INTEGRATE` para G2.
+
+## Comandos requeridos
+
+Ejecutar y conservar los resultados en el SHA candidato:
+
+- `pnpm --filter @opslog/web test:unit` — cobertura de las áreas web con umbrales 95/95/95/90, incluidas pantallas, formularios, reglas, mocks, puertos, rutas y axe en jsdom.
+- `pnpm test:e2e` — suite Playwright declarada en `e2e/assignments.spec.ts` y `e2e/imports.spec.ts`, además de regresión de shell y componentes. En CI debe correr con el Chromium fijado y sin retries que oculten flakes.
+- `pnpm test:e2e -- --project=chromium` — evidencia explícita del navegador Chromium exigida por FND-BROWSER-E2E.
+- `pnpm storybook:build` — verificar que Storybook indexa todas las stories nuevas.
+- `pnpm test:visual` — comparar todas las stories con sus baselines rastreadas. Para crear o renovar imágenes, `pnpm test:visual:update` solo se usa con inspección visual y justificación de cada diferencia; después se vuelve a ejecutar `pnpm test:visual`.
+- `pnpm lint`, `pnpm format:check`, `pnpm typecheck` y `pnpm build` — controles de estilo y compilación afectados por el cambio.
+- `pnpm quality` — controles agregados de integridad, fugas, lint, formato, tipos, unidades, integración y build de la rama; por sí solo no sustituye Playwright ni regresión visual.
+
+Para el gate acumulativo G2, `FLT-INTEGRATE` debe además ejecutar los flujos integrados pertinentes contra BFF y MySQL efímero real, incluidos aislamiento A/B, permisos, errores e importación idempotente. Esta interfaz no puede reemplazar esa evidencia con mocks. No usar `pnpm test:visual:update` como comprobación de regresión.
+
+## Evidencia local reportada durante la autoría
+
+El coordinador ejecutó los controles en el worktree actualizado. Los resultados son evidencia local del árbol previo al commit final; no sustituyen CI sobre un SHA inmutable ni esta lista declara aceptación:
+
+| Comando | Resultado observado | Alcance que aún falta |
+| --- | --- | --- |
+| `pnpm --filter @opslog/web test:unit` | PASS, 71 archivos / 1042 pruebas, incluida la regresión del informe 300/12 | Repetir en el candidato final de CI si cambia el SHA. |
+| `pnpm test:e2e` | PASS, 102/102 pruebas | Repetir sobre el SHA final. |
+| `pnpm test:e2e -- --project=chromium` | El argumento `--` literal no es aceptado por pnpm en este script. La forma `pnpm test:e2e --project=chromium` ejecutó 101/102; falló un timeout de login en `vehicles.spec.ts`. El test dirigido con `--grep='shows only the actions the role allows'` pasó 6/6 | La suite Chromium completa no pasó; repetir la invocación compatible y resolver o documentar el fallo antes de gate. |
+| `pnpm storybook:build` | PASS | Repetir sobre el SHA final si cambia. |
+| `pnpm typecheck` | PASS tras integrar los dos módulos y mantener Alertas | Repetir sobre el SHA final si cambia. |
+| `pnpm build` | PASS | Repetir sobre el SHA final si cambia. |
+| `pnpm lint` | PASS | Repetir sobre el SHA final si cambia. |
+| `pnpm format:check` | PASS global después de reformatear los archivos cambiados y los cinco archivos base que el comando había señalado | Repetir sobre el SHA final si cambia. |
+| `pnpm test:visual` / `pnpm test:visual:update` | No ejecutados | Faltan las 144 baselines nuevas de Asignaciones/Importaciones; su generación e inspección debe hacerse en Linux con Chromium fijado 1194. |
+| `pnpm quality` | No ejecutado como agregado | Requiere CI y la integración real de `FLT-INTEGRATE` para aceptar G2. |
+
+La primera corrida completa de Chromium tuvo un fallo aislado, aunque el test exacto pasó al repetirse. Se registra como tal, no como PASS del comando completo. Storybook compiló localmente; todavía no hay comparaciones visuales ni capturas de aceptación para este slice.
+
+## Gaps y decisiones que deben quedar visibles
+
+1. **XLSX:** BRD FR-054/074 y US-016 nombran CSV/XLSX o Excel; `IMPORT-M2-20261006` solo define JSON/CSV y deja XLSX abierto por seguridad/dependencia. No afirmarlo como terminado. Requiere una decisión/adopción explícita o un paquete backend compatible antes de cerrar G2.
+2. **Reporte descargable:** BRD US-016 §22 y S27 requieren descargar errores; el backend ofrece filas JSON paginadas y declara el archivo pendiente. Este paquete incorpora descarga segura desde la UI (sin guardar ni devolver valores de celdas), que debe quedar cubierta por pruebas. Si la paginación no permite producir el archivo completo, bloquear y coordinar cambio de contrato/backend; no declarar cumplido con solo la tabla.
+3. **Historial en fichas:** FR-053 pide asignación vigente e historial en ficha de vehículo y de conductor. La implementación candidata ahora integra `AssignmentHistorySection` en el detalle de vehículo y en el de empleados tipo conductor, con paginación y enlaces a la asignación; se añadió una prueba Playwright para ambos contextos. Falta confirmar esa regresión en el SHA final; el servidor sigue siendo la fuente de elegibilidad y permisos.
+4. **Texto exigido por US-013:** el BRD §22 pide que el conflicto identifique al conductor actual. El contrato/backend hoy devuelve `principal_taken` con campo, sin identidad, para limitar exposición de datos. No inventar ese dato en UI. La tarea puede cumplir el reemplazo seguro, pero debe mantener este desvío explícito y no declarar completa esa frase de US-013 hasta que el propietario resuelva el equilibrio de permiso/visibilidad y el contrato lo soporte.
+5. **FR-077:** el historial unificado de vehículo (asignaciones, estados, mantenimiento, siniestros, documentos y pólizas) filtrable/exportable a PDF no existe en estos contratos. No atribuirlo a la ficha de asignación ni al historial del job; conservarlo como gap de G2/M2 hasta paquete integrador y contrato aprobado.
+6. **BR-003 y límites de negocio:** el backend fija por defecto una principal vigente por conductor, no configurable; los cambios de estado/baja no cierran automáticamente asignaciones y la elegibilidad es best effort. La UI debe reflejar errores del servidor y no inferir resolución de las preguntas abiertas del backend.
+7. **Datos PII y reportes:** importaciones de empleados pueden incluir teléfono, correo, identificación y licencia con `view_pii`; el informe exportable no debe reconstruir valores originales, incluirlos en URL/local storage/logs ni crear fórmulas activas.
+8. **Backend integrado:** los E2E web actuales son de mock y no validan OIDC/BFF real, MySQL o auditoría durable. `FLT-INTEGRATE` mantiene esa obligación de G2 por separado.
+9. **Baselines visuales actuales:** el worktree de preparación no contiene snapshots con nombres de Asignaciones/Importaciones. El paquete no da por cumplida la obligación porque las stories existen; hay que producir, revisar y rastrear ambos tamaños antes de dar por lista la tarea.
+
+## Entregables y regla de aceptación
+
+- Interfaz y navegación con los clientes tipados de asignaciones/importaciones; mocks sintéticos que cubran resultados y fallos del contrato.
+- Pruebas unitarias de lógica y pantalla, accesibilidad jsdom y Playwright para cada flujo anterior.
+- 72 stories actuales y sus 144 baselines desktop/mobile revisadas, más reportes de browser/visual sobre el SHA candidato.
+- Este paquete actualizado con hallazgos reales, cambios y trazabilidad requisito→contrato→interfaz→prueba→evidencia.
+- No declarar aceptado el paquete mientras falte una ejecución requerida, evidencia de visual/browser, resolución de hallazgos, requisito aplicable o decisión sobre XLSX. Solo el orquestador puede marcar la tarea aceptada y cerrar gates.
+
+El candidato web se rebasó sobre `origin/main` en `d131acf` y sus rutas, puertos y mocks se integraron con Alertas de PR #67. Se añadió el informe CSV seguro descargable y la sección de asignaciones en las fichas de vehículos y conductores, con regresiones unitarias y Playwright. El coordinador reportó typecheck, build, lint, formato, Storybook, unitarias y `pnpm test:e2e` completos como PASS en el árbol previo al commit final. La suite Chromium ejecutó 101/102 y tuvo un timeout aislado de login en `vehicles.spec.ts`; su reproducción dirigida pasó 6/6, lo que no convierte el resultado de suite en PASS. `pnpm quality` y pruebas visuales no se ejecutaron; no se generaron baselines en Windows. Quedan pendientes las 144 baselines inspeccionadas en Linux con Chromium fijado, `pnpm quality`, validación en el SHA inmutable y auditoría independiente. La integración BFF/MySQL y su auditoría durable corresponden a `FLT-INTEGRATE`. Este paquete no declara aceptación, CI, PR, auditoría ni gates pasados.

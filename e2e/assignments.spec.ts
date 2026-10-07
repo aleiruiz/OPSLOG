@@ -34,6 +34,18 @@ async function ready(page: Page) {
 }
 
 test.describe('assignments: list, history, permissions and accessibility', () => {
+  test('shows current and past assignments in vehicle and driver records', async ({ page }) => {
+    await signIn(page, '/flota/vehiculos/veh-001');
+    await expect(page.getByRole('heading', { name: 'Asignaciones e historial' })).toBeVisible();
+    const vehicleHistory = page.getByRole('region', { name: 'Asignaciones e historial' });
+    await expect(vehicleHistory.getByRole('link', { name: /Principal ·/ })).toHaveCount(2);
+    await expect(vehicleHistory.getByText('Finalizada')).toBeVisible();
+    await goTo(page, '/plantilla/empleados/emp-001');
+    await expect(page.getByRole('heading', { name: 'Asignaciones e historial' })).toBeVisible();
+    const employeeHistory = page.getByRole('region', { name: 'Asignaciones e historial' });
+    await expect(employeeHistory.getByRole('link', { name: /Principal ·/ })).toHaveCount(1);
+  });
+
   test('lists assignments with filters and cursor pagination, reachable from the navigation', async ({
     page,
   }) => {
@@ -157,7 +169,11 @@ test.describe('assignments: create, replace and end', () => {
     await expectNoViolations(page);
     await page.getByRole('button', { name: 'Reemplazar al principal actual' }).click();
     await expect(page.getByText(/Asignación creada/)).toBeVisible();
-    await expect(page.getByText(/reemplazó/i).first()).toBeVisible();
+    await expect(page.getByText(/reemplazada/i).first()).toBeVisible();
+    await page.getByRole('link', { name: 'ECO-001' }).click();
+    const vehicleHistory = page.getByRole('region', { name: 'Asignaciones e historial' });
+    await expect(vehicleHistory.getByText('Vigente')).toHaveCount(2);
+    await expect(vehicleHistory.getByText('Finalizada')).toHaveCount(2);
   });
 
   test('explains the BR-003 conflict next to the driver', async ({ page }) => {
