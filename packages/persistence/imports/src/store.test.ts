@@ -155,6 +155,40 @@ describe('jobs', () => {
     expect(await put(store, job(A, 'n2', { idempotencyKey: null, mode: 'dry_run' }))).toBe(true);
   });
 
+  it('claims a running job with one conditional update, once per stamp', async () => {
+    const { db, store } = setup();
+    const j = job(A, 'j1');
+    await put(store, j);
+    const t1 = '2026-10-06T12:00:00.001Z';
+    const t2 = '2026-10-06T12:00:00.002Z';
+    expect(await store.claimJob(A, 'j1', j.updatedAt, t1)).toBe(true);
+    expect((await store.findJob(A, 'j1'))?.updatedAt).toBe(t1);
+    // The stale stamp, another company and a finished job never match.
+    expect(await store.claimJob(A, 'j1', j.updatedAt, t2)).toBe(false);
+    expect(await store.claimJob(B, 'j1', t1, t2)).toBe(false);
+    expect(await store.finishJob(finished(j), 1, ended(j))).toBe(true);
+    expect(await store.claimJob(A, 'j1', finished(j).updatedAt, t2)).toBe(false);
+    expect(db.committed(ImportEventEntity)).toHaveLength(2);
+  });
+
+  it('refuses rows that are not those of the tenant and job given', async () => {
+    const { db, store } = setup();
+    await put(store, job(A, 'j1'));
+    await put(store, job(B, 'j1'));
+    await put(store, job(A, 'j2'));
+    for (const [tenant, jobId, row] of [
+      [A, 'j1', result(B, 'j1', 1)],
+      [A, 'j1', result(A, 'j2', 1)],
+      [B, 'j1', result(A, 'j1', 1)],
+    ] as const)
+      expect(
+        await rejection(store.appendRows(tenant, jobId, [result(A, 'j1', 2), row])),
+      ).toMatchObject({
+        code: 'integrity',
+      });
+    expect(db.committed(ImportRowEntity)).toHaveLength(0);
+  });
+
   it('keeps tenants apart', async () => {
     const { store } = setup();
     await put(store, job(A, 'j1'));
@@ -302,6 +336,12 @@ describe('failures', () => {
     expect(
       await rejection(store.finishJob(finished(job(A, 'j1')), 1, ended(job(A, 'j1')))),
     ).toMatchObject({ code: 'contention' });
+    db.failNext('update', CONNECTION_LOST);
+    expect(
+      await rejection(
+        store.claimJob(A, 'j1', '2026-10-06T12:00:00.000Z', '2026-10-06T12:00:00.001Z'),
+      ),
+    ).toBeInstanceOf(ImportStoreError);
   });
 
   it('reports a stored row that violates the domain as an integrity error', async () => {

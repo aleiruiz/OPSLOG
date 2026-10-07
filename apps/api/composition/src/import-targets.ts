@@ -1,4 +1,4 @@
-import type { AreaService } from '../../../../packages/domain/areas/src/index.js';
+import { AreaError, type AreaService } from '../../../../packages/domain/areas/src/index.js';
 import {
   EmployeeError,
   employeeNumberKey,
@@ -66,7 +66,7 @@ function probeColumns(
   return bad.length > 0 ? bad : Object.keys(input);
 }
 
-/** Active-area check per distinct area (read only: nothing is written under the area lock). */
+/** Active-area check per distinct area (read only). */
 async function inactiveAreas(
   areas: AreaService,
   tenantId: string,
@@ -74,7 +74,13 @@ async function inactiveAreas(
 ): Promise<ReadonlySet<string>> {
   const gone = new Set<string>();
   for (const areaId of new Set(inputs.map((input) => String(input['areaId']))))
-    if (!(await areas.withActiveArea(tenantId, areaId, async () => true)).active) gone.add(areaId);
+    try {
+      if (!(await areas.get(tenantId, areaId)).active) gone.add(areaId);
+    } catch (error) {
+      // Unknown and foreign areas are both `not_found`: gone. Anything else is not a verdict.
+      if (!(error instanceof AreaError) || error.code !== 'not_found') throw error;
+      gone.add(areaId);
+    }
   return gone;
 }
 

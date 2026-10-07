@@ -481,6 +481,17 @@ export interface ImportStore {
   finishJob(next: ImportJob, expectedVersion: number, event: ImportEvent): Promise<boolean>;
   /** Newest event first. */
   events(tenantId: string, jobId: string, window: ImportWindow): Promise<ImportEventSlice>;
+  /**
+   * Atomic claim (and lease renewal) of a running job: moves `updatedAt` from `expectedUpdatedAt`
+   * to `nextUpdatedAt` only while the job is still `running` and still has that exact stamp; false
+   * otherwise. Of any number of executors that read the same stamp, exactly one wins.
+   */
+  claimJob(
+    tenantId: string,
+    jobId: string,
+    expectedUpdatedAt: string,
+    nextUpdatedAt: string,
+  ): Promise<boolean>;
 }
 
 const compareKeys = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
@@ -580,6 +591,19 @@ export class InMemoryImportStore implements ImportStore {
     if (this.jobs.get(key)?.version !== expectedVersion) return false;
     this.jobs.set(key, structuredClone(next));
     this.eventRows.push(structuredClone(event));
+    return true;
+  }
+
+  public async claimJob(
+    tenantId: string,
+    jobId: string,
+    expectedUpdatedAt: string,
+    nextUpdatedAt: string,
+  ): Promise<boolean> {
+    const key = storeKey(tenantId, jobId);
+    const job = this.jobs.get(key);
+    if (job?.status !== 'running' || job.updatedAt !== expectedUpdatedAt) return false;
+    this.jobs.set(key, { ...job, updatedAt: nextUpdatedAt });
     return true;
   }
 
@@ -710,6 +734,22 @@ export class ImportService {
     this.leaseMs = options.leaseMs ?? DEFAULT_LEASE_MS;
   }
 
+  /** A stamp strictly after `previous` (and not before now), so a claim always changes `updatedAt`. */
+  private stampAfter(previous: string): string {
+    return new Date(Math.max(this.now().getTime(), Date.parse(previous) + 1)).toISOString();
+  }
+
+  /**
+   * Claims a running job for this executor (or renews the claim): one conditional write that only
+   * one of the executors holding the same stamp wins. The loser gets `conflict`.
+   */
+  private async claim(job: ImportJob): Promise<ImportJob> {
+    const updatedAt = this.stampAfter(job.updatedAt);
+    if (!(await this.store.claimJob(job.tenantId, job.id, job.updatedAt, updatedAt)))
+      throw new ImportError('conflict');
+    return { ...job, updatedAt };
+  }
+
   /** The job of this tenant, or `not_found` (also for ids of other tenants). */
   private async load(tenantId: string, id: unknown): Promise<ImportJob> {
     const found = await this.store.findJob(guardId(tenantId), guardId(id));
@@ -804,6 +844,7 @@ export class ImportService {
       input: row.input,
       issue: row.issue ?? stored.get(row.rowNumber) ?? null,
     }));
+    let held = job;
     const rejected = [...recorded.values()].filter((row) => row.outcome === 'invalid').length;
     const reject =
       job.mode === 'commit_all' &&
@@ -831,6 +872,9 @@ export class ImportService {
           ),
       );
       for (const row of pending.filter((candidate) => candidate.issue === null)) {
+        // Renew the claim as the run goes on, so a long run is not taken over; a lost claim stops it.
+        if (this.now().getTime() - Date.parse(held.updatedAt) >= this.leaseMs / 4)
+          held = await this.claim(held);
         const created = await target.create(
           tenantId,
           actorId,
@@ -848,7 +892,7 @@ export class ImportService {
         }
       }
     }
-    return this.finish(job);
+    return this.finish(held);
   }
 
   private async finish(job: ImportJob): Promise<ImportJob> {
@@ -935,10 +979,12 @@ export class ImportService {
     if (job === null || job.fingerprint !== fingerprint || job.mode !== submission.mode)
       throw new ImportError('conflict');
     if (job.status !== 'running') return { job, replayed: !created };
-    // Someone is still running it (an attempt that lost the race, or a quick retry): not ours to run twice.
-    if (!created && now.getTime() - Date.parse(job.createdAt) < this.leaseMs)
+    // Someone may still be running it (the lease is measured from its last claim or renewal): not ours to run twice.
+    if (!created && now.getTime() - Date.parse(job.updatedAt) < this.leaseMs)
       throw new ImportError('conflict');
-    return { job: await this.execute(actorId, job, submission, observer), replayed: false };
+    // Taking over an expired lease is a conditional write: of two retries only one executes.
+    const mine = created ? job : await this.claim(job);
+    return { job: await this.execute(actorId, mine, submission, observer), replayed: false };
   }
 
   public get(tenantId: string, id: unknown): Promise<ImportJob> {

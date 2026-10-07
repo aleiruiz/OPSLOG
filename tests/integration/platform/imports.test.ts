@@ -214,8 +214,7 @@ describe('ImportsApi', () => {
 
 describe('import targets', () => {
   const boom = new Error('storage down: SYNTH-ID-7788');
-  const areas = (active: boolean) =>
-    ({ withActiveArea: async () => ({ active, value: true }) }) as never;
+  const areas = (active: boolean) => ({ get: async () => ({ active }) }) as never;
 
   it('vehicle target maps the vehicle service errors to row issues and rethrows the rest', async () => {
     const outcome = async (error: unknown) => {

@@ -557,6 +557,98 @@ describe('commit modes', () => {
     expect(s.created).toHaveLength(5);
   });
 
+  it('lets only one executor run a job after its lease: a retry while the first is still running', async () => {
+    const { s, service, later } = setup();
+    const input = {
+      entity: 'vehicle',
+      mode: 'commit_valid',
+      idempotencyKey: 'key-claimaaa',
+      rows: [vehicleRow(1), vehicleRow(2), vehicleRow(3)],
+    };
+    const original = s.target.create;
+    let calls = 0;
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let reached: () => void = () => undefined;
+    const atGate = new Promise<void>((resolve) => (reached = resolve));
+    (s.target as { create: ImportTarget['create'] }).create = async (t, a, i) => {
+      calls += 1;
+      if (calls === 2) {
+        reached();
+        await gate;
+      }
+      return original(t, a, i);
+    };
+    // The first executor stalls on its second row for longer than the lease.
+    const first = service.submit(A, ACTOR, input);
+    const firstSettled = first.then(
+      () => 'finished',
+      (error: unknown) => (error instanceof ImportError ? error.code : 'other'),
+    );
+    await atGate;
+    later(DEFAULT_LEASE_MS);
+    const second = await service.submit(A, ACTOR, input);
+    expect(second).toMatchObject({ replayed: false, job: { status: 'imported', importedRows: 3 } });
+    release();
+    // The first notices it lost the claim before its next row and stops: the third row is not created again.
+    expect(await firstSettled).toBe('conflict');
+    // Row 1 once, row 2 in flight in both (the only overlap a lost claim can leave), row 3 once.
+    expect(s.created).toHaveLength(4);
+    expect(await service.get(A, second.job.id)).toMatchObject({
+      status: 'imported',
+      importedRows: 3,
+    });
+    expect(await service.history(A, second.job.id)).toMatchObject({ total: 2 });
+    expect(await service.submit(A, ACTOR, input)).toMatchObject({ replayed: true });
+    expect(s.created).toHaveLength(4);
+  });
+
+  it('lets exactly one of two concurrent retries take over an expired lease', async () => {
+    const { s, service, later } = setup();
+    s.failCreateOnce = true;
+    const input = {
+      entity: 'vehicle',
+      mode: 'commit_valid',
+      idempotencyKey: 'key-claimbbb',
+      rows: [vehicleRow(1), vehicleRow(2), vehicleRow(3)],
+    };
+    await expect(service.submit(A, ACTOR, input)).rejects.toThrow('store down');
+    later(DEFAULT_LEASE_MS);
+    const outcomes = await Promise.allSettled([
+      service.submit(A, ACTOR, input),
+      service.submit(A, ACTOR, input),
+      service.submit(A, ACTOR, input),
+    ]);
+    expect(outcomes.filter((o) => o.status === 'fulfilled')).toHaveLength(1);
+    for (const o of outcomes)
+      if (o.status === 'rejected') expect((o.reason as ImportError).code).toBe('conflict');
+    expect(s.created).toHaveLength(3);
+  });
+
+  it('renews its claim while it runs, so a long run is not taken over', async () => {
+    const { s, service, later } = setup();
+    const input = {
+      entity: 'vehicle',
+      mode: 'commit_valid',
+      idempotencyKey: 'key-claimccc',
+      rows: [vehicleRow(1), vehicleRow(2), vehicleRow(3), vehicleRow(4)],
+    };
+    const original = s.target.create;
+    let calls = 0;
+    const retries: string[] = [];
+    (s.target as { create: ImportTarget['create'] }).create = async (t, a, i) => {
+      calls += 1;
+      // Each row takes more than half a lease: by the 3rd the run is older than a lease since it began.
+      later(DEFAULT_LEASE_MS / 2);
+      if (calls >= 3) retries.push(await code(service.submit(A, ACTOR, input)));
+      return original(t, a, i);
+    };
+    const run = await service.submit(A, ACTOR, input);
+    expect(run.job).toMatchObject({ status: 'imported', importedRows: 4 });
+    expect(retries).toEqual(['conflict', 'conflict']);
+    expect(s.created).toHaveLength(4);
+  });
+
   it('refuses a key reused for a different request or mode', async () => {
     const { service } = setup();
     const input = {
@@ -592,6 +684,7 @@ describe('commit modes', () => {
       rows: real.rows.bind(real),
       finishJob: real.finishJob.bind(real),
       events: real.events.bind(real),
+      claimJob: real.claimJob.bind(real),
     };
     const { service } = setup(racing);
     const input = {
@@ -829,5 +922,21 @@ describe('InMemoryImportStore', () => {
     expect(await store.finishJob({ ...j1, version: 2 }, 5, started(j1))).toBe(false);
     expect((await store.events(A, 'j1', { limit: 5, offset: 0 })).total).toBe(1);
     expect((await store.listJobs(A, {}, { limit: 5, offset: 0 })).total).toBe(1);
+  });
+  it("claims a running job once per stamp, never a finished one or another tenant's", async () => {
+    const store = new InMemoryImportStore();
+    const j = job(A, 'j1', 'key-pppppppp');
+    await store.insertJob(j, started(j));
+    const t1 = '2026-10-06T12:00:00.001Z';
+    const t2 = '2026-10-06T12:00:00.002Z';
+    expect(await store.claimJob(A, 'j1', j.updatedAt, t1)).toBe(true);
+    expect(await store.claimJob(A, 'j1', j.updatedAt, t2)).toBe(false);
+    expect(await store.claimJob(B, 'j1', t1, t2)).toBe(false);
+    expect(await store.claimJob(A, 'ghost', t1, t2)).toBe(false);
+    expect((await store.findJob(A, 'j1'))?.updatedAt).toBe(t1);
+    expect(
+      await store.finishJob({ ...j, status: 'failed', version: 2, updatedAt: t2 }, 1, started(j)),
+    ).toBe(true);
+    expect(await store.claimJob(A, 'j1', t2, '2026-10-06T12:00:00.003Z')).toBe(false);
   });
 });

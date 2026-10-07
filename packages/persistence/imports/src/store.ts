@@ -249,11 +249,14 @@ export class TypeOrmImportStore implements ImportStore {
   }
 
   public async appendRows(
-    _tenantId: string,
-    _jobId: string,
+    tenantId: string,
+    jobId: string,
     rows: readonly ImportRowResult[],
   ): Promise<void> {
     if (rows.length === 0) return;
+    // The arguments scope the write: a row of another tenant or job is refused, never stored.
+    if (rows.some((row) => row.tenantId !== tenantId || row.jobId !== jobId))
+      throw new ImportStoreError('integrity');
     await this.single('appendRows', async () => {
       const repository = this.dataSource.getRepository(ImportRowEntity);
       const fresh = rows.map(toResultRow);
@@ -308,6 +311,24 @@ export class TypeOrmImportStore implements ImportStore {
       if (result.affected !== 1) return false;
       await manager.getRepository(ImportEventEntity).insert(toEventRow(event));
       return true;
+    });
+  }
+
+  public async claimJob(
+    tenantId: string,
+    jobId: string,
+    expectedUpdatedAt: string,
+    nextUpdatedAt: string,
+  ): Promise<boolean> {
+    return this.single('claimJob', async () => {
+      // One conditional UPDATE: of any number of executors holding the same stamp, one changes the row.
+      const result = await this.dataSource
+        .getRepository(ImportJobEntity)
+        .update(
+          { tenantId, id: jobId, status: 'running', updatedAt: new Date(expectedUpdatedAt) },
+          { updatedAt: new Date(nextUpdatedAt) },
+        );
+      return result.affected === 1;
     });
   }
 

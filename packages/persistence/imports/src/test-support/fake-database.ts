@@ -186,6 +186,8 @@ export class FakeDatabase {
   }
 
   private satisfies(actual: unknown, expected: unknown): boolean {
+    if (expected instanceof Date)
+      return actual instanceof Date && actual.getTime() === expected.getTime();
     if (!(expected instanceof FindOperator)) return actual === expected;
     const value = expected.value as unknown;
     const text = typeof actual === 'string' ? actual : null;

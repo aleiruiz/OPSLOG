@@ -466,6 +466,35 @@ suite('persistent import store on MySQL', () => {
       expect((await storeA.events('tenant-finish', 'f1', window)).total).toBe(2);
     });
 
+    it('lets exactly one of many concurrent executors claim a running job', async () => {
+      const tenant = 'tenant-claim';
+      const j = job(tenant, 'c1', {
+        createdAt: '2026-10-06T12:00:00.123456Z',
+        updatedAt: '2026-10-06T12:00:00.123Z',
+      });
+      await storeA.insertJob(j, started(j));
+      const next = '2026-10-06T12:02:00.456Z';
+      const outcomes = await Promise.all(
+        [storeA, storeB, storeA, storeB, storeA, storeB].map((store) =>
+          store.claimJob(tenant, 'c1', j.updatedAt, next),
+        ),
+      );
+      expect(outcomes.filter(Boolean)).toHaveLength(1);
+      expect((await storeA.findJob(tenant, 'c1'))?.updatedAt).toBe(next);
+      // A renewal by the holder works, the stale stamp never does, and another company never matches.
+      expect(await storeB.claimJob(tenant, 'c1', next, '2026-10-06T12:03:00.000Z')).toBe(true);
+      expect(await storeA.claimJob(tenant, 'c1', next, '2026-10-06T12:04:00.000Z')).toBe(false);
+      expect(await storeA.claimJob('tenant-other', 'c1', '2026-10-06T12:03:00.000Z', next)).toBe(
+        false,
+      );
+      // Once finished the job cannot be claimed.
+      const done = { ...finished(j), updatedAt: '2026-10-06T12:05:00.000Z' };
+      expect(await storeA.finishJob(done, 1, ended(j))).toBe(true);
+      expect(await storeA.claimJob(tenant, 'c1', done.updatedAt, '2026-10-06T12:06:00.000Z')).toBe(
+        false,
+      );
+    });
+
     it('keeps the first result of a row recorded by concurrent attempts', async () => {
       const tenant = 'tenant-append';
       const j = job(tenant, 'p1');
