@@ -13,5 +13,29 @@ export default [
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     },
   },
+  {
+    // Convención de tamaño: archivos de producción con una sola responsabilidad, máx. ~400 líneas.
+    files: ['**/*.ts', '**/*.tsx'],
+    ignores: [
+      '**/*.test.ts',
+      '**/*.test.tsx',
+      '**/*.spec.ts',
+      '**/*.stories.tsx',
+      '**/test-support/**',
+      'e2e/**',
+      'tests/**',
+    ],
+    rules: { 'max-lines': ['error', { max: 400, skipBlankLines: true, skipComments: true }] },
+  },
+  {
+    // Archivos heredados por encima del límite; se dividen cuando se tocan. La lista solo se reduce.
+    files: [
+      'packages/contracts/src/client.ts',
+      'packages/contracts/src/index.ts',
+      'packages/persistence/identity/src/typeorm-identity-store.ts',
+      'packages/persistence/tenancy/src/store.ts',
+    ],
+    rules: { 'max-lines': 'off' },
+  },
   prettier,
 ];

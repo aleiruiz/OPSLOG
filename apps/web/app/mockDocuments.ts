@@ -1,20 +1,21 @@
-import type { ApiError } from '@opslog/contracts';
 import { BFF_DOCUMENT_OWNER_TYPES, BFF_DOCUMENT_STATUSES } from '@opslog/contracts';
 import { demoDocuments } from '../documents/fixtures';
+import { NOTES, OPAQUE_ID, TITLE, normalizeText, todayOf, typeInfo } from '../documents/rules';
 import {
-  EXPIRING_WINDOW_DAYS,
-  MAX_EXPIRY_DATE,
-  MIN_DATE,
-  NOTES,
-  OPAQUE_ID,
-  REFERENCE_NUMBER,
-  TITLE,
-  isDateBetween,
-  normalizeReference,
-  normalizeText,
-  todayOf,
-  typeInfo,
-} from '../documents/rules';
+  NOW,
+  NO_EXPIRY_KEY,
+  badRequest,
+  conflict,
+  derive,
+  invalidOwner,
+  notFound,
+  ok,
+  onlyKeys,
+  parseValidity,
+  seedRevisions,
+  validVersion,
+} from './mockDocumentsSupport';
+import type { MockDocumentStore } from './mockDocumentsTypes';
 import type {
   Document,
   DocumentInput,
@@ -25,109 +26,9 @@ import type {
   DocumentRevision,
   DocumentsPort,
   Page,
-  Result,
 } from './types';
 
-/**
- * In-memory documents with the semantics of the real backend (`packages/domain/documents`): optimistic versions
- * (409 `stale_version`), read-only archived documents (409 `immutable`), a status derived from the expiry date and
- * the server clock, immutable revisions appended by renewals, a live owner of the company checked on create and
- * renew (a uniform 422 `invalid_owner`), and a uniform 400/404. Permissions are enforced by the caller (`mockApi`).
- */
-export interface MockDocumentStore {
-  readonly port: DocumentsPort;
-  /** Another actor edits the document on the server: its version moves on, so the caller's copy is stale. */
-  changeExternally(id: string, change: Partial<Pick<Document, 'title' | 'notes'>>): void;
-  /** Another actor archives the document on the server. */
-  archiveExternally(id: string): void;
-  snapshot(): readonly Document[];
-}
-
-const NOW = '2026-10-06T12:00:00.000Z';
-const DAY_MS = 86_400_000;
-const NO_EXPIRY_KEY = '9999-12-31';
-let correlation = 0;
-
-function failure(
-  status: ApiError['status'],
-  code: string,
-  message: string,
-  field?: string,
-): Result<never> {
-  correlation += 1;
-  return {
-    ok: false,
-    error: {
-      code,
-      status,
-      message,
-      correlationId: `corr-mock-document-${correlation}`,
-      ...(field === undefined ? {} : { fieldErrors: [{ field, code, message }] }),
-    },
-  };
-}
-const ok = <T>(value: T): Result<T> => ({ ok: true, value });
-const badRequest = () => failure(400, 'bad_request', 'Invalid request');
-const notFound = () => failure(404, 'not_found', 'Resource not found');
-const invalidOwner = () => failure(422, 'invalid_owner', 'Unprocessable request', 'owner_id');
-const conflict = (code: 'stale_version' | 'immutable') => failure(409, code, 'Conflict');
-
-const validVersion = (value: unknown): value is number =>
-  typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 2_147_483_646;
-
-/** Derived state as of the server clock: never stored. */
-function derive(document: Document, today: string): Pick<Document, 'status' | 'daysToExpiry'> {
-  if (document.expiresOn === null) return { status: 'valid', daysToExpiry: null };
-  const days = Math.round(
-    (Date.parse(`${document.expiresOn}T00:00:00.000Z`) - Date.parse(`${today}T00:00:00.000Z`)) /
-      DAY_MS,
-  );
-  return {
-    status: days < 0 ? 'expired' : days <= EXPIRING_WINDOW_DAYS ? 'expiring' : 'valid',
-    daysToExpiry: days,
-  };
-}
-
-interface Validity {
-  readonly issuedOn: string | null;
-  readonly expiresOn: string | null;
-  readonly documentNumber: string | null;
-}
-
-interface StoredRevision extends Validity {
-  readonly revision: number;
-  readonly actorId: string;
-  readonly at: string;
-}
-
-/** Validates the validity fields of a creation or a renewal; `null` when anything is invalid. */
-function parseValidity(
-  fields: Readonly<Record<string, unknown>>,
-  required: boolean,
-  today: string,
-): Validity | null {
-  const date = (key: string, max: string): string | null | undefined => {
-    const value = fields[key];
-    if (value === undefined || value === null) return null;
-    return typeof value === 'string' && isDateBetween(value, MIN_DATE, max) ? value : undefined;
-  };
-  const issuedOn = date('issuedOn', today);
-  const expiresOn = date('expiresOn', MAX_EXPIRY_DATE);
-  if (issuedOn === undefined || expiresOn === undefined) return null;
-  if (required && expiresOn === null) return null;
-  if (issuedOn !== null && expiresOn !== null && expiresOn < issuedOn) return null;
-  const raw = fields['documentNumber'];
-  let documentNumber: string | null = null;
-  if (raw !== undefined && raw !== null) {
-    if (typeof raw !== 'string') return null;
-    documentNumber = normalizeReference(raw);
-    if (!REFERENCE_NUMBER.test(documentNumber)) return null;
-  }
-  return { issuedOn, expiresOn, documentNumber };
-}
-
-const onlyKeys = (fields: Readonly<Record<string, unknown>>, allowed: readonly string[]) =>
-  Object.keys(fields).every((key) => allowed.includes(key));
+export type { MockDocumentStore };
 
 export function createMockDocumentStore(
   seed: readonly Document[] = demoDocuments(),
@@ -150,29 +51,7 @@ export function createMockDocumentStore(
   let rows: Document[] = seed.map((document) => ({ ...document }));
   let sequence = rows.length;
   // Earlier revisions of a seeded document are synthetic: one year apart, oldest first.
-  const revisions = new Map<string, StoredRevision[]>(
-    rows.map((document) => [
-      document.id,
-      Array.from({ length: document.revision }, (_, index): StoredRevision => {
-        const revision = index + 1;
-        const back = (document.revision - revision) * 365;
-        const move = (day: string | null) =>
-          day === null
-            ? null
-            : new Date(Date.parse(`${day}T00:00:00.000Z`) - back * DAY_MS)
-                .toISOString()
-                .slice(0, 10);
-        return {
-          revision,
-          issuedOn: move(document.issuedOn),
-          expiresOn: move(document.expiresOn),
-          documentNumber: document.documentNumber,
-          actorId: 'user-admin',
-          at: document.createdAt,
-        };
-      }),
-    ]),
-  );
+  const revisions = seedRevisions(rows);
 
   const index = (id: string) => rows.findIndex((document) => document.id === id);
   const replace = (id: string, next: Document) => {

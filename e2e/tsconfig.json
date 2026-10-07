@@ -20,6 +20,7 @@
     "../packages/ui/src/**/*.ts",
     "../packages/ui/src/**/*.tsx",
     "../packages/contracts/src/*.ts",
+    "../packages/contracts/src/bff/*.ts",
     "../apps/web/api/**/*.ts",
     "../apps/web/app/**/*.ts",
     "../apps/web/app/**/*.tsx",

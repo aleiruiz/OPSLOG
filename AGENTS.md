@@ -13,7 +13,7 @@ Aplican a OpenAI, Anthropic y cualquier implementador/auditor del repositorio.
 9. No exponer datos reales, logs sensibles, tokens ni secretos a modelos. Auditoría de hito usa entorno cerrado con datos sintéticos, sin acceso a producción. Pedir intervención humana en gate solo con demo/hallazgos/pregunta concreta cuando sea necesaria.
 10. Despliegue autorizado a pruebas; producción necesita autorización separada. No modificar/destruir base AWS existente durante inventario ni usarla para fixtures.
 11. Documentar trazabilidad requisito→contrato→implementación→prueba→evidencia y reportar limitaciones. Proveedor ausente/check inconcluso significa bloqueado, no consenso.
-12. Mantener código legible con ESLint/Prettier, contratos tipados y cambios pequeños; configuración/shared paths requieren coordinación. No crear deuda que reduzca controles obligatorios.
+12. Mantener código legible con ESLint/Prettier, contratos tipados y cambios pequeños; configuración/shared paths requieren coordinación. No crear deuda que reduzca controles obligatorios. Archivos de código de producción con una sola responsabilidad y como máximo ~400 líneas (ESLint `max-lines`); los archivos heredados en la lista de excepciones se dividen cuando se tocan, y la lista solo se reduce.
 
 Estado actual: el repositorio ya tiene runtime M1 y CI; el trabajo de FND-ORCH no se persigue por decisión del propietario (ADR-0009, que supera el diferimiento de ADR-0008), así que no hay que esperarlo. Seguir el protocolo manual de Orchestrator y los gates acumulativos (G0/G1) de SPECS. No lanzar desarrollo de módulos de producto sin paquete validado.
 
