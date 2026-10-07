@@ -6,6 +6,7 @@ import {
   createAreasClient,
   createBffClient,
   createDocumentsClient,
+  createAlertsClient,
   createAssignmentsClient,
   createInsuranceClient,
   createEmployeesClient,
@@ -610,6 +611,57 @@ describe('typed client against the real BFF', () => {
       ok: false,
       error: { status: 404 },
     });
+
+    // Expiry alerts and their settings through the typed client.
+    const alerts = createAlertsClient(client);
+    const permit = await documents.create({
+      ownerType: 'vehicle',
+      ownerId: truck.value.id,
+      typeCode: 'transport_permit',
+      title: 'Permiso de prueba',
+      expiresOn: '2026-10-10',
+    });
+    if (!permit.ok) throw new Error('permit fixture failed');
+    expect(await alerts.settings()).toEqual({
+      ok: true,
+      value: {
+        expiryWindowDays: 30,
+        recipientRoles: ['admin', 'editor'],
+        version: 0,
+        updatedBy: null,
+        updatedAt: null,
+      },
+    });
+    expect(await alerts.list()).toMatchObject({
+      ok: true,
+      value: {
+        asOf: '2026-10-06',
+        windowDays: 30,
+        total: 1,
+        items: [
+          {
+            source: 'vehicle_document',
+            subjectId: permit.value.id,
+            vehicleId: truck.value.id,
+            typeCode: 'transport_permit',
+            dueOn: '2026-10-10',
+            daysToExpiry: 4,
+            severity: 'expiring',
+          },
+        ],
+      },
+    });
+    expect(await alerts.list({ severity: 'expired', limit: 25 })).toMatchObject({
+      ok: true,
+      value: { total: 0 },
+    });
+    expect(
+      await alerts.saveSettings({ version: 0, expiryWindowDays: 2, recipientRoles: ['admin'] }),
+    ).toMatchObject({ ok: true, value: { version: 1, expiryWindowDays: 2 } });
+    expect(
+      await alerts.saveSettings({ version: 0, expiryWindowDays: 3, recipientRoles: ['admin'] }),
+    ).toMatchObject({ ok: false, error: { code: 'stale_version', status: 409 } });
+    expect(await alerts.list()).toMatchObject({ ok: true, value: { total: 0, windowDays: 2 } });
 
     // Drafts
     expect(await client.call('drafts.load', { params: { scope: 'form:a' } })).toEqual({
