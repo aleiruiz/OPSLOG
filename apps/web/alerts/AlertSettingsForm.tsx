@@ -214,7 +214,11 @@ export function AlertSettingsForm({
               errors.expiryWindowDays ??
               `Entre ${MIN_WINDOW_DAYS} y ${MAX_WINDOW_DAYS} días. Los estados «por vencer» de documentos y seguros siempre usan 30 días.`
             }
-            sx={{ maxWidth: 320 }}
+            sx={{
+              maxWidth: 320,
+              // Helper text is content, not a control: keep readable contrast while the field is locked.
+              '& .MuiFormHelperText-root.Mui-disabled': { color: 'text.secondary' },
+            }}
           />
         </FormSection>
         <FormSection
