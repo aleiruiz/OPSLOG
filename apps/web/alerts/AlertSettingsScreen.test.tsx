@@ -70,6 +70,49 @@ describe('alert settings: editing with manage_config', () => {
     expect(api.controls.alertSettings()).toMatchObject({ expiryWindowDays: 14, version: 2 });
   });
 
+  it('locks the settings fields until an in-flight save finishes', async () => {
+    const api = createMockApi();
+    let resolveSave!: (result: Result<AlertSettings>) => void;
+    const pendingSave = new Promise<Result<AlertSettings>>((resolve) => {
+      resolveSave = resolve;
+    });
+    const save = vi.spyOn(api.alerts, 'saveSettings').mockReturnValue(pendingSave);
+    await openForm({ api });
+
+    type('Días de anticipación', '7');
+    toggle('Consulta');
+    click('Guardar ajustes');
+
+    const expiryWindow = screen.getByLabelText(/^Días de anticipación/);
+    await waitFor(() => {
+      expect(expiryWindow).toBeDisabled();
+      expect(role('Consulta')).toBeDisabled();
+    });
+    expect(save).toHaveBeenCalledWith({
+      version: 0,
+      expiryWindowDays: 7,
+      recipientRoles: ['admin', 'editor', 'viewer'],
+    });
+
+    resolveSave({
+      ok: true,
+      value: {
+        ...api.controls.alertSettings(),
+        expiryWindowDays: 7,
+        recipientRoles: ['admin', 'editor', 'viewer'],
+        version: 1,
+        updatedBy: 'user-admin',
+        updatedAt: '2026-10-07T12:00:00.000Z',
+      },
+    });
+
+    expect(await screen.findByText('Ajustes guardados.')).toBeInTheDocument();
+    expect(expiryWindow).toHaveValue(7);
+    expect(role('Consulta')).toBeChecked();
+    expect(expiryWindow).toBeEnabled();
+    expect(role('Consulta')).toBeEnabled();
+  });
+
   it('keeps the recipients in the canonical order whatever order they were checked in', async () => {
     const api = createMockApi();
     const save = vi.spyOn(api.alerts, 'saveSettings');

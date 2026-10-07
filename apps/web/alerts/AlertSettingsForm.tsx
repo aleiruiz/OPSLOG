@@ -202,6 +202,7 @@ export function AlertSettingsForm({
             id={windowId}
             label="Días de anticipación"
             required
+            disabled={submitting}
             type="number"
             inputProps={{ min: MIN_WINDOW_DAYS, max: MAX_WINDOW_DAYS, inputMode: 'numeric' }}
             value={values.expiryWindowDays}
@@ -229,6 +230,7 @@ export function AlertSettingsForm({
                   <Checkbox
                     id={roleId(role)}
                     checked={values.recipientRoles.includes(role)}
+                    disabled={submitting}
                     onChange={(event) => toggle(role, event.target.checked)}
                     inputProps={
                       errors.recipientRoles
