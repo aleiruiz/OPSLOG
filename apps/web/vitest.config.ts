@@ -16,6 +16,7 @@ export default defineConfig({
     testTimeout: 10000,
     setupFiles: ['./app/test/setup.ts'],
     include: [
+      'alerts/**/*.test.{ts,tsx}',
       'api/**/*.test.{ts,tsx}',
       'app/**/*.test.{ts,tsx}',
       'areas/**/*.test.{ts,tsx}',
@@ -29,6 +30,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: [
+        'alerts/**/*.{ts,tsx}',
         'api/**/*.{ts,tsx}',
         'app/**/*.{ts,tsx}',
         'areas/**/*.{ts,tsx}',

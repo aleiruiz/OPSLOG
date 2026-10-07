@@ -1,4 +1,5 @@
 import {
+  createAlertsClient,
   createAreasClient,
   createBffClient,
   createDocumentsClient,
@@ -39,6 +40,7 @@ export function createHttpApi(
   const documents = createDocumentsClient(client);
   const insurance = createInsuranceClient(client);
   const employees = createEmployeesClient(client);
+  const alerts = createAlertsClient(client);
   return {
     oidc,
     auth: {
@@ -106,5 +108,6 @@ export function createHttpApi(
       archive: employees.archive,
       history: employees.history,
     },
+    alerts,
   };
 }

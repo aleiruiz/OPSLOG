@@ -1,4 +1,5 @@
 import type { ApiError } from '@opslog/contracts';
+import type { MockAlertsStore } from './mockAlerts';
 import type { MockAreaStore } from './mockAreas';
 import type { MockDocumentStore } from './mockDocuments';
 import type { MockEmployeeStore } from './mockEmployees';
@@ -18,6 +19,7 @@ export function createControls(
   paperwork: MockDocumentStore,
   cover: MockInsuranceStore,
   staff: MockEmployeeStore,
+  warnings: MockAlertsStore,
 ): MockControls {
   return {
     expireSession: () => {
@@ -56,5 +58,7 @@ export function createControls(
     terminateEmployeeExternally: (id) => staff.terminateExternally(id),
     employees: () => staff.snapshot(),
     employeeAudit: () => staff.auditLog(),
+    changeAlertSettingsExternally: (change) => warnings.changeSettingsExternally(change),
+    alertSettings: () => warnings.settings(),
   };
 }

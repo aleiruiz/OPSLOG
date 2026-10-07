@@ -573,3 +573,54 @@ describe('mock employees port: permission guards', () => {
     expect(list.ok && list.value.total).toBe(0);
   });
 });
+
+describe('mock alerts port: permission guards and derivation', () => {
+  it('lets anyone who can view read the alerts and the settings, but only manage_config save them', async () => {
+    const api = createMockApi();
+    await api.auth.login(demoCredentials.viewer);
+    expect((await api.alerts.list()).ok).toBe(true);
+    const read = await api.alerts.settings();
+    expect(read).toMatchObject({ ok: true, value: { version: 0 } });
+    const input = { version: 0, expiryWindowDays: 10, recipientRoles: ['admin' as const] };
+    expect(await api.alerts.saveSettings(input)).toMatchObject({
+      ok: false,
+      error: { status: 403 },
+    });
+    expect(api.controls.alertSettings().version).toBe(0);
+    await api.auth.login(demoCredentials.admin);
+    expect(await api.alerts.saveSettings(input)).toMatchObject({
+      ok: true,
+      value: { version: 1, updatedBy: 'user-admin' },
+    });
+  });
+
+  it('answers 401 without a session and injects one-shot failures', async () => {
+    const api = createMockApi();
+    expect(await api.alerts.list()).toMatchObject({ ok: false, error: { status: 401 } });
+    await api.auth.login(demoCredentials.admin);
+    api.controls.failNext('listAlerts');
+    api.controls.failNext('getAlertSettings', 422);
+    api.controls.failNext('saveAlertSettings', 429);
+    expect(await api.alerts.list()).toMatchObject({ error: { status: 500 } });
+    expect(await api.alerts.settings()).toMatchObject({ error: { status: 422 } });
+    expect(
+      await api.alerts.saveSettings({ version: 0, expiryWindowDays: 5, recipientRoles: ['admin'] }),
+    ).toMatchObject({ error: { status: 429 } });
+    expect((await api.alerts.list()).ok).toBe(true);
+  });
+
+  it('derives the alerts from the server documents and policies, and follows their changes', async () => {
+    const api = createMockApi({ documents: [], policies: [] });
+    await api.auth.login(demoCredentials.admin);
+    expect(await api.alerts.list()).toMatchObject({ ok: true, value: { total: 0 } });
+    const full = createMockApi();
+    await full.auth.login(demoCredentials.admin);
+    const before = await full.alerts.list({ limit: 100 });
+    expect(before.ok && before.value.total).toBe(34);
+    full.controls.archivePolicyExternally('pol-001');
+    const after = await full.alerts.list({ limit: 100 });
+    expect(after.ok && after.value.total).toBe(33);
+    full.controls.changeAlertSettingsExternally({ expiryWindowDays: 1 });
+    expect(full.controls.alertSettings()).toMatchObject({ expiryWindowDays: 1, version: 1 });
+  });
+});

@@ -282,6 +282,30 @@ describe('createHttpApi', () => {
     expect(calls[15]?.input).toEqual({ params: { id: 'pol-1' }, body: { version: 4 } });
   });
 
+  it('maps the alert calls to their routes, with the version in the settings body', async () => {
+    const { api, calls } = scripted({});
+    await api.alerts.list();
+    await api.alerts.list({ limit: 50, source: 'insurance_policy', severity: 'expired' });
+    await api.alerts.settings();
+    await api.alerts.saveSettings({
+      version: 0,
+      expiryWindowDays: 15,
+      recipientRoles: ['admin', 'viewer'],
+    });
+    expect(calls.map((call) => call.id)).toEqual([
+      'alerts.list',
+      'alerts.list',
+      'alerts.settings.get',
+      'alerts.settings.update',
+    ]);
+    expect(calls[1]?.input).toEqual({
+      query: { limit: 50, source: 'insurance_policy', severity: 'expired' },
+    });
+    expect(calls[3]?.input).toEqual({
+      body: { version: 0, expiryWindowDays: 15, recipientRoles: ['admin', 'viewer'] },
+    });
+  });
+
   it('passes failures through untouched and exposes the identity provider', async () => {
     const oidc = createFakeOidc();
     const client = { call: async () => failure } as unknown as BffClient;

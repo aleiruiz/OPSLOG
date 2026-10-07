@@ -1,6 +1,15 @@
 import type {
+  AlertsClient,
   ApiError,
   AreasClient,
+  BffAlert,
+  BffAlertPage,
+  BffAlertRecipientRole,
+  BffAlertSettings,
+  BffAlertSettingsInput,
+  BffAlertSeverity,
+  BffAlertSource,
+  BffAlertsQuery,
   BffArea,
   BffAreaDetail,
   BffAreaHistoryEntry,
@@ -281,6 +290,24 @@ export type FitnessReason = BffFitnessReason;
  */
 export type EmployeesPort = EmployeesClient;
 
+export type Alert = BffAlert;
+export type AlertSource = BffAlertSource;
+export type AlertSeverity = BffAlertSeverity;
+export type AlertPage = BffAlertPage;
+export type AlertListQuery = BffAlertsQuery;
+export type AlertSettings = BffAlertSettings;
+export type AlertSettingsInput = BffAlertSettingsInput;
+export type AlertRecipientRole = BffAlertRecipientRole;
+
+/**
+ * Expiry alerts and their settings over the generated BFF client. Alerts are derived by the server on every read from
+ * the company's vehicle documents and insurance policies (never stored): `list` needs `view`. The settings (expiry
+ * window and recipient roles) are read with `view`; `saveSettings` needs `manage_config` (403 otherwise) and carries
+ * the `version` of the last read (0 while the company has never saved): a lost race is a 409 `stale_version`, and
+ * invalid input a uniform 400.
+ */
+export type AlertsPort = AlertsClient;
+
 export interface ApiPorts {
   readonly auth: AuthPort;
   readonly tenant: TenantAdminPort;
@@ -292,5 +319,6 @@ export interface ApiPorts {
   readonly documents: DocumentsPort;
   readonly insurance: InsurancePort;
   readonly employees: EmployeesPort;
+  readonly alerts: AlertsPort;
   readonly oidc: OidcPort;
 }

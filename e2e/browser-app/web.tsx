@@ -25,6 +25,11 @@ bumpPolicy.textContent = 'Simular cambio ajeno en la póliza pol-001 (arnés)';
 bumpPolicy.addEventListener('click', () =>
   api.controls.changePolicyExternally('pol-001', { insurer: 'Cambiada por otra persona' }),
 );
-harness.append(expire, bump, bumpDocument, bumpPolicy);
+const bumpAlertSettings = document.createElement('button');
+bumpAlertSettings.textContent = 'Simular cambio ajeno en los ajustes de alertas (arnés)';
+bumpAlertSettings.addEventListener('click', () =>
+  api.controls.changeAlertSettingsExternally({ expiryWindowDays: 21 }),
+);
+harness.append(expire, bump, bumpDocument, bumpPolicy, bumpAlertSettings);
 root.append(app, harness);
 mountApp(app, api, { basename: '/web' });

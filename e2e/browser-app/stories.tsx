@@ -32,6 +32,7 @@ const modules = (
     '../../apps/web/documents/**/*.stories.tsx',
     '../../apps/web/insurance/**/*.stories.tsx',
     '../../apps/web/employees/**/*.stories.tsx',
+    '../../apps/web/alerts/**/*.stories.tsx',
   ],
   { eager: true },
 );

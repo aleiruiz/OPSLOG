@@ -1,6 +1,7 @@
 import type { ApiError } from '@opslog/contracts';
 import type { EmployeeAuditAction } from './mockEmployees';
 import type {
+  AlertSettings,
   ApiPorts,
   Area,
   Document,
@@ -63,7 +64,10 @@ export type MockOperation =
   | 'updateEmployee'
   | 'changeEmployeeStatus'
   | 'archiveEmployee'
-  | 'employeeHistory';
+  | 'employeeHistory'
+  | 'listAlerts'
+  | 'getAlertSettings'
+  | 'saveAlertSettings';
 
 export interface MockControls {
   /** Simulates the server-side session expiring (cookie no longer valid). */
@@ -117,6 +121,10 @@ export interface MockControls {
   employees(): readonly Employee[];
   /** The server's audit trail of employee events (action and entity id, never a value), for assertions. */
   employeeAudit(): readonly { readonly action: EmployeeAuditAction; readonly id: string }[];
+  /** Another actor saves new alert settings on the server: their version moves on, so a form that loaded them is stale. */
+  changeAlertSettingsExternally(change: Partial<Pick<AlertSettings, 'expiryWindowDays'>>): void;
+  /** The alert settings currently on the server, for assertions. */
+  alertSettings(): AlertSettings;
 }
 
 export interface MockApi extends ApiPorts {

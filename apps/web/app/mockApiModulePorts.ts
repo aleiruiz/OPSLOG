@@ -1,5 +1,6 @@
 import { withPii } from './mockApiErrors';
 import type { Guarded } from './mockApiTypes';
+import type { MockAlertsStore } from './mockAlerts';
 import type { MockAreaStore } from './mockAreas';
 import type { MockDocumentStore } from './mockDocuments';
 import type { MockEmployeeStore } from './mockEmployees';
@@ -15,8 +16,15 @@ export function createModulePorts(
   paperwork: MockDocumentStore,
   cover: MockInsuranceStore,
   staff: MockEmployeeStore,
-): Pick<ApiPorts, 'vehicles' | 'areas' | 'documents' | 'insurance' | 'employees'> {
+  warnings: MockAlertsStore,
+): Pick<ApiPorts, 'vehicles' | 'areas' | 'documents' | 'insurance' | 'employees' | 'alerts'> {
   return {
+    alerts: {
+      list: (query) => guarded('listAlerts', 'view', () => warnings.port.list(query)),
+      settings: () => guarded('getAlertSettings', 'view', () => warnings.port.settings()),
+      saveSettings: (input) =>
+        guarded('saveAlertSettings', 'manage_config', () => warnings.port.saveSettings(input)),
+    },
     vehicles: {
       list: (query) => guarded('listVehicles', 'view', () => fleet.port.list(query)),
       get: (id) => guarded('getVehicle', 'view', () => fleet.port.get(id)),

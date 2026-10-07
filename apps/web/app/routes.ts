@@ -34,11 +34,18 @@ export interface RouteDefinition {
     | 'employees'
     | 'employeeNew'
     | 'employeeDetail'
-    | 'employeeEdit';
+    | 'employeeEdit'
+    | 'alerts'
+    | 'alertSettings';
   readonly pattern: string;
   readonly title: string;
   readonly access: RouteAccess;
-  readonly nav?: { readonly group: NavGroup; readonly label: string };
+  /** `requires`: an extra permission for the navigation entry only (the route itself follows `access`). */
+  readonly nav?: {
+    readonly group: NavGroup;
+    readonly label: string;
+    readonly requires?: Permission;
+  };
 }
 
 export const routes: readonly RouteDefinition[] = [
@@ -211,6 +218,23 @@ export const routes: readonly RouteDefinition[] = [
     pattern: '/flota/seguros/:id/renovar',
     title: 'Renovar póliza',
     access: { permission: 'edit' },
+  },
+  // Expiry alerts (FLT-ALERTS): derived and read-only, so `view` is enough. The settings (window and recipients) are
+  // read with `view` as well and written with `manage_config`; the screen shows them read-only otherwise, and only
+  // people who can change them see the entry in the navigation (the others reach it from the alert list).
+  {
+    id: 'alerts',
+    pattern: '/flota/alertas',
+    title: 'Alertas',
+    access: { permission: 'view' },
+    nav: { group: 'Flota', label: 'Alertas' },
+  },
+  {
+    id: 'alertSettings',
+    pattern: '/configuracion/alertas',
+    title: 'Ajustes de alertas',
+    access: { permission: 'view' },
+    nav: { group: 'Configuración', label: 'Ajustes de alertas', requires: 'manage_config' },
   },
   {
     id: 'company',

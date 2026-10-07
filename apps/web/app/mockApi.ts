@@ -7,6 +7,7 @@ import { apiError, badRequest, ok } from './mockApiErrors';
 import { demoInvitations, people, systemRoles } from './mockApiFixtures';
 import { createModulePorts } from './mockApiModulePorts';
 import type { Guarded, MockApi, MockApiOptions, MockOperation } from './mockApiTypes';
+import { createMockAlertsStore, type MockAlertsStore } from './mockAlerts';
 import { createMockAreaStore, type MockAreaStore } from './mockAreas';
 import { createMockDocumentStore, type MockDocumentStore } from './mockDocuments';
 import { createMockInsuranceStore, type MockInsuranceStore } from './mockInsurance';
@@ -77,6 +78,11 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     canViewCosts: () =>
       roles.find((role) => role.id === currentUser()?.roleId)?.permissions.includes('view_costs') ??
       false,
+    actorId: () => signedInAs ?? 'user-admin',
+  });
+  const warnings: MockAlertsStore = createMockAlertsStore({
+    documents: () => paperwork.snapshot(),
+    policies: () => cover.snapshot(),
     actorId: () => signedInAs ?? 'user-admin',
   });
   const failures = new Map<MockOperation, ApiError['status']>();
@@ -178,6 +184,7 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     paperwork,
     cover,
     staff,
+    warnings,
   );
 
   return {
@@ -270,7 +277,7 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
         }),
     },
     ...createAccessPorts(guarded, users, roles, invitations, roleName),
-    ...createModulePorts(guarded, fleet, orgTree, paperwork, cover, staff),
+    ...createModulePorts(guarded, fleet, orgTree, paperwork, cover, staff, warnings),
     drafts: {
       load: (scope) => guarded('loadDraft', null, () => ok(drafts.get(draftKey(scope)) ?? null)),
       save: (scope, values) =>

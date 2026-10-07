@@ -35,7 +35,9 @@
     "../apps/web/insurance/**/*.ts",
     "../apps/web/insurance/**/*.tsx",
     "../apps/web/employees/**/*.ts",
-    "../apps/web/employees/**/*.tsx"
+    "../apps/web/employees/**/*.tsx",
+    "../apps/web/alerts/**/*.ts",
+    "../apps/web/alerts/**/*.tsx"
   ],
   "exclude": [
     "../packages/ui/src/**/*.stories.tsx",

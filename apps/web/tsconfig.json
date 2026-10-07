@@ -17,6 +17,8 @@
   },
   "include": [
     "api/**/*.ts",
+    "alerts/**/*.ts",
+    "alerts/**/*.tsx",
     "app/**/*.ts",
     "app/**/*.tsx",
     "auth/**/*.ts",
