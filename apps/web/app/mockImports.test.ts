@@ -188,13 +188,13 @@ describe('mock import store', () => {
       { csv: `${header},color\n${row(1)},x` },
     ];
     for (const extra of bad) {
-      const request = { ...input({}), ...extra } as Record<string, unknown>;
+      const request = { ...(input({}) as Record<string, unknown>), ...extra };
       for (const key of Object.keys(request)) if (request[key] === undefined) delete request[key];
       expect(status(await store.port.submit(request as never))).toBe(400);
     }
     expect(status(await store.port.list({ entity: 'x' as never }))).toBe(400);
     expect(status(await store.port.list({ status: 'x' as never }))).toBe(400);
-    expect(status(await store.port.list({ limit: 7 }))).toBe(400);
+    expect(status(await store.port.list({ limit: 7 as never }))).toBe(400);
     expect(status(await store.port.list({ cursor: 'basura' }))).toBe(400);
   });
 

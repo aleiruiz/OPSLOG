@@ -309,7 +309,7 @@ describe('createHttpApi', () => {
   it('maps every assignment and import call to its route', async () => {
     const { api, calls } = scripted({});
     await api.assignments.list();
-    await api.assignments.list({ vehicleId: 'veh-1', current: true });
+    await api.assignments.list({ vehicleId: 'veh-1', status: 'current' });
     await api.assignments.get('asg-1');
     await api.assignments.assign({
       vehicleId: 'veh-1',
@@ -346,7 +346,7 @@ describe('createHttpApi', () => {
       'imports.history',
       'imports.history',
     ]);
-    expect(calls[1]?.input).toEqual({ query: { vehicleId: 'veh-1', current: true } });
+    expect(calls[1]?.input).toEqual({ query: { vehicleId: 'veh-1', status: 'current' } });
     expect(calls[4]?.input).toEqual({
       params: { id: 'asg-1' },
       body: { version: 2, reason: 'Fin' },

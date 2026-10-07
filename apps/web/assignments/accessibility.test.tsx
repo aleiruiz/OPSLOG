@@ -36,7 +36,10 @@ describe('assignment screens in jsdom', () => {
   });
 
   it('has no detectable violations in the empty, not-found and forbidden states', async () => {
-    const empty = await renderApp({ api: createMockApi({ assignments: [] }), path: '/flota/asignaciones' });
+    const empty = await renderApp({
+      api: createMockApi({ assignments: [] }),
+      path: '/flota/asignaciones',
+    });
     await screen.findByRole('heading', { name: 'Aún no hay asignaciones' });
     expect(await violations(empty.container)).toEqual([]);
     empty.unmount();

@@ -109,7 +109,8 @@ describe('import file rules', () => {
     expect(signatureOf(a)).toBe(signatureOf({ ...a }));
     expect(signatureOf(a)).not.toBe(signatureOf({ ...a, mode: 'commit_all' }));
     expect(signatureOf(a)).not.toBe(signatureOf(a, 'imp-1'));
-    expect(fileSignatureOf(a)).toBe(fileSignatureOf({ ...a, mode: 'commit_all' }));
+    const other: ImportFormValues = { ...a, mode: 'commit_all' };
+    expect(fileSignatureOf(a)).toBe(fileSignatureOf(other));
     expect(fileSignatureOf(a)).not.toBe(fileSignatureOf({ ...a, entity: 'employee' }));
   });
 });

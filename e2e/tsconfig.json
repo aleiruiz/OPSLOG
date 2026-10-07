@@ -37,7 +37,10 @@
     "../apps/web/employees/**/*.ts",
     "../apps/web/employees/**/*.tsx",
     "../apps/web/alerts/**/*.ts",
-    "../apps/web/alerts/**/*.tsx"
+    "../apps/web/assignments/**/*.ts",
+    "../apps/web/assignments/**/*.tsx",
+    "../apps/web/imports/**/*.ts",
+    "../apps/web/imports/**/*.tsx"
   ],
   "exclude": [
     "../packages/ui/src/**/*.stories.tsx",

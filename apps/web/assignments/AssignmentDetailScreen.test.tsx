@@ -18,20 +18,20 @@ describe('assignment detail', () => {
       'href',
       '/flota/asignaciones/asg-001/cerrar',
     );
-    expect(screen.getByRole('link', { name: 'Ver todas las asignaciones del vehículo' })).toHaveAttribute(
-      'href',
-      '/flota/asignaciones?vehiculo=veh-001',
-    );
-    expect(screen.getByRole('link', { name: 'Ver todas las asignaciones del conductor' })).toHaveAttribute(
-      'href',
-      '/flota/asignaciones?conductor=emp-001',
-    );
+    expect(
+      screen.getByRole('link', { name: 'Ver todas las asignaciones del vehículo' }),
+    ).toHaveAttribute('href', '/flota/asignaciones?vehiculo=veh-001');
+    expect(
+      screen.getByRole('link', { name: 'Ver todas las asignaciones del conductor' }),
+    ).toHaveAttribute('href', '/flota/asignaciones?conductor=emp-001');
   });
 
   it('shows a replaced assignment as read-only history with how and why it ended', async () => {
     await open('asg-005');
     expect(await screen.findByRole('heading', { name: 'Asignación cerrada' })).toBeInTheDocument();
-    expect(screen.getByText('Reemplazada por un nuevo principal', { selector: 'dd' })).toBeInTheDocument();
+    expect(
+      screen.getByText('Reemplazada por un nuevo principal', { selector: 'dd' }),
+    ).toBeInTheDocument();
     expect(screen.getByText('Cambio de conductor titular', { selector: 'dd' })).toBeInTheDocument();
     expect(await screen.findByText('Reemplazada')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Cerrar asignación' })).toBeNull();
@@ -52,7 +52,9 @@ describe('assignment detail', () => {
 
   it('answers an unknown id with a uniform not-found, and other failures with retry', async () => {
     const missing = await open('no-existe');
-    expect(await screen.findByRole('heading', { name: 'Asignación no encontrada' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Asignación no encontrada' }),
+    ).toBeInTheDocument();
     missing.unmount();
     const api = createMockApi();
     api.controls.failNext('getAssignment');
@@ -69,18 +71,30 @@ describe('assignment detail', () => {
     let calls = 0;
     api.assignments.history = async (id, query) => {
       calls += 1;
-      if (calls === 1) return { ok: false, error: { code: 'internal_error', status: 500, message: 'x', correlationId: 'c' } };
+      if (calls === 1)
+        return {
+          ok: false,
+          error: { code: 'internal_error', status: 500, message: 'x', correlationId: 'c' },
+        };
       const result = await real(id, query);
-      return result.ok ? { ok: true, value: { ...result.value, nextCursor: query?.cursor ? null : 'mock:1' } } : result;
+      return result.ok
+        ? { ok: true, value: { ...result.value, nextCursor: query?.cursor ? null : 'mock:1' } }
+        : result;
     };
     await open('asg-x', { api });
     await screen.findByRole('heading', { name: 'No pudimos cargar la información' });
     click('Reintentar');
-    click(await screen.findByRole('button', { name: 'Cargar más historial' }).then((b) => b.textContent ?? ''));
+    click(
+      await screen
+        .findByRole('button', { name: 'Cargar más historial' })
+        .then((b) => b.textContent ?? ''),
+    );
   });
 
   it('closed seeds show the end data', async () => {
-    await open('asg-x', { api: createMockApi({ assignments: [closed(makeAssignment({ id: 'asg-x' }))] }) });
+    await open('asg-x', {
+      api: createMockApi({ assignments: [closed(makeAssignment({ id: 'asg-x' }))] }),
+    });
     expect(await screen.findByText('Fin de la ruta', { selector: 'dd' })).toBeInTheDocument();
   });
 });
