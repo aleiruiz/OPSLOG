@@ -1,0 +1,23 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "../../../dist/tests/e2e/fleet",
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["**/*.ts"],
+  "references": [
+    { "path": "../../../apps/api/composition" },
+    { "path": "../../../apps/api/bff" },
+    { "path": "../../../packages/persistence/identity" },
+    { "path": "../../../packages/persistence/vehicles" },
+    { "path": "../../../packages/persistence/areas" },
+    { "path": "../../../packages/persistence/employees" },
+    { "path": "../../../packages/persistence/documents" },
+    { "path": "../../../packages/persistence/insurance" },
+    { "path": "../../../packages/persistence/assignments" },
+    { "path": "../../../packages/persistence/imports" },
+    { "path": "../../../packages/persistence/settings" },
+    { "path": "../../../packages/platform/pii" }
+  ]
+}

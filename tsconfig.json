@@ -46,6 +46,7 @@
     { "path": "./apps/worker/composition" },
     { "path": "./apps/api/composition" },
     { "path": "./apps/api/bff" },
-    { "path": "./tests/integration/platform" }
+    { "path": "./tests/integration/platform" },
+    { "path": "./tests/e2e/fleet" }
   ]
 }
