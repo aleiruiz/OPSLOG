@@ -25,7 +25,7 @@ import type {
   ImportStore,
   ImportWindow,
 } from './store.js';
-import { DEFAULT_LEASE_MS } from './service-types.js';
+import { DEFAULT_LEASE_MS } from './ports.js';
 import type {
   ImportHistoryQuery,
   ImportListQuery,
@@ -34,7 +34,7 @@ import type {
   ImportServiceOptions,
   ImportTarget,
   Submitted,
-} from './service-types.js';
+} from './ports.js';
 
 function windowOf(query: ImportHistoryQuery): ImportWindow {
   const limit = query.limit === undefined ? DEFAULT_LIST_LIMIT : query.limit;

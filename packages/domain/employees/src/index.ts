@@ -57,8 +57,8 @@ export {
   applyPatch,
   applyStatus,
   applyArchive,
-} from './domain.js';
-export type { FitnessReason, Fitness } from './domain.js';
+} from './rules.js';
+export type { FitnessReason, Fitness } from './rules.js';
 export { isLiveEmployee, InMemoryEmployeeStore } from './store.js';
 export type {
   EmployeeFilter,

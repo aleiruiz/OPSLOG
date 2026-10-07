@@ -51,7 +51,7 @@ export type {
   ImportEventSlice,
   ImportStore,
 } from './store.js';
-export { DEFAULT_LEASE_MS } from './service-types.js';
+export { DEFAULT_LEASE_MS } from './ports.js';
 export type {
   CreateOutcome,
   ImportTarget,
@@ -61,6 +61,6 @@ export type {
   ImportListQuery,
   ImportRowsQuery,
   ImportHistoryQuery,
-} from './service-types.js';
+} from './ports.js';
 export { ImportService } from './service.js';
 export { DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT } from '../../documents/src/index.js';

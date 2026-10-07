@@ -38,8 +38,8 @@ import {
   fitnessOf,
   newEmployee,
   statusEntry,
-} from './domain.js';
-import type { Fitness } from './domain.js';
+} from './rules.js';
+import type { Fitness } from './rules.js';
 import type {
   EmployeeFilter,
   EmployeeHistorySlice,
