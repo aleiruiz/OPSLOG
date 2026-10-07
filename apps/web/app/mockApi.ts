@@ -2,6 +2,7 @@ import type { ApiError } from '@opslog/contracts';
 import { createFakeOidc, fakeOidcSubject } from '../api/fakeOidc';
 import { demoEmployeeIds } from '../documents/fixtures';
 import { createAccessPorts } from './mockApiAccessPorts';
+import { createBulkControls, createBulkPorts, createBulkStores } from './mockApiBulkPorts';
 import { createControls } from './mockApiControls';
 import { apiError, badRequest, ok } from './mockApiErrors';
 import { demoInvitations, people, systemRoles } from './mockApiFixtures';
@@ -85,6 +86,13 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     policies: () => cover.snapshot(),
     actorId: () => signedInAs ?? 'user-admin',
   });
+  const bulkStores = createBulkStores(
+    options,
+    fleet,
+    staff,
+    orgTree,
+    () => signedInAs ?? 'user-admin',
+  );
   const failures = new Map<MockOperation, ApiError['status']>();
   const drafts = new Map<string, DraftRecord>();
   let company: CompanySettings = {
@@ -174,18 +182,21 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
       signedInAs = null;
     },
   };
-  const controls = createControls(
-    session,
-    failures,
-    users,
-    drafts,
-    fleet,
-    orgTree,
-    paperwork,
-    cover,
-    staff,
-    warnings,
-  );
+  const controls = {
+    ...createControls(
+      session,
+      failures,
+      users,
+      drafts,
+      fleet,
+      orgTree,
+      paperwork,
+      cover,
+      staff,
+      warnings,
+    ),
+    ...createBulkControls(bulkStores),
+  };
 
   return {
     controls,
@@ -278,6 +289,7 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     },
     ...createAccessPorts(guarded, users, roles, invitations, roleName),
     ...createModulePorts(guarded, fleet, orgTree, paperwork, cover, staff, warnings),
+    ...createBulkPorts(guarded, bulkStores),
     drafts: {
       load: (scope) => guarded('loadDraft', null, () => ok(drafts.get(draftKey(scope)) ?? null)),
       save: (scope, values) =>

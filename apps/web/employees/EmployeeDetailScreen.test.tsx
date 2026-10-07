@@ -460,9 +460,11 @@ describe('employee detail: change status', () => {
       status: 'suspended',
       reason: 'Revisión interna',
     });
-    expect(
-      screen.getByText('Estado cambiado a Suspendido.').closest('[tabindex="-1"]'),
-    ).toHaveFocus();
+    await waitFor(() =>
+      expect(
+        screen.getByText('Estado cambiado a Suspendido.').closest('[tabindex="-1"]'),
+      ).toHaveFocus(),
+    );
     expect(screen.queryByRole('form', { name: 'Cambiar estado' })).toBeNull();
     expect(dd('Estado')).toHaveTextContent('Suspendido');
     expect(dd('Motivo del estado')).toHaveTextContent('Revisión interna');

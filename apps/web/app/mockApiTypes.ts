@@ -1,4 +1,5 @@
 import type { ApiError } from '@opslog/contracts';
+import type { DemoImport } from '../imports/fixtures';
 import type { EmployeeAuditAction } from './mockEmployees';
 import type {
   AlertSettings,
@@ -8,11 +9,13 @@ import type {
   DraftValues,
   Employee,
   EmployeeDetail,
+  ImportJob,
   InsurancePolicy,
   Permission,
   Result,
   UserSummary,
   Vehicle,
+  VehicleAssignment,
 } from './types';
 
 export type MockOperation =
@@ -67,7 +70,17 @@ export type MockOperation =
   | 'employeeHistory'
   | 'listAlerts'
   | 'getAlertSettings'
-  | 'saveAlertSettings';
+  | 'saveAlertSettings'
+  | 'listAssignments'
+  | 'getAssignment'
+  | 'assign'
+  | 'endAssignment'
+  | 'assignmentHistory'
+  | 'listImports'
+  | 'getImport'
+  | 'submitImport'
+  | 'importRows'
+  | 'importHistory';
 
 export interface MockControls {
   /** Simulates the server-side session expiring (cookie no longer valid). */
@@ -125,6 +138,10 @@ export interface MockControls {
   changeAlertSettingsExternally(change: Partial<Pick<AlertSettings, 'expiryWindowDays'>>): void;
   /** The alert settings currently on the server, for assertions. */
   alertSettings(): AlertSettings;
+  /** Another actor closes an assignment on the server, making a loaded copy stale. */
+  endAssignmentExternally(id: string): void;
+  assignments(): readonly VehicleAssignment[];
+  imports(): readonly ImportJob[];
 }
 
 export interface MockApi extends ApiPorts {
@@ -142,6 +159,8 @@ export interface MockApiOptions {
   readonly policies?: readonly InsurancePolicy[];
   /** Initial staff with their personal data: the synthetic demo staff by default; pass `[]` for none. */
   readonly employees?: readonly EmployeeDetail[];
+  readonly assignments?: readonly VehicleAssignment[];
+  readonly imports?: readonly DemoImport[];
 }
 
 /** Runs `action` only for a live session holding `permission` (when given). */

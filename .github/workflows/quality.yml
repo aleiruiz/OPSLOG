@@ -36,9 +36,9 @@ jobs:
       - run: pnpm test:e2e
       # Storybook static build (offline) + pixel snapshots of every story (SPECS §9.1, ADR-0010).
       - run: pnpm test:visual
-      - if: failure()
+      - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: visual-test-results
-          path: test-results/
+          name: playwright-test-results
+          path: test-results/**
           if-no-files-found: ignore

@@ -12,6 +12,9 @@ import { AlertsScreen } from '../alerts/AlertsScreen';
 import { AreaDetailScreen } from '../areas/AreaDetailScreen';
 import { AreaCreateScreen, AreaEditScreen, AreaMoveScreen } from '../areas/AreaFormScreen';
 import { AreasScreen } from '../areas/AreasScreen';
+import { AssignmentDetailScreen } from '../assignments/AssignmentDetailScreen';
+import { AssignmentCreateScreen, AssignmentEndScreen } from '../assignments/AssignmentFormScreen';
+import { AssignmentsScreen } from '../assignments/AssignmentsScreen';
 import { DocumentDetailScreen } from '../documents/DocumentDetailScreen';
 import {
   DocumentCreateScreen,
@@ -19,6 +22,9 @@ import {
   DocumentRenewScreen,
 } from '../documents/DocumentFormScreen';
 import { DocumentsScreen } from '../documents/DocumentsScreen';
+import { ImportDetailScreen } from '../imports/ImportDetailScreen';
+import { ImportCreateScreen } from '../imports/ImportFormScreen';
+import { ImportsScreen } from '../imports/ImportsScreen';
 import { PolicyDetailScreen } from '../insurance/PolicyDetailScreen';
 import {
   PolicyCreateScreen,
@@ -51,6 +57,9 @@ export function App({ ports, basename = '' }: { ports: ApiPorts; basename?: stri
 /** Sub-screens keep the entry of their list highlighted ("Vehículos", "Áreas", "Empleados"). */
 function navigationRoute(id: string | null): string | null {
   if (id === 'vehicleNew' || id === 'vehicleDetail' || id === 'vehicleEdit') return 'vehicles';
+  if (id === 'assignmentNew' || id === 'assignmentDetail' || id === 'assignmentEnd')
+    return 'assignments';
+  if (id === 'importNew' || id === 'importDetail') return 'imports';
   if (id === 'employeeNew' || id === 'employeeDetail' || id === 'employeeEdit') return 'employees';
   if (id === 'areaNew' || id === 'areaDetail' || id === 'areaEdit' || id === 'areaMove')
     return 'areas';
@@ -172,6 +181,27 @@ function Routes() {
         break;
       case 'vehicleEdit':
         screen = <VehicleEditScreen key={match.params.id} id={match.params.id as string} />;
+        break;
+      case 'assignments':
+        screen = <AssignmentsScreen />;
+        break;
+      case 'assignmentNew':
+        screen = <AssignmentCreateScreen />;
+        break;
+      case 'assignmentDetail':
+        screen = <AssignmentDetailScreen key={match.params.id} id={match.params.id as string} />;
+        break;
+      case 'assignmentEnd':
+        screen = <AssignmentEndScreen key={match.params.id} id={match.params.id as string} />;
+        break;
+      case 'imports':
+        screen = <ImportsScreen />;
+        break;
+      case 'importNew':
+        screen = <ImportCreateScreen />;
+        break;
+      case 'importDetail':
+        screen = <ImportDetailScreen key={match.params.id} id={match.params.id as string} />;
         break;
       case 'employees':
         screen = <EmployeesScreen />;
