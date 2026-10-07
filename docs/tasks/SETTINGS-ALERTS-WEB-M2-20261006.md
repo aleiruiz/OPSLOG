@@ -4,8 +4,8 @@
 id: SETTINGS-ALERTS-WEB-M2-20261006
 baseline:
   [
-    SPEC-1.4,
-    ORCH-1.4,
+    SPEC-1.3,
+    ORCH-1.3,
     inherited: SPEC-1.0/ORCH-1.0,
     SPEC-1.1/ORCH-1.1,
     SPEC-1.2/ORCH-1.2,
@@ -36,6 +36,8 @@ write_paths:
     package.json,
   ]
 ```
+
+La autoridad de esta asignación es la instrucción directa del usuario que fija SPEC-1.3/ORCH-1.3. En esta rama, `docs/baselines/ACTIVE.md` y otros paquetes de tarea aún declaran 1.4; la discrepancia queda registrada aquí sin modificar ni adoptar baselines o manifests.
 
 Pantallas sobre el backend ya fusionado (`GET /api/alerts`, `GET/PUT /api/alerts/settings`, cliente `createAlertsClient`), con el mismo patrón que Documentos y Seguros. Solo datos sintéticos; sin cambios de backend ni de `@opslog/ui`. ADR-0010: todas las pantallas tienen stories con baselines en 1280 y 360.
 
