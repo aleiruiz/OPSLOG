@@ -36,7 +36,8 @@
     "vitest.config.ts",
     "../../packages/ui/src/**/*.ts",
     "../../packages/ui/src/**/*.tsx",
-    "../../packages/contracts/src/*.ts"
+    "../../packages/contracts/src/*.ts",
+    "../../packages/contracts/src/bff/*.ts"
   ],
   "exclude": [
     "../../packages/ui/src/**/*.stories.tsx",
