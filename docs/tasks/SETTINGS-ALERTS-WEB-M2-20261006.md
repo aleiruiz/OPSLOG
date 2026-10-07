@@ -59,10 +59,14 @@ Pantallas sobre el backend ya fusionado (`GET /api/alerts`, `GET/PUT /api/alerts
 
 Storybook y la página de axe indexan `apps/web/alerts/**`: `Flota/Alertas/Lista` (13) y `Configuración/Alertas` (15: formulario, conflicto, solo lectura y resumen de Inicio). Cada story genera baselines `-desktop` (1280) y `-mobile` (360), creados con `pnpm test:visual:update`. `e2e/components.spec.ts` cuenta 285 stories.
 
+**Reconciliación visual PR #67 (2026-10-07, Chromium fijado por Playwright):** los snapshots de error `conflict`, `no-permission-to-save` y `rejected` (desktop/móvil) estaban desactualizados: el esperado omitía el `UiState`/`Alert` MUI ya usado por la implementación de esta rama. Solo esos seis snapshots de Alertas se regeneraron y los seis pasan al repetir sus stories. La suite completa da 131/626; quedan 495 diferencias: 458 fuera de Alertas y 37 de Alertas (18 en Ajustes/resumen, principalmente rasterización tipográfica de bajo porcentaje, y 19 en Lista). No se regeneraron capturas ajenas. En móvil, la tabla ocupa 431 px dentro de una región de desplazamiento de 328 px; `Estado` empieza en x=327 y se ve parcialmente al inicio. La región admite desplazamiento horizontal y teclado (`ScrollRegion`), pero la columna queda recortada en la primera vista; se conserva como hueco de presentación para seguimiento, sin ocultarlo con una captura nueva. Estos resultados no declaran pasado el gate visual.
+
 ## Pruebas
 
 - `pnpm --filter @opslog/web test:unit` (umbrales 95/95/95/90): lista, ajustes, resumen, modelo de formulario, etiquetas, mock, puerto HTTP, rutas y axe en jsdom.
 - `e2e/alerts.spec.ts`: navegación, filtros y paginación, enlaces al origen, resumen en Inicio, axe con contraste medido, sin desbordamiento a 360/1280, permisos (editable, solo lectura, sin entrada de menú), guardado con teclado, validación con foco y conflicto de versión (botón del arnés).
+
+**Revalidación de reconciliación:** `baseline:check`, `lint`, `typecheck`, `@opslog/web test:unit` y `test:e2e` (85/85) pasaron. `test:visual` quedó en 131/626; permanecen 495 discrepancias de snapshots, 458 fuera de Alertas y 37 dentro de Alertas, documentadas arriba. `format:check` continúa fallando en `pnpm-workspace.yaml` y cuatro `e2e/browser-app/*.html` idénticos a `origin/main`; el chequeo Prettier acotado a los archivos modificados pasó. No se alteraron los cinco archivos compartidos fuera del alcance.
 
 ## Huecos y decisiones pendientes (no se declaran cumplidos)
 
