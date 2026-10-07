@@ -1,5 +1,6 @@
 import React from 'react';
 import { NextStepPanel, PageHeader } from '@opslog/ui';
+import { AlertsSummary } from '../alerts/AlertsSummary';
 import type { Permission, SessionInfo } from './types';
 
 /** Landing screen: what the person can do next, derived from their permissions only. */
@@ -22,6 +23,7 @@ export function HomeScreen({
         description={`Esta es la cuenta de ${session.company.name} con el rol ${session.roleLabel}.`}
       />
       <NextStepPanel title="Siguiente paso" steps={steps} />
+      {can('view') && <AlertsSummary />}
     </>
   );
 }

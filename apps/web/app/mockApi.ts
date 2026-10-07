@@ -3,6 +3,7 @@ import { createFakeOidc, fakeOidcCode, fakeOidcSubject } from '../api/fakeOidc';
 import { demoEmployeeIds } from '../documents/fixtures';
 import { createMockAreaStore, type MockAreaStore } from './mockAreas';
 import { createMockDocumentStore, type MockDocumentStore } from './mockDocuments';
+import { createMockAlertsStore, type MockAlertsStore } from './mockAlerts';
 import { createMockInsuranceStore, type MockInsuranceStore } from './mockInsurance';
 import {
   createMockEmployeeStore,
@@ -11,6 +12,7 @@ import {
 } from './mockEmployees';
 import { createMockVehicleStore, type MockVehicleStore } from './mockVehicles';
 import type {
+  AlertSettings,
   ApiPorts,
   Employee,
   EmployeeDetail,
@@ -84,7 +86,10 @@ export type MockOperation =
   | 'updateEmployee'
   | 'changeEmployeeStatus'
   | 'archiveEmployee'
-  | 'employeeHistory';
+  | 'employeeHistory'
+  | 'listAlerts'
+  | 'getAlertSettings'
+  | 'saveAlertSettings';
 
 export interface MockControls {
   /** Simulates the server-side session expiring (cookie no longer valid). */
@@ -125,6 +130,10 @@ export interface MockControls {
   archivePolicyExternally(id: string): void;
   /** Policies currently on the server, deductible included, for assertions. */
   policies(): readonly InsurancePolicy[];
+  /** Another actor saves new alert settings on the server: their version moves on, so a form that loaded them is stale. */
+  changeAlertSettingsExternally(change: Partial<Pick<AlertSettings, 'expiryWindowDays'>>): void;
+  /** The alert settings currently on the server, for assertions. */
+  alertSettings(): AlertSettings;
   /** Another actor edits an employee on the server: its version moves on, so a form that loaded it is stale. */
   changeEmployeeExternally(
     id: string,
@@ -335,6 +344,11 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
       false,
     actorId: () => signedInAs ?? 'user-admin',
   });
+  const warnings: MockAlertsStore = createMockAlertsStore({
+    documents: () => paperwork.snapshot(),
+    policies: () => cover.snapshot(),
+    actorId: () => signedInAs ?? 'user-admin',
+  });
   const failures = new Map<MockOperation, ApiError['status']>();
   const drafts = new Map<string, DraftRecord>();
   let company: CompanySettings = {
@@ -456,6 +470,8 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     terminateEmployeeExternally: (id) => staff.terminateExternally(id),
     employees: () => staff.snapshot(),
     employeeAudit: () => staff.auditLog(),
+    changeAlertSettingsExternally: (change) => warnings.changeSettingsExternally(change),
+    alertSettings: () => warnings.settings(),
   };
 
   return {
@@ -703,6 +719,12 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
         guarded('archiveEmployee', 'delete', () => staff.port.archive(id, version)),
       history: (id, query) =>
         guarded('employeeHistory', 'view', () => staff.port.history(id, query)),
+    },
+    alerts: {
+      list: (query) => guarded('listAlerts', 'view', () => warnings.port.list(query)),
+      settings: () => guarded('getAlertSettings', 'view', () => warnings.port.settings()),
+      saveSettings: (input) =>
+        guarded('saveAlertSettings', 'manage_config', () => warnings.port.saveSettings(input)),
     },
     drafts: {
       load: (scope) => guarded('loadDraft', null, () => ok(drafts.get(draftKey(scope)) ?? null)),

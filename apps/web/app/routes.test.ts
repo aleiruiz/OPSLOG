@@ -36,7 +36,7 @@ describe('route matching', () => {
     expect(resolveRoute('/flota/vehiculos/a/b/c')).toBeNull();
     // Only the lists are in the navigation, under "Flota".
     expect(routes.filter((route) => route.nav?.group === 'Flota').map((route) => route.id)).toEqual(
-      ['vehicles', 'documents', 'policies'],
+      ['vehicles', 'documents', 'policies', 'alerts'],
     );
   });
 
@@ -105,6 +105,21 @@ describe('route matching', () => {
     expect(routes.find((route) => route.id === 'employees')?.nav).toEqual({
       group: 'Plantilla',
       label: 'Empleados',
+    });
+  });
+
+  it('resolves the alert screens: the list under "Flota", the settings readable with `view` but listed for `manage_config`', () => {
+    expect(resolveRoute('/flota/alertas')?.route.id).toBe('alerts');
+    expect(resolveRoute('/configuracion/alertas')?.route.id).toBe('alertSettings');
+    expect(resolveRoute('/flota/alertas/x')).toBeNull();
+    const byId = Object.fromEntries(routes.map((route) => [route.id, route]));
+    expect(byId.alerts?.access).toEqual({ permission: 'view' });
+    expect(byId.alerts?.nav).toEqual({ group: 'Flota', label: 'Alertas' });
+    expect(byId.alertSettings?.access).toEqual({ permission: 'view' });
+    expect(byId.alertSettings?.nav).toEqual({
+      group: 'Configuración',
+      label: 'Ajustes de alertas',
+      requires: 'manage_config',
     });
   });
 

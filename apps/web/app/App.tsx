@@ -7,6 +7,8 @@ import { SessionProvider, useSession } from '../auth/session';
 import { RolesScreen } from '../settings/access/RolesScreen';
 import { TenantAdminScreen } from '../settings/access/TenantAdminScreen';
 import { UsersScreen } from '../settings/access/UsersScreen';
+import { AlertSettingsScreen } from '../alerts/AlertSettingsScreen';
+import { AlertsScreen } from '../alerts/AlertsScreen';
 import { AreaDetailScreen } from '../areas/AreaDetailScreen';
 import { AreaCreateScreen, AreaEditScreen, AreaMoveScreen } from '../areas/AreaFormScreen';
 import { AreasScreen } from '../areas/AreasScreen';
@@ -227,6 +229,12 @@ function Routes() {
         break;
       case 'policyRenew':
         screen = <PolicyRenewScreen key={match.params.id} id={match.params.id as string} />;
+        break;
+      case 'alerts':
+        screen = <AlertsScreen />;
+        break;
+      case 'alertSettings':
+        screen = <AlertSettingsScreen />;
         break;
       case 'invitation':
         screen = (

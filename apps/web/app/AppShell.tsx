@@ -17,7 +17,12 @@ export function visibleNavigation(
   return navGroups
     .map((group) => ({
       group,
-      items: routes.filter((route) => route.nav?.group === group && isAllowed(route.access, can)),
+      items: routes.filter(
+        (route) =>
+          route.nav?.group === group &&
+          isAllowed(route.access, can) &&
+          (route.nav.requires === undefined || can(route.nav.requires)),
+      ),
     }))
     .filter((entry) => entry.items.length > 0);
 }
