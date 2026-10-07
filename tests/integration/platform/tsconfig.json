@@ -16,6 +16,7 @@
     { "path": "../../../packages/persistence/documents" },
     { "path": "../../../packages/persistence/insurance" },
     { "path": "../../../packages/persistence/assignments" },
-    { "path": "../../../packages/persistence/imports" }
+    { "path": "../../../packages/persistence/imports" },
+    { "path": "../../../packages/persistence/settings" }
   ]
 }

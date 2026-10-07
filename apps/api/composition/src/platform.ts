@@ -30,6 +30,12 @@ import {
   type DocumentStore,
 } from '../../../../packages/domain/documents/src/index.js';
 import {
+  InMemorySettingsStore,
+  SettingsService,
+  type SettingsStore,
+} from '../../../../packages/domain/settings/src/index.js';
+import { AlertService } from '../../../../packages/domain/alerts/src/index.js';
+import {
   AssignmentError,
   AssignmentService,
   InMemoryAssignmentStore,
@@ -121,6 +127,8 @@ import { DocumentsApi } from './documents.js';
 import { AssignmentsApi } from './assignments.js';
 import { employeeImportTarget, vehicleImportTarget } from './import-targets.js';
 import { ImportsApi } from './imports.js';
+import { AlertsApi } from './alerts.js';
+import { CompanySettingsApi } from './settings.js';
 import { InsuranceApi } from './insurance.js';
 import { EmployeesApi } from './employees.js';
 import { VehiclesApi } from './vehicles.js';
@@ -258,6 +266,8 @@ export interface PlatformAdapters {
   readonly assignments?: AssignmentStore;
   /** Persistent import job store (the TypeORM adapter of `packages/persistence/imports`); in-memory by default. */
   readonly imports?: ImportStore;
+  /** Persistent company settings store (the TypeORM adapter of `packages/persistence/settings`); in-memory by default. */
+  readonly settings?: SettingsStore;
   /**
    * Personal-data protection (SPECS D23): envelope encryption plus blind indexes. Defaults to the
    * local development KMS with a random per-process key, which refuses production-mode
@@ -364,6 +374,8 @@ export class Platform {
   public readonly insurance: InsuranceApi;
   public readonly assignments: AssignmentsApi;
   public readonly imports: ImportsApi;
+  public readonly companySettings: CompanySettingsApi;
+  public readonly alerts: AlertsApi;
   public readonly access: AccessDirectory;
   public readonly tenants: InMemoryTenantStore;
   public readonly audit: AuditStore;
@@ -507,8 +519,10 @@ export class Platform {
       audit: (context, action, entityId, correlationId) =>
         this.auditNow(this.userActor(context), action, 'employee', entityId, correlationId),
     });
+    const documentStore = adapters.documents ?? new InMemoryDocumentStore();
+    const policyStore = adapters.insurance ?? new InMemoryPolicyStore();
     this.documents = new DocumentsApi({
-      service: new DocumentService(adapters.documents ?? new InMemoryDocumentStore(), {
+      service: new DocumentService(documentStore, {
         now: this.now,
         // The owner of a document must be a live (not archived) vehicle or employee of the same
         // tenant. Unknown, foreign and archived owners are indistinguishable (no tenant oracle).
@@ -536,7 +550,7 @@ export class Platform {
         this.auditNow(this.userActor(context), action, 'document', entityId, correlationId),
     });
     this.insurance = new InsuranceApi({
-      service: new PolicyService(adapters.insurance ?? new InMemoryPolicyStore(), {
+      service: new PolicyService(policyStore, {
         now: this.now,
         // The vehicle of a policy must be a live (not archived) vehicle of the same tenant.
         // Unknown, foreign and archived vehicles are indistinguishable (no tenant oracle).
@@ -607,6 +621,75 @@ export class Platform {
           entityId,
           correlationId,
         ),
+    });
+    const settingsService = new SettingsService(adapters.settings ?? new InMemorySettingsStore(), {
+      now: this.now,
+    });
+    this.companySettings = new CompanySettingsApi({
+      service: settingsService,
+      authorize: (token, correlationId, required) => this.authorize(token, correlationId, required),
+      audit: (context, action, entityId, correlationId) =>
+        this.auditNow(this.userActor(context), action, 'company_settings', entityId, correlationId),
+    });
+    // Alerts are derived from the documents and policies stores on every read (no queue, no outbox
+    // yet): vehicle documents and insurance policies whose last valid day falls inside the company's
+    // window, or already passed. Archived ones are excluded; every read names the tenant.
+    this.alerts = new AlertsApi({
+      service: new AlertService(
+        {
+          vehicle_document: {
+            due: async (tenantId, scope, window) => {
+              const slice = await documentStore.list(
+                tenantId,
+                {
+                  ownerType: 'vehicle',
+                  includeArchived: false,
+                  expiry: scope.expiry,
+                  ...(scope.vehicleId === undefined ? {} : { ownerId: scope.vehicleId }),
+                },
+                window,
+              );
+              return {
+                total: slice.total,
+                items: slice.items.map((document) => ({
+                  subjectId: document.id,
+                  vehicleId: document.ownerId,
+                  typeCode: document.typeCode,
+                  dueOn: document.expiresOn as string,
+                })),
+              };
+            },
+          },
+          insurance_policy: {
+            due: async (tenantId, scope, window) => {
+              const slice = await policyStore.list(
+                tenantId,
+                {
+                  includeArchived: false,
+                  expiry: scope.expiry,
+                  ...(scope.vehicleId === undefined ? {} : { vehicleId: scope.vehicleId }),
+                },
+                window,
+              );
+              return {
+                total: slice.total,
+                items: slice.items.map((policy) => ({
+                  subjectId: policy.id,
+                  vehicleId: policy.vehicleId,
+                  typeCode: policy.coverageType,
+                  dueOn: policy.endsOn,
+                })),
+              };
+            },
+          },
+        },
+        {
+          expiryWindowDays: async (tenantId) =>
+            (await settingsService.get(tenantId)).expiryWindowDays,
+        },
+        { now: this.now },
+      ),
+      authorize: (token, correlationId, required) => this.authorize(token, correlationId, required),
     });
     this.areas = new AreasApi({
       service: areaService,

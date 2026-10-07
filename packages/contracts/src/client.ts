@@ -7,6 +7,10 @@ import {
   type BffCallArgs,
   type BffResponseOf,
   type BffRouteId,
+  type BffAlertPage,
+  type BffAlertSettings,
+  type BffAlertSettingsInput,
+  type BffAlertsQuery,
   type BffArea,
   type BffAreaDetail,
   type BffAreaHistoryEntry,
@@ -529,5 +533,26 @@ export function createImportsClient(client: BffClient): ImportsClient {
       query
         ? client.call('imports.history', { params: { id }, query })
         : client.call('imports.history', { params: { id } }),
+  };
+}
+
+/**
+ * Typed expiry-alert calls over any `BffClient`. `list` reads the alerts derived from the
+ * company's vehicle documents and insurance policies as of the server's UTC date; `settings` reads
+ * the company's window and recipients (version 0 = defaults) and `saveSettings` replaces them with
+ * the `version` of the last read (`manage_config`); a lost race comes back as the `stale_version`
+ * error value (never an exception).
+ */
+export interface AlertsClient {
+  list(query?: BffAlertsQuery): Promise<BffResult<BffAlertPage>>;
+  settings(): Promise<BffResult<BffAlertSettings>>;
+  saveSettings(input: BffAlertSettingsInput): Promise<BffResult<BffAlertSettings>>;
+}
+
+export function createAlertsClient(client: BffClient): AlertsClient {
+  return {
+    list: (query) => (query ? client.call('alerts.list', { query }) : client.call('alerts.list')),
+    settings: () => client.call('alerts.settings.get'),
+    saveSettings: (input) => client.call('alerts.settings.update', { body: input }),
   };
 }

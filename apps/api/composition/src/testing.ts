@@ -15,6 +15,7 @@ export { InMemoryFileRecordStore } from '../../../../packages/domain/files/src/i
 export { InMemoryAreaStore } from '../../../../packages/domain/areas/src/index.js';
 export { InMemoryDocumentStore } from '../../../../packages/domain/documents/src/index.js';
 export { InMemoryPolicyStore } from '../../../../packages/domain/insurance/src/index.js';
+export { InMemorySettingsStore } from '../../../../packages/domain/settings/src/index.js';
 export { InMemoryAssignmentStore } from '../../../../packages/domain/assignments/src/index.js';
 export { InMemoryImportStore } from '../../../../packages/domain/imports/src/index.js';
 export { InMemoryEmployeeStore } from '../../../../packages/domain/employees/src/index.js';

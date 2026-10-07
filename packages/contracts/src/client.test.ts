@@ -3,6 +3,7 @@ import {
   createAreasClient,
   createBffClient,
   createDocumentsClient,
+  createAlertsClient,
   createAssignmentsClient,
   createImportsClient,
   createInsuranceClient,
@@ -694,6 +695,34 @@ describe('imports client', () => {
       'GET /api/imports/j1/history',
       'GET /api/imports/j1/history?limit=25',
       'POST /api/imports',
+    ]);
+  });
+});
+
+describe('alerts client', () => {
+  it('maps each method to its route, method and path', async () => {
+    const { fetch, seen } = transport((request) => {
+      if (request.url === '/api/auth/csrf') return { status: 200, body: { csrfToken: 'tok' } };
+      if (request.url === '/api/auth/session') return { status: 200, body: session('tok') };
+      if (request.method === 'PUT') return { status: 409, body: errorBody('stale_version', 409) };
+      return { status: 200, body: { items: [], total: 0 } };
+    });
+    const alerts = createAlertsClient(createBffClient({ fetch }));
+    await alerts.list();
+    await alerts.list({ source: 'insurance_policy', severity: 'expired', limit: 50 });
+    await alerts.settings();
+    const stale = await alerts.saveSettings({
+      version: 0,
+      expiryWindowDays: 7,
+      recipientRoles: ['admin'],
+    });
+    expect(stale).toMatchObject({ ok: false, error: { code: 'stale_version', status: 409 } });
+    const calls = seen.filter((entry) => !entry.url.startsWith('/api/auth/'));
+    expect(calls.map((entry) => `${entry.method} ${entry.url}`)).toEqual([
+      'GET /api/alerts',
+      'GET /api/alerts?source=insurance_policy&severity=expired&limit=50',
+      'GET /api/alerts/settings',
+      'PUT /api/alerts/settings',
     ]);
   });
 });
