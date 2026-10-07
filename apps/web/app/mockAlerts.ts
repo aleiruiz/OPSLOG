@@ -37,6 +37,7 @@ const NOW = '2026-10-06T12:00:00.000Z';
 const DAY_MS = 86_400_000;
 export const DEFAULT_WINDOW_DAYS = 30;
 export const DEFAULT_RECIPIENTS: readonly AlertRecipientRole[] = ['admin', 'editor'];
+const MAX_ALERT_OFFSET = 2_000;
 let correlation = 0;
 
 function failure(status: ApiError['status'], code: string, message: string): Result<never> {
@@ -133,6 +134,7 @@ export function createMockAlertsStore(options: {
       if (
         ![25, 50, 100].includes(limit) ||
         !Number.isSafeInteger(offset) ||
+        offset > MAX_ALERT_OFFSET ||
         (query.source !== undefined && !BFF_ALERT_SOURCES.includes(query.source)) ||
         (query.severity !== undefined && !BFF_ALERT_SEVERITIES.includes(query.severity)) ||
         (query.vehicleId !== undefined && !OPAQUE_ID.test(query.vehicleId))
@@ -147,7 +149,7 @@ export function createMockAlertsStore(options: {
       const next = offset + limit;
       const page: AlertPage = {
         items: matches.slice(offset, next),
-        nextCursor: next < matches.length ? `mock:${next}` : null,
+        nextCursor: next < matches.length && next <= MAX_ALERT_OFFSET ? `mock:${next}` : null,
         total: matches.length,
         sort: { field: 'dueOn', direction: 'asc' },
         asOf: now().toISOString().slice(0, 10),

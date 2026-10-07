@@ -121,6 +121,32 @@ describe('derived alerts', () => {
     expect(await list(s, { limit: 50 })).toMatchObject({ total: 31 });
   });
 
+  it('bounds deep-page cursors at offset 2000 and rejects cursors beyond the bound', async () => {
+    const documents = Array.from({ length: 2_026 }, (_, index) =>
+      makeDocument({
+        id: `doc-${String(index + 1).padStart(4, '0')}`,
+        expiresOn: '2026-10-07',
+      }),
+    );
+    const s = store(documents);
+    let cursor: string | undefined;
+
+    for (let pageIndex = 0; pageIndex < 20; pageIndex += 1) {
+      const page = await list(s, { limit: 100, ...(cursor ? { cursor } : {}) });
+      expect(page.items).toHaveLength(100);
+      cursor = page.nextCursor ?? undefined;
+    }
+
+    expect(cursor).toBe('mock:2000');
+    const lastPage = await list(s, { limit: 100, cursor });
+    expect(lastPage.items).toHaveLength(26);
+    expect(lastPage.nextCursor).toBeNull();
+    expect(await s.port.list({ cursor: 'mock:2001' })).toMatchObject({
+      ok: false,
+      error: { status: 400, code: 'bad_request' },
+    });
+  });
+
   it('rejects an invalid query with a uniform 400', async () => {
     const s = store();
     for (const query of [
