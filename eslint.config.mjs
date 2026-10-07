@@ -29,12 +29,7 @@ export default [
   },
   {
     // Archivos heredados por encima del límite; se dividen cuando se tocan. La lista solo se reduce.
-    files: [
-      'packages/contracts/src/client.ts',
-      'packages/contracts/src/index.ts',
-      'packages/persistence/identity/src/typeorm-identity-store.ts',
-      'packages/persistence/tenancy/src/store.ts',
-    ],
+    files: ['packages/contracts/src/client.ts', 'packages/contracts/src/index.ts'],
     rules: { 'max-lines': 'off' },
   },
   prettier,
