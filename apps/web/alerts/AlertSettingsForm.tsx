@@ -214,7 +214,14 @@ export function AlertSettingsForm({
               errors.expiryWindowDays ??
               `Entre ${MIN_WINDOW_DAYS} y ${MAX_WINDOW_DAYS} días. Los estados «por vencer» de documentos y seguros siempre usan 30 días.`
             }
-            sx={{ maxWidth: 320 }}
+            sx={{
+              maxWidth: 320,
+              ...(submitting && {
+                '& .MuiFormHelperText-root.Mui-disabled:not(.Mui-error)': {
+                  color: 'text.secondary',
+                },
+              }),
+            }}
           />
         </FormSection>
         <FormSection
