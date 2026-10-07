@@ -1,10 +1,12 @@
-import type { Result, Vehicle, VehiclesPort } from './types';
+import type { Result, Vehicle, VehiclesPort, VehicleStatus } from './types';
 
 export interface VehicleOption {
   readonly id: string;
   /** What the person picks by: the economic number and the model. Vehicles hold no personal data. */
   readonly label: string;
   readonly economicNumber: string;
+  /** Present on options read from the server: lets a screen offer only the vehicles an action accepts. */
+  readonly status?: VehicleStatus;
 }
 
 export interface VehicleOptions {
@@ -20,6 +22,7 @@ export const MAX_VEHICLE_OPTIONS = PAGE * MAX_PAGES;
 const optionOf = (vehicle: Vehicle): VehicleOption => ({
   id: vehicle.id,
   economicNumber: vehicle.economicNumber,
+  status: vehicle.status,
   label: `${vehicle.economicNumber} · ${vehicle.make} ${vehicle.model}`,
 });
 
