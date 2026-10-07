@@ -1,22 +1,30 @@
-import type { ApiError } from '@opslog/contracts';
-import { BFF_COVERAGE_TYPES, BFF_POLICY_STATUSES } from '@opslog/contracts';
-import {
-  EXPIRING_WINDOW_DAYS,
-  MAX_EXPIRY_DATE,
-  MIN_DATE,
-  NOTES,
-  OPAQUE_ID,
-  REFERENCE_NUMBER,
-  isDateBetween,
-  normalizeReference,
-  normalizeText,
-  todayOf,
-} from '../documents/rules';
+import { NOTES, OPAQUE_ID, normalizeText, todayOf } from '../documents/rules';
 import { demoPolicies } from '../insurance/fixtures';
-import { CURRENCY, INSURER, MAX_BASIS_POINTS, MAX_DEDUCTIBLE_MINOR } from '../insurance/rules';
+import { INSURER } from '../insurance/rules';
+import {
+  NOW,
+  badRequest,
+  conflict,
+  forbidden,
+  invalidVehicle,
+  isCoverage,
+  notFound,
+  ok,
+  onlyKeys,
+  parseDeductible,
+  parseNumber,
+  parsePeriod,
+  seedRevisions,
+  validVersion,
+} from './mockInsuranceSupport';
+import {
+  deriveView,
+  isValidListQuery,
+  matchesListQuery,
+  revisionViews,
+} from './mockInsuranceViews';
+import type { MockInsuranceStore } from './mockInsuranceTypes';
 import type {
-  CoverageType,
-  Deductible,
   InsuranceListQuery,
   InsurancePolicy,
   InsurancePolicyInput,
@@ -25,120 +33,9 @@ import type {
   InsurancePolicyRevision,
   InsurancePort,
   Page,
-  Result,
 } from './types';
 
-/**
- * In-memory insurance policies with the semantics of the real backend (`packages/domain/insurance`): optimistic
- * versions (409 `stale_version`), read-only archived policies (409 `immutable`), a status derived from the end date and
- * the server clock, immutable revisions appended by renewals, a live vehicle of the company checked on create and
- * renew (a uniform 422 `invalid_vehicle`), and the deductible gated by `view_costs`: hidden on every read without it,
- * and any request that mentions it a 403 (decided before the value is looked at). Permissions of the operations
- * themselves are enforced by the caller (`mockApi`).
- */
-export interface MockInsuranceStore {
-  readonly port: InsurancePort;
-  /** Another actor edits the policy on the server: its version moves on, so the caller's copy is stale. */
-  changeExternally(id: string, change: Partial<Pick<InsurancePolicy, 'insurer'>>): void;
-  /** Another actor archives the policy on the server. */
-  archiveExternally(id: string): void;
-  /** Policies as stored (the deductible included), for assertions. */
-  snapshot(): readonly InsurancePolicy[];
-}
-
-const NOW = '2026-10-06T12:00:00.000Z';
-const DAY_MS = 86_400_000;
-let correlation = 0;
-
-function failure(
-  status: ApiError['status'],
-  code: string,
-  message: string,
-  field?: string,
-): Result<never> {
-  correlation += 1;
-  return {
-    ok: false,
-    error: {
-      code,
-      status,
-      message,
-      correlationId: `corr-mock-policy-${correlation}`,
-      ...(field === undefined ? {} : { fieldErrors: [{ field, code, message }] }),
-    },
-  };
-}
-const ok = <T>(value: T): Result<T> => ({ ok: true, value });
-const badRequest = () => failure(400, 'bad_request', 'Invalid request');
-const notFound = () => failure(404, 'not_found', 'Resource not found');
-const forbidden = () => failure(403, 'forbidden', 'Permission denied');
-const invalidVehicle = () => failure(422, 'invalid_vehicle', 'Unprocessable request', 'vehicle_id');
-const conflict = (code: 'stale_version' | 'immutable') => failure(409, code, 'Conflict');
-
-const validVersion = (value: unknown): value is number =>
-  typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 2_147_483_646;
-
-const onlyKeys = (fields: Readonly<Record<string, unknown>>, allowed: readonly string[]) =>
-  Object.keys(fields).every((key) => allowed.includes(key));
-
-const isInt = (value: unknown, min: number, max: number): value is number =>
-  typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max;
-
-function parseDeductible(value: unknown): Deductible | null {
-  if (typeof value !== 'object' || value === null) return null;
-  const fields = value as Readonly<Record<string, unknown>>;
-  if (fields['kind'] === 'amount') {
-    const { amountMinor, currency } = fields;
-    return onlyKeys(fields, ['kind', 'amountMinor', 'currency']) &&
-      isInt(amountMinor, 1, MAX_DEDUCTIBLE_MINOR) &&
-      typeof currency === 'string' &&
-      CURRENCY.test(currency)
-      ? { kind: 'amount', amountMinor, currency }
-      : null;
-  }
-  if (fields['kind'] === 'percent') {
-    const { basisPoints } = fields;
-    return onlyKeys(fields, ['kind', 'basisPoints']) && isInt(basisPoints, 1, MAX_BASIS_POINTS)
-      ? { kind: 'percent', basisPoints }
-      : null;
-  }
-  return null;
-}
-
-interface Period {
-  readonly startsOn: string;
-  readonly endsOn: string;
-}
-
-function parsePeriod(fields: Readonly<Record<string, unknown>>): Period | null {
-  const { startsOn, endsOn } = fields;
-  return typeof startsOn === 'string' &&
-    typeof endsOn === 'string' &&
-    isDateBetween(startsOn, MIN_DATE, MAX_EXPIRY_DATE) &&
-    isDateBetween(endsOn, MIN_DATE, MAX_EXPIRY_DATE) &&
-    endsOn >= startsOn
-    ? { startsOn, endsOn }
-    : null;
-}
-
-const parseNumber = (value: unknown): string | null => {
-  if (typeof value !== 'string') return null;
-  const text = normalizeReference(value);
-  return REFERENCE_NUMBER.test(text) ? text : null;
-};
-const isCoverage = (value: unknown): value is CoverageType =>
-  typeof value === 'string' && (BFF_COVERAGE_TYPES as readonly string[]).includes(value);
-
-interface RevisionData extends Period {
-  readonly policyNumber: string;
-  readonly coverageType: CoverageType;
-  readonly deductible: Deductible | null;
-}
-interface StoredRevision extends RevisionData {
-  readonly revision: number;
-  readonly actorId: string;
-  readonly at: string;
-}
+export type { MockInsuranceStore };
 
 export function createMockInsuranceStore(
   seed: readonly InsurancePolicy[] = demoPolicies(),
@@ -158,45 +55,13 @@ export function createMockInsuranceStore(
   const today = () => todayOf(now());
 
   /** What the server derives at read time, with the deductible hidden from a role without `view_costs`. */
-  const view = (policy: InsurancePolicy): InsurancePolicy => {
-    const days = Math.round(
-      (Date.parse(`${policy.endsOn}T00:00:00.000Z`) - Date.parse(`${today()}T00:00:00.000Z`)) /
-        DAY_MS,
-    );
-    return {
-      ...policy,
-      status: days < 0 ? 'expired' : days <= EXPIRING_WINDOW_DAYS ? 'expiring' : 'valid',
-      daysToExpiry: days,
-      covering: policy.startsOn <= today() && today() <= policy.endsOn,
-      hasDeductible: policy.deductible !== null,
-      deductible: canViewCosts() ? policy.deductible : null,
-    };
-  };
+  const view = (policy: InsurancePolicy): InsurancePolicy =>
+    deriveView(policy, today(), canViewCosts());
 
   let rows: InsurancePolicy[] = seed.map((policy) => ({ ...policy }));
   let sequence = rows.length;
   // Earlier revisions of a seeded policy are synthetic: one year apart, oldest first.
-  const revisions = new Map<string, StoredRevision[]>(
-    rows.map((policy) => [
-      policy.id,
-      Array.from({ length: policy.revision }, (_, index): StoredRevision => {
-        const revision = index + 1;
-        const back = (policy.revision - revision) * 365 * DAY_MS;
-        const move = (day: string) =>
-          new Date(Date.parse(`${day}T00:00:00.000Z`) - back).toISOString().slice(0, 10);
-        return {
-          revision,
-          policyNumber: policy.policyNumber,
-          coverageType: policy.coverageType,
-          startsOn: move(policy.startsOn),
-          endsOn: move(policy.endsOn),
-          deductible: policy.deductible,
-          actorId: 'user-admin',
-          at: policy.createdAt,
-        };
-      }),
-    ]),
-  );
+  const revisions = seedRevisions(rows);
 
   const index = (id: string) => rows.findIndex((policy) => policy.id === id);
   const replace = (id: string, next: InsurancePolicy) => {
@@ -215,28 +80,10 @@ export function createMockInsuranceStore(
       const limit = query.limit ?? 25;
       const offset =
         query.cursor === undefined ? 0 : Number(/^mock:(\d+)$/.exec(query.cursor)?.[1]);
-      if (
-        ![25, 50, 100].includes(limit) ||
-        !Number.isSafeInteger(offset) ||
-        (query.vehicleId !== undefined && !OPAQUE_ID.test(query.vehicleId)) ||
-        (query.coverageType !== undefined && !isCoverage(query.coverageType)) ||
-        (query.status !== undefined && !BFF_POLICY_STATUSES.includes(query.status)) ||
-        (query.coversOn !== undefined &&
-          !isDateBetween(query.coversOn, MIN_DATE, MAX_EXPIRY_DATE)) ||
-        (query.includeArchived !== undefined && !['true', 'false'].includes(query.includeArchived))
-      )
-        return badRequest();
+      if (!isValidListQuery(query, limit, offset)) return badRequest();
       const matches = rows
         .map(view)
-        .filter(
-          (policy) =>
-            (query.includeArchived === 'true' || policy.archivedAt === null) &&
-            (query.vehicleId === undefined || policy.vehicleId === query.vehicleId) &&
-            (query.coverageType === undefined || policy.coverageType === query.coverageType) &&
-            (query.status === undefined || policy.status === query.status) &&
-            (query.coversOn === undefined ||
-              (policy.startsOn <= query.coversOn && query.coversOn <= policy.endsOn)),
-        )
+        .filter((policy) => matchesListQuery(policy, query))
         .sort((a, b) =>
           a.endsOn < b.endsOn ? -1 : a.endsOn > b.endsOn ? 1 : a.id < b.id ? -1 : 1,
         );
@@ -426,23 +273,7 @@ export function createMockInsuranceStore(
       const current = rows[index(id)];
       if (!current) return notFound();
       if (![25, 50, 100].includes(limit) || !Number.isSafeInteger(offset)) return badRequest();
-      const all: InsurancePolicyRevision[] = [...(revisions.get(id) ?? [])]
-        .sort((a, b) => b.revision - a.revision)
-        .map((entry) => ({
-          revision: entry.revision,
-          policyNumber: entry.policyNumber,
-          coverageType: entry.coverageType,
-          startsOn: entry.startsOn,
-          endsOn: entry.endsOn,
-          status:
-            entry.revision === current.revision
-              ? view({ ...current, endsOn: entry.endsOn }).status
-              : ('replaced' as const),
-          hasDeductible: entry.deductible !== null,
-          deductible: canViewCosts() ? entry.deductible : null,
-          actorId: entry.actorId,
-          at: entry.at,
-        }));
+      const all = revisionViews(revisions.get(id) ?? [], current, view, canViewCosts());
       const next = offset + limit;
       return ok({
         items: all.slice(offset, next),

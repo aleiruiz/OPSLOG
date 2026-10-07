@@ -1,29 +1,31 @@
-import type { ApiError } from '@opslog/contracts';
 import { BFF_EMPLOYEE_KINDS, BFF_EMPLOYEE_STATUSES } from '@opslog/contracts';
-import { demoEmployees, FIXTURE_TODAY, type EmployeePiiValues } from '../employees/fixtures';
+import { FIXTURE_TODAY } from '../employees/fixtures';
+import { OPAQUE_ID, canTransition, fitnessOf, isReasonValid } from '../employees/rules';
 import {
-  EMAIL,
-  EMPLOYEE_NUMBER,
-  ID_TYPE,
-  IDENTIFICATION,
-  LABEL,
-  LICENSE_NUMBER,
-  LICENSE_TYPE,
-  MAX_LICENSE_DATE,
-  MIN_DATE,
-  NAME,
-  OPAQUE_ID,
-  PHONE,
-  canTransition,
-  fitnessOf,
-  isDateBetween,
-  isReasonValid,
-  normalizeCode,
-  normalizeEmail,
-  normalizeName,
-  normalizePhone,
-  normalizeUpper,
-} from '../employees/rules';
+  CREATE_KEYS,
+  LICENSE_KEYS,
+  badRequest,
+  compare,
+  conflict,
+  demoMockEmployees,
+  duplicate,
+  idKey,
+  invalidArea,
+  notFound,
+  ok,
+  page,
+  pageWindow,
+  parseFields,
+  seedHistory,
+  sortKey,
+  validVersion,
+  type Row,
+} from './mockEmployeesSupport';
+import type {
+  MockEmployeeEnvironment,
+  MockEmployeeStore,
+  EmployeeAuditAction,
+} from './mockEmployeesTypes';
 import type {
   Employee,
   EmployeeDetail,
@@ -32,214 +34,12 @@ import type {
   EmployeeListQuery,
   EmployeePatch,
   EmployeesPort,
-  EmployeeStatus,
-  Page,
-  Result,
 } from './types';
 
-/**
- * In-memory employees with the semantics of the real backend (`packages/domain/employees` and the
- * `EmployeesApi` composition): optimistic versions (409 `stale_version`), read-only archived and terminated
- * employees (409 `immutable`), a status matrix (409 `invalid_transition`), per-company uniqueness of employee
- * number, identification and e-mail (409 `duplicate` with the colliding field), an active area of the company
- * (422 `invalid_area`), personal data that only `get` returns and only to a session with `view_pii`, a history of
- * status and area changes, and a uniform 400/404. Operation permissions are enforced by the caller (`mockApi`);
- * the PII permission needed to write personal data is part of that check, like on the server.
- */
-export interface MockEmployeeStore {
-  readonly port: EmployeesPort;
-  /** Another actor changes the employee on the server: bumps its version, so the caller's copy is stale. */
-  changeExternally(id: string, change: Partial<Pick<Employee, 'position' | 'firstName'>>): void;
-  /** Another actor archives the employee on the server. */
-  archiveExternally(id: string): void;
-  /** Another actor terminates the employee on the server. */
-  terminateExternally(id: string): void;
-  /** Employees currently on the server (no personal data), for assertions. */
-  snapshot(): readonly Employee[];
-  /** Every audit event the server recorded: action and entity id, never a value. */
-  auditLog(): readonly { readonly action: EmployeeAuditAction; readonly id: string }[];
-  /** Employees of the area that still count as assigned people (BR-021): not archived, not terminated. */
-  countLiveInArea(areaId: string): number;
-}
-
-export type EmployeeAuditAction =
-  | 'employee.created'
-  | 'employee.updated'
-  | 'employee.status_changed'
-  | 'employee.archived'
-  | 'employee.pii_viewed';
-
-export interface MockEmployeeEnvironment {
-  /** Whether an area id is an active area of the company (like the backend, which refuses any other). */
-  readonly isActiveArea: (areaId: string) => boolean;
-  /** Whether the signed-in session holds `view_pii`. */
-  readonly canViewPii: () => boolean;
-  /** The signed-in user, recorded in the history. */
-  readonly actorId: () => string;
-}
+export { demoMockEmployees };
+export type { EmployeeAuditAction, MockEmployeeEnvironment, MockEmployeeStore };
 
 const NOW = '2026-10-06T12:00:00.000Z';
-let correlation = 0;
-
-function failure(
-  status: ApiError['status'],
-  code: string,
-  message: string,
-  field?: string,
-): Result<never> {
-  correlation += 1;
-  return {
-    ok: false,
-    error: {
-      code,
-      status,
-      message,
-      correlationId: `corr-mock-employee-${correlation}`,
-      ...(field === undefined ? {} : { fieldErrors: [{ field, code, message }] }),
-    },
-  };
-}
-const ok = <T>(value: T): Result<T> => ({ ok: true, value });
-const badRequest = () => failure(400, 'bad_request', 'Invalid request');
-const notFound = () => failure(404, 'not_found', 'Resource not found');
-const invalidArea = () => failure(422, 'invalid_area', 'Unprocessable request', 'area_id');
-const conflict = (code: 'stale_version' | 'immutable' | 'invalid_transition') =>
-  failure(409, code, 'Conflict');
-const duplicate = (field: string) => failure(409, 'duplicate', 'Conflict', field);
-
-const validVersion = (value: unknown): value is number =>
-  typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 2_147_483_646;
-
-const CREATE_KEYS = [
-  'kind',
-  'firstName',
-  'lastName',
-  'employeeNumber',
-  'position',
-  'hireDate',
-  'areaId',
-  'idType',
-  'nationalId',
-  'phone',
-  'email',
-  'licenseNumber',
-  'licenseType',
-  'licenseExpiresOn',
-] as const;
-const LICENSE_KEYS = ['licenseNumber', 'licenseType', 'licenseExpiresOn'] as const;
-
-type Row = EmployeeDetail & { readonly pii: EmployeePiiValues };
-
-interface Core {
-  firstName: string;
-  lastName: string;
-  employeeNumber: string | null;
-  position: string | null;
-  hireDate: string | null;
-  areaId: string;
-  idType: string | null;
-  licenseType: string | null;
-  licenseExpiresOn: string | null;
-}
-type Parsed = { core: Partial<Core>; pii: Partial<EmployeePiiValues> };
-
-/** Validates and normalizes the fields that are present; `null` when anything is invalid. */
-function parseFields(
-  input: Readonly<Record<string, unknown>>,
-  allowed: readonly string[],
-  today: string,
-): Parsed | null {
-  if (Object.keys(input).some((key) => !allowed.includes(key))) return null;
-  const core: { -readonly [K in keyof Core]?: Core[K] } = {};
-  const pii: { -readonly [K in keyof EmployeePiiValues]?: string | null } = {};
-  const has = (key: string) => Object.hasOwn(input, key);
-  const text = (key: string, pattern: RegExp, normalize: (value: string) => string) => {
-    const value = input[key];
-    if (typeof value !== 'string') return undefined;
-    const normalized = normalize(value);
-    return pattern.test(normalized) ? normalized : undefined;
-  };
-  /** `null` clears; otherwise the normalized text, or `false` when invalid. */
-  const nullable = (key: string, pattern: RegExp, normalize: (value: string) => string) =>
-    input[key] === null ? null : (text(key, pattern, normalize) ?? false);
-
-  for (const key of ['firstName', 'lastName'] as const) {
-    if (!has(key)) continue;
-    const value = text(key, NAME, normalizeName);
-    if (value === undefined) return null;
-    core[key] = value;
-  }
-  if (has('areaId')) {
-    const value = input['areaId'];
-    if (typeof value !== 'string' || !OPAQUE_ID.test(value)) return null;
-    core.areaId = value;
-  }
-  const simple: [keyof Core, RegExp, (value: string) => string][] = [
-    ['employeeNumber', EMPLOYEE_NUMBER, (value) => value.trim()],
-    ['position', LABEL, (value) => value.trim()],
-    ['licenseType', LICENSE_TYPE, normalizeUpper],
-  ];
-  for (const [key, pattern, normalize] of simple) {
-    if (!has(key)) continue;
-    const value = nullable(key, pattern, normalize);
-    if (value === false) return null;
-    (core as Record<string, unknown>)[key] = value;
-  }
-  if (has('hireDate')) {
-    const value = input['hireDate'];
-    if (value !== null && (typeof value !== 'string' || !isDateBetween(value, MIN_DATE, today)))
-      return null;
-    core.hireDate = value as string | null;
-  }
-  if (has('licenseExpiresOn')) {
-    const value = input['licenseExpiresOn'];
-    if (
-      value !== null &&
-      (typeof value !== 'string' || !isDateBetween(value, MIN_DATE, MAX_LICENSE_DATE))
-    )
-      return null;
-    core.licenseExpiresOn = value as string | null;
-  }
-  // `idType` and `nationalId` go together (both set or both cleared).
-  if (has('idType') || has('nationalId')) {
-    if (!has('idType') || !has('nationalId')) return null;
-    if ((input['idType'] === null) !== (input['nationalId'] === null)) return null;
-    if (input['idType'] === null) {
-      core.idType = null;
-      pii.nationalId = null;
-    } else {
-      const idType = text('idType', ID_TYPE, normalizeCode);
-      const nationalId = text('nationalId', IDENTIFICATION, normalizeUpper);
-      if (idType === undefined || nationalId === undefined) return null;
-      core.idType = idType;
-      pii.nationalId = nationalId;
-    }
-  }
-  for (const [key, pattern, normalize] of [
-    ['phone', PHONE, normalizePhone],
-    ['email', EMAIL, normalizeEmail],
-    ['licenseNumber', LICENSE_NUMBER, normalizeUpper],
-  ] as const) {
-    if (!has(key)) continue;
-    const value = nullable(key, pattern, normalize);
-    if (value === false || (key === 'email' && typeof value === 'string' && value.length > 254))
-      return null;
-    pii[key] = value;
-  }
-  return { core, pii };
-}
-
-const idKey = (idType: string | null, nationalId: string) =>
-  `${idType}:${nationalId.replace(/[ ./-]/g, '')}`;
-const sortKey = (employee: Pick<Employee, 'firstName' | 'lastName'>) =>
-  `${employee.lastName} ${employee.firstName}`.toLowerCase();
-const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
-
-/** The demo staff, with a long history on the first employee so the history needs a second page. */
-export const demoMockEmployees = (): EmployeeDetail[] =>
-  demoEmployees().map((employee) =>
-    employee.id === 'emp-001' ? { ...employee, version: 31 } : employee,
-  );
 
 export function createMockEmployeeStore(
   env: MockEmployeeEnvironment,
@@ -272,32 +72,7 @@ export function createMockEmployeeStore(
   };
 
   // Every employee starts with a believable history: the hiring and, for long-lived ones, status changes.
-  const history = new Map<string, EmployeeHistoryEntry[]>();
-  for (const row of rows) {
-    const entries = [
-      entry(row.id, 'status', null, 'active', 'Alta', 'user-admin', 1, row.createdAt),
-    ];
-    let state: EmployeeStatus = 'active';
-    for (let version = 2; version <= row.version; version += 1) {
-      const last = version === row.version;
-      const to: EmployeeStatus = last ? row.status : state === 'active' ? 'suspended' : 'active';
-      if (to === state) continue;
-      entries.push(
-        entry(
-          row.id,
-          'status',
-          state,
-          to,
-          last ? row.statusReason : 'Cambio de estado de demostración',
-          'user-admin',
-          version,
-          last ? row.updatedAt : row.createdAt,
-        ),
-      );
-      state = to;
-    }
-    history.set(row.id, entries);
-  }
+  const history = seedHistory(rows, entry);
 
   const index = (id: string) => rows.findIndex((employee) => employee.id === id);
   const view = (row: Row): Employee => {
@@ -342,24 +117,10 @@ export function createMockEmployeeStore(
     }
     return null;
   };
-  const window = (query: { limit?: number; cursor?: string }) => {
-    const limit = query.limit ?? 25;
-    const offset = query.cursor === undefined ? 0 : Number(/^mock:(\d+)$/.exec(query.cursor)?.[1]);
-    return [25, 50, 100].includes(limit) && Number.isSafeInteger(offset) ? { limit, offset } : null;
-  };
-  const page = <T>(items: readonly T[], limit: number, offset: number, field: string): Page<T> => {
-    const next = offset + limit;
-    return {
-      items: items.slice(offset, next),
-      nextCursor: next < items.length ? `mock:${next}` : null,
-      total: items.length,
-      sort: { field, direction: field === 'lastName' ? 'asc' : 'desc' },
-    };
-  };
 
   const port: EmployeesPort = {
     list: async (query: EmployeeListQuery = {}) => {
-      const slice = window(query);
+      const slice = pageWindow(query);
       if (
         !slice ||
         (query.kind !== undefined && !BFF_EMPLOYEE_KINDS.includes(query.kind)) ||
@@ -512,7 +273,7 @@ export function createMockEmployeeStore(
       return ok(view(replace(bump(current, { archivedAt: now() }))));
     },
     history: async (id, query = {}) => {
-      const slice = window(query);
+      const slice = pageWindow(query);
       if (!slice) return badRequest();
       if (index(id) < 0) return notFound();
       const entries = [...(history.get(id) ?? [])].sort((a, b) => b.version - a.version);
