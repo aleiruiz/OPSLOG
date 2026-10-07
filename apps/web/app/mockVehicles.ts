@@ -133,6 +133,9 @@ export function createMockVehicleStore(
 ): MockVehicleStore {
   let rows: Vehicle[] = seed.map((vehicle) => ({ ...vehicle }));
   let sequence = rows.length;
+  // The form dates a new vehicle with the real clock, so the mock cannot judge "not in the future"
+  // against its fixed one once the real day moves past it.
+  const latestToday = () => todayOf(new Date(Math.max(now().getTime(), Date.now())));
 
   const index = (id: string) => rows.findIndex((vehicle) => vehicle.id === id);
   const replace = (id: string, next: Vehicle) => {
@@ -213,7 +216,7 @@ export function createMockVehicleStore(
         typeof odometer !== 'number' ||
         !isInteger(odometer, 0, MAX_ODOMETER_KM) ||
         typeof registeredOn !== 'string' ||
-        !isPastOrToday(registeredOn, todayOf(now()))
+        !isPastOrToday(registeredOn, latestToday())
       )
         return badRequest();
       if (!isActiveArea(core.areaId as string)) return invalidArea();
