@@ -216,8 +216,11 @@ export function AlertSettingsForm({
             }
             sx={{
               maxWidth: 320,
-              // Helper text is content, not a control: keep readable contrast while the field is locked.
-              '& .MuiFormHelperText-root.Mui-disabled': { color: 'text.secondary' },
+              ...(submitting && {
+                '& .MuiFormHelperText-root.Mui-disabled:not(.Mui-error)': {
+                  color: 'text.secondary',
+                },
+              }),
             }}
           />
         </FormSection>
