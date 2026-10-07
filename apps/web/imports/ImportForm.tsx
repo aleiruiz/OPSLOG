@@ -15,7 +15,7 @@ import {
   type ImportFormValues,
 } from './formModel';
 import { ImportValidationPanel, type ValidationResult } from './ImportValidationPanel';
-import { columnLabel, entityLabels, modeDescriptions, modeLabels, modeOrder } from './labels';
+import { columnLabel, entityLabels } from './labels';
 import { MAX_CSV_LENGTH, MAX_ROWS, IMPORT_ENTITIES, templateOf } from './rules';
 
 export type { FormAlert, ValidationResult };
@@ -37,12 +37,6 @@ export interface ImportFormProps {
   readonly cancelTo: string;
 }
 
-const submitLabels: Record<ImportMode, string> = {
-  dry_run: 'Validar archivo',
-  commit_valid: 'Importar filas válidas',
-  commit_all: 'Importar todo o nada',
-};
-
 const number = (value: number) => new Intl.NumberFormat('es-MX').format(value);
 
 const list = (columns: readonly string[]) => columns.map(columnLabel).join(', ');
@@ -54,7 +48,7 @@ export const templateHref = (entity: ImportEntity): string => {
   return `data:text/csv;charset=utf-8,${encodeURIComponent(`﻿${header}\n`)}`;
 };
 
-/** Bulk-import form: entity, mode, and the CSV pasted or loaded from a file. Validation mirrors the backend. */
+/** Bulk-import form: entity and CSV input. The only initial action is a non-mutating validation. */
 export function ImportForm({
   initial,
   canViewPii,
@@ -73,6 +67,7 @@ export function ImportForm({
   const [values, setValues] = React.useState<ImportFormValues>(() => ({
     ...emptyValues,
     ...initial,
+    mode: 'dry_run',
   }));
   const [fileName, setFileName] = React.useState<string | null>(null);
   const [clientErrors, setClientErrors] = React.useState<FieldErrors>({});
@@ -122,7 +117,7 @@ export function ImportForm({
   const found = values.csv.trim() ? inspect(values.csv, values.entity) : null;
   const template = templateOf(values.entity);
   const piiColumns = template.pii;
-  const grid = { display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' } };
+  const grid = { display: 'grid', gap: 2, gridTemplateColumns: 'minmax(0, 1fr)' };
 
   return (
     <form onSubmit={submit} noValidate aria-label="Nueva importación">
@@ -163,7 +158,7 @@ export function ImportForm({
                   },
                 ]
               : []),
-            ...(values.mode !== 'dry_run'
+            ...(submittingMode !== null && submittingMode !== 'dry_run'
               ? [
                   {
                     id: 'commit-note',
@@ -195,25 +190,6 @@ export function ImportForm({
               {IMPORT_ENTITIES.map((entity) => (
                 <option key={entity} value={entity}>
                   {entityLabels[entity]}
-                </option>
-              ))}
-            </Field>
-            <Field
-              id={inputId('mode')}
-              label="Qué hacer con el archivo"
-              select
-              SelectProps={{ native: true }}
-              InputLabelProps={{ shrink: true }}
-              value={values.mode}
-              onChange={(event) => setField('mode', event.target.value as ImportMode)}
-              required
-              error={Boolean(errors.mode)}
-              helperText={errors.mode ?? modeDescriptions[values.mode]}
-              fullWidth
-            >
-              {modeOrder.map((mode) => (
-                <option key={mode} value={mode}>
-                  {modeLabels[mode]}
                 </option>
               ))}
             </Field>
@@ -303,10 +279,10 @@ export function ImportForm({
           <Button
             type="submit"
             variant="contained"
-            loading={submitting && submittingMode === values.mode}
-            disabled={submitting && submittingMode !== values.mode}
+            loading={submitting && submittingMode === 'dry_run'}
+            disabled={submitting && submittingMode !== 'dry_run'}
           >
-            {submitLabels[values.mode]}
+            Validar archivo
           </Button>
           <RouterButton to={cancelTo} variant="text">
             Cancelar

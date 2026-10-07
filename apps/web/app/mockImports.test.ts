@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { makeJob } from '../imports/fixtures';
 import { normalizePlate } from '../vehicles/rules';
 import { createMockImportStore, importWritesPii, type MockImportEnvironment } from './mockImports';
 
@@ -79,40 +80,70 @@ describe('mock import store', () => {
     created.length = 0;
     const store = fresh();
     const mixed = csv(row(1), row(2, 'DUP-1'));
+    const preview = value<{ job: { id: string } }>(
+      await store.port.submit(input({ csv: mixed })),
+    ).job;
     const some = value<{ job: { status: string; importedRows: number } }>(
-      await store.port.submit(input({ mode: 'commit_valid', csv: mixed, idempotencyKey: KEY })),
+      await store.port.submit(
+        input({
+          mode: 'commit_valid',
+          csv: mixed,
+          idempotencyKey: KEY,
+          dryRunJobId: preview.id,
+        }),
+      ),
     );
     expect(some.job).toMatchObject({ status: 'imported', importedRows: 1 });
     expect(created).toHaveLength(1);
     const replay = await store.port.submit(
-      input({ mode: 'commit_valid', csv: mixed, idempotencyKey: KEY }),
+      input({ mode: 'commit_valid', csv: mixed, idempotencyKey: KEY, dryRunJobId: preview.id }),
     );
     expect(value<{ replayed: boolean }>(replay).replayed).toBe(true);
     expect(created).toHaveLength(1);
     expect(
       status(
         await store.port.submit(
-          input({ mode: 'commit_valid', csv: csv(row(9)), idempotencyKey: KEY }),
+          input({
+            mode: 'commit_valid',
+            csv: csv(row(9)),
+            idempotencyKey: KEY,
+            dryRunJobId: preview.id,
+          }),
         ),
       ),
     ).toBe(409);
     expect(
       status(
-        await store.port.submit(input({ mode: 'commit_all', csv: mixed, idempotencyKey: KEY })),
+        await store.port.submit(
+          input({ mode: 'commit_all', csv: mixed, idempotencyKey: KEY, dryRunJobId: preview.id }),
+        ),
       ),
     ).toBe(409);
     const all = value<{ job: { status: string; importedRows: number; id: string } }>(
       await store.port.submit(
-        input({ mode: 'commit_all', csv: mixed, idempotencyKey: 'key-87654321' }),
+        input({
+          mode: 'commit_all',
+          csv: mixed,
+          idempotencyKey: 'key-87654321',
+          dryRunJobId: preview.id,
+        }),
       ),
     );
     expect(all.job).toMatchObject({ status: 'failed', importedRows: 0 });
     expect(created).toHaveLength(1);
     const skipped = value<{ items: { outcome: string }[] }>(await store.port.rows(all.job.id));
     expect(skipped.items.map((item) => item.outcome)).toEqual(['skipped', 'invalid']);
+    const cleanPreview = value<{ job: { id: string } }>(
+      await store.port.submit(input({ csv: csv(row(5)) })),
+    ).job;
     const clean = value<{ job: { status: string; importedRows: number } }>(
       await store.port.submit(
-        input({ mode: 'commit_all', csv: csv(row(5)), idempotencyKey: 'key-11223344' }),
+        input({
+          mode: 'commit_all',
+          csv: csv(row(5)),
+          idempotencyKey: 'key-11223344',
+          dryRunJobId: cleanPreview.id,
+        }),
       ),
     );
     expect(clean.job).toMatchObject({ status: 'imported', importedRows: 1 });
@@ -132,9 +163,15 @@ describe('mock import store', () => {
           },
         }) as never,
     });
+    const preview = value<{ job: { id: string } }>(await store.port.submit(input({}))).job;
     const { job } = value<{ job: { id: string; importedRows: number } }>(
       await store.port.submit(
-        input({ mode: 'commit_valid', csv: csv(row(1)), idempotencyKey: KEY }),
+        input({
+          mode: 'commit_valid',
+          csv: csv(row(1)),
+          idempotencyKey: KEY,
+          dryRunJobId: preview.id,
+        }),
       ),
     );
     expect(job.importedRows).toBe(0);
@@ -147,9 +184,15 @@ describe('mock import store', () => {
         createRecord: async () =>
           ({ ok: false, error: { code, status: 409, message: 'x', correlationId: 'c' } }) as never,
       });
+      const otherPreview = value<{ job: { id: string } }>(await other.port.submit(input({}))).job;
       const made = value<{ job: { id: string } }>(
         await other.port.submit(
-          input({ mode: 'commit_valid', csv: csv(row(1)), idempotencyKey: KEY }),
+          input({
+            mode: 'commit_valid',
+            csv: csv(row(1)),
+            idempotencyKey: KEY,
+            dryRunJobId: otherPreview.id,
+          }),
         ),
       );
       expect(
@@ -159,15 +202,32 @@ describe('mock import store', () => {
   });
 
   it('links a commit to its validation of the same file only', async () => {
-    const store = fresh();
+    const store = createMockImportStore(env());
     const { job } = value<{ job: { id: string } }>(await store.port.submit(input({})));
     const commit = (extra: Record<string, unknown>) =>
       store.port.submit(input({ mode: 'commit_all', idempotencyKey: 'key-aaaaaaaa', ...extra }));
+    expect(status(await commit({}))).toBe(400);
     expect(status(await commit({ dryRunJobId: 'imp-desconocida' }))).toBe(404);
+    expect(status(await commit({ dryRunJobId: 'imp-001' }))).toBe(409);
     expect(status(await commit({ dryRunJobId: job.id, csv: csv(row(7)) }))).toBe(409);
     expect(value<{ replayed: boolean }>(await commit({ dryRunJobId: job.id })).replayed).toBe(
       false,
     );
+
+    const runningJob = makeJob({
+      id: 'imp-running-preview',
+      mode: 'dry_run',
+      status: 'running',
+      finishedAt: null,
+    });
+    const running = createMockImportStore(env(), [{ job: runningJob, rows: [], events: [] }]);
+    expect(
+      status(
+        await running.port.submit(
+          input({ mode: 'commit_all', idempotencyKey: 'key-bbbbbbbb', dryRunJobId: runningJob.id }),
+        ),
+      ),
+    ).toBe(409);
   });
 
   it('refuses malformed requests with a uniform 400', async () => {

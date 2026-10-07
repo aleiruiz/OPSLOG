@@ -29,7 +29,8 @@ import type {
  * creates nothing and is stored as a job; `commit_valid` imports the valid rows and reports the others; `commit_all`
  * imports nothing when any row is invalid (job `failed`, valid rows `skipped`); a commit needs an idempotency key and
  * the same key with the same file returns the stored job (`replayed: true`) while another file or mode is a 409
- * `conflict`; a `dryRunJobId` must belong to a validation of the same file (409 otherwise, 404 when unknown); a row
+ * `conflict`; a `dryRunJobId` must belong to a completed `dry_run` in `validated` state with the same file
+ * fingerprint (409 otherwise, 404 when unknown); a row
  * issue names the columns and never a value; a cell that starts with `=` or `@` (or `+` / `-` outside a phone) is
  * `formula_injection`. Records are created through the same mock stores as an individual create. Permissions of the
  * operations themselves (`create`, plus `view_pii` for personal-data columns) are enforced by the caller (`mockApi`).
@@ -173,9 +174,22 @@ export function createMockImportStore(
         (mode === 'dry_run' || typeof dryRunJobId !== 'string' || !OPAQUE_ID.test(dryRunJobId))
       )
         return badRequest();
+      if (mode !== 'dry_run' && dryRunJobId === undefined) return badRequest();
       const raw = rowsOf(fields, entity);
       if (raw === null || raw.length < 1 || raw.length > MAX_ROWS) return badRequest();
       const fingerprint = fingerprintOf(entity, raw);
+
+      if (mode !== 'dry_run') {
+        const preview = find(dryRunJobId as string);
+        if (!preview) return notFound();
+        if (
+          preview.job.mode !== 'dry_run' ||
+          preview.job.status !== 'validated' ||
+          preview.job.finishedAt === null ||
+          preview.fingerprint !== fingerprint
+        )
+          return conflict();
+      }
 
       if (typeof key === 'string') {
         const earlier = stored.find((item) => item.key === key);
@@ -185,12 +199,6 @@ export function createMockImportStore(
           return ok({ job: { ...earlier.job }, replayed: true });
         }
       }
-      if (typeof dryRunJobId === 'string') {
-        const preview = find(dryRunJobId);
-        if (!preview) return notFound();
-        if (preview.fingerprint !== fingerprint) return conflict();
-      }
-
       // Row by row: the issue of the row, or the keys it would take (checked in the file and against the company).
       const taken = env.existingKeys(entity);
       const seen = new Set<string>();

@@ -289,7 +289,13 @@ const validation = (
 export const FormEmpty = { render: () => create() };
 export const FormPasted = { render: () => create({ initial: { csv: vehicleCsv } }) };
 export const FormCommitMode = {
-  render: () => create({ initial: { csv: vehicleCsv, mode: 'commit_valid' } }),
+  render: () =>
+    create({
+      initial: { csv: vehicleCsv },
+      validation: validation({ validRows: 3, invalidRows: 0 }, ready({ items: [], total: 0 })),
+      submitting: true,
+      submittingMode: 'commit_all',
+    }),
 };
 export const FormEmployeesWithoutPii = {
   render: () => create({ initial: { entity: 'employee', csv: employeeCsv } }),

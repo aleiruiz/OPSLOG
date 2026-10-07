@@ -98,6 +98,24 @@ export function ImportCreateScreen() {
   };
 
   const run = async (values: ImportFormValues, dryRunJobId?: string) => {
+    if (
+      values.mode !== 'dry_run' &&
+      (!validation ||
+        dryRunJobId !== validation.job.id ||
+        validation.job.mode !== 'dry_run' ||
+        validation.job.status !== 'validated' ||
+        validation.job.finishedAt === null ||
+        validation.fileSignature !== fileSignatureOf(values))
+    ) {
+      setFailure({
+        alert: {
+          severity: 'error',
+          title: 'Valida el archivo antes de importar',
+          message: 'La vista previa ya no está disponible. Valida de nuevo antes de confirmar.',
+        },
+      });
+      return;
+    }
     setSubmitting(values.mode);
     setFailure(none);
     const key = values.mode === 'dry_run' ? undefined : keyFor(signatureOf(values, dryRunJobId));
@@ -152,7 +170,9 @@ export function ImportCreateScreen() {
         }}
         cancelTo={importsPath}
         onSubmit={(values) => void run(values)}
-        onConfirm={(values, mode) => void run({ ...values, mode }, validation?.job.id)}
+        onConfirm={(values, mode) => {
+          if (validation) void run({ ...values, mode }, validation.job.id);
+        }}
       />
     </>
   );

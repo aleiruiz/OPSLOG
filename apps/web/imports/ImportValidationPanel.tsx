@@ -41,6 +41,20 @@ export function ImportValidationPanel({
         {'Cambiaste el archivo después de validarlo. Valida de nuevo antes de importar.'}
       </Alert>
     );
+  const completed = job.mode === 'dry_run' && job.status === 'validated' && job.finishedAt !== null;
+  if (!completed)
+    return (
+      <Box component="section" aria-labelledby="validation-title">
+        <Typography id="validation-title" component="h2" variant="h2" sx={{ mb: 1 }}>
+          Resultado de la validación
+        </Typography>
+        <Alert severity="info">
+          {job.status === 'running'
+            ? 'La validación sigue en curso. Espera a que termine antes de importar.'
+            : 'La validación no está completa. Vuelve a validar el archivo antes de importar.'}
+        </Alert>
+      </Box>
+    );
   const allValid = job.invalidRows === 0;
   return (
     <Box component="section" aria-labelledby="validation-title">

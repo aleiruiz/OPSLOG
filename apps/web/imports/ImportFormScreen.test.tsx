@@ -22,7 +22,7 @@ const validate = async () => {
 };
 
 describe('new import form', () => {
-  it('explains the template, the privacy of the report and the modes', async () => {
+  it('explains the template and privacy, and offers validation before any commit action', async () => {
     await open();
     await screen.findByRole('form', { name: 'Nueva importación' });
     expect(screen.getByText(/nunca el contenido de las celdas/)).toBeInTheDocument();
@@ -32,9 +32,29 @@ describe('new import form', () => {
       'plantilla-vehiculos.csv',
     );
     expect(screen.queryByText(/contienen datos personales/)).toBeNull();
-    set('Qué hacer con el archivo *', 'commit_all');
-    expect(screen.getByText(/crea registros reales/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Importar todo o nada' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Qué hacer con el archivo *')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Validar archivo' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Importar/ })).toBeNull();
+  });
+
+  it('does not offer a commit while the server validation is still running', async () => {
+    const api = createMockApi();
+    const submit = api.imports.submit;
+    api.imports.submit = async (input) => {
+      const result = await submit(input);
+      if (!result.ok || input.mode !== 'dry_run') return result;
+      return {
+        ...result,
+        value: {
+          ...result.value,
+          job: { ...result.value.job, status: 'running', finishedAt: null },
+        },
+      };
+    };
+    await fill(file(good(1)), { api });
+    await validate();
+    expect(screen.getByText(/validación sigue en curso/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Importar/ })).toBeNull();
   });
 
   it('shows what it detected, and the error of a bad file on submit', async () => {
@@ -103,7 +123,7 @@ describe('new import form', () => {
     set('Contenido CSV *', file(good(1), good(2)));
     expect(screen.getByText(/Cambiaste el archivo después de validarlo/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Importar todo' })).toBeNull();
-    // Changing the mode alone does not invalidate the validation of the same file.
+    // Restoring the exact file restores the same validation preview.
     set('Contenido CSV *', file(good(1)));
     expect(screen.getByRole('heading', { name: 'Resultado de la validación' })).toBeInTheDocument();
   });
@@ -111,26 +131,26 @@ describe('new import form', () => {
   it('reuses the key of a retry and replays a request already processed', async () => {
     const api = createMockApi();
     await fill(file(good(1)), { api });
-    set('Qué hacer con el archivo *', 'commit_valid');
+    await validate();
     api.controls.failNext('submitImport');
-    click('Importar filas válidas');
+    click('Importar las 1 filas válidas');
     expect(await screen.findByText('No pudimos importar el archivo')).toBeInTheDocument();
     expect(screen.getByText(/no se creará nada dos veces/)).toBeInTheDocument();
     const commits = () =>
       api.controls.imports().filter((job) => job.mode === 'commit_valid').length;
     const before = commits();
-    click('Importar filas válidas');
+    click('Importar las 1 filas válidas');
     await screen.findByRole('heading', { name: 'Importación de vehículos', level: 1 });
     expect(commits()).toBe(before + 1);
   });
 
-  it('shows the all-or-nothing failure as a failed job', async () => {
+  it('keeps all-or-nothing disabled when the preview contains errors', async () => {
     const { api } = await fill(file(good(1), 'ECO-X,,Nissan,NP300,2022,area-norte,100'));
-    set('Qué hacer con el archivo *', 'commit_all');
-    click('Importar todo o nada');
-    await screen.findByRole('heading', { name: 'Importación de vehículos', level: 1 });
-    expect(screen.getByText(/No se importó nada: había filas con error/)).toBeInTheDocument();
-    expect(api.controls.imports()[0]).toMatchObject({ status: 'failed', importedRows: 0 });
+    const before = api.controls.imports().length;
+    await validate();
+    expect(screen.getByRole('button', { name: 'Importar todo' })).toBeDisabled();
+    expect(api.controls.imports()).toHaveLength(before + 1);
+    expect(api.controls.imports()[0]).toMatchObject({ mode: 'dry_run', status: 'validated' });
   });
 
   it('keeps the form while sending and blocks a second submit', async () => {
