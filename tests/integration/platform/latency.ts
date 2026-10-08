@@ -16,11 +16,16 @@ export function withLatency<T extends object>(
     started.set(name, new Promise<void>((resolve) => resolvers.set(name, resolve)));
   const arm = (name: Slow) =>
     started.set(name, new Promise<void>((resolve) => resolvers.set(name, resolve)));
+  const auditedMethods: Readonly<Record<string, Slow>> = {
+    activateInvitationWithAudit: 'activateInvitation',
+    revokeMembershipWithAudit: 'revokeMembership',
+  };
   const wrapped = new Proxy(store, {
     get(target, property) {
       const value = Reflect.get(target, property, target) as unknown;
       if (typeof value !== 'function') return value;
-      const name = property as Slow;
+      const name =
+        typeof property === 'string' ? (auditedMethods[property] ?? (property as Slow)) : '';
       if (!(name in delays))
         return (...args: unknown[]) => (value as (...a: unknown[]) => unknown).apply(target, args);
       return async (...args: unknown[]) => {

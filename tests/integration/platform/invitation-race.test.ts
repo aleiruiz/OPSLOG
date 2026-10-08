@@ -20,6 +20,24 @@ import { createWorld, type World } from './world.js';
 let world: World;
 afterEach(() => world.dispose());
 
+describe('withLatency', () => {
+  it('signals the atomic-audit variants of invitation activation and revocation', async () => {
+    world = createWorld();
+    const latency = withLatency(
+      {
+        activateInvitationWithAudit: async () => 'activated',
+        revokeMembershipWithAudit: async () => 'revoked',
+      },
+      { activateInvitation: 1, revokeMembership: 1 },
+    );
+
+    await expect(latency.store.activateInvitationWithAudit()).resolves.toBe('activated');
+    await expect(latency.started('activateInvitation')).resolves.toBeUndefined();
+    await expect(latency.store.revokeMembershipWithAudit()).resolves.toBe('revoked');
+    await expect(latency.started('revokeMembership')).resolves.toBeUndefined();
+  });
+});
+
 const stores = {
   'in-memory store': () => new InMemoryIdentityStore(),
   'TypeORM store (fake driver)': () =>
