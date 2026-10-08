@@ -74,11 +74,12 @@ export async function acceptInvitation(
       typeof invitationToken === 'string'
         ? k.invitations.get(opaqueTokenGenerator.hash(invitationToken))
         : undefined;
+    const tenantId = meta?.tenantId ?? (await k.identity.findInvitationTenant(invitationToken));
     // Activation and directory update run under the tenant lock, like every other change of
     // membership, so a concurrent revocation of the same pending invitation cannot interleave.
     // An invitation unknown to the composition keeps the unlocked, fail-closed path below.
-    return await (meta
-      ? k.locked(meta.tenantId, () => redeem(k, invitationToken, principal, meta.tenantId))
+    return await (tenantId
+      ? k.locked(tenantId, () => redeem(k, invitationToken, principal, tenantId))
       : redeem(k, invitationToken, principal, null));
   } catch (error) {
     return failure(error);

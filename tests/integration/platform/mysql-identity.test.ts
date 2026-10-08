@@ -271,6 +271,25 @@ suite('platform on a real MySQL identity store', () => {
       nonce,
     );
     expect(verified.value).toBeDefined();
+    await platform.suspendTenant(a.tenantId);
+    const frozen = await restartedPlatform.acceptInvitation(
+      invitation.invitationToken,
+      verified.value,
+    );
+    expect(frozen.error?.code).toBe('unauthorized');
+    expect(
+      await rows<{ status: string }>(
+        'SELECT status FROM opslog_identity_memberships WHERE tenant_id = ? AND identity_id = ?',
+        [a.tenantId, invitation.identityId],
+      ),
+    ).toEqual([{ status: 'pending' }]);
+    expect(
+      await rows(
+        `SELECT event_id FROM ${identifier(AUDIT_TABLES.local)} WHERE action = 'user.joined' AND entity_id = ?`,
+        [invitation.identityId],
+      ),
+    ).toHaveLength(0);
+    await platform.reactivateTenant(a.tenantId);
     const accepted = await restartedPlatform.acceptInvitation(
       invitation.invitationToken,
       verified.value,

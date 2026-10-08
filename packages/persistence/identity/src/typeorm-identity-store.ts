@@ -19,6 +19,7 @@ import {
   activateInvitation,
   countActiveAdmins,
   findMembership,
+  findInvitationTenant,
   findRole,
   revokeMembership,
   setRole,
@@ -93,6 +94,10 @@ export class TypeOrmIdentityStore implements IdentityStore {
 
   public findMembership(tenantId: string, identityId: string): Promise<Membership | null> {
     return findMembership(this.core, tenantId, identityId);
+  }
+
+  public findInvitationTenant(tokenHash: string, at: Date): Promise<string | null> {
+    return findInvitationTenant(this.core, tokenHash, at);
   }
 
   /** Role of an active membership of this tenant, or null (never reads another tenant's rows). */

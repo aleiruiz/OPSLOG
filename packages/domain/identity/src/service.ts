@@ -50,6 +50,11 @@ export class IdentityService {
     if (!identity || identity.status !== 'active') throw new AuthError('unauthorized');
     return identity;
   }
+  /** Resolves only the tenant needed to coordinate invitation acceptance with tenant freezes. */
+  public async findInvitationTenant(token: string): Promise<string | null> {
+    if (!nonEmpty(token)) return null;
+    return this.store.findInvitationTenant(this.tokens.hash(token), this.now());
+  }
   /** Bootstrap/administration only (e.g. first tenant owner); not reachable from AuthApi.login. */
   public async provisionExternal(provider: string, subject: string): Promise<Identity> {
     if (!nonEmpty(provider) || !nonEmpty(subject)) throw new AuthError('invalid_input');

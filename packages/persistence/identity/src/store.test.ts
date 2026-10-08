@@ -145,7 +145,9 @@ describe('identity service flows over the persistent store (72 h invitations, 8 
 
     const invitation = await service.issueInvitation(tenantA);
     expect(invitation.expiresAt.getTime() - clock.current.getTime()).toBe(72 * HOUR);
+    expect(await store.findInvitationTenant(hashOf(invitation.token), clock.now())).toBe(tenantA);
     const activation = await service.activateInvitation(invitation.token, PROVIDER, 'new-subject');
+    expect(await store.findInvitationTenant(hashOf(invitation.token), clock.now())).toBeNull();
     expect(activation.membership).toMatchObject({ status: 'active', tenantId: tenantA });
     expect(activation.identity.status).toBe('active');
     // The membership created through the plain port has the least-privilege role.
