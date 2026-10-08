@@ -18,6 +18,7 @@ import {
 } from './entities.js';
 import { AreaStoreError } from './errors.js';
 import { TypeOrmAreaStore, type StoreErrorEvent } from './store.js';
+import { AuditDeliveryEntity, AuditLocalEventEntity } from '../../audit/src/entities.js';
 import {
   CONNECTION_LOST,
   DEADLOCK,
@@ -107,6 +108,12 @@ describe('insert, find, history and the child tables', () => {
         .sort(),
     ).toEqual(['u1', 'u2']);
     expect(db.committed(AreaLockEntity)).toEqual([{ tenantId: A }]);
+    expect(db.committed(AuditLocalEventEntity)).toMatchObject([
+      { tenantId: A, eventId: 'h-a1-1', entityType: 'area', entityId: 'a1' },
+    ]);
+    expect(db.committed(AuditDeliveryEntity)).toMatchObject([
+      { tenantId: A, eventId: 'h-a1-1', status: 'pending' },
+    ]);
   });
   it('keeps nothing of an insert whose later rows fail', async () => {
     const { db, store } = setup();
@@ -115,6 +122,8 @@ describe('insert, find, history and the child tables', () => {
     expect(await rejection(seed(store, a))).toMatchObject({ code: 'unavailable' });
     expect(db.committed(AreaEntity)).toEqual([]);
     expect(db.committed(AreaResponsibleEntity)).toEqual([]);
+    expect(db.committed(AuditLocalEventEntity)).toEqual([]);
+    expect(db.committed(AuditDeliveryEntity)).toEqual([]);
     // The lock row created by the failed transaction is rolled back with it.
     expect(db.committed(AreaLockEntity)).toEqual([]);
   });

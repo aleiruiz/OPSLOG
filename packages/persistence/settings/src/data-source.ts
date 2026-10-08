@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { DataSource, type DataSourceOptions } from 'typeorm';
 import { SETTINGS_ENTITIES } from './entities.js';
 import { CreateCompanySettings2026100600090, SETTINGS_MIGRATIONS_TABLE } from './migrations.js';
+import { AUDIT_ENTITIES } from '../../audit/src/index.js';
 
 export interface SettingsDatabaseConfig {
   readonly host: string;
@@ -22,7 +23,7 @@ export const SETTINGS_RUNTIME_ACCOUNT = /^opslog_settings_[a-z0-9_]+$/i;
 
 const common = {
   type: 'mysql',
-  entities: [...SETTINGS_ENTITIES],
+  entities: [...SETTINGS_ENTITIES, ...AUDIT_ENTITIES.slice(0, 2)],
   migrations: [CreateCompanySettings2026100600090],
   migrationsTableName: SETTINGS_MIGRATIONS_TABLE,
   synchronize: false,

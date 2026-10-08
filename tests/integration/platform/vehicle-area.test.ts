@@ -74,7 +74,9 @@ describe('vehicle area validation through the platform', () => {
     }
     // Nothing was created or audited, and the foreign area is untouched.
     expect(ok(await platform.vehicles.list(admin.token, corr(), {})).total).toBe(0);
-    expect(world.audit.list(admin.tenantId).filter((e) => e.entityType === 'vehicle')).toEqual([]);
+    expect(
+      world.audit.snapshotForTesting(admin.tenantId).filter((e) => e.entityType === 'vehicle'),
+    ).toEqual([]);
     expect(ok(await platform.areas.get(adminB.token, corr(), foreign.id)).resourceCounts).toEqual({
       vehicles: 0,
       people: 0,

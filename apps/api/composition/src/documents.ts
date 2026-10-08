@@ -157,7 +157,7 @@ export interface DocumentsApiDeps {
     action: DocumentAuditAction,
     entityId: string,
     correlationId: string,
-  ) => void;
+  ) => void | Promise<void>;
 }
 
 /**
@@ -192,7 +192,7 @@ export class DocumentsApi {
     try {
       const context = await this.deps.authorize(token, correlationId, permissions);
       const document = await work(context);
-      this.deps.audit(context, action, document.id, correlationId);
+      await this.deps.audit(context, action, document.id, correlationId);
       return { ok: true, value: viewOf(document, this.deps.service.expiry(document)) };
     } catch (error) {
       return failure(error);

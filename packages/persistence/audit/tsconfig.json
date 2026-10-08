@@ -1,0 +1,12 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo",
+    "baseUrl": ".",
+    "paths": { "@opslog/platform-audit": ["../../platform/audit/src/index.ts"] }
+  },
+  "include": ["src/**/*.ts"],
+  "references": [{ "path": "../../platform/audit" }]
+}

@@ -80,7 +80,9 @@ describe('employee area validation through the platform', () => {
         areaId,
       ).toEqual(INVALID_AREA);
     expect(ok(await platform.employees.list(admin.token, corr(), {})).total).toBe(0);
-    expect(world.audit.list(admin.tenantId).filter((e) => e.entityType === 'employee')).toEqual([]);
+    expect(
+      world.audit.snapshotForTesting(admin.tenantId).filter((e) => e.entityType === 'employee'),
+    ).toEqual([]);
     expect(ok(await platform.areas.get(adminB.token, corr(), foreign.id)).resourceCounts).toEqual({
       vehicles: 0,
       people: 0,

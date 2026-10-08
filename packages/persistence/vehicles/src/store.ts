@@ -14,6 +14,7 @@ import {
   type VehicleWindow,
 } from '../../../domain/vehicles/src/index.js';
 import { VEHICLES_RUNTIME_ACCOUNT } from './data-source.js';
+import { appendLocalAuditAndDelivery, type AuditEvent } from '../../audit/src/index.js';
 import { VehicleEntity, VehicleStatusEntryEntity } from './entities.js';
 import {
   VehicleStoreError,
@@ -117,6 +118,18 @@ const toEntryRow = (entry: VehicleStatusEntry): VehicleStatusEntryEntity => ({
   at: new Date(entry.at),
 });
 
+const auditEvent = (entry: VehicleStatusEntry): AuditEvent => ({
+  eventId: entry.id,
+  tenantId: entry.tenantId,
+  action: `vehicle.status.${entry.to}`,
+  entityType: 'vehicle',
+  entityId: entry.vehicleId,
+  occurredAt: entry.at,
+  actor: { id: entry.actorId, kind: 'user' },
+  correlationId: entry.id,
+  data: {},
+});
+
 /**
  * Persistent TypeORM/MySQL implementation of the `VehicleStore` port.
  *
@@ -217,6 +230,7 @@ export class TypeOrmVehicleStore implements VehicleStore {
     await this.transaction('insert', vehicle, async (manager) => {
       await manager.getRepository(VehicleEntity).insert(toVehicleRow(vehicle));
       await manager.getRepository(VehicleStatusEntryEntity).insert(toEntryRow(entry));
+      await appendLocalAuditAndDelivery(manager, auditEvent(entry));
     });
   }
 
@@ -264,7 +278,10 @@ export class TypeOrmVehicleStore implements VehicleStore {
         mutableColumns(next),
       );
       if (result.affected !== 1) return false;
-      if (entry) await manager.getRepository(VehicleStatusEntryEntity).insert(toEntryRow(entry));
+      if (entry) {
+        await manager.getRepository(VehicleStatusEntryEntity).insert(toEntryRow(entry));
+        await appendLocalAuditAndDelivery(manager, auditEvent(entry));
+      }
       return true;
     });
   }

@@ -6,6 +6,7 @@ import {
   type Browser,
 } from '../../../apps/api/bff/src/test-support.js';
 import { TypeOrmPolicyStore } from '../../../packages/persistence/insurance/src/index.js';
+import { AUDIT_TABLES } from '../../../packages/persistence/audit/src/index.js';
 import {
   adminUrl,
   startInsuranceDatabase,
@@ -303,9 +304,12 @@ suite('BFF on the real MySQL insurance store', () => {
       }),
     });
     const text = JSON.stringify(
-      world.platform.audit.list(tenantA).filter((event) => event.entityType === 'insurance_policy'),
+      await db.rows(
+        `SELECT action, data FROM ${AUDIT_TABLES.local} WHERE tenant_id = ? AND entity_type = ?`,
+        [tenantA, 'insurance_policy'],
+      ),
     );
-    expect(text).toContain('insurance_policy.created');
+    expect(text).toContain('insurance.created');
     for (const fragment of ['Aseguradora-auditoria-99', 'POL-AUDITORIA-99', '7654321'])
       expect(text).not.toContain(fragment);
   });

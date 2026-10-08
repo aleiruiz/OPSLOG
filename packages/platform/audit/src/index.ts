@@ -21,8 +21,6 @@ export interface AuditEvent {
 export interface PersistedAuditEvent extends Omit<AuditEvent, 'data'> {
   readonly data: AuditData;
 }
-const SENSITIVE_KEY =
-  /(password|secret|token|authorization|cookie|credential|private.?key|access.?key|refresh.?token|ssn|tax.?id|rfc|curp|license|phone|email|address|birth|dob|national.?id)/i;
 const SECRET_VALUE = /(?:bearer\s+|sk-[A-Za-z0-9]|AKIA[A-Z0-9]{16}|-----BEGIN|[A-Fa-f0-9]{32,})/i;
 const FREE_FORM_PII =
   /[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}|\b(?:\+?\d[\d .()-]{7,}\d)\b|\b\d{3}-\d{2}-\d{4}\b/g;
@@ -47,7 +45,7 @@ function requireKey(value: unknown, field: string): string {
 const instant = (value: unknown): string =>
   typeof value === 'string' && ISO_INSTANT.test(value) ? value : REDACTED;
 /** Builds the persisted shape field by field; unknown runtime fields and free-form identifiers never survive. */
-function toPersisted(event: AuditEvent): PersistedAuditEvent {
+export function sanitizeAuditEvent(event: AuditEvent): PersistedAuditEvent {
   if (!ACTOR_KINDS.includes(event.actor.kind)) throw new Error('invalid audit actor kind');
   return {
     eventId: requireKey(event.eventId, 'eventId'),
@@ -64,18 +62,9 @@ function toPersisted(event: AuditEvent): PersistedAuditEvent {
     data: redactAuditData(event.data ?? {}),
   };
 }
-function scrub(value: unknown, key = ''): unknown {
-  if (SENSITIVE_KEY.test(key)) return REDACTED;
-  if (typeof value === 'string') {
-    if (SECRET_VALUE.test(value)) return REDACTED;
-    return value.replace(FREE_FORM_PII, REDACTED).slice(0, 2000);
-  }
-  if (Array.isArray(value)) return value.map((item) => scrub(item, key));
-  if (value && typeof value === 'object')
-    return Object.fromEntries(
-      Object.entries(value).map(([name, item]) => [name, scrub(item, name)]),
-    );
-  return value;
+function scrub(value: string): string {
+  if (SECRET_VALUE.test(value)) return REDACTED;
+  return value.replace(FREE_FORM_PII, REDACTED).slice(0, 2000);
 }
 export function redactAuditData(data: Readonly<Record<string, unknown>>): AuditData {
   const safeData: { attempts?: number } = {};
@@ -99,9 +88,7 @@ const JWT = /\beyJ[A-Za-z0-9_-]{6,}(?:\.[A-Za-z0-9_-]+){0,2}/g;
 export function redactError(error: unknown): string {
   // Cap before scanning so a huge upstream message cannot stall the event loop.
   const message = (error instanceof Error ? error.message : 'handler failed').slice(0, 2000);
-  return String(scrub(message.replace(CREDENTIAL_PAIR, REDACTED).replace(JWT, REDACTED), 'error'))
-    .replace(FREE_FORM_PII, '[REDACTED]')
-    .slice(0, 500);
+  return scrub(message.replace(CREDENTIAL_PAIR, REDACTED).replace(JWT, REDACTED)).slice(0, 500);
 }
 export function createAuditEvent(
   context: AuditContext,
@@ -110,7 +97,7 @@ export function createAuditEvent(
   },
 ): PersistedAuditEvent {
   if (!context.tenantId.trim()) throw new Error('tenant is required');
-  return toPersisted({
+  return sanitizeAuditEvent({
     ...input,
     tenantId: context.tenantId,
     actor: { id: context.actorId, kind: context.actorKind },
@@ -120,21 +107,88 @@ export function createAuditEvent(
 }
 export interface AuditStore {
   /** Implementations must sanitize actor references and allowlist data before persistence. */
-  append(event: AuditEvent): void;
-  list(tenantId: string): readonly PersistedAuditEvent[];
+  append(event: AuditEvent): Promise<void>;
+  list(tenantId: string, range?: AuditListRange): Promise<readonly PersistedAuditEvent[]>;
 }
+
+/** A bounded half-open time range keeps every tenant audit read indexable and finite. */
+export interface AuditListRange {
+  readonly from: string;
+  readonly to: string;
+  readonly limit?: number;
+}
+
+export function defaultAuditListRange(now = new Date()): Required<AuditListRange> {
+  return {
+    from: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+    to: new Date(now.getTime() + 1).toISOString(),
+    limit: 500,
+  };
+}
+
+export function validateAuditListRange(range?: AuditListRange): Required<AuditListRange> {
+  range ??= defaultAuditListRange();
+  const from = Date.parse(range.from);
+  const to = Date.parse(range.to);
+  const limit = range.limit ?? 500;
+  if (
+    !Number.isFinite(from) ||
+    !Number.isFinite(to) ||
+    from >= to ||
+    !Number.isInteger(limit) ||
+    limit < 1 ||
+    limit > 1000
+  )
+    throw new Error('invalid audit time range');
+  return { from: new Date(from).toISOString(), to: new Date(to).toISOString(), limit };
+}
+
+export class AuditConflictError extends Error {
+  readonly code = 'AUDIT_EVENT_CONFLICT';
+  constructor() {
+    super('Audit event id was already used with different content');
+    this.name = 'AuditConflictError';
+  }
+}
+
 export class InMemoryAuditStore implements AuditStore {
   private readonly events = new Map<string, PersistedAuditEvent>();
-  append(event: AuditEvent): void {
-    const safeEvent = toPersisted(structuredClone(event));
+  async append(event: AuditEvent): Promise<void> {
+    const safeEvent = sanitizeAuditEvent(structuredClone(event));
     const key = scopedKey(safeEvent.tenantId, safeEvent.eventId);
-    if (!this.events.has(key)) this.events.set(key, safeEvent);
+    const prior = this.events.get(key);
+    if (prior && canonicalAuditEvent(prior) !== canonicalAuditEvent(safeEvent))
+      throw new AuditConflictError();
+    if (!prior) this.events.set(key, safeEvent);
   }
-  list(tenantId: string): readonly PersistedAuditEvent[] {
+  async list(tenantId: string, range?: AuditListRange): Promise<readonly PersistedAuditEvent[]> {
+    const bounded = validateAuditListRange(range);
+    const from = Date.parse(bounded.from);
+    const to = Date.parse(bounded.to);
     return [...this.events.values()]
-      .filter((event) => event.tenantId === tenantId)
+      .filter((event) => {
+        const occurredAt = Date.parse(event.occurredAt);
+        return event.tenantId === tenantId && occurredAt >= from && occurredAt < to;
+      })
+      .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
+      .slice(0, bounded.limit)
       .map((event) => structuredClone(event));
   }
+
+  /** Synchronous inspection for tests that assert on in-memory adapter state. */
+  snapshotForTesting(tenantId: string): readonly PersistedAuditEvent[] {
+    return [...this.events.values()]
+      .filter((event) => event.tenantId === tenantId)
+      .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
+      .map((event) => structuredClone(event));
+  }
+}
+function canonicalAuditEvent(event: PersistedAuditEvent): string {
+  const occurredAt = Date.parse(event.occurredAt);
+  return JSON.stringify({
+    ...event,
+    occurredAt: Number.isFinite(occurredAt) ? new Date(occurredAt).toISOString() : event.occurredAt,
+  });
 }
 function scopedKey(tenantId: string, eventId: string): string {
   return `${tenantId.length}:${tenantId}${eventId.length}:${eventId}`;

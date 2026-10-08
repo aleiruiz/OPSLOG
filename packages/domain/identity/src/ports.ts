@@ -17,7 +17,25 @@ export interface IdentityAccessResolver {
   resolvePermissions(context: TenantContext): Promise<readonly Permission[]>;
 }
 
+/** Minimal sanitized audit envelope used to atomically record identity mutations. */
+export interface IdentityMutationAudit {
+  readonly eventId: string;
+  readonly tenantId: string;
+  readonly action: string;
+  readonly entityType: string;
+  readonly entityId: string;
+  readonly occurredAt: string;
+  readonly actor: { readonly id: string; readonly kind: 'user' | 'system' };
+  readonly correlationId: string;
+  readonly data: Readonly<Record<string, unknown>>;
+}
+
+/** Builds an activation audit event from the invitation row locked inside the transaction. */
+export type InvitationActivationAudit = (activation: InvitationActivation) => IdentityMutationAudit;
+
 export interface IdentityStore {
+  /** True only when audit rows can be committed in the same transaction as identity mutations. */
+  readonly supportsAtomicAudit?: boolean;
   /** Atomically persist a new identity and its provider+subject key. Enforce a unique constraint on that key and return the winner on conflict. */
   createExternalIdentity(identity: Identity, external: ExternalIdentity): Promise<ExternalIdentity>;
   findIdentity(id: string): Promise<Identity | null>;
@@ -34,6 +52,15 @@ export interface IdentityStore {
     invitation: Invitation,
     supersededAt?: Date,
   ): Promise<void>;
+  /** Persistent adapters may atomically store invitation, role, local audit and pending delivery. */
+  createInvitationWithRoleAndAudit?(
+    identity: Identity,
+    membership: Membership,
+    invitation: Invitation,
+    role: string,
+    audit: IdentityMutationAudit,
+    supersededAt?: Date,
+  ): Promise<void>;
   /**
    * Atomically consume the unexpired invitation, bind the verified subject, and activate identity plus membership.
    * An identity that already has an external link, or is not pending, may only be activated by that same
@@ -46,6 +73,13 @@ export interface IdentityStore {
     provider: string,
     subject: string,
     activatedAt: Date,
+  ): Promise<InvitationActivation | null>;
+  activateInvitationWithAudit?(
+    tokenHash: string,
+    provider: string,
+    subject: string,
+    activatedAt: Date,
+    audit: IdentityMutationAudit | InvitationActivationAudit,
   ): Promise<InvitationActivation | null>;
   findRecovery(tokenHash: string): Promise<RecoveryRequest | null>;
   /** Persist the request and mark older unused requests of the same identity as superseded (`supersededAt = request.issuedAt`). */
@@ -65,6 +99,18 @@ export interface IdentityStore {
    * adapter must refuse to revoke the final administrator of a tenant.
    */
   revokeMembership(tenantId: string, identityId: string): Promise<boolean>;
+  revokeMembershipWithAudit?(
+    tenantId: string,
+    identityId: string,
+    audit: IdentityMutationAudit,
+  ): Promise<boolean>;
+  /** Persistent adapters may atomically store a role change and its local audit/delivery rows. */
+  setRoleWithAudit?(
+    tenantId: string,
+    identityId: string,
+    role: string,
+    audit: IdentityMutationAudit,
+  ): Promise<boolean>;
   saveSession(session: Session): Promise<void>;
   findSession(tokenHash: string): Promise<Session | null>;
   revokeSession(id: string, revokedAt: Date): Promise<boolean>;

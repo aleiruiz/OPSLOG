@@ -21,6 +21,7 @@ import {
   type DocumentWindow,
 } from '../../../domain/documents/src/index.js';
 import { DOCUMENTS_RUNTIME_ACCOUNT } from './data-source.js';
+import { appendLocalAuditAndDelivery, type AuditEvent } from '../../audit/src/index.js';
 import { DocumentEntity, DocumentRevisionEntity } from './entities.js';
 import {
   DocumentStoreError,
@@ -85,6 +86,18 @@ const toRevision = (row: DocumentRevisionEntity): DocumentRevision => ({
   documentNumber: row.documentNumber,
   actorId: row.actorId,
   at: row.at.toISOString(),
+});
+
+const auditEvent = (revision: DocumentRevision): AuditEvent => ({
+  eventId: `${revision.documentId}.revision.${revision.revision}`,
+  tenantId: revision.tenantId,
+  action: revision.revision === 1 ? 'document.created' : 'document.revised',
+  entityType: 'document',
+  entityId: revision.documentId,
+  occurredAt: new Date(`${revision.at}`).toISOString(),
+  actor: { id: revision.actorId, kind: 'user' },
+  correlationId: `${revision.documentId}.revision.${revision.revision}`,
+  data: {},
 });
 
 /** Columns that can change after creation (never the tenant, the id, the owner, the type or `createdAt`). */
@@ -194,6 +207,7 @@ export class TypeOrmDocumentStore implements DocumentStore {
     await this.transaction('insert', async (manager) => {
       await manager.getRepository(DocumentEntity).insert(toDocumentRow(document));
       await manager.getRepository(DocumentRevisionEntity).insert(toRevisionRow(revision));
+      await appendLocalAuditAndDelivery(manager, auditEvent(revision));
     });
   }
 
@@ -250,6 +264,7 @@ export class TypeOrmDocumentStore implements DocumentStore {
       if (result.affected !== 1) return false;
       if (revision)
         await manager.getRepository(DocumentRevisionEntity).insert(toRevisionRow(revision));
+      if (revision) await appendLocalAuditAndDelivery(manager, auditEvent(revision));
       return true;
     });
   }

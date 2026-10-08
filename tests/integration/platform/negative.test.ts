@@ -108,7 +108,7 @@ describe('cross-tenant ids and hostile identifiers', () => {
       expect((await platform.files.status(editor.token, corr(), id)).error?.code).toBe('not_found');
     }
     // The audit trail never records a hostile id verbatim.
-    const trail = JSON.stringify(world.audit.list(a.tenantId));
+    const trail = JSON.stringify(world.audit.snapshotForTesting(a.tenantId));
     expect(trail).not.toContain('../');
     expect(trail).not.toContain('tenants/other');
   });
@@ -189,8 +189,8 @@ describe('forged principals, invitations and bootstrap', () => {
       direct.token,
       await world.principal('subject-direct'),
     );
-    expect(accepted.error?.code).toBe('forbidden');
-    // The membership was revoked again, so a login finds no active tenant.
+    expect(accepted.error?.code).toBe('unauthorized');
+    // An untracked invitation is left untouched and still cannot create an active session.
     expect((await platform.signIn(await world.principal('subject-direct'))).ok).toBe(false);
   });
 

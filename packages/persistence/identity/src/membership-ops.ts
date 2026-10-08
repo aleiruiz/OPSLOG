@@ -6,6 +6,8 @@ import {
   type Invitation,
   type InvitationActivation,
   type Membership,
+  type IdentityMutationAudit,
+  type InvitationActivationAudit,
 } from '../../../domain/identity/src/index.js';
 import {
   ExternalIdentityEntity,
@@ -79,6 +81,7 @@ export async function setRole(
   tenantId: string,
   identityId: string,
   role: string,
+  audit?: IdentityMutationAudit,
 ): Promise<boolean> {
   if (!nonBlank(tenantId, 64) || !nonBlank(identityId, 64) || !isRoleName(role)) return invalid();
   const known = await findMembership(core, tenantId, identityId);
@@ -97,6 +100,7 @@ export async function setRole(
     await memberships.update({ tenantId, identityId }, { role });
     if (current.status === 'active')
       await identities.increment({ id: identityId }, 'authorizationVersion', 1);
+    if (audit) await core.appendAudit(manager, audit);
     return true;
   });
 }
@@ -108,6 +112,7 @@ export async function writeInvitation(
   invitation: Invitation,
   supersededAt: Date,
   role: string | undefined,
+  audit?: IdentityMutationAudit,
 ): Promise<void> {
   if (
     !nonBlank(identity.id, 64) ||
@@ -181,6 +186,7 @@ export async function writeInvitation(
       expiresAt: invitation.expiresAt,
       consumedAt: invitation.consumedAt,
     });
+    if (audit) await core.appendAudit(manager, audit);
   });
 }
 
@@ -190,6 +196,7 @@ export async function activateInvitation(
   provider: string,
   subject: string,
   activatedAt: Date,
+  audit?: IdentityMutationAudit | InvitationActivationAudit,
 ): Promise<InvitationActivation | null> {
   if (
     !HASH_PATTERN.test(tokenHash) ||
@@ -247,10 +254,13 @@ export async function activateInvitation(
           { consumedAt: activatedAt },
         );
       if (consumed.affected !== 1) throw new ActivationRejected();
-      return {
+      const activation = {
         identity: { ...toIdentity(identity), status: 'active' },
         membership: { ...toMembership(membership), status: 'active', activatedAt },
       } satisfies InvitationActivation;
+      if (audit)
+        await core.appendAudit(manager, typeof audit === 'function' ? audit(activation) : audit);
+      return activation;
     });
   } catch (error) {
     if (error instanceof ActivationRejected) return null;
@@ -269,6 +279,7 @@ export async function revokeMembership(
   core: IdentityStoreCore,
   tenantId: string,
   identityId: string,
+  audit?: IdentityMutationAudit,
 ): Promise<boolean> {
   if (!nonBlank(tenantId, 64) || !nonBlank(identityId, 64)) return false;
   // No lock rows are created for unknown tenants: only an existing membership proves the tenant.
@@ -293,6 +304,7 @@ export async function revokeMembership(
       .getRepository(SessionEntity)
       .update({ tenantId, identityId, revokedAt: IsNull() }, { revokedAt: core.now() });
     await identities.increment({ id: identityId }, 'authorizationVersion', 1);
+    if (audit) await core.appendAudit(manager, audit);
     return true;
   });
 }

@@ -17,6 +17,7 @@ import {
   type InsuranceDatabase,
 } from '../../../packages/persistence/insurance/src/test-support/mysql.js';
 import { TypeOrmSettingsStore } from '../../../packages/persistence/settings/src/index.js';
+import { AUDIT_TABLES } from '../../../packages/persistence/audit/src/index.js';
 import {
   startSettingsDatabase,
   type SettingsDatabase,
@@ -240,9 +241,12 @@ suite('BFF on the real MySQL stores: expiry alerts and settings', () => {
     for (const alert of narrowed.json.items) expect(alert.daysToExpiry).toBeLessThanOrEqual(3);
     expect((await adminB.get(S)).json).toMatchObject({ version: 0, expiryWindowDays: 30 });
     const text = JSON.stringify(
-      world.platform.audit.list(tenantA).filter((event) => event.entityType === 'company_settings'),
+      await settings.rows(
+        `SELECT action, data FROM ${AUDIT_TABLES.local} WHERE tenant_id = ? AND action = ?`,
+        [tenantA, 'settings.updated'],
+      ),
     );
-    expect(text).toContain('company_settings.updated');
+    expect(text).toContain('settings.updated');
     expect(text).not.toContain('admin,viewer');
     expect(text).not.toContain('expiryWindowDays');
     // Back to the default window for the other tests.

@@ -3,6 +3,7 @@ import type {
   IdentityService,
   Permission,
   TenantContext,
+  IdentityMutationAudit,
 } from '../../../../../packages/domain/identity/src/index.js';
 import {
   createAuditEvent,
@@ -79,19 +80,28 @@ export class PlatformKernel {
     entityType: string,
     entityId: string,
     correlationId: string,
-  ): void {
-    this.audit.append(
-      createAuditEvent(
-        { ...context, correlationId },
-        {
-          eventId: `platform-${randomUUID()}`,
-          action,
-          entityType,
-          entityId,
-          occurredAt: this.now().toISOString(),
-        },
-      ),
+  ): Promise<void> {
+    return this.audit.append(this.auditEvent(context, action, entityType, entityId, correlationId));
+  }
+
+  public auditEvent(
+    context: { tenantId: string; actorId: string; actorKind: 'user' | 'system' },
+    action: string,
+    entityType: string,
+    entityId: string,
+    correlationId: string,
+  ): IdentityMutationAudit {
+    const event = createAuditEvent(
+      { ...context, correlationId },
+      {
+        eventId: `platform-${randomUUID()}`,
+        action,
+        entityType,
+        entityId,
+        occurredAt: this.now().toISOString(),
+      },
     );
+    return { ...event, actor: { ...event.actor, kind: context.actorKind } };
   }
 
   public userActor(context: TenantContext) {
@@ -133,8 +143,15 @@ export class PlatformKernel {
   }
 
   /** Writes a membership role through to the persistent directory (no-op with in-memory adapters). */
-  public async persistRole(tenantId: string, identityId: string, role: RoleName): Promise<void> {
-    if (!(await this.roles.setMemberRole(tenantId, identityId, role)))
-      throw new PlatformError('conflict');
+  public async persistRole(
+    tenantId: string,
+    identityId: string,
+    role: RoleName,
+    audit?: IdentityMutationAudit,
+  ): Promise<void> {
+    const persisted = audit
+      ? await this.roles.setMemberRoleWithAudit(tenantId, identityId, role, audit)
+      : await this.roles.setMemberRole(tenantId, identityId, role);
+    if (!persisted) throw new PlatformError('conflict');
   }
 }

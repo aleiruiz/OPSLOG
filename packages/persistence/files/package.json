@@ -1,0 +1,25 @@
+{
+  "name": "@opslog/persistence-files",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./dist/packages/persistence/files/src/index.js"
+  },
+  "scripts": {
+    "test:unit": "vitest run src/schema.test.ts",
+    "test:integration": "vitest run src/mysql.integration.test.ts",
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "@opslog/domain-files": "workspace:*",
+    "@opslog/platform-audit": "workspace:*",
+    "@opslog/platform-files": "workspace:*",
+    "@opslog/persistence-audit": "workspace:*",
+    "mysql2": "3.22.0",
+    "reflect-metadata": "0.2.2",
+    "typeorm": "1.1.1"
+  },
+  "devDependencies": {
+    "vitest": "3.2.6"
+  }
+}

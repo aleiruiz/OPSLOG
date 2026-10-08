@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { DataSource } from 'typeorm';
+import { AUDIT_MIGRATIONS_TABLE, AUDIT_TABLES } from '../../audit/src/index.js';
 import {
   ImportService,
   type ImportEvent,
@@ -14,6 +15,11 @@ import { TypeOrmImportStore, type StoreErrorEvent } from './store.js';
 import { adminUrl, startImportsDatabase, type ImportsDatabase } from './test-support/mysql.js';
 
 const suite = adminUrl ? describe : describe.skip;
+const auditSchemaTables = [
+  ...Object.values(AUDIT_TABLES),
+  'opslog_audit_local_keys',
+  AUDIT_MIGRATIONS_TABLE,
+];
 
 const NOW = new Date('2026-10-06T12:00:00.000Z');
 const ACTOR = 'user-11111111-1111-4111-8111-111111111111';
@@ -156,19 +162,22 @@ suite('persistent import store on MySQL', () => {
         'SELECT TABLE_NAME AS t FROM information_schema.TABLES WHERE TABLE_SCHEMA = ?',
         [db.databaseName],
       );
+      const moduleTableList = Object.values(T)
+        .map((name) => `'${name}'`)
+        .join(', ');
       expect(tables.map((r) => r.t).sort()).toEqual(
-        [...Object.values(T), 'opslog_imports_migrations'].sort(),
+        [...Object.values(T), 'opslog_imports_migrations', ...auditSchemaTables].sort(),
       );
       const columns = await db.rows<{ coll: string }>(
         `SELECT COLLATION_NAME AS coll FROM information_schema.COLUMNS
-          WHERE TABLE_SCHEMA = ? AND DATA_TYPE IN ('varchar', 'char') AND TABLE_NAME <> 'opslog_imports_migrations'`,
+          WHERE TABLE_SCHEMA = ? AND DATA_TYPE IN ('varchar', 'char') AND TABLE_NAME IN (${moduleTableList})`,
         [db.databaseName],
       );
       expect(columns.length).toBeGreaterThan(10);
       expect(columns.filter((column) => column.coll !== BINARY_COLLATION)).toEqual([]);
       const keys = await db.rows<{ table: string; name: string; col: string; seq: number }>(
         `SELECT TABLE_NAME AS \`table\`, INDEX_NAME AS name, COLUMN_NAME AS col, SEQ_IN_INDEX AS seq FROM information_schema.STATISTICS
-          WHERE TABLE_SCHEMA = ? AND TABLE_NAME <> 'opslog_imports_migrations'`,
+          WHERE TABLE_SCHEMA = ? AND TABLE_NAME IN (${moduleTableList})`,
         [db.databaseName],
       );
       // Every index, the primary keys included, starts with company_id.
@@ -473,6 +482,12 @@ suite('persistent import store on MySQL', () => {
         updatedAt: '2026-10-06T12:00:00.123Z',
       });
       await storeA.insertJob(j, started(j));
+      const auditTimestamp = await db.rows<{ n: number }>(
+        `SELECT COUNT(*) AS n FROM ${AUDIT_TABLES.local}
+          WHERE tenant_id = ? AND event_id = 'c1.event.1' AND occurred_at = '2026-10-06 12:00:00.123'`,
+        [tenant],
+      );
+      expect(auditTimestamp[0]?.n).toBe(1);
       const next = '2026-10-06T12:02:00.456Z';
       const outcomes = await Promise.all(
         [storeA, storeB, storeA, storeB, storeA, storeB].map((store) =>
@@ -521,6 +536,31 @@ suite('persistent import store on MySQL', () => {
       expect(error).toBeInstanceOf(ImportStoreError);
       expect(error).toMatchObject({ code: 'integrity' });
       expect(await storeA.findJob('tenant-atomic', 'a1')).toBeNull();
+    });
+
+    it('rolls a job and first event back when local audit append is denied', async () => {
+      const tenant = `tenant-audit-${Date.now()}`;
+      const value = job(tenant, 'audit-rollback');
+      await db.admin.query(
+        `REVOKE EXECUTE ON PROCEDURE \`${db.databaseName}\`.\`opslog_append_local_audit_and_delivery\` FROM '${db.runtimeUser}'@'%'`,
+      );
+      try {
+        expect(await outcome(storeA.insertJob(value, started(value)))).toBeInstanceOf(
+          ImportStoreError,
+        );
+        expect(await storeA.findJob(tenant, value.id)).toBeNull();
+        expect(
+          await db.rows(`SELECT 1 FROM ${T.events} WHERE company_id = ?`, [tenant]),
+        ).toHaveLength(0);
+        for (const table of [AUDIT_TABLES.local, AUDIT_TABLES.delivery])
+          expect(
+            await db.rows(`SELECT event_id FROM ${table} WHERE tenant_id = ?`, [tenant]),
+          ).toHaveLength(0);
+      } finally {
+        await db.admin.query(
+          `GRANT EXECUTE ON PROCEDURE \`${db.databaseName}\`.\`opslog_append_local_audit_and_delivery\` TO '${db.runtimeUser}'@'%'`,
+        );
+      }
     });
 
     it('never leaks a value through a sanitized failure', async () => {

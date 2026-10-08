@@ -29,7 +29,7 @@ export interface ImportTarget {
 
 /** Told about every vehicle or employee a job creates, as it is created (the composition audits it). */
 export interface ImportObserver {
-  created(entity: ImportEntity, id: string): void;
+  created(entity: ImportEntity, id: string): void | Promise<void>;
 }
 
 /** How long a `running` job counts as being executed by someone: a retry inside it is a `conflict`, after it the job is resumed. */

@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { DataSource, type DataSourceOptions } from 'typeorm';
 import { ASSIGNMENT_ENTITIES } from './entities.js';
+import { AUDIT_ENTITIES } from '../../audit/src/index.js';
 import {
   CreateVehicleAssignments2026100600080,
   ASSIGNMENTS_MIGRATIONS_TABLE,
@@ -25,7 +26,7 @@ export const ASSIGNMENTS_RUNTIME_ACCOUNT = /^opslog_assignments_[a-z0-9_]+$/i;
 
 const common = {
   type: 'mysql',
-  entities: [...ASSIGNMENT_ENTITIES],
+  entities: [...ASSIGNMENT_ENTITIES, ...AUDIT_ENTITIES.slice(0, 2)],
   migrations: [CreateVehicleAssignments2026100600080],
   migrationsTableName: ASSIGNMENTS_MIGRATIONS_TABLE,
   synchronize: false,

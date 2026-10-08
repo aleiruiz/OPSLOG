@@ -14,6 +14,7 @@ import {
   type EndKind,
 } from '../../../domain/assignments/src/index.js';
 import { ASSIGNMENTS_RUNTIME_ACCOUNT } from './data-source.js';
+import { appendLocalAuditAndDelivery, type AuditEvent } from '../../audit/src/index.js';
 import { AssignmentEntity, AssignmentEventEntity } from './entities.js';
 import {
   AssignmentStoreError,
@@ -108,6 +109,18 @@ const toEventRow = (event: AssignmentEvent): AssignmentEventEntity => ({
   actorId: event.actorId,
   reason: event.reason,
   at: new Date(event.at),
+});
+
+const auditEvent = (event: AssignmentEvent): AuditEvent => ({
+  eventId: `${event.assignmentId}.${event.seq}`,
+  tenantId: event.tenantId,
+  action: `assignment.${event.kind}`,
+  entityType: 'assignment',
+  entityId: event.assignmentId,
+  occurredAt: event.at,
+  actor: { id: event.actorId, kind: 'user' },
+  correlationId: `${event.assignmentId}.${event.seq}`,
+  data: {},
 });
 
 /**
@@ -222,9 +235,11 @@ export class TypeOrmAssignmentStore implements AssignmentStore {
           );
           if (closed.affected !== 1) return false;
           await manager.getRepository(AssignmentEventEntity).insert(toEventRow(closing.event));
+          await appendLocalAuditAndDelivery(manager, auditEvent(closing.event));
         }
         await manager.getRepository(AssignmentEntity).insert(toAssignmentRow(assignment));
         await manager.getRepository(AssignmentEventEntity).insert(toEventRow(event));
+        await appendLocalAuditAndDelivery(manager, auditEvent(event));
         return true;
       },
       { assignment, replacedId: closing?.next.id ?? null },
@@ -277,6 +292,7 @@ export class TypeOrmAssignmentStore implements AssignmentStore {
         );
       if (result.affected !== 1) return false;
       await manager.getRepository(AssignmentEventEntity).insert(toEventRow(event));
+      await appendLocalAuditAndDelivery(manager, auditEvent(event));
       return true;
     });
   }

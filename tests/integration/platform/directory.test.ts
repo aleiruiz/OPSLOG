@@ -230,7 +230,7 @@ describe('platform operations behind the BFF', () => {
     expect(world.platform.settings.get(a.tenantId, 'x').name).toBe('Alfa 3');
     const asViewer = await world.platform.updateSettings(viewer.token, corr(), base);
     expect(asViewer.error?.code).toBe('unauthorized');
-    const actions = world.audit.list(a.tenantId).map((event) => event.action);
+    const actions = world.audit.snapshotForTesting(a.tenantId).map((event) => event.action);
     expect(actions.filter((action) => action === 'tenant.security_settings_updated')).toHaveLength(
       1,
     );

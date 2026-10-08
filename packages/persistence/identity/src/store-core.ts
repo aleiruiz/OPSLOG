@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import { type DataSource, type EntityManager } from 'typeorm';
+import type { IdentityMutationAudit } from '../../../domain/identity/src/index.js';
 import { MembershipEntity, TenantLockEntity } from './entities.js';
 import {
   IdentityStoreError,
@@ -22,7 +23,19 @@ export class IdentityStoreCore {
     public readonly now: () => Date,
     private readonly maxAttempts: number,
     private readonly onError: ((event: StoreErrorEvent) => void) | undefined,
+    private readonly auditWriter:
+      | ((manager: EntityManager, event: IdentityMutationAudit) => Promise<void>)
+      | undefined,
   ) {}
+
+  public get hasAuditWriter(): boolean {
+    return this.auditWriter !== undefined;
+  }
+
+  public appendAudit(manager: EntityManager, event: IdentityMutationAudit): Promise<void> {
+    if (!this.auditWriter) throw new IdentityStoreError('internal');
+    return this.auditWriter(manager, event);
+  }
 
   public fail(operation: string, error: unknown): Error {
     const safe = sanitizeStoreError(error);

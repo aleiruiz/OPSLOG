@@ -67,6 +67,8 @@ export interface PlatformAdapters {
    */
   readonly people?: AreaResourceCounter;
   readonly audit?: AuditStore;
+  /** Tenant-scoped durable audit relay; scheduled by the host worker. */
+  readonly auditRelay?: { runBatch(max?: number): Promise<number> };
   readonly outbox?: OutboxStore;
   readonly tenants?: InMemoryTenantStore;
   readonly recoveryNotifier?: RecoveryNotifier;

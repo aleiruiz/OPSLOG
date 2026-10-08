@@ -419,7 +419,11 @@ describe('commit modes', () => {
   it('commit_valid imports the valid rows once and reports the rest', async () => {
     const { s, service } = setup();
     const seen: string[] = [];
-    const observer: ImportObserver = { created: (entity, id) => seen.push(`${entity}:${id}`) };
+    const observer: ImportObserver = {
+      created: (entity, id) => {
+        seen.push(`${entity}:${id}`);
+      },
+    };
     const first = await service.submit(
       A,
       ACTOR,

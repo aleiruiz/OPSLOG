@@ -5,7 +5,8 @@ const HOUR = 3_600_000;
 let world: World;
 afterEach(() => world.dispose());
 
-const actions = (tenantId: string) => world.audit.list(tenantId).map((event) => event.action);
+const actions = (tenantId: string) =>
+  world.audit.snapshotForTesting(tenantId).map((event) => event.action);
 
 describe('revoking a pending invitation', () => {
   it('revokes an administrator invitation: the token can no longer be inspected or accepted', async () => {

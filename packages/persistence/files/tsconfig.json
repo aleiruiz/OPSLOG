@@ -1,0 +1,26 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../../",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
+  },
+  "include": [
+    "src/**/*.ts",
+    "../../domain/files/src/index.ts",
+    "../../platform/files/src/index.ts",
+    "../../platform/files/src/grants.ts",
+    "../../platform/files/src/pipeline.ts",
+    "../../platform/files/src/saga-recovery.ts",
+    "../../platform/files/src/scan-runner.ts",
+    "../../platform/files/src/scanner.ts",
+    "../../platform/files/src/storage.ts",
+    "../../platform/audit/src/index.ts",
+    "../audit/src/index.ts",
+    "../audit/src/entities.ts",
+    "../audit/src/migrations.ts",
+    "../audit/src/data-source.ts",
+    "../audit/src/store.ts",
+    "../audit/src/runtime.ts"
+  ]
+}

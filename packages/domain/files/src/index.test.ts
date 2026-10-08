@@ -6,6 +6,7 @@ import {
   assertDownloadable,
   contentDispositionFor,
   detectFamily,
+  newUploadIntentRecord,
   newPendingRecord,
   requireOpaqueId,
   sanitizeFilename,
@@ -166,6 +167,28 @@ describe('records and lifecycle', () => {
     expect(
       code(() => pending({ kind: 'derivative', originalId: 'a.b', width: 5, height: 5 })),
     ).toBe('invalid_input');
+  });
+  it('keeps a durable upload intent unavailable until quarantine storage is verified', () => {
+    const intent = newUploadIntentRecord({
+      id: 'file-pending',
+      tenantId: 'tenant-a',
+      kind: 'original',
+      sensitivity: 'standard',
+      upload: validateUpload({ name: 'a.jpg', declaredType: 'image/jpeg', bytes: jpeg() }),
+      createdBy: 'user-x',
+      now: new Date('2026-10-06T00:00:00Z'),
+    });
+    expect(intent.status).toBe('pending_upload');
+    expect(
+      code(() =>
+        assertDownloadable({
+          record: intent,
+          original: null,
+          tenantId: 'tenant-a',
+          granted: ['view'],
+        }),
+      ),
+    ).toBe('not_available');
   });
   it('keeps derivative dimensions within 2000 px per side', () => {
     const base = { kind: 'derivative', originalId: 'file-0' } as const;

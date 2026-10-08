@@ -148,7 +148,7 @@ export interface VehiclesApiDeps {
     action: VehicleAuditAction,
     entityId: string,
     correlationId: string,
-  ) => void;
+  ) => void | Promise<void>;
 }
 
 /**
@@ -184,7 +184,7 @@ export class VehiclesApi {
     try {
       const context = await this.deps.authorize(token, correlationId, permissions);
       const vehicle = await work(context);
-      if (!unchanged(vehicle)) this.deps.audit(context, action, vehicle.id, correlationId);
+      if (!unchanged(vehicle)) await this.deps.audit(context, action, vehicle.id, correlationId);
       return { ok: true, value: view(vehicle) };
     } catch (error) {
       return failure(error);

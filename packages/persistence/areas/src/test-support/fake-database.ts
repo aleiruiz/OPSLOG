@@ -6,6 +6,7 @@ import {
   AreaLockEntity,
   AreaResponsibleEntity,
 } from '../entities.js';
+import { AUDIT_ENTITIES } from '../../../audit/src/index.js';
 
 /**
  * Test double of the TypeORM surface the area store uses (DataSource, Repository, transaction).
@@ -94,6 +95,7 @@ const FOREIGN_KEYS: readonly {
 export class FakeDatabase {
   public readonly options = {
     type: 'mysql',
+    database: 'opslog_t_synthetic',
     username: 'opslog_areas_synthetic',
     synchronize: false,
   };
@@ -109,7 +111,7 @@ export class FakeDatabase {
   private readonly lockWaiters = new Map<string, (() => void)[]>();
 
   public constructor() {
-    for (const schema of AREA_ENTITIES) {
+    for (const schema of [...AREA_ENTITIES, ...AUDIT_ENTITIES.slice(0, 2)]) {
       const options = schema.options;
       const target = options.target as EntityClass;
       const columns = Object.entries(options.columns as Record<string, { primary?: boolean }>);
@@ -161,7 +163,10 @@ export class FakeDatabase {
     this.transactions += 1;
     const tx: Transaction = { undo: [], held: new Set() };
     try {
-      return await work({ getRepository: (entity) => new FakeRepository(this, entity, tx) });
+      return await work({
+        connection: this,
+        getRepository: (entity: EntityClass) => new FakeRepository(this, entity, tx),
+      } as never);
     } catch (error) {
       for (const step of tx.undo.reverse()) {
         const rows = this.rows(step.entity);

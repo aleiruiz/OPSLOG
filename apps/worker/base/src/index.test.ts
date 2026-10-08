@@ -71,7 +71,7 @@ describe('worker tenant, handler and DLQ controls', () => {
     worker.register('demo', () => undefined);
     await worker.process(Date.now());
     expect(store.get('tenant-a', 'e1')?.status).toBe('delivered');
-    expect(audit.list('tenant-a')).toHaveLength(1);
+    expect(audit.snapshotForTesting('tenant-a')).toHaveLength(1);
   });
   it('does not redeliver a completed handler after audit append failure', async () => {
     const { store } = setup('active');
@@ -79,9 +79,9 @@ describe('worker tenant, handler and DLQ controls', () => {
     let failAudit = true;
     let calls = 0;
     const audit = {
-      append: (event: Parameters<typeof persisted.append>[0]) => {
+      append: async (event: Parameters<typeof persisted.append>[0]) => {
         if (failAudit) throw new Error('unavailable');
-        persisted.append(event);
+        await persisted.append(event);
       },
       list: (tenantId: string) => persisted.list(tenantId),
     };
@@ -104,7 +104,7 @@ describe('worker tenant, handler and DLQ controls', () => {
     await worker.process(now + 11);
     expect(calls).toBe(1);
     expect(store.get('tenant-a', 'e1')?.status).toBe('delivered');
-    expect(persisted.list('tenant-a')).toHaveLength(1);
+    expect(persisted.snapshotForTesting('tenant-a')).toHaveLength(1);
   });
   it('allows only one concurrent worker claim for an event', async () => {
     const { store, audit } = setup('active');
@@ -163,10 +163,10 @@ describe('worker lease loss, attempts and tenant isolation', () => {
     const store = new InMemoryOutboxStore(() => 0);
     enqueue(store, 'tenant-a');
     const failing = {
-      append: () => {
+      append: async () => {
         throw new Error('audit down');
       },
-      list: () => [],
+      list: async () => [],
     };
     const worker = new Worker(store, { status: () => 'active' }, failing, 'worker-a', 10, 2);
     let calls = 0;
@@ -221,8 +221,8 @@ describe('worker lease loss, attempts and tenant isolation', () => {
     await worker.process(0);
     expect(store.get('tenant-a', 'e1')?.status).toBe('delivered');
     expect(store.get('tenant-b', 'e1')?.status).toBe('dead_letter');
-    expect(audit.list('tenant-a')).toHaveLength(1);
-    expect(audit.list('tenant-b')).toHaveLength(0);
+    expect(audit.snapshotForTesting('tenant-a')).toHaveLength(1);
+    expect(audit.snapshotForTesting('tenant-b')).toHaveLength(0);
   });
   it('audits with the enqueuing correlation id and the delivery time', async () => {
     const store = new InMemoryOutboxStore(() => 0);
@@ -252,7 +252,7 @@ describe('worker lease loss, attempts and tenant isolation', () => {
       time = 5_000;
     });
     await worker.process();
-    expect(audit.list('tenant-a')[0]).toMatchObject({
+    expect(audit.snapshotForTesting('tenant-a')[0]).toMatchObject({
       correlationId: 'request-42',
       occurredAt: new Date(5_000).toISOString(),
     });
@@ -402,7 +402,7 @@ describe('worker registration, exhaustion and drain', () => {
     await expect(worker.process(0)).resolves.toBe(true);
     expect(worker.metrics.staleLeases).toBe(1);
     expect(worker.metrics.delivered).toBe(0);
-    expect(audit.list('tenant-a')).toHaveLength(0);
+    expect(audit.snapshotForTesting('tenant-a')).toHaveLength(0);
   });
   it('drain processes until empty and returns the number handled', async () => {
     const store = new InMemoryOutboxStore(() => 0);

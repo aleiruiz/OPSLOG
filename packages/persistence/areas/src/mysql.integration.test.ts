@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { DataSource } from 'typeorm';
+import { AUDIT_TABLES } from '../../audit/src/index.js';
 import {
   AreaError,
   AreaService,
@@ -92,18 +93,28 @@ suite('persistent area store on MySQL', () => {
         [db.databaseName],
       );
       expect(tables.map((row) => row.t).sort()).toEqual(
-        [...Object.values(AREA_TABLES), 'opslog_areas_migrations'].sort(),
+        [
+          ...Object.values(AREA_TABLES),
+          'opslog_areas_migrations',
+          'opslog_audit_local',
+          'opslog_audit_delivery',
+          'opslog_audit_local_keys',
+          'opslog_audit_log',
+          'opslog_audit_registry',
+          'opslog_audit_migrations',
+        ].sort(),
       );
+      const areaTableList = [...Object.values(AREA_TABLES)].map((name) => `'${name}'`).join(', ');
       const columns = await db.rows<{ coll: string }>(
         `SELECT COLLATION_NAME AS coll FROM information_schema.COLUMNS
-          WHERE TABLE_SCHEMA = ? AND DATA_TYPE IN ('varchar', 'char') AND TABLE_NAME <> 'opslog_areas_migrations'`,
+          WHERE TABLE_SCHEMA = ? AND DATA_TYPE IN ('varchar', 'char') AND TABLE_NAME IN (${areaTableList})`,
         [db.databaseName],
       );
       expect(columns.length).toBeGreaterThan(10);
       expect(columns.filter((column) => column.coll !== BINARY_COLLATION)).toEqual([]);
       const uniques = await db.rows<{ name: string; col: string; seq: number }>(
         `SELECT INDEX_NAME AS name, COLUMN_NAME AS col, SEQ_IN_INDEX AS seq FROM information_schema.STATISTICS
-          WHERE TABLE_SCHEMA = ? AND NON_UNIQUE = 0 AND TABLE_NAME <> 'opslog_areas_migrations'
+          WHERE TABLE_SCHEMA = ? AND NON_UNIQUE = 0 AND TABLE_NAME IN (${areaTableList})
           ORDER BY INDEX_NAME, SEQ_IN_INDEX`,
         [db.databaseName],
       );
@@ -116,7 +127,7 @@ suite('persistent area store on MySQL', () => {
       const foreignKeys = await db.rows<{ name: string; cols: string }>(
         `SELECT CONSTRAINT_NAME AS name, GROUP_CONCAT(COLUMN_NAME ORDER BY ORDINAL_POSITION) AS cols
            FROM information_schema.KEY_COLUMN_USAGE
-          WHERE TABLE_SCHEMA = ? AND REFERENCED_TABLE_NAME IS NOT NULL GROUP BY CONSTRAINT_NAME`,
+          WHERE TABLE_SCHEMA = ? AND TABLE_NAME IN (${areaTableList}) AND REFERENCED_TABLE_NAME IS NOT NULL GROUP BY CONSTRAINT_NAME`,
         [db.databaseName],
       );
       expect(foreignKeys.map((fk) => [fk.name, fk.cols]).sort()).toEqual([
@@ -213,7 +224,7 @@ suite('persistent area store on MySQL', () => {
         'SELECT TABLE_NAME AS t FROM information_schema.TABLES WHERE TABLE_SCHEMA = ?',
         [db.databaseName],
       );
-      expect(names).toHaveLength(Object.keys(AREA_TABLES).length + 1);
+      expect(names).toHaveLength(Object.keys(AREA_TABLES).length + 7);
     });
   });
 
@@ -435,6 +446,52 @@ suite('persistent area store on MySQL', () => {
         await rejection(storeA.transaction(tenant, (tx) => tx.replace(next, 1, bad))),
       ).toBeInstanceOf(Error);
       expect(await storeA.find(tenant, area.id)).toEqual(area);
+    });
+
+    it('rolls the area and history back when the runtime cannot append local audit', async () => {
+      const tenant = randomUUID();
+      const area = { ...areaOf(tenant), responsibleIds: ['user-a'] };
+      const entry = historyEntry(
+        area,
+        'created',
+        [],
+        { from: null, to: null },
+        randomUUID(),
+        ACTOR,
+        NOW,
+      );
+      await db.admin.query(
+        `REVOKE EXECUTE ON PROCEDURE \`${db.databaseName}\`.\`opslog_append_local_audit_and_delivery\` FROM '${db.runtimeUser}'@'%'`,
+      );
+      try {
+        expect(
+          await rejection(storeA.transaction(tenant, (tx) => tx.insert(area, entry))),
+        ).toBeInstanceOf(AreaStoreError);
+        expect(await storeA.find(tenant, area.id)).toBeNull();
+        expect(await storeA.history(tenant, area.id, { limit: 10, offset: 0 })).toMatchObject({
+          items: [],
+          total: 0,
+        });
+        expect(
+          await db.rows(`SELECT area_id FROM ${AREA_TABLES.responsibles} WHERE area_id = ?`, [
+            area.id,
+          ]),
+        ).toHaveLength(0);
+        expect(
+          await db.rows(`SELECT event_id FROM ${AUDIT_TABLES.local} WHERE event_id = ?`, [
+            entry.id,
+          ]),
+        ).toHaveLength(0);
+        expect(
+          await db.rows(`SELECT event_id FROM ${AUDIT_TABLES.delivery} WHERE event_id = ?`, [
+            entry.id,
+          ]),
+        ).toHaveLength(0);
+      } finally {
+        await db.admin.query(
+          `GRANT EXECUTE ON PROCEDURE \`${db.databaseName}\`.\`opslog_append_local_audit_and_delivery\` TO '${db.runtimeUser}'@'%'`,
+        );
+      }
     });
   });
 

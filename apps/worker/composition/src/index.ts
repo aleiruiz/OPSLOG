@@ -75,6 +75,8 @@ export interface WorkerRuntimeDeps {
   /** Current-permission check for the user that enqueued a job. */
   readonly actors: ActorPermissionCheck;
   readonly audit: AuditStore;
+  /** Tenant-aware batch relay supplied by the persistence composition. */
+  readonly auditRelay?: { runBatch(max?: number): Promise<number> };
   readonly pipeline: FilePipeline;
   readonly clock: () => number;
   /** Opaque system actor reference, `worker-<slug>`. */
@@ -89,6 +91,8 @@ export interface WorkerRuntime {
   drainOutbox(max?: number): Promise<number>;
   /** Processes due scan jobs of active tenants. */
   runScans(): Promise<ScanRunSummary>;
+  /** Relays tenant-local audit rows to each tenant's date-partitioned projection. */
+  runAuditRelay(max?: number): Promise<number>;
 }
 
 /**
@@ -110,5 +114,9 @@ export function createWorkerRuntime(deps: WorkerRuntimeDeps): WorkerRuntime {
     worker,
     drainOutbox: (max) => drain(worker, max),
     runScans: () => deps.pipeline.processScans(),
+    runAuditRelay: (max) => {
+      if (!deps.auditRelay) throw new Error('audit relay is not configured');
+      return deps.auditRelay.runBatch(max);
+    },
   };
 }

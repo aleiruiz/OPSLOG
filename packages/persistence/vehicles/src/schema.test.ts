@@ -247,7 +247,7 @@ describe('DataSource factories', () => {
         /restricted runtime account/,
       );
     expect(VEHICLES_RUNTIME_ACCOUNT.test('opslog_vehicles_abc123')).toBe(true);
-    expect(dataSource.options.entities).toHaveLength(VEHICLE_ENTITIES.length);
+    expect(dataSource.options.entities).toHaveLength(VEHICLE_ENTITIES.length + 2);
   });
 
   it('creates a migration DataSource that is never used at runtime', () => {

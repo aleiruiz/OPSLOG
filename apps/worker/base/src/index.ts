@@ -195,7 +195,7 @@ export class Worker {
       data: { type: record.type, attempts: record.attempts },
     };
     try {
-      this.audit.append(auditEvent);
+      await this.audit.append(auditEvent);
     } catch {
       // Keep the claim processing until lease expiry. The handler checkpoint is already stored,
       // so reclaiming retries only the audit append and never re-invokes the handler.

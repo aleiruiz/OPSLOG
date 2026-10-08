@@ -22,6 +22,7 @@ import {
 const jpeg = (tag: string): Uint8Array =>
   Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, ...Buffer.from(tag)]);
 const FULL: readonly Permission[] = ['view', 'create', 'edit', 'view_pii'];
+const auditRange = { from: '2026-10-01T00:00:00.000Z', to: '2026-11-01T00:00:00.000Z' };
 
 async function world() {
   let now = new Date('2026-10-06T12:00:00Z');
@@ -77,6 +78,8 @@ async function world() {
   };
 }
 type World = Awaited<ReturnType<typeof world>>;
+
+const auditEvents = (w: World, tenantId: string) => w.audit.list(tenantId, auditRange);
 
 async function releasedFile(w: World, token: string, tag = 'photo', sensitivity?: 'pii') {
   const uploaded = await w.api.upload(token, 'corr-up', {
@@ -357,9 +360,11 @@ describe('tenant isolation A/B', () => {
     const grantA = await grantFor(w, a.token, idA);
     expect((await w.api.download(b.token, 'c', grantA)).error?.code).toBe('not_found');
     // The foreign file id is not written to tenant B's audit trail.
-    const denied = w.audit.list('tenant-b').filter((e) => e.action === 'file.access_denied');
+    const denied = (await auditEvents(w, 'tenant-b')).filter(
+      (e) => e.action === 'file.access_denied',
+    );
     expect(denied.map((e) => e.entityId)).toEqual(['[REDACTED]']);
-    expect(JSON.stringify(w.audit.list('tenant-b'))).not.toContain(idA);
+    expect(JSON.stringify(await auditEvents(w, 'tenant-b'))).not.toContain(idA);
   });
   it('rejects a grant presented by a different user of the same tenant', async () => {
     const w = await world();
@@ -392,7 +397,7 @@ describe('tenant isolation A/B', () => {
     const w = await world();
     const { token } = await w.user('tenant-a', 'subject-a');
     await w.api.createDownloadGrant(token, 'c', 'a@b.example/../x');
-    const events = w.audit.list('tenant-a');
+    const events = await auditEvents(w, 'tenant-a');
     expect(events.map((e) => e.entityId)).toEqual(['[REDACTED]']);
   });
   it('keeps same local ids in both tenants separate', async () => {
@@ -440,20 +445,28 @@ describe('audit trail', () => {
     const { token } = await w.user('tenant-a', 'subject-a');
     const id = await releasedFile(w, token, 'confidential-body');
     await w.api.download(token, 'c', await grantFor(w, token, id));
-    const events = w.audit.list('tenant-a');
-    expect(events.map((e) => e.action)).toEqual([
-      'file.uploaded',
-      'file.released',
-      'file.grant_issued',
-      'file.downloaded',
-    ]);
+    const events = await auditEvents(w, 'tenant-a');
+    expect(events.map((e) => e.action)).toEqual(
+      expect.arrayContaining([
+        'file.uploaded',
+        'file.released',
+        'file.grant_issued',
+        'file.downloaded',
+      ]),
+    );
+    expect(events).toHaveLength(4);
     const serialized = JSON.stringify(events);
     expect(serialized).not.toContain('Photo');
     expect(serialized).not.toContain('confidential-body');
     expect(serialized).not.toMatch(/[0-9a-f]{64}/);
-    expect(events[0]?.actor.id).toMatch(/^user-[0-9a-f-]{36}$/);
-    expect(events[1]?.actor).toEqual({ id: 'worker-files', kind: 'system' });
-    expect(w.audit.list('tenant-b')).toEqual([]);
+    expect(events.find((event) => event.action === 'file.uploaded')?.actor.id).toMatch(
+      /^user-[0-9a-f-]{36}$/,
+    );
+    expect(events.find((event) => event.action === 'file.released')?.actor).toEqual({
+      id: 'worker-files',
+      kind: 'system',
+    });
+    expect(await auditEvents(w, 'tenant-b')).toEqual([]);
   });
   it('records a denial inside the caller tenant and nothing for unauthenticated calls', async () => {
     const w = await world();
@@ -462,8 +475,10 @@ describe('audit trail', () => {
     const id = await releasedFile(w, a.token);
     await w.api.createDownloadGrant(b.token, 'c', id);
     await w.api.createDownloadGrant('bad-token', 'c', id);
-    expect(w.audit.list('tenant-b').map((e) => e.action)).toEqual(['file.access_denied']);
-    expect(w.audit.list('tenant-a').map((e) => e.action)).not.toContain('file.access_denied');
+    expect((await auditEvents(w, 'tenant-b')).map((e) => e.action)).toEqual(['file.access_denied']);
+    expect((await auditEvents(w, 'tenant-a')).map((e) => e.action)).not.toContain(
+      'file.access_denied',
+    );
   });
   it('does not return bytes when the download audit cannot be written', async () => {
     const w = await world();
@@ -471,9 +486,9 @@ describe('audit trail', () => {
     const id = await releasedFile(w, token);
     const grant = await grantFor(w, token, id);
     const append = w.audit.append.bind(w.audit);
-    w.audit.append = (event) => {
+    w.audit.append = async (event) => {
       if (event.action === 'file.downloaded') throw new Error('audit down');
-      append(event);
+      await append(event);
     };
     const result = await w.api.download(token, 'c', grant);
     expect(result.ok).toBe(false);
@@ -482,7 +497,7 @@ describe('audit trail', () => {
   it('keeps the original denial response when the denial audit itself fails', async () => {
     const w = await world();
     const { token } = await w.user('tenant-a', 'subject-a');
-    w.audit.append = () => {
+    w.audit.append = async () => {
       throw new Error('audit down');
     };
     expect((await w.api.createDownloadGrant(token, 'c', 'file-404')).error?.code).toBe('not_found');
@@ -505,7 +520,9 @@ describe('audit trail', () => {
     // Without an injected clock the denial audit is stamped with the real current time.
     const before = Date.now();
     expect((await api.createDownloadGrant(token, 'c', 'file-404')).error?.code).toBe('not_found');
-    const denied = w.audit.list('tenant-a').filter((e) => e.action === 'file.access_denied');
+    const denied = (await auditEvents(w, 'tenant-a')).filter(
+      (e) => e.action === 'file.access_denied',
+    );
     expect(denied).toHaveLength(1);
     const stamped = Date.parse(denied[0]?.occurredAt ?? '');
     expect(stamped).toBeGreaterThanOrEqual(before);

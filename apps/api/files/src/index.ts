@@ -22,9 +22,11 @@ import {
   DownloadGrants,
   FilePipeline,
   auditFileEvent,
+  createFileAccessAuditEvent,
   refFor,
   type DerivativeInput,
   type FileActor,
+  type FileSagaJournal,
   type ObjectStorage,
 } from '../../../../packages/platform/files/src/index.js';
 
@@ -100,6 +102,7 @@ export interface FilesApiDeps {
   readonly pipeline: FilePipeline;
   readonly grants: DownloadGrants;
   readonly audit: AuditStore;
+  readonly journal?: FileSagaJournal;
   readonly now?: () => Date;
 }
 
@@ -228,13 +231,13 @@ export class FilesApi {
         fileId,
         subject: auth.context.actor.subject,
       });
-      auditFileEvent(this.deps.audit, auth.actor, 'file.grant_issued', fileId, this.now());
+      await this.auditEvent(auth.actor, 'file.grant_issued', fileId);
       return {
         ok: true,
         value: { grant: issued.token, expiresAt: issued.expiresAt.toISOString() },
       };
     } catch (error) {
-      this.auditDenied(auth, fileId, error);
+      await this.auditDenied(auth, fileId, error);
       return failure(error);
     }
   }
@@ -264,7 +267,7 @@ export class FilesApi {
       const bytes = await this.deps.storage.get(refFor(record, 'released'));
       if (!bytes) throw new FileError('not_found');
       if (sha256Hex(bytes) !== record.sha256) throw new FileError('integrity_failed');
-      auditFileEvent(this.deps.audit, auth.actor, 'file.downloaded', record.id, this.now());
+      await this.auditEvent(auth.actor, 'file.downloaded', record.id);
       return {
         ok: true,
         value: {
@@ -281,7 +284,7 @@ export class FilesApi {
         },
       };
     } catch (error) {
-      this.auditDenied(auth, fileId, error);
+      await this.auditDenied(auth, fileId, error);
       return failure(error);
     }
   }
@@ -296,12 +299,26 @@ export class FilesApi {
     return assertDownloadable({ record, original, tenantId, granted: auth.granted });
   }
 
+  private async auditEvent(actor: FileActor, action: string, fileId: string): Promise<void> {
+    if (this.deps.journal) {
+      await this.deps.journal.appendAudit(
+        createFileAccessAuditEvent(actor, action, fileId, this.now()),
+      );
+      return;
+    }
+    await auditFileEvent(this.deps.audit, actor, action, fileId, this.now());
+  }
+
   /** Best effort: a denial is already returned to the caller, so an audit failure must not mask it. */
-  private auditDenied(auth: Authorized | undefined, fileId: string, error: unknown): void {
+  private async auditDenied(
+    auth: Authorized | undefined,
+    fileId: string,
+    error: unknown,
+  ): Promise<void> {
     if (!auth || !(error instanceof FileError) || error.code === 'unauthorized') return;
     try {
       const safeId = OPAQUE.test(fileId) ? fileId : '';
-      auditFileEvent(this.deps.audit, auth.actor, 'file.access_denied', safeId, this.now());
+      await this.auditEvent(auth.actor, 'file.access_denied', safeId);
     } catch {
       /* the denial response stands */
     }

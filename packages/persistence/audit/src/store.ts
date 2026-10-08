@@ -1,0 +1,415 @@
+import { createHash } from 'node:crypto';
+import {
+  AuditConflictError,
+  defaultAuditListRange,
+  sanitizeAuditEvent,
+  validateAuditListRange,
+  type AuditEvent,
+  type AuditListRange,
+  type AuditStore,
+  type PersistedAuditEvent,
+} from '@opslog/platform-audit';
+import {
+  AuditDeliveryEntity,
+  AuditLocalEventEntity,
+  AuditProjectionEntity,
+  AuditRegistryEntity,
+} from './entities.js';
+import { AUDIT_TENANT_DATABASE } from './data-source.js';
+import type { DataSource, EntityManager } from 'typeorm';
+
+export class AuditPersistenceError extends Error {
+  constructor() {
+    super('Audit persistence operation failed');
+    this.name = 'AuditPersistenceError';
+  }
+}
+
+function requireTenantDatabase(manager: EntityManager): void {
+  const database = manager.connection.options.database;
+  if (typeof database !== 'string' || !AUDIT_TENANT_DATABASE.test(database))
+    throw new AuditPersistenceError();
+}
+
+function requireTenantSource(source: DataSource): void {
+  const database = source.options.database;
+  if (typeof database !== 'string' || !AUDIT_TENANT_DATABASE.test(database))
+    throw new AuditPersistenceError();
+}
+
+function hashEvent(event: PersistedAuditEvent): string {
+  const canonical = JSON.stringify({
+    eventId: event.eventId,
+    tenantId: event.tenantId,
+    action: event.action,
+    entityType: event.entityType,
+    entityId: event.entityId,
+    occurredAt: asDate(event.occurredAt).toISOString(),
+    actor: { id: event.actor.id, kind: event.actor.kind },
+    correlationId: event.correlationId,
+    data: { attempts: event.data.attempts },
+  });
+  return createHash('sha256').update(canonical).digest('hex');
+}
+
+function asDate(value: string): Date {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime()) || value === '[REDACTED]')
+    throw new Error('invalid audit occurredAt');
+  return date;
+}
+
+function eventRow(event: PersistedAuditEvent, contentHash: string) {
+  return {
+    eventId: event.eventId,
+    tenantId: event.tenantId,
+    action: event.action,
+    entityType: event.entityType,
+    entityId: event.entityId,
+    occurredAt: asDate(event.occurredAt),
+    actorId: event.actor.id,
+    actorKind: event.actor.kind,
+    correlationId: event.correlationId,
+    data: event.data,
+    contentHash,
+  };
+}
+
+function persisted(row: {
+  eventId: string;
+  tenantId: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  occurredAt: Date;
+  actorId: string;
+  actorKind: PersistedAuditEvent['actor']['kind'];
+  correlationId: string;
+  data: PersistedAuditEvent['data'];
+}): PersistedAuditEvent {
+  return {
+    eventId: row.eventId,
+    tenantId: row.tenantId,
+    action: row.action,
+    entityType: row.entityType,
+    entityId: row.entityId,
+    occurredAt: row.occurredAt.toISOString(),
+    actor: { id: row.actorId, kind: row.actorKind },
+    correlationId: row.correlationId,
+    data: row.data,
+  };
+}
+
+function isDuplicate(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const driver = (error as { driverError?: { errno?: unknown; code?: unknown } }).driverError;
+  return driver?.errno === 1062 || driver?.code === 'ER_DUP_ENTRY';
+}
+
+function sameHash(existing: { contentHash: string }, contentHash: string): void {
+  if (existing.contentHash !== contentHash) throw new AuditConflictError();
+}
+
+/**
+ * Inserts immutable tenant-local audit plus the initial relay state using the caller's manager.
+ * The caller owns the transaction: this helper never creates, commits, or rolls one back.
+ */
+export async function appendLocalAuditAndDelivery(
+  manager: EntityManager,
+  rawEvent: AuditEvent,
+): Promise<PersistedAuditEvent> {
+  requireTenantDatabase(manager);
+  const event = sanitizeAuditEvent(structuredClone(rawEvent));
+  const contentHash = hashEvent(event);
+  const local = manager.getRepository(AuditLocalEventEntity);
+  const delivery = manager.getRepository(AuditDeliveryEntity);
+  if (typeof manager.query === 'function') {
+    try {
+      await manager.query(
+        'CALL opslog_append_local_audit_and_delivery(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+          event.tenantId,
+          event.eventId,
+          event.action,
+          event.entityType,
+          event.entityId,
+          asDate(event.occurredAt),
+          event.actor.id,
+          event.actor.kind,
+          event.correlationId,
+          JSON.stringify(event.data),
+          contentHash,
+        ],
+      );
+      return event;
+    } catch (error) {
+      const driver = (error as { driverError?: { message?: string; sqlMessage?: string } })
+        ?.driverError;
+      if (`${driver?.message ?? ''} ${driver?.sqlMessage ?? ''}`.includes('AUDIT_EVENT_CONFLICT'))
+        throw new AuditConflictError();
+      throw new AuditPersistenceError();
+    }
+  }
+  try {
+    const existing = await local.findOneBy({ tenantId: event.tenantId, eventId: event.eventId });
+    if (existing) {
+      sameHash(existing, contentHash);
+      const existingDelivery = await delivery.findOneBy({
+        tenantId: event.tenantId,
+        eventId: event.eventId,
+      });
+      if (!existingDelivery)
+        await delivery.insert({
+          tenantId: event.tenantId,
+          eventId: event.eventId,
+          status: 'pending',
+          createdAt: new Date(),
+          deliveredAt: null,
+        });
+      return persisted(existing);
+    }
+    await local.insert(eventRow(event, contentHash));
+  } catch (error) {
+    if (error instanceof AuditConflictError) throw error;
+    throw new AuditPersistenceError();
+  }
+  try {
+    if (typeof manager.query === 'function') {
+      await manager.query(
+        'INSERT INTO `opslog_audit_delivery` (`tenant_id`, `event_id`, `status`, `created_at`, `delivered_at`) VALUES (?, ?, ?, ?, ?)',
+        [event.tenantId, event.eventId, 'pending', new Date(), null],
+      );
+    } else {
+      await delivery.insert({
+        tenantId: event.tenantId,
+        eventId: event.eventId,
+        status: 'pending',
+        createdAt: new Date(),
+        deliveredAt: null,
+      });
+    }
+  } catch {
+    // The caller's transaction must roll back the local audit row with the command/history.
+    throw new AuditPersistenceError();
+  }
+  return event;
+}
+
+/** Inserts the registry and date-partitioned projection in the caller's tenant-local transaction. */
+export async function appendAuditProjection(
+  manager: EntityManager,
+  rawEvent: AuditEvent,
+): Promise<void> {
+  requireTenantDatabase(manager);
+  const event = sanitizeAuditEvent(structuredClone(rawEvent));
+  const contentHash = hashEvent(event);
+  const registry = manager.getRepository(AuditRegistryEntity);
+  const projection = manager.getRepository(AuditProjectionEntity);
+  try {
+    await registry.insert({
+      tenantId: event.tenantId,
+      eventId: event.eventId,
+      contentHash,
+      occurredAt: asDate(event.occurredAt),
+    });
+  } catch (error) {
+    if (!isDuplicate(error)) throw new AuditPersistenceError();
+    const existing = await registry.findOneBy({ tenantId: event.tenantId, eventId: event.eventId });
+    if (!existing) throw new AuditPersistenceError();
+    sameHash(existing, contentHash);
+    return;
+  }
+  try {
+    await projection.insert(eventRow(event, contentHash));
+  } catch {
+    // Registry and log must commit or roll back together to keep cross-partition idempotency sound.
+    throw new AuditPersistenceError();
+  }
+}
+
+export type TenantAuditDataSourceResolver = (tenantId: string) => DataSource | Promise<DataSource>;
+
+/** Lists pending event identities for one physical tenant database; callers then relay each item. */
+export async function listPendingAuditEventIds(
+  source: DataSource,
+  tenantId: string,
+  limit = 100,
+): Promise<readonly string[]> {
+  requireTenantSource(source);
+  if (
+    typeof tenantId !== 'string' ||
+    !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(tenantId) ||
+    !Number.isInteger(limit) ||
+    limit < 1 ||
+    limit > 1000
+  )
+    throw new Error('invalid audit relay query');
+  try {
+    const rows = await source.getRepository(AuditDeliveryEntity).find({
+      where: { tenantId, status: 'pending' },
+      order: { createdAt: 'ASC', eventId: 'ASC' },
+      take: limit,
+    });
+    return rows.map((row) => row.eventId);
+  } catch {
+    throw new AuditPersistenceError();
+  }
+}
+
+/** Relay/projection adapter. Its resolver must return the exclusive database for the requested tenant. */
+export class MySqlAuditStore implements AuditStore {
+  public constructor(
+    private readonly resolveProjectionWriter: TenantAuditDataSourceResolver,
+    private readonly resolveReader: TenantAuditDataSourceResolver = resolveProjectionWriter,
+  ) {}
+
+  public async append(event: AuditEvent): Promise<void> {
+    try {
+      const safeEvent = sanitizeAuditEvent(structuredClone(event));
+      const source = await this.resolveProjectionWriter(safeEvent.tenantId);
+      requireTenantSource(source);
+      await source.transaction('READ COMMITTED', (manager) =>
+        appendAuditProjection(manager, safeEvent),
+      );
+    } catch (error) {
+      if (error instanceof AuditConflictError) throw error;
+      throw new AuditPersistenceError();
+    }
+  }
+
+  public async list(
+    tenantId: string,
+    range?: AuditListRange,
+  ): Promise<readonly PersistedAuditEvent[]> {
+    return listTenantAuditProjection(this.resolveReader, tenantId, range);
+  }
+}
+
+async function listTenantAuditProjection(
+  resolveReader: TenantAuditDataSourceResolver,
+  tenantId: string,
+  range?: AuditListRange,
+): Promise<readonly PersistedAuditEvent[]> {
+  if (typeof tenantId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(tenantId))
+    throw new Error('invalid audit tenantId');
+  const bounded = validateAuditListRange(range ?? defaultAuditListRange());
+  try {
+    const source = await resolveReader(tenantId);
+    requireTenantSource(source);
+    const rows = await source
+      .getRepository(AuditProjectionEntity)
+      .createQueryBuilder('audit')
+      .where('audit.tenantId = :tenantId', { tenantId })
+      .andWhere('audit.occurredAt >= :from', { from: new Date(bounded.from) })
+      .andWhere('audit.occurredAt < :to', { to: new Date(bounded.to) })
+      .orderBy('audit.occurredAt', 'DESC')
+      .addOrderBy('audit.eventId', 'ASC')
+      .take(bounded.limit)
+      .getMany();
+    return rows.map(persisted);
+  } catch {
+    throw new AuditPersistenceError();
+  }
+}
+
+/** API-facing store: append writes a durable tenant-local event and delivery row for later relay. */
+export class MySqlAuditApiStore implements AuditStore {
+  public constructor(
+    private readonly resolveRuntime: TenantAuditDataSourceResolver,
+    private readonly resolveReader: TenantAuditDataSourceResolver = resolveRuntime,
+  ) {}
+
+  public async append(event: AuditEvent): Promise<void> {
+    try {
+      const safeEvent = sanitizeAuditEvent(structuredClone(event));
+      const source = await this.resolveRuntime(safeEvent.tenantId);
+      requireTenantSource(source);
+      await source.transaction('READ COMMITTED', (manager) =>
+        appendLocalAuditAndDelivery(manager, safeEvent),
+      );
+    } catch (error) {
+      if (error instanceof AuditConflictError) throw error;
+      throw new AuditPersistenceError();
+    }
+  }
+
+  public async list(
+    tenantId: string,
+    range?: AuditListRange,
+  ): Promise<readonly PersistedAuditEvent[]> {
+    return listTenantAuditProjection(this.resolveReader, tenantId, range);
+  }
+}
+
+/** Runs the durable tenant-local delivery queue and never treats a missing relay as an empty batch. */
+export class MySqlAuditRelay {
+  public constructor(
+    private readonly tenantIds: () => readonly string[] | Promise<readonly string[]>,
+    private readonly resolveRelay: TenantAuditDataSourceResolver,
+  ) {}
+
+  public async runBatch(max = 100): Promise<number> {
+    if (!Number.isInteger(max) || max < 1 || max > 1000)
+      throw new Error('invalid audit relay batch size');
+    const tenants = [...new Set(await this.tenantIds())].sort();
+    let delivered = 0;
+    for (const tenantId of tenants) {
+      if (delivered >= max) break;
+      const source = await this.resolveRelay(tenantId);
+      requireTenantSource(source);
+      const ids = await listPendingAuditEventIds(source, tenantId, max - delivered);
+      for (const eventId of ids) {
+        if (await relayPendingAuditEvent(source, tenantId, eventId)) delivered += 1;
+        if (delivered >= max) break;
+      }
+    }
+    return delivered;
+  }
+}
+
+/** Reads one local pending event, commits projection+registry, then advances only delivery state. */
+export async function relayPendingAuditEvent(
+  source: DataSource,
+  tenantId: string,
+  eventId: string,
+): Promise<boolean> {
+  if (
+    typeof tenantId !== 'string' ||
+    !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(tenantId) ||
+    typeof eventId !== 'string' ||
+    !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(eventId)
+  )
+    throw new Error('invalid audit relay identity');
+  requireTenantSource(source);
+  let event: PersistedAuditEvent | undefined;
+  try {
+    await source.transaction('READ COMMITTED', async (manager) => {
+      const status = await manager.getRepository(AuditDeliveryEntity).findOneBy({
+        tenantId,
+        eventId,
+        status: 'pending',
+      });
+      if (!status) return;
+      const local = await manager
+        .getRepository(AuditLocalEventEntity)
+        .findOneBy({ tenantId, eventId });
+      if (!local) throw new AuditPersistenceError();
+      event = persisted(local);
+      await appendAuditProjection(manager, event);
+    });
+    if (!event) return false;
+    // This update is intentionally separate from the projection commit and never touches local audit.
+    const result = await source.transaction('READ COMMITTED', (manager) =>
+      manager
+        .getRepository(AuditDeliveryEntity)
+        .update(
+          { tenantId, eventId, status: 'pending' },
+          { status: 'delivered', deliveredAt: new Date() },
+        ),
+    );
+    return result.affected === 1;
+  } catch (error) {
+    if (error instanceof AuditConflictError) throw error;
+    throw new AuditPersistenceError();
+  }
+}

@@ -185,7 +185,7 @@ export interface EmployeesApiDeps {
     action: EmployeeAuditAction,
     entityId: string,
     correlationId: string,
-  ) => void;
+  ) => void | Promise<void>;
 }
 
 /**
@@ -224,7 +224,7 @@ export class EmployeesApi {
     try {
       const context = await this.deps.authorize(token, correlationId, permissions);
       const employee = await work(context);
-      this.deps.audit(context, action, employee.id, correlationId);
+      await this.deps.audit(context, action, employee.id, correlationId);
       return { ok: true, value: viewOf(employee, this.deps.service.fitness(employee)) };
     } catch (error) {
       return failure(error);
@@ -315,7 +315,7 @@ export class EmployeesApi {
       const pii = await this.deps.service.reveal(employee);
       // Disclosure is audited before it is returned: if the audit cannot be written, nothing leaves.
       if (Object.values(pii).some((value) => value !== null))
-        this.deps.audit(context, 'employee.pii_viewed', employee.id, correlationId);
+        await this.deps.audit(context, 'employee.pii_viewed', employee.id, correlationId);
       return { ok: true, value: { ...view, pii } };
     } catch (error) {
       return failure(error);

@@ -1,6 +1,7 @@
 import mysql from 'mysql2/promise';
 import { createHash, randomBytes } from 'node:crypto';
 import type { DataSource } from 'typeorm';
+import { createAuditMigrationDataSource, runAuditMigrations } from '../../../audit/src/index.js';
 import {
   createSettingsDataSource,
   createSettingsMigrationDataSource,
@@ -23,7 +24,11 @@ if (!adminUrl && process.env.CI)
 export function loopbackAdminConfig(value: string) {
   const url = new URL(value);
   const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
-  if (url.protocol !== 'mysql:' || !['localhost', '127.0.0.1', '::1'].includes(host))
+  if (
+    url.protocol !== 'mysql:' ||
+    (!['localhost', '127.0.0.1', '::1'].includes(host) &&
+      process.env.OPSLOG_TEST_MYSQL_ALLOW_REMOTE !== '1')
+  )
     throw new Error('synthetic MySQL admin URL must use a loopback host');
   return {
     host,
@@ -53,17 +58,41 @@ export interface SettingsDatabase {
 /** Creates the database, the least-privilege runtime account and applies the migration as the schema owner. */
 export async function startSettingsDatabase(tag: string): Promise<SettingsDatabase> {
   const suffix = `${Date.now()}_${process.pid}`;
-  const databaseName = `opslog_set_${tag}_${suffix}`;
+  const databaseName = `opslog_t_${tag}_${suffix}`;
   const runtimeUser = `opslog_settings_${createHash('sha256')
     .update(suffix + tag)
     .digest('hex')
     .slice(0, 12)}`;
   const runtimePassword = randomBytes(24).toString('base64url');
+  const auditMigratorUser = `opslog_audit_migrator_${createHash('sha256')
+    .update(suffix + tag)
+    .digest('hex')
+    .slice(0, 10)}`;
+  const auditMigratorPassword = randomBytes(24).toString('base64url');
   const adminConfig = loopbackAdminConfig(adminUrl as string);
   const admin = await mysql.createConnection({ ...adminConfig, database: 'mysql' });
   const sources: DataSource[] = [];
   await admin.query(`CREATE DATABASE ${identifier(databaseName)} CHARACTER SET utf8mb4`);
   await admin.query(`CREATE USER '${runtimeUser}'@'%' IDENTIFIED BY ?`, [runtimePassword]);
+  await admin.query(`CREATE USER '${auditMigratorUser}'@'%' IDENTIFIED BY ?`, [
+    auditMigratorPassword,
+  ]);
+  await admin.query(
+    `GRANT CREATE, ALTER, INDEX, SELECT, INSERT, REFERENCES, CREATE ROUTINE, ALTER ROUTINE ON ${identifier(databaseName)}.* TO '${auditMigratorUser}'@'%'`,
+  );
+  const auditMigrations = createAuditMigrationDataSource({
+    host: adminConfig.host,
+    port: adminConfig.port,
+    database: databaseName,
+    username: auditMigratorUser,
+    password: auditMigratorPassword,
+  });
+  await auditMigrations.initialize();
+  try {
+    await runAuditMigrations(auditMigrations);
+  } finally {
+    await auditMigrations.destroy();
+  }
   const migrations = createSettingsMigrationDataSource({
     host: adminConfig.host,
     port: adminConfig.port,
@@ -84,6 +113,9 @@ export async function startSettingsDatabase(tag: string): Promise<SettingsDataba
   // Least privilege (granted once the table exists): settings are read, inserted and updated but never deleted.
   await admin.query(
     `GRANT SELECT, INSERT, UPDATE ON ${identifier(databaseName)}.${identifier(SETTINGS_TABLES.settings)} TO '${runtimeUser}'@'%'`,
+  );
+  await admin.query(
+    `GRANT EXECUTE ON PROCEDURE ${identifier(databaseName)}.\`opslog_append_local_audit_and_delivery\` TO '${runtimeUser}'@'%'`,
   );
   await admin.changeUser({ database: databaseName });
   return {
@@ -113,6 +145,7 @@ export async function startSettingsDatabase(tag: string): Promise<SettingsDataba
       await admin.changeUser({ database: 'mysql' });
       await admin.query(`DROP DATABASE IF EXISTS ${identifier(databaseName)}`);
       await admin.query(`DROP USER IF EXISTS '${runtimeUser}'@'%'`);
+      await admin.query(`DROP USER IF EXISTS '${auditMigratorUser}'@'%'`);
       await admin.end();
     },
   };

@@ -1,4 +1,7 @@
-import type { Permission } from '../../../../packages/domain/identity/src/index.js';
+import type {
+  IdentityMutationAudit,
+  Permission,
+} from '../../../../packages/domain/identity/src/index.js';
 import { ROLE_PERMISSIONS, type RoleName } from './access.js';
 
 export const ROLE_LABELS: Readonly<Record<RoleName, string>> = {
@@ -101,8 +104,21 @@ export interface RoleDirectoryStore {
     role: { id: string; name: string; permissions: readonly string[] },
     maxRoles: number,
   ): Promise<CreateRoleOutcome>;
+  createCustomRoleWithAudit?(
+    tenantId: string,
+    role: { id: string; name: string; permissions: readonly string[] },
+    maxRoles: number,
+    audit: IdentityMutationAudit,
+  ): Promise<CreateRoleOutcome>;
   /** Persists the role of a pending or active membership; false when there is none. */
   setRole(tenantId: string, identityId: string, role: string): Promise<boolean>;
+  /** Optional transactional variant for a durable tenant-local audit row and delivery state. */
+  setRoleWithAudit?(
+    tenantId: string,
+    identityId: string,
+    role: string,
+    audit: IdentityMutationAudit,
+  ): Promise<boolean>;
 }
 
 export const isRoleDirectoryStore = (value: unknown): value is RoleDirectoryStore =>
@@ -169,6 +185,17 @@ export class RoleDirectory {
     return this.store.createCustomRole(tenantId, role, MAX_CUSTOM_ROLES_PER_TENANT);
   }
 
+  public async createWithAudit(
+    tenantId: string,
+    role: CustomRole,
+    audit: IdentityMutationAudit,
+  ): Promise<CreateRoleOutcome | null> {
+    if (!this.store) return null;
+    if (isSystemRoleName(role.name)) return 'name_taken';
+    if (!this.store.createCustomRoleWithAudit) return null;
+    return this.store.createCustomRoleWithAudit(tenantId, role, MAX_CUSTOM_ROLES_PER_TENANT, audit);
+  }
+
   /** Writes a membership's role through to the store; true (nothing to do) without a store. */
   public async setMemberRole(
     tenantId: string,
@@ -176,6 +203,17 @@ export class RoleDirectory {
     role: RoleName,
   ): Promise<boolean> {
     return this.store ? this.store.setRole(tenantId, identityId, role) : true;
+  }
+
+  public async setMemberRoleWithAudit(
+    tenantId: string,
+    identityId: string,
+    role: RoleName,
+    audit: IdentityMutationAudit,
+  ): Promise<boolean> {
+    if (!this.store) return true;
+    if (!this.store.setRoleWithAudit) return false;
+    return this.store.setRoleWithAudit(tenantId, identityId, role, audit);
   }
 }
 

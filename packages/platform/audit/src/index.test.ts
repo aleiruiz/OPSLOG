@@ -1,12 +1,44 @@
 import { describe, expect, it } from 'vitest';
-import { InMemoryAuditStore, createAuditEvent, redactAuditData, redactError } from './index.js';
+import {
+  AuditConflictError,
+  InMemoryAuditStore,
+  createAuditEvent,
+  defaultAuditListRange,
+  redactAuditData,
+  redactError,
+} from './index.js';
 
 // Assembled at runtime so secret scanners do not mistake the synthetic IDs for provider tokens.
 const SYNTHETIC_UUID = '00000000-0000-4000-8000-000000000000';
 const SYNTHETIC_USER_ACTOR = ['user', SYNTHETIC_UUID].join('-');
 const SYNTHETIC_API_ACTOR = ['api', SYNTHETIC_UUID].join('-');
+const RANGE = { from: '2026-10-01T00:00:00.000Z', to: '2026-10-10T00:00:00.000Z' } as const;
 
 describe('audit safety and tenant isolation', () => {
+  it('uses a bounded default read range and exposes only in-memory test snapshots', async () => {
+    const now = new Date('2026-10-10T12:00:00.000Z');
+    const range = defaultAuditListRange(now);
+    expect(range).toEqual({
+      from: '2026-09-10T12:00:00.000Z',
+      to: '2026-10-10T12:00:00.001Z',
+      limit: 500,
+    });
+    const store = new InMemoryAuditStore();
+    expect(await store.list('tenant-a')).toEqual([]);
+    await store.append({
+      eventId: 'default-range',
+      tenantId: 'tenant-a',
+      action: 'x',
+      entityType: 'x',
+      entityId: 'e',
+      occurredAt: now.toISOString(),
+      actor: { id: 'system', kind: 'system' },
+      correlationId: 'c',
+      data: {},
+    });
+    expect(store.snapshotForTesting('tenant-a')).toHaveLength(1);
+    expect(store.snapshotForTesting('tenant-b')).toEqual([]);
+  });
   it('persists only allowlisted structured audit data', () => {
     const data = redactAuditData({
       attempts: 2,
@@ -23,7 +55,7 @@ describe('audit safety and tenant isolation', () => {
       redactError(new Error('contact ana@example.test or call +1 (415) 555-2671; SSN 123-45-6789')),
     ).not.toMatch(/ana@example\.test|415|123-45-6789/);
   });
-  it('redacts raw events appended directly to the public store API', () => {
+  it('redacts raw events appended directly to the public store API', async () => {
     const store = new InMemoryAuditStore();
     const rawEvent = {
       eventId: 'raw-e',
@@ -44,10 +76,10 @@ describe('audit safety and tenant isolation', () => {
       },
     };
 
-    store.append(rawEvent);
+    await store.append(rawEvent);
 
-    expect(store.list('tenant-a')[0]?.actor.id).toBe('[REDACTED]');
-    expect(store.list('tenant-a')[0]?.data).toEqual({ attempts: 1 });
+    expect((await store.list('tenant-a', RANGE))[0]?.actor.id).toBe('[REDACTED]');
+    expect((await store.list('tenant-a', RANGE))[0]?.data).toEqual({ attempts: 1 });
     expect(rawEvent.actor.id).toBe('Jane Doe');
     expect(rawEvent.data).toEqual({
       attempts: 1,
@@ -112,7 +144,7 @@ describe('audit safety and tenant isolation', () => {
     expect(userEvent.actor.id).toBe(SYNTHETIC_USER_ACTOR);
     expect(apiEvent.actor.id).toBe(SYNTHETIC_API_ACTOR);
   });
-  it('keeps A/B tenants isolated and deduplicates event ids', () => {
+  it('keeps A/B tenants isolated and deduplicates event ids', async () => {
     const store = new InMemoryAuditStore();
     const event = (tenantId: string) =>
       createAuditEvent(
@@ -126,18 +158,80 @@ describe('audit safety and tenant isolation', () => {
           data: { contact: 'person@example.test', nested: { phone: '+1 415 555 2671' } },
         },
       );
-    store.append(event('tenant-a'));
-    store.append(event('tenant-a'));
-    store.append(event('tenant-b'));
-    expect(store.list('tenant-a')).toHaveLength(1);
-    expect(store.list('tenant-b')).toHaveLength(1);
-    expect(store.list('tenant-a')[0]?.tenantId).toBe('tenant-a');
-    expect(store.list('tenant-b')[0]?.eventId).toBe(store.list('tenant-a')[0]?.eventId);
-    expect(store.list('tenant-a')[0]?.data).toEqual({});
+    await store.append(event('tenant-a'));
+    await store.append(event('tenant-a'));
+    await store.append(event('tenant-b'));
+    const tenantA = await store.list('tenant-a', RANGE);
+    const tenantB = await store.list('tenant-b', RANGE);
+    expect(tenantA).toHaveLength(1);
+    expect(tenantB).toHaveLength(1);
+    expect(tenantA[0]?.tenantId).toBe('tenant-a');
+    expect(tenantB[0]?.eventId).toBe(tenantA[0]?.eventId);
+    expect(tenantA[0]?.data).toEqual({});
   });
-  it('persists only allowlisted fields and opaque identifiers on append', () => {
+  it('rejects changed content for an immutable tenant/event identity', async () => {
     const store = new InMemoryAuditStore();
-    store.append({
+    const base = {
+      eventId: 'immutable-e',
+      tenantId: 'tenant-a',
+      action: 'vehicle.created',
+      entityType: 'vehicle',
+      entityId: 'vehicle-1',
+      occurredAt: '2026-10-04T00:00:00.000Z',
+      actor: { id: 'system', kind: 'system' as const },
+      correlationId: 'corr-a',
+      data: { attempts: 1 },
+    };
+    await store.append(base);
+    await expect(store.append({ ...base, action: 'vehicle.deleted' })).rejects.toBeInstanceOf(
+      AuditConflictError,
+    );
+    expect(await store.list('tenant-a', RANGE)).toMatchObject([{ action: 'vehicle.created' }]);
+  });
+  it('treats equivalent UTC timestamp spellings as the same canonical event', async () => {
+    const store = new InMemoryAuditStore();
+    const event = {
+      eventId: 'timestamp-e',
+      tenantId: 'tenant-a',
+      action: 'x',
+      entityType: 'x',
+      entityId: 'e',
+      occurredAt: '2026-10-04T00:00:00Z',
+      actor: { id: 'system', kind: 'system' as const },
+      correlationId: 'c',
+      data: {},
+    };
+    await store.append(event);
+    await expect(store.append({ ...event, occurredAt: '2026-10-04T00:00:00.000Z' })).resolves.toBe(
+      undefined,
+    );
+  });
+  it('bounds tenant reads by a half-open time range and deterministic limit', async () => {
+    const store = new InMemoryAuditStore();
+    const base = {
+      eventId: 'range-event',
+      tenantId: 'tenant-a',
+      action: 'x',
+      entityType: 'x',
+      entityId: 'e',
+      actor: { id: 'system', kind: 'system' as const },
+      correlationId: 'c',
+      data: {},
+    };
+    await store.append({ ...base, eventId: 'before', occurredAt: '2026-09-30T23:59:59.999Z' });
+    await store.append({ ...base, eventId: 'inside-1', occurredAt: '2026-10-02T00:00:00.000Z' });
+    await store.append({ ...base, eventId: 'inside-2', occurredAt: '2026-10-03T00:00:00.000Z' });
+    await store.append({ ...base, eventId: 'at-end', occurredAt: RANGE.to });
+    expect(await store.list('tenant-a', { ...RANGE, limit: 1 })).toMatchObject([
+      { eventId: 'inside-2' },
+    ]);
+    await expect(store.list('tenant-a', { from: RANGE.to, to: RANGE.from })).rejects.toThrow(
+      /time range/,
+    );
+  });
+  it('persists only allowlisted fields and opaque identifiers on append', async () => {
+    const store = new InMemoryAuditStore();
+    await store.append({
       eventId: 'e-field',
       tenantId: 'tenant-a',
       action: 'x',
@@ -149,14 +243,14 @@ describe('audit safety and tenant isolation', () => {
       data: {},
       note: 'ssn 123-45-6789',
     } as never);
-    const [stored] = store.list('tenant-a');
+    const [stored] = await store.list('tenant-a', RANGE);
     expect(stored).toBeDefined();
     expect(stored).not.toHaveProperty('note');
     expect(stored?.entityId).toBe('[REDACTED]');
     expect(stored?.correlationId).toBe('[REDACTED]');
     expect(JSON.stringify(stored)).not.toMatch(/jane|ssn|123-45/i);
   });
-  it('rejects, rather than redacts, keys that identify and deduplicate events', () => {
+  it('rejects, rather than redacts, keys that identify and deduplicate events', async () => {
     const store = new InMemoryAuditStore();
     const base = {
       eventId: 'e-key',
@@ -169,14 +263,14 @@ describe('audit safety and tenant isolation', () => {
       correlationId: 'c',
       data: {},
     };
-    expect(() => store.append({ ...base, eventId: 'order/1' })).toThrow('eventId');
-    expect(() => store.append({ ...base, tenantId: '' })).toThrow('tenantId');
-    expect(() => store.append({ ...base, actor: { id: 'system', kind: 'root' as never } })).toThrow(
-      'actor kind',
-    );
-    store.append(base);
-    store.append({ ...base, eventId: 'e-key-2' });
-    expect(store.list('tenant-a')).toHaveLength(2);
+    await expect(store.append({ ...base, eventId: 'order/1' })).rejects.toThrow('eventId');
+    await expect(store.append({ ...base, tenantId: '' })).rejects.toThrow('tenantId');
+    await expect(
+      store.append({ ...base, actor: { id: 'system', kind: 'root' as never } }),
+    ).rejects.toThrow('actor kind');
+    await store.append(base);
+    await store.append({ ...base, eventId: 'e-key-2' });
+    expect(await store.list('tenant-a', RANGE)).toHaveLength(2);
   });
   it('redacts credential pairs and JWT-like values from stored errors', () => {
     // Built at runtime so secret scanners do not flag the synthetic token.
@@ -242,9 +336,9 @@ describe('audit safety and tenant isolation', () => {
       ),
     ).toThrow('tenant is required');
   });
-  it('treats a missing data object as empty on append', () => {
+  it('treats a missing data object as empty on append', async () => {
     const store = new InMemoryAuditStore();
-    store.append({
+    await store.append({
       eventId: 'no-data',
       tenantId: 'tenant-a',
       action: 'x',
@@ -255,7 +349,7 @@ describe('audit safety and tenant isolation', () => {
       correlationId: 'c',
       data: undefined,
     } as never);
-    expect(store.list('tenant-a')[0]?.data).toEqual({});
+    expect((await store.list('tenant-a', RANGE))[0]?.data).toEqual({});
   });
   it('keeps only valid non-negative safe-integer attempts', () => {
     expect(redactAuditData({ attempts: 0 })).toEqual({ attempts: 0 });

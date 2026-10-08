@@ -18,8 +18,28 @@ export async function inviteUser(
   try {
     if (!isRoleName(role)) throw new PlatformError('invalid_input');
     const context = await k.authorize(token, correlationId, ['manage_users']);
-    const invitation = await k.identity.issueInvitation(context.tenantId);
-    await k.persistRole(context.tenantId, invitation.identityId, role);
+    const audit = k.auditEvent(
+      k.userActor(context),
+      'user.invited',
+      'membership',
+      'pending',
+      correlationId,
+    );
+    const invitation =
+      k.roles.persistent && k.identity.supportsAtomicAudit
+        ? await k.identity.issueInvitation(context.tenantId, undefined, undefined, {
+            role,
+            audit: { ...audit, entityId: 'pending' },
+          })
+        : k.roles.persistent
+          ? await k.identity.issueInvitation(context.tenantId, undefined, undefined, { role })
+          : await k.identity.issueInvitation(context.tenantId);
+    if (!k.roles.persistent) {
+      await k.persistRole(context.tenantId, invitation.identityId, role);
+      await k.audit.append(audit);
+    } else if (!k.identity.supportsAtomicAudit) {
+      await k.audit.append({ ...audit, entityId: invitation.identityId });
+    }
     k.access.expectInvitation(invitation.identityId, context.tenantId, role);
     const nowMs = k.now().getTime();
     for (const [hash, meta] of k.invitations)
@@ -30,13 +50,6 @@ export async function inviteUser(
       role,
       expiresAt: invitation.expiresAt,
     });
-    k.auditNow(
-      k.userActor(context),
-      'user.invited',
-      'membership',
-      invitation.identityId,
-      correlationId,
-    );
     return success({
       invitationToken: invitation.token,
       expiresAt: invitation.expiresAt,
@@ -61,12 +74,14 @@ export async function acceptInvitation(
       typeof invitationToken === 'string'
         ? k.invitations.get(opaqueTokenGenerator.hash(invitationToken))
         : undefined;
+    // With no process-local invitation metadata we cannot coordinate the tenant freeze with
+    // redemption safely; leave the persisted invitation untouched and fail closed.
+    if (!meta) throw new AuthError('unauthorized');
     // Activation and directory update run under the tenant lock, like every other change of
-    // membership, so a concurrent revocation of the same pending invitation cannot interleave.
-    // An invitation unknown to the composition keeps the unlocked, fail-closed path below.
-    return await (meta
-      ? k.locked(meta.tenantId, () => redeem(k, invitationToken, principal, meta.tenantId))
-      : redeem(k, invitationToken, principal, null));
+    // membership, so a concurrent revocation or freeze of the tenant cannot interleave.
+    return await k.locked(meta.tenantId, () =>
+      redeem(k, invitationToken, principal, meta.tenantId),
+    );
   } catch (error) {
     return failure(error);
   }
@@ -81,11 +96,29 @@ export async function redeem(
   try {
     if (lockedTenantId !== null && k.tenants.status(lockedTenantId) !== 'active')
       throw new AuthError('unauthorized');
-    const activated = await k.auth.activateInvitation(invitationToken, principal);
+    const correlationId = `accept-${randomUUID()}`;
+    const audit = k.identity.supportsAtomicAudit
+      ? (activation: { identity: { id: string }; membership: { tenantId: string } }) =>
+          k.auditEvent(
+            {
+              tenantId: activation.membership.tenantId,
+              actorId: `user-${activation.identity.id}`,
+              actorKind: 'user',
+            },
+            'user.joined',
+            'membership',
+            activation.identity.id,
+            correlationId,
+          )
+      : undefined;
+    const activated = await k.auth.activateInvitation(invitationToken, principal, audit);
     if (!activated.ok || !activated.value) return failure(new AuthError('unauthorized'));
     const { identity, membership } = activated.value;
     k.invitations.delete(opaqueTokenGenerator.hash(invitationToken));
-    if (!k.access.activate(identity.id, membership.tenantId)) {
+    if (
+      !k.access.activate(identity.id, membership.tenantId) &&
+      !(await k.access.activateFromStore(identity.id, membership.tenantId))
+    ) {
       // No role was recorded for this invitation: it did not come from `inviteUser`; fail closed.
       await k.identity.revokeMembership(membership.tenantId, identity.id);
       throw new PlatformError('forbidden');
@@ -100,13 +133,14 @@ export async function redeem(
       (current?.version ?? 0) + 1,
       'active',
     );
-    k.auditNow(
-      { tenantId: membership.tenantId, actorId: `user-${identity.id}`, actorKind: 'user' },
-      'user.joined',
-      'membership',
-      identity.id,
-      `accept-${randomUUID()}`,
-    );
+    if (!k.identity.supportsAtomicAudit)
+      await k.auditNow(
+        { tenantId: membership.tenantId, actorId: `user-${identity.id}`, actorKind: 'user' },
+        'user.joined',
+        'membership',
+        identity.id,
+        `accept-${randomUUID()}`,
+      );
     return success({ identityId: identity.id, tenantId: membership.tenantId });
   } catch (error) {
     return failure(error);

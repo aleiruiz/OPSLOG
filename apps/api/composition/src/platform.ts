@@ -9,6 +9,7 @@ import {
 } from '../../../../packages/domain/identity/src/index.js';
 import {
   InMemoryAuditStore,
+  type AuditListRange,
   type AuditStore,
   type PersistedAuditEvent,
 } from '../../../../packages/platform/audit/src/index.js';
@@ -134,11 +135,16 @@ export class Platform {
     this.now = options.now ?? (() => new Date());
     const adapters = options.adapters ?? {};
     this.tenants = adapters.tenants ?? new InMemoryTenantStore(this.now);
+    const identityStore = adapters.identityStore ?? new InMemoryIdentityStore();
+    const persistentIdentity = !(identityStore instanceof InMemoryIdentityStore);
+    if (persistentIdentity && (!adapters.audit || !adapters.auditRelay))
+      throw new Error(
+        'persistent identity requires durable audit storage and a tenant-aware relay',
+      );
     this.audit = adapters.audit ?? new InMemoryAuditStore();
     this.outbox = adapters.outbox ?? new InMemoryOutboxStore(() => this.now().getTime());
     this.records = adapters.records ?? new InMemoryFileRecordStore();
     this.storage = adapters.storage ?? new InMemoryObjectStorage();
-    const identityStore = adapters.identityStore ?? new InMemoryIdentityStore();
     this.access = new AccessDirectory(
       (tenantId) => this.tenants.status(tenantId) === 'active',
       isStoredRoleReader(identityStore) ? identityStore : undefined,
@@ -213,7 +219,12 @@ export class Platform {
     this.imports = apis.imports;
     this.companySettings = apis.companySettings;
     this.alerts = apis.alerts;
-    this.runtime = buildWorkerRuntime(this.kernel, this.pipeline, options.worker);
+    this.runtime = buildWorkerRuntime(
+      this.kernel,
+      this.pipeline,
+      options.worker,
+      adapters.auditRelay,
+    );
   }
 
   /** Verifies an authorization code through the injected OIDC verifier and seals the principal. */
@@ -397,8 +408,9 @@ export class Platform {
   public listAudit(
     token: string,
     correlationId: string,
+    range?: AuditListRange,
   ): Promise<PlatformResponse<readonly PersistedAuditEvent[]>> {
-    return listAudit(this.kernel, token, correlationId);
+    return listAudit(this.kernel, token, correlationId, range);
   }
 
   /**

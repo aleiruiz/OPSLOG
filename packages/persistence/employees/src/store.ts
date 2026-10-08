@@ -17,6 +17,7 @@ import {
   type SealedField,
 } from '../../../domain/employees/src/index.js';
 import { EMPLOYEES_RUNTIME_ACCOUNT } from './data-source.js';
+import { appendLocalAuditAndDelivery, type AuditEvent } from '../../audit/src/index.js';
 import { EmployeeEntity, EmployeeHistoryEntity } from './entities.js';
 import {
   EmployeeStoreError,
@@ -148,6 +149,18 @@ const toEntryRow = (entry: EmployeeHistoryEntry): EmployeeHistoryEntity => ({
   at: new Date(entry.at),
 });
 
+const auditEvent = (entry: EmployeeHistoryEntry): AuditEvent => ({
+  eventId: entry.id,
+  tenantId: entry.tenantId,
+  action: `employee.${entry.kind}.${entry.to}`,
+  entityType: 'employee',
+  entityId: entry.employeeId,
+  occurredAt: entry.at,
+  actor: { id: entry.actorId, kind: 'user' },
+  correlationId: entry.id,
+  data: {},
+});
+
 /**
  * Persistent TypeORM/MySQL implementation of the `EmployeeStore` port.
  *
@@ -257,6 +270,7 @@ export class TypeOrmEmployeeStore implements EmployeeStore {
     await this.transaction('insert', employee, async (manager) => {
       await manager.getRepository(EmployeeEntity).insert(toEmployeeRow(employee));
       await manager.getRepository(EmployeeHistoryEntity).insert(toEntryRow(entry));
+      await appendLocalAuditAndDelivery(manager, auditEvent(entry));
     });
   }
 
@@ -302,7 +316,10 @@ export class TypeOrmEmployeeStore implements EmployeeStore {
           mutableColumns(next),
         );
       if (result.affected !== 1) return false;
-      if (entry) await manager.getRepository(EmployeeHistoryEntity).insert(toEntryRow(entry));
+      if (entry) {
+        await manager.getRepository(EmployeeHistoryEntity).insert(toEntryRow(entry));
+        await appendLocalAuditAndDelivery(manager, auditEvent(entry));
+      }
       return true;
     });
   }

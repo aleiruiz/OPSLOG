@@ -257,7 +257,7 @@ describe('DataSource factories', () => {
         /restricted runtime account/,
       );
     expect(IMPORTS_RUNTIME_ACCOUNT.test('opslog_imports_abc123')).toBe(true);
-    expect(dataSource.options.entities).toHaveLength(IMPORT_ORM_ENTITIES.length);
+    expect(dataSource.options.entities).toHaveLength(IMPORT_ORM_ENTITIES.length + 2);
   });
 
   it('creates a migration DataSource that is never used at runtime', () => {

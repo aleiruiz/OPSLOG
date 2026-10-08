@@ -1312,10 +1312,10 @@ describe('company settings', () => {
       { reason: 'x'.repeat(501) },
     ])
       expectUniformError(await admin.put('/api/company/settings', body(over)), 400, 'bad_request');
-    const audit = world.platform.audit.list(a.tenantId).map((event) => event.action);
+    const audit = (await world.platform.audit.list(a.tenantId)).map((event) => event.action);
     expect(audit).toContain('tenant.settings_updated');
     expect(audit).toContain('tenant.security_settings_updated');
-    expect(JSON.stringify(world.platform.audit.list(a.tenantId))).not.toContain('jane.doe');
+    expect(JSON.stringify(await world.platform.audit.list(a.tenantId))).not.toContain('jane.doe');
   });
 
   it('reports a suspended company status to a session that still exists in the directory', async () => {

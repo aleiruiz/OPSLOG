@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { DataSource, type DataSourceOptions } from 'typeorm';
 import { POLICY_ENTITIES } from './entities.js';
+import { AUDIT_ENTITIES } from '../../audit/src/index.js';
 import { CreateInsurancePolicies2026100600070, INSURANCE_MIGRATIONS_TABLE } from './migrations.js';
 
 export interface InsuranceDatabaseConfig {
@@ -22,7 +23,7 @@ export const INSURANCE_RUNTIME_ACCOUNT = /^opslog_insurance_[a-z0-9_]+$/i;
 
 const common = {
   type: 'mysql',
-  entities: [...POLICY_ENTITIES],
+  entities: [...POLICY_ENTITIES, ...AUDIT_ENTITIES.slice(0, 2)],
   migrations: [CreateInsurancePolicies2026100600070],
   migrationsTableName: INSURANCE_MIGRATIONS_TABLE,
   synchronize: false,

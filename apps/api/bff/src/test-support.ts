@@ -1,4 +1,5 @@
 import { vi } from 'vitest';
+import { InMemoryAuditStore } from '../../../../packages/platform/audit/src/index.js';
 import {
   FakeOidcVerifier,
   InMemoryTenantStore,
@@ -137,7 +138,12 @@ export function createBffWorld(options: BffWorldOptions = {}) {
     verifier,
     issuer: verifier.issuer,
     grantSecret: 'synthetic-grant-secret-for-tests-0123456789',
-    adapters: { tenants: new InMemoryTenantStore(), ...options.adapters },
+    adapters: {
+      tenants: new InMemoryTenantStore(),
+      audit: new InMemoryAuditStore(),
+      auditRelay: { runBatch: async () => 0 },
+      ...options.adapters,
+    },
   });
   const errors: { correlationId: string; route: string; errorClass: string }[] = [];
   const handler = createBffHandler({

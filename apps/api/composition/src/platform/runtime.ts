@@ -12,6 +12,7 @@ export function buildWorkerRuntime(
   kernel: PlatformKernel,
   pipeline: FilePipeline,
   worker: PlatformOptions['worker'],
+  auditRelay?: { runBatch(max?: number): Promise<number> },
 ): WorkerRuntime {
   return createWorkerRuntime({
     outbox: kernel.outbox,
@@ -29,6 +30,7 @@ export function buildWorkerRuntime(
       },
     },
     audit: kernel.audit,
+    ...(auditRelay ? { auditRelay } : {}),
     pipeline: pipeline,
     clock: () => kernel.now().getTime(),
     ...worker,

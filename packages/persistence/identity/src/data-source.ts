@@ -1,5 +1,10 @@
 import 'reflect-metadata';
-import { DataSource, type DataSourceOptions } from 'typeorm';
+import {
+  DataSource,
+  type DataSourceOptions,
+  type EntitySchema,
+  type MigrationInterface,
+} from 'typeorm';
 import { IDENTITY_ENTITIES } from './entities.js';
 import {
   CreateIdentityRoles2026100600020,
@@ -19,6 +24,9 @@ export interface IdentityDatabaseConfig {
   readonly queueLimit?: number;
   /** TCP connect timeout in milliseconds (default 10 000). */
   readonly connectTimeoutMs?: number;
+  /** Optional same-database module schemas and migrations supplied by the host composition. */
+  readonly additionalEntities?: readonly EntitySchema[];
+  readonly additionalMigrations?: readonly (new () => MigrationInterface)[];
 }
 
 /** Runtime accounts follow the control-plane naming rule: never root/admin, DML privileges only. */
@@ -43,6 +51,8 @@ export function createIdentityDataSource(config: IdentityDatabaseConfig): DataSo
     throw new Error('Identity DataSource requires its restricted runtime account');
   return new DataSource({
     ...common,
+    entities: [...IDENTITY_ENTITIES, ...(config.additionalEntities ?? [])],
+    migrations: [...common.migrations, ...(config.additionalMigrations ?? [])],
     host: config.host,
     port: config.port,
     database: config.database,
@@ -66,6 +76,8 @@ export function createIdentityMigrationDataSource(
 ): DataSource {
   return new DataSource({
     ...common,
+    entities: [...IDENTITY_ENTITIES, ...(config.additionalEntities ?? [])],
+    migrations: [...common.migrations, ...(config.additionalMigrations ?? [])],
     host: config.host,
     port: config.port,
     database: config.database,

@@ -7,6 +7,7 @@ import {
   InMemoryTenantStore,
 } from '../../../apps/api/composition/src/index.js';
 import { InMemoryIdentityStore } from '../../../packages/domain/identity/src/index.js';
+import { AUDIT_ENTITIES } from '../../../packages/persistence/audit/src/index.js';
 import { TypeOrmIdentityStore } from '../../../packages/persistence/identity/src/index.js';
 import {
   FakeDatabase,
@@ -19,9 +20,28 @@ import { createWorld, type World } from './world.js';
 let world: World;
 afterEach(() => world.dispose());
 
+describe('withLatency', () => {
+  it('signals the atomic-audit variants of invitation activation and revocation', async () => {
+    world = createWorld();
+    const latency = withLatency(
+      {
+        activateInvitationWithAudit: async () => 'activated',
+        revokeMembershipWithAudit: async () => 'revoked',
+      },
+      { activateInvitation: 1, revokeMembership: 1 },
+    );
+
+    await expect(latency.store.activateInvitationWithAudit()).resolves.toBe('activated');
+    await expect(latency.started('activateInvitation')).resolves.toBeUndefined();
+    await expect(latency.store.revokeMembershipWithAudit()).resolves.toBe('revoked');
+    await expect(latency.started('revokeMembership')).resolves.toBeUndefined();
+  });
+});
+
 const stores = {
   'in-memory store': () => new InMemoryIdentityStore(),
-  'TypeORM store (fake driver)': () => new TypeOrmIdentityStore(asDataSource(new FakeDatabase())),
+  'TypeORM store (fake driver)': () =>
+    new TypeOrmIdentityStore(asDataSource(new FakeDatabase(AUDIT_ENTITIES))),
 } as const;
 
 describe.each(Object.entries(stores))('accept racing revoke, %s', (_name, makeStore) => {
@@ -71,7 +91,8 @@ describe('accept racing a tenant suspension (same process)', () => {
     const a = await world.tenant('Empresa Alfa', 'subject-admin-a');
     const invited = (await world.platform.inviteUser(a.admin.token, 'c', 'editor')).value!;
     tenantStore.rearm('setTenantStatus');
-    const actions = () => world.platform.audit.list(a.tenantId).map((event) => event.action);
+    const actions = async () =>
+      (await world.platform.audit.list(a.tenantId)).map((event) => event.action);
     return { a, invited, identity, tenantStore, actions, principal: world.principal };
   }
 
@@ -87,7 +108,7 @@ describe('accept racing a tenant suspension (same process)', () => {
     expect(accepted.ok).toBe(true);
     expect(world.platform.tenants.status(t.a.tenantId)).toBe('suspended');
     expect(world.platform.access.roleOf(t.a.tenantId, t.invited.identityId)).toBe('editor');
-    const actions = t.actions();
+    const actions = await t.actions();
     expect(actions.indexOf('user.joined')).toBeGreaterThan(-1);
     expect(actions.indexOf('user.joined')).toBeLessThan(actions.indexOf('tenant.suspended'));
   });
@@ -103,7 +124,7 @@ describe('accept racing a tenant suspension (same process)', () => {
     const [, accepted] = await Promise.all([suspend, accept]);
     expect(accepted.error?.code).toBe('unauthorized');
     expect(world.platform.access.hasPending(t.invited.identityId, t.a.tenantId)).toBe(true);
-    expect(t.actions()).not.toContain('user.joined');
+    expect(await t.actions()).not.toContain('user.joined');
     await world.platform.reactivateTenant(t.a.tenantId);
     expect(
       (

@@ -1,4 +1,4 @@
-import { AuthError } from '../../../domain/identity/src/index.js';
+import { AuthError, type IdentityMutationAudit } from '../../../domain/identity/src/index.js';
 import { MembershipEntity, RoleEntity, RolePermissionEntity } from './entities.js';
 import { CUSTOM_ROLE_LIMITS } from './role-model.js';
 import type { CreateCustomRoleOutcome, CustomRoleRecord } from './role-model.js';
@@ -59,6 +59,7 @@ export async function createCustomRole(
   tenantId: string,
   role: CustomRoleRecord,
   maxRoles: number,
+  audit?: IdentityMutationAudit,
 ): Promise<CreateCustomRoleOutcome> {
   const name = typeof role.name === 'string' ? role.name.trim() : '';
   if (
@@ -93,6 +94,7 @@ export async function createCustomRole(
     const permissions = manager.getRepository(RolePermissionEntity);
     for (const [position, permission] of role.permissions.entries())
       await permissions.insert({ tenantId, roleId: role.id, permission, position });
+    if (audit) await core.appendAudit(manager, audit);
     return 'created' as const;
   });
 }

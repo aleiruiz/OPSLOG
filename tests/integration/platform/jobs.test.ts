@@ -78,9 +78,11 @@ describe('worker jobs and the outbox', () => {
     expect(world.outbox.all()).toHaveLength(0);
     expect(await platform.runtime.drainOutbox()).toBe(0);
     expect(handled).toEqual([]);
-    expect(world.audit.list(a.tenantId).some((event) => event.action === 'outbox.delivered')).toBe(
-      false,
-    );
+    expect(
+      world.audit
+        .snapshotForTesting(a.tenantId)
+        .some((event) => event.action === 'outbox.delivered'),
+    ).toBe(false);
   });
 
   it('deduplicates a retried publish by tenant and event id, independently per tenant', async () => {
@@ -140,7 +142,7 @@ describe('worker jobs and the outbox', () => {
     world.advance(10 * MINUTE);
     expect(await platform.runtime.drainOutbox()).toBe(0);
     expect(effects).toBe(1);
-    const trail = JSON.stringify(world.audit.list(a.tenantId));
+    const trail = JSON.stringify(world.audit.snapshotForTesting(a.tenantId));
     expect(trail).not.toMatch(/owner@example|abc\.def|Bearer/);
   });
 
