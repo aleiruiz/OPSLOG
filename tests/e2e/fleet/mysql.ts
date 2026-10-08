@@ -124,15 +124,15 @@ async function startTenantDatabase(label: string): Promise<FleetTenantDatabase> 
     ]),
   ) as Omit<Accounts, 'auditRuntime' | 'auditRelay'>;
   const auditRuntime = {
-    username: `opslog_audit_runtime_${suffix}`,
+    username: `opslog_ar_${suffix}`,
     password: randomBytes(24).toString('base64url'),
   };
   const auditRelay = {
-    username: `opslog_audit_relay_${suffix}`,
+    username: `opslog_al_${suffix}`,
     password: randomBytes(24).toString('base64url'),
   };
   const auditMigrator = {
-    username: `opslog_audit_migrator_${suffix}`,
+    username: `opslog_am_${suffix}`,
     password: randomBytes(24).toString('base64url'),
   };
   const accounts = { ...runtime, auditRuntime, auditRelay } as Accounts;
