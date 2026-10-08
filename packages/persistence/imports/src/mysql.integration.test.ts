@@ -482,6 +482,12 @@ suite('persistent import store on MySQL', () => {
         updatedAt: '2026-10-06T12:00:00.123Z',
       });
       await storeA.insertJob(j, started(j));
+      const auditTimestamp = await db.rows<{ n: number }>(
+        `SELECT COUNT(*) AS n FROM ${AUDIT_TABLES.local}
+          WHERE tenant_id = ? AND event_id = 'c1.event.1' AND occurred_at = '2026-10-06 12:00:00.123'`,
+        [tenant],
+      );
+      expect(auditTimestamp[0]?.n).toBe(1);
       const next = '2026-10-06T12:02:00.456Z';
       const outcomes = await Promise.all(
         [storeA, storeB, storeA, storeB, storeA, storeB].map((store) =>

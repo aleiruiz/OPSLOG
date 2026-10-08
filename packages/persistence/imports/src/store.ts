@@ -143,7 +143,9 @@ const auditEvent = (event: ImportEvent): AuditEvent => ({
   action: `import.${event.kind}`,
   entityType: 'import_job',
   entityId: event.jobId,
-  occurredAt: event.at,
+  // Import events accept DATETIME(6); the shared audit store persists DATETIME(3), like this row
+  // after conversion to a JavaScript Date. Keep audit time aligned with the persisted event.
+  occurredAt: new Date(event.at).toISOString(),
   actor: { id: event.actorId, kind: 'user' },
   correlationId: `${event.jobId}.event.${event.seq}`,
   data: {},
