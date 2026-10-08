@@ -96,7 +96,7 @@ describe('tenant-local files saga on MySQL 8', () => {
     ])
       await admin.query(`CREATE USER '${user}'@'%' IDENTIFIED BY ?`, [password]);
     await admin.query(
-      `GRANT CREATE, ALTER, INDEX, SELECT, INSERT, REFERENCES ON ${ident(database)}.* TO '${auditMigratorUser}'@'%'`,
+      `GRANT CREATE, ALTER, INDEX, SELECT, INSERT, REFERENCES, CREATE ROUTINE, ALTER ROUTINE ON ${ident(database)}.* TO '${auditMigratorUser}'@'%'`,
     );
     await admin.query(
       `GRANT CREATE, ALTER, INDEX, SELECT, INSERT, REFERENCES ON ${ident(database)}.* TO '${filesMigratorUser}'@'%'`,
@@ -132,6 +132,9 @@ describe('tenant-local files saga on MySQL 8', () => {
       `GRANT SELECT, INSERT ON ${table(AUDIT_TABLES.delivery)} TO '${runtimeUser}'@'%'`,
     );
     await admin.query(`GRANT SELECT ON ${table(AUDIT_TABLES.projection)} TO '${runtimeUser}'@'%'`);
+    await admin.query(
+      `GRANT EXECUTE ON PROCEDURE ${table('opslog_append_local_audit_and_delivery')} TO '${runtimeUser}'@'%'`,
+    );
     runtime = createFilesDataSource({
       ...dbConfig,
       username: runtimeUser,
