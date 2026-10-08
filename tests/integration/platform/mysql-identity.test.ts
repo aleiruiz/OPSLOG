@@ -11,6 +11,7 @@ import {
 import { withLatency } from './latency.js';
 import { raceAcceptAndRevoke, type Order } from './invitation-race.js';
 import {
+  IDENTITY_TABLES,
   TypeOrmIdentityStore,
   createIdentityDataSource,
   createIdentityMigrationDataSource,
@@ -18,6 +19,7 @@ import {
 } from '../../../packages/persistence/identity/src/index.js';
 import {
   AUDIT_TABLES,
+  appendLocalAuditAndDelivery,
   createMySqlAuditRuntime,
 } from '../../../packages/persistence/audit/src/index.js';
 
@@ -27,6 +29,7 @@ import {
  * for another process. Only synthetic data; the database and the account are dropped afterwards.
  */
 const adminUrlValue = process.env.OPSLOG_TEST_MYSQL_ADMIN_URL;
+const allowRemote = process.env.OPSLOG_TEST_MYSQL_ALLOW_REMOTE === '1';
 if (!adminUrlValue && process.env.CI)
   throw new Error(
     'OPSLOG_TEST_MYSQL_ADMIN_URL is required in CI; MySQL integration must not be skipped',
@@ -47,6 +50,7 @@ suite('platform on a real MySQL identity store', () => {
   let nonces = 0;
   let admin: mysql.Connection;
   let config: { host: string; port: number; user: string; password: string };
+  let tenants: InMemoryTenantStore;
   const sources: ReturnType<typeof createIdentityDataSource>[] = [];
   let storeA: TypeOrmIdentityStore;
   let storeB: TypeOrmIdentityStore;
@@ -79,7 +83,10 @@ suite('platform on a real MySQL identity store', () => {
   beforeAll(async () => {
     const url = new URL(adminUrlValue as string);
     const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
-    if (url.protocol !== 'mysql:' || !['localhost', '127.0.0.1', '::1'].includes(host))
+    if (
+      url.protocol !== 'mysql:' ||
+      (!['localhost', '127.0.0.1', '::1'].includes(host) && !allowRemote)
+    )
       throw new Error('synthetic MySQL admin URL must use a loopback host');
     config = {
       host,
@@ -87,7 +94,7 @@ suite('platform on a real MySQL identity store', () => {
       user: decodeURIComponent(url.username) || 'root',
       password: decodeURIComponent(url.password),
     };
-    const tenants = new InMemoryTenantStore();
+    tenants = new InMemoryTenantStore();
     const auditSource = () => {
       const source = sources[0];
       if (!source) throw new Error('synthetic audit DataSource is unavailable');
@@ -119,6 +126,9 @@ suite('platform on a real MySQL identity store', () => {
     } finally {
       await migrations.destroy();
     }
+    await admin.query(
+      `GRANT EXECUTE ON PROCEDURE ${identifier(databaseName)}.\`opslog_append_local_audit_and_delivery\` TO '${runtimeUser}'@'%'`,
+    );
     await admin.changeUser({ database: databaseName });
     const open = async () => {
       const source = createIdentityDataSource({
@@ -235,6 +245,65 @@ suite('platform on a real MySQL identity store', () => {
         }),
       ]),
     });
+  });
+
+  it('rolls back identity, membership, invitation and local audit when the audit append fails', async () => {
+    const a = await tenant('audit-rollback');
+    const failingStore = new TypeOrmIdentityStore(sources[0]!, {
+      appendAudit: async (manager, event) => {
+        await appendLocalAuditAndDelivery(manager, { ...event, data: {} });
+        throw new Error('synthetic audit failure');
+      },
+    });
+    const failingPlatform = createPlatform({
+      verifier,
+      issuer: verifier.issuer,
+      grantSecret: 'synthetic-grant-secret-for-tests-0123456789',
+      adapters: {
+        identityStore: failingStore,
+        tenants,
+        audit: new InMemoryAuditStore(),
+        auditRelay: { runBatch: async () => 0 },
+      },
+    });
+    const counts = async () => ({
+      identities: (
+        await rows<{ total: number }>(
+          `SELECT COUNT(*) AS total FROM ${identifier(IDENTITY_TABLES.identities)}`,
+        )
+      )[0]?.total,
+      memberships: (
+        await rows<{ total: number }>(
+          `SELECT COUNT(*) AS total FROM ${identifier(IDENTITY_TABLES.memberships)} WHERE tenant_id = ?`,
+          [a.tenantId],
+        )
+      )[0]?.total,
+      invitations: (
+        await rows<{ total: number }>(
+          `SELECT COUNT(*) AS total FROM ${identifier(IDENTITY_TABLES.invitations)} WHERE tenant_id = ?`,
+          [a.tenantId],
+        )
+      )[0]?.total,
+      localAudit: (
+        await rows<{ total: number }>(
+          `SELECT COUNT(*) AS total FROM ${identifier(AUDIT_TABLES.local)} WHERE tenant_id = ? AND action = 'user.invited'`,
+          [a.tenantId],
+        )
+      )[0]?.total,
+      delivery: (
+        await rows<{ total: number }>(
+          `SELECT COUNT(*) AS total FROM ${identifier(AUDIT_TABLES.delivery)} d JOIN ${identifier(AUDIT_TABLES.local)} a ON a.tenant_id = d.tenant_id AND a.event_id = d.event_id WHERE a.tenant_id = ? AND a.action = 'user.invited'`,
+          [a.tenantId],
+        )
+      )[0]?.total,
+    });
+    const before = await counts();
+    expect(
+      await failingPlatform.inviteUser(a.token, 'audit-rollback-correlation', 'editor'),
+    ).toMatchObject({
+      ok: false,
+    });
+    expect(await counts()).toEqual(before);
   });
 
   it('does not let a stale directory role outlive a demotion made by another process', async () => {
