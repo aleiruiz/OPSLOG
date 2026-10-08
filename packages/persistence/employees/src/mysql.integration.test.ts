@@ -519,6 +519,30 @@ suite('persistent employee store on MySQL', () => {
       expect(await storeA.find(tenant, e.id)).toEqual(e);
     });
 
+    it('rolls employee and history back when local audit append is denied', async () => {
+      const tenant = randomUUID();
+      await db.admin.query(
+        `REVOKE EXECUTE ON PROCEDURE \`${db.databaseName}\`.\`opslog_append_local_audit_and_delivery\` FROM '${db.runtimeUser}'@'%'`,
+      );
+      try {
+        expect(await rejection(svcA.create(tenant, ACTOR, fields()))).toBeInstanceOf(
+          EmployeeStoreError,
+        );
+        for (const table of [EMPLOYEE_TABLES.employees, EMPLOYEE_TABLES.history])
+          expect(
+            await db.rows(`SELECT 1 FROM ${table} WHERE company_id = ?`, [tenant]),
+          ).toHaveLength(0);
+        for (const table of [AUDIT_TABLES.local, AUDIT_TABLES.delivery])
+          expect(
+            await db.rows(`SELECT event_id FROM ${table} WHERE tenant_id = ?`, [tenant]),
+          ).toHaveLength(0);
+      } finally {
+        await db.admin.query(
+          `GRANT EXECUTE ON PROCEDURE \`${db.databaseName}\`.\`opslog_append_local_audit_and_delivery\` TO '${db.runtimeUser}'@'%'`,
+        );
+      }
+    });
+
     it('serializes concurrent status changes through the service: one wins, the rest are stale', async () => {
       const tenant = randomUUID();
       const created = await svcA.create(tenant, ACTOR, fields());

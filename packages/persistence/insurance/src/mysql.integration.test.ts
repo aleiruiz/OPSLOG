@@ -413,6 +413,30 @@ suite('persistent policy store on MySQL', () => {
       expect(await rejection(storeA.replace(next, 1, bad))).toBeInstanceOf(Error);
       expect(await storeA.find(tenant, p.id)).toEqual(p);
     });
+
+    it('rolls policy and revision back when local audit append is denied', async () => {
+      const tenant = randomUUID();
+      await db.admin.query(
+        `REVOKE EXECUTE ON PROCEDURE \`${db.databaseName}\`.\`opslog_append_local_audit_and_delivery\` FROM '${db.runtimeUser}'@'%'`,
+      );
+      try {
+        expect(await rejection(svcA.create(tenant, ACTOR, input()))).toBeInstanceOf(
+          PolicyStoreError,
+        );
+        for (const table of [POLICY_TABLES.policies, POLICY_TABLES.revisions])
+          expect(
+            await db.rows(`SELECT 1 FROM ${table} WHERE company_id = ?`, [tenant]),
+          ).toHaveLength(0);
+        for (const table of [AUDIT_TABLES.local, AUDIT_TABLES.delivery])
+          expect(
+            await db.rows(`SELECT event_id FROM ${table} WHERE tenant_id = ?`, [tenant]),
+          ).toHaveLength(0);
+      } finally {
+        await db.admin.query(
+          `GRANT EXECUTE ON PROCEDURE \`${db.databaseName}\`.\`opslog_append_local_audit_and_delivery\` TO '${db.runtimeUser}'@'%'`,
+        );
+      }
+    });
   });
 
   describe('listing, status and coverage filters', () => {

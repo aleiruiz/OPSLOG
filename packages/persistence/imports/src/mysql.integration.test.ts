@@ -538,6 +538,31 @@ suite('persistent import store on MySQL', () => {
       expect(await storeA.findJob('tenant-atomic', 'a1')).toBeNull();
     });
 
+    it('rolls a job and first event back when local audit append is denied', async () => {
+      const tenant = `tenant-audit-${Date.now()}`;
+      const value = job(tenant, 'audit-rollback');
+      await db.admin.query(
+        `REVOKE EXECUTE ON PROCEDURE \`${db.databaseName}\`.\`opslog_append_local_audit_and_delivery\` FROM '${db.runtimeUser}'@'%'`,
+      );
+      try {
+        expect(await outcome(storeA.insertJob(value, started(value)))).toBeInstanceOf(
+          ImportStoreError,
+        );
+        expect(await storeA.findJob(tenant, value.id)).toBeNull();
+        expect(
+          await db.rows(`SELECT 1 FROM ${T.events} WHERE company_id = ?`, [tenant]),
+        ).toHaveLength(0);
+        for (const table of [AUDIT_TABLES.local, AUDIT_TABLES.delivery])
+          expect(
+            await db.rows(`SELECT event_id FROM ${table} WHERE tenant_id = ?`, [tenant]),
+          ).toHaveLength(0);
+      } finally {
+        await db.admin.query(
+          `GRANT EXECUTE ON PROCEDURE \`${db.databaseName}\`.\`opslog_append_local_audit_and_delivery\` TO '${db.runtimeUser}'@'%'`,
+        );
+      }
+    });
+
     it('never leaks a value through a sanitized failure', async () => {
       const failing = new TypeOrmImportStore(sourceA, { onError: (event) => events.push(event) });
       const j = job('tenant-leak', 'l1');

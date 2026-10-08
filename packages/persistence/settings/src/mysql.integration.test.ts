@@ -185,6 +185,31 @@ suite('persistent settings store on MySQL', () => {
       expect(await storeB.find('tenant-rt')).toEqual(value);
     });
 
+    it('rolls settings back when the runtime cannot append local audit', async () => {
+      const value = settings('tenant-audit-rollback');
+      await db.admin.query(
+        `REVOKE EXECUTE ON PROCEDURE \`${db.databaseName}\`.\`opslog_append_local_audit_and_delivery\` FROM '${db.runtimeUser}'@'%'`,
+      );
+      try {
+        expect(await outcome(storeA.insert(value))).toBeInstanceOf(SettingsStoreError);
+        expect(await storeA.find(value.tenantId)).toBeNull();
+        expect(
+          await db.rows(`SELECT event_id FROM ${AUDIT_TABLES.local} WHERE tenant_id = ?`, [
+            value.tenantId,
+          ]),
+        ).toHaveLength(0);
+        expect(
+          await db.rows(`SELECT event_id FROM ${AUDIT_TABLES.delivery} WHERE tenant_id = ?`, [
+            value.tenantId,
+          ]),
+        ).toHaveLength(0);
+      } finally {
+        await db.admin.query(
+          `GRANT EXECUTE ON PROCEDURE \`${db.databaseName}\`.\`opslog_append_local_audit_and_delivery\` TO '${db.runtimeUser}'@'%'`,
+        );
+      }
+    });
+
     it('decides a second first write by the primary key', async () => {
       expect(await storeA.insert(settings('tenant-dup'))).toBe(true);
       expect(await storeB.insert(settings('tenant-dup', { expiryWindowDays: 3 }))).toBe(false);

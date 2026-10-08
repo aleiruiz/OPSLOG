@@ -272,6 +272,30 @@ suite('persistent document store on MySQL', () => {
       expect([1452, 1216]).toContain((error as DocumentStoreError).errno);
       expect(await storeA.find(other.tenantId, other.id)).toBeNull();
     });
+
+    it('rolls document and revision back when local audit append is denied', async () => {
+      const tenant = randomUUID();
+      await db.admin.query(
+        `REVOKE EXECUTE ON PROCEDURE \`${db.databaseName}\`.\`opslog_append_local_audit_and_delivery\` FROM '${db.runtimeUser}'@'%'`,
+      );
+      try {
+        expect(await rejection(svcA.create(tenant, ACTOR, input()))).toBeInstanceOf(
+          DocumentStoreError,
+        );
+        for (const table of [DOCUMENT_TABLES.documents, DOCUMENT_TABLES.revisions])
+          expect(
+            await db.rows(`SELECT 1 FROM ${table} WHERE company_id = ?`, [tenant]),
+          ).toHaveLength(0);
+        for (const table of [AUDIT_TABLES.local, AUDIT_TABLES.delivery])
+          expect(
+            await db.rows(`SELECT event_id FROM ${table} WHERE tenant_id = ?`, [tenant]),
+          ).toHaveLength(0);
+      } finally {
+        await db.admin.query(
+          `GRANT EXECUTE ON PROCEDURE \`${db.databaseName}\`.\`opslog_append_local_audit_and_delivery\` TO '${db.runtimeUser}'@'%'`,
+        );
+      }
+    });
   });
 
   describe('renewal keeps the original', () => {

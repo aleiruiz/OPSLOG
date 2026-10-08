@@ -394,6 +394,31 @@ suite('persistent assignment store on MySQL', () => {
       ).toBe(1);
     });
 
+    it('rolls assignment and event back when local audit append is denied', async () => {
+      const tenant = `tenant-audit-${randomUUID()}`;
+      const value = assignment(tenant, randomUUID());
+      await db.admin.query(
+        `REVOKE EXECUTE ON PROCEDURE \`${db.databaseName}\`.\`opslog_append_local_audit_and_delivery\` FROM '${db.runtimeUser}'@'%'`,
+      );
+      try {
+        expect(await rejection(storeA.insert(value, assignedEvent(value)))).toBeInstanceOf(
+          AssignmentStoreError,
+        );
+        for (const table of [T.assignments, T.events])
+          expect(
+            await db.rows(`SELECT 1 FROM ${table} WHERE company_id = ?`, [tenant]),
+          ).toHaveLength(0);
+        for (const table of [AUDIT_TABLES.local, AUDIT_TABLES.delivery])
+          expect(
+            await db.rows(`SELECT event_id FROM ${table} WHERE tenant_id = ?`, [tenant]),
+          ).toHaveLength(0);
+      } finally {
+        await db.admin.query(
+          `GRANT EXECUTE ON PROCEDURE \`${db.databaseName}\`.\`opslog_append_local_audit_and_delivery\` TO '${db.runtimeUser}'@'%'`,
+        );
+      }
+    });
+
     it('replaces the principal atomically and rolls back the whole thing on a clash', async () => {
       const tenant = 'tenant-replace';
       const old = assignment(tenant, 'p1');

@@ -344,6 +344,34 @@ suite('persistent vehicle store on MySQL', () => {
       expect(await storeA.find(tenant, v.id)).toEqual(v);
     });
 
+    it('rolls the vehicle and status history back when audit append is denied', async () => {
+      const tenant = randomUUID();
+      const vehicle = vehicleOf(tenant);
+      const entry = entryOf(vehicle);
+      await db.admin.query(
+        `REVOKE EXECUTE ON PROCEDURE \`${db.databaseName}\`.\`opslog_append_local_audit_and_delivery\` FROM '${db.runtimeUser}'@'%'`,
+      );
+      try {
+        expect(await rejection(storeA.insert(vehicle, entry))).toBeInstanceOf(VehicleStoreError);
+        expect(await storeA.find(tenant, vehicle.id)).toBeNull();
+        expect(await storeA.history(tenant, vehicle.id)).toEqual([]);
+        expect(
+          await db.rows(`SELECT event_id FROM ${AUDIT_TABLES.local} WHERE event_id = ?`, [
+            entry.id,
+          ]),
+        ).toHaveLength(0);
+        expect(
+          await db.rows(`SELECT event_id FROM ${AUDIT_TABLES.delivery} WHERE event_id = ?`, [
+            entry.id,
+          ]),
+        ).toHaveLength(0);
+      } finally {
+        await db.admin.query(
+          `GRANT EXECUTE ON PROCEDURE \`${db.databaseName}\`.\`opslog_append_local_audit_and_delivery\` TO '${db.runtimeUser}'@'%'`,
+        );
+      }
+    });
+
     it('never lowers the odometer: the statement itself refuses, even under the current version', async () => {
       const tenant = randomUUID();
       const v = vehicleOf(tenant, { odometerKm: 5000 });
