@@ -125,12 +125,6 @@ describe('tenant-local files saga on MySQL 8', () => {
     await admin.query(
       `GRANT SELECT, INSERT, UPDATE ON ${table(FILE_TABLES.saga)} TO '${runtimeUser}'@'%'`,
     );
-    await admin.query(
-      `GRANT SELECT, INSERT ON ${table(AUDIT_TABLES.local)} TO '${runtimeUser}'@'%'`,
-    );
-    await admin.query(
-      `GRANT SELECT, INSERT ON ${table(AUDIT_TABLES.delivery)} TO '${runtimeUser}'@'%'`,
-    );
     await admin.query(`GRANT SELECT ON ${table(AUDIT_TABLES.projection)} TO '${runtimeUser}'@'%'`);
     await admin.query(
       `GRANT EXECUTE ON PROCEDURE ${table('opslog_append_local_audit_and_delivery')} TO '${runtimeUser}'@'%'`,
@@ -227,7 +221,9 @@ describe('tenant-local files saga on MySQL 8', () => {
     expect(Number((auditRows as { count: number | string }[])[0]?.count)).toBe(5);
 
     const table = (name: string) => `${ident(database)}.${ident(name)}`;
-    await admin.query(`REVOKE INSERT ON ${table(AUDIT_TABLES.delivery)} FROM '${runtimeUser}'@'%'`);
+    await admin.query(
+      `REVOKE EXECUTE ON PROCEDURE ${table('opslog_append_local_audit_and_delivery')} FROM '${runtimeUser}'@'%'`,
+    );
     const upload = validateUpload({ name: 'rollback.jpg', declaredType: 'image/jpeg', bytes });
     const rollbackRecord = newUploadIntentRecord({
       id: 'file-rollback-1',
@@ -278,7 +274,7 @@ describe('tenant-local files saga on MySQL 8', () => {
       expect(Number((rows as { count: number | string }[])[0]?.count)).toBe(0);
     }
     await admin.query(
-      `GRANT SELECT, INSERT ON ${table(AUDIT_TABLES.delivery)} TO '${runtimeUser}'@'%'`,
+      `GRANT EXECUTE ON PROCEDURE ${table('opslog_append_local_audit_and_delivery')} TO '${runtimeUser}'@'%'`,
     );
   }, 30_000);
 
