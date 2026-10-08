@@ -169,6 +169,34 @@ describe('createWorkerRuntime defaults', () => {
       }),
     ).toThrow('persistent identity requires durable audit storage and a tenant-aware relay');
   });
+
+  it('refuses persistent module stores that would otherwise fall back to an in-memory AuditStore', () => {
+    const verifier = new FakeOidcVerifier();
+    const base = {
+      verifier,
+      issuer: verifier.issuer,
+      grantSecret: 'synthetic-grant-secret-for-tests-0123456789',
+    };
+    expect(() => createPlatform({ ...base, adapters: { vehicles: {} as never } })).toThrow(
+      'persistent business stores require durable audit storage and a tenant-aware relay',
+    );
+    expect(() =>
+      createPlatform({
+        ...base,
+        adapters: { vehicles: {} as never, audit: {} as never },
+      }),
+    ).toThrow('persistent business stores require durable audit storage and a tenant-aware relay');
+    expect(() =>
+      createPlatform({
+        ...base,
+        adapters: {
+          vehicles: {} as never,
+          audit: {} as never,
+          auditRelay: { runBatch: async () => 0 },
+        },
+      }),
+    ).not.toThrow();
+  });
 });
 
 class SpyIdentityStore extends InMemoryIdentityStore {

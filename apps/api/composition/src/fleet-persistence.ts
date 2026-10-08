@@ -214,6 +214,8 @@ export interface FleetRuntimeStores {
       | 'assignments'
       | 'settings'
       | 'imports'
+      | 'audit'
+      | 'auditRelay'
     >
   >;
   readonly audit: NonNullable<PlatformAdapters['audit']>;
@@ -289,6 +291,8 @@ export async function openFleetRuntimeStores(
         assignments: new TypeOrmAssignmentStore(sources[5] as FleetDataSource),
         settings: new TypeOrmSettingsStore(sources[6] as FleetDataSource),
         imports: new TypeOrmImportStore(sources[7] as FleetDataSource),
+        audit: auditRuntime.audit,
+        auditRelay: auditRuntime.auditRelay,
       },
       audit: auditRuntime.audit,
       auditRelay: auditRuntime.auditRelay,

@@ -141,6 +141,25 @@ export class Platform {
       throw new Error(
         'persistent identity requires durable audit storage and a tenant-aware relay',
       );
+    const persistentBusinessStores = [
+      adapters.roleStore,
+      adapters.areas,
+      adapters.vehicles,
+      adapters.employees,
+      adapters.documents,
+      adapters.insurance,
+      adapters.assignments,
+      adapters.settings,
+      adapters.imports,
+      adapters.records,
+    ];
+    if (
+      persistentBusinessStores.some((store) => store !== undefined) &&
+      (!adapters.audit || !adapters.auditRelay)
+    )
+      throw new Error(
+        'persistent business stores require durable audit storage and a tenant-aware relay',
+      );
     this.audit = adapters.audit ?? new InMemoryAuditStore();
     this.outbox = adapters.outbox ?? new InMemoryOutboxStore(() => this.now().getTime());
     this.records = adapters.records ?? new InMemoryFileRecordStore();
