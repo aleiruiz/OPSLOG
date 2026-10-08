@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { DataSource } from 'typeorm';
+import { AUDIT_MIGRATIONS_TABLE, AUDIT_TABLES } from '../../audit/src/index.js';
 import { SettingsService, type CompanySettings } from '../../../domain/settings/src/index.js';
 import { BINARY_COLLATION, SETTINGS_TABLES } from './entities.js';
 import { SettingsStoreError } from './errors.js';
@@ -8,6 +9,11 @@ import { TypeOrmSettingsStore, type StoreErrorEvent } from './store.js';
 import { adminUrl, startSettingsDatabase, type SettingsDatabase } from './test-support/mysql.js';
 
 const suite = adminUrl ? describe : describe.skip;
+const auditSchemaTables = [
+  ...Object.values(AUDIT_TABLES),
+  'opslog_audit_local_keys',
+  AUDIT_MIGRATIONS_TABLE,
+];
 
 const NOW = new Date('2026-10-06T12:00:00.000Z');
 const ACTOR = 'user-11111111-1111-4111-8111-111111111111';
@@ -89,7 +95,7 @@ suite('persistent settings store on MySQL', () => {
         [db.databaseName],
       );
       expect(tables.map((r) => r.t).sort()).toEqual(
-        [...Object.values(T), 'opslog_settings_migrations'].sort(),
+        [...Object.values(T), 'opslog_settings_migrations', ...auditSchemaTables].sort(),
       );
       const columns = await db.rows<{ coll: string }>(
         `SELECT COLLATION_NAME AS coll FROM information_schema.COLUMNS

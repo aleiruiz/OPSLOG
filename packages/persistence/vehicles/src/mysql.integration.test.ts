@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { DataSource } from 'typeorm';
+import { AUDIT_MIGRATIONS_TABLE, AUDIT_TABLES } from '../../audit/src/index.js';
 import {
   VehicleError,
   VehicleService,
@@ -16,6 +17,11 @@ import { TypeOrmVehicleStore, type StoreErrorEvent } from './store.js';
 import { adminUrl, startVehiclesDatabase, type VehiclesDatabase } from './test-support/mysql.js';
 
 const suite = adminUrl ? describe : describe.skip;
+const auditSchemaTables = [
+  ...Object.values(AUDIT_TABLES),
+  'opslog_audit_local_keys',
+  AUDIT_MIGRATIONS_TABLE,
+];
 
 const NOW = new Date('2026-10-06T12:00:00.000Z');
 const ACTOR = 'user-11111111-1111-4111-8111-111111111111';
@@ -77,19 +83,26 @@ suite('persistent vehicle store on MySQL', () => {
         'SELECT TABLE_NAME AS t FROM information_schema.TABLES WHERE TABLE_SCHEMA = ?',
         [db.databaseName],
       );
+      const moduleTableList = Object.values(VEHICLE_TABLES)
+        .map((name) => `'${name}'`)
+        .join(', ');
       expect(tables.map((row) => row.t).sort()).toEqual(
-        [...Object.values(VEHICLE_TABLES), 'opslog_vehicles_migrations'].sort(),
+        [
+          ...Object.values(VEHICLE_TABLES),
+          'opslog_vehicles_migrations',
+          ...auditSchemaTables,
+        ].sort(),
       );
       const columns = await db.rows<{ coll: string }>(
         `SELECT COLLATION_NAME AS coll FROM information_schema.COLUMNS
-          WHERE TABLE_SCHEMA = ? AND DATA_TYPE IN ('varchar', 'char') AND TABLE_NAME <> 'opslog_vehicles_migrations'`,
+          WHERE TABLE_SCHEMA = ? AND DATA_TYPE IN ('varchar', 'char') AND TABLE_NAME IN (${moduleTableList})`,
         [db.databaseName],
       );
       expect(columns.length).toBeGreaterThan(10);
       expect(columns.filter((column) => column.coll !== BINARY_COLLATION)).toEqual([]);
       const uniques = await db.rows<{ name: string; col: string; seq: number }>(
         `SELECT INDEX_NAME AS name, COLUMN_NAME AS col, SEQ_IN_INDEX AS seq FROM information_schema.STATISTICS
-          WHERE TABLE_SCHEMA = ? AND NON_UNIQUE = 0 AND TABLE_NAME <> 'opslog_vehicles_migrations'
+          WHERE TABLE_SCHEMA = ? AND NON_UNIQUE = 0 AND TABLE_NAME IN (${moduleTableList})
           ORDER BY INDEX_NAME, SEQ_IN_INDEX`,
         [db.databaseName],
       );
