@@ -32,6 +32,15 @@
   "exclude": ["src/**/*.test.ts"],
   "references": [
     { "path": "../../../packages/domain/tenants" },
-    { "path": "../../../packages/persistence/tenancy" }
+    { "path": "../../../packages/persistence/tenancy" },
+    { "path": "../../../packages/persistence/areas" },
+    { "path": "../../../packages/persistence/vehicles" },
+    { "path": "../../../packages/persistence/employees" },
+    { "path": "../../../packages/persistence/documents" },
+    { "path": "../../../packages/persistence/insurance" },
+    { "path": "../../../packages/persistence/assignments" },
+    { "path": "../../../packages/persistence/settings" },
+    { "path": "../../../packages/persistence/imports" },
+    { "path": "../../../packages/persistence/audit" }
   ]
 }

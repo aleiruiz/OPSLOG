@@ -12,6 +12,7 @@ export * from './settings.js';
 export * from './tenancy.js';
 export * from './vehicles.js';
 export * from './testing.js';
+export * from './fleet-persistence.js';
 export {
   TenantAwareScanQueue,
   createWorkerRuntime,
