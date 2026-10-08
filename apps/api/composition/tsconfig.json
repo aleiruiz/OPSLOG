@@ -40,6 +40,7 @@
     { "path": "../../../packages/persistence/insurance" },
     { "path": "../../../packages/persistence/assignments" },
     { "path": "../../../packages/persistence/settings" },
-    { "path": "../../../packages/persistence/imports" }
+    { "path": "../../../packages/persistence/imports" },
+    { "path": "../../../packages/persistence/audit" }
   ]
 }

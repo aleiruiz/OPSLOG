@@ -56,7 +56,7 @@ suite('integrated assignment integrity on real MySQL', () => {
     expect(foreignMutation.text).not.toContain(vehicleId);
     expect(foreignMutation.text).not.toContain(expiredDriver);
     expect(
-      await database.rows(
+      await database.rowsB(
         'SELECT id FROM opslog_vehicle_assignments WHERE company_id = ? AND vehicle_id = ?',
         [fleet.tenantB, vehicleId],
       ),

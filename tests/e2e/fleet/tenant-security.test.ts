@@ -105,4 +105,40 @@ suite('integrated tenant and permission boundaries on real MySQL', () => {
     expect(employeeHistory.status).toBe(200);
     expect(employeeHistory.json.items).toHaveLength(1);
   }, 60_000);
+
+  it('relays module-local audit rows into the tenant projection and rejects another tenant resolver key', async () => {
+    const areaId = await fleet.area(fleet.adminA, 'Auditoría durable');
+    const areaIdB = await fleet.area(fleet.adminB, 'Auditoría durable B');
+    const local = await database.rows<{ event_id: string; action: string }>(
+      'SELECT event_id, action FROM opslog_audit_local WHERE tenant_id = ? AND action = ? AND entity_id = ? ORDER BY occurred_at DESC LIMIT 1',
+      [fleet.tenantA, 'area.created', areaId],
+    );
+    expect(local).toHaveLength(1);
+    const localB = await database.rowsB<{ event_id: string; action: string }>(
+      'SELECT event_id, action FROM opslog_audit_local WHERE tenant_id = ? AND action = ? AND entity_id = ? ORDER BY occurred_at DESC LIMIT 1',
+      [fleet.tenantB, 'area.created', areaIdB],
+    );
+    expect(localB).toHaveLength(1);
+
+    const delivered = await fleet.platformA.runtime.runAuditRelay();
+    expect(delivered).toBeGreaterThan(0);
+    const deliveredB = await fleet.platformB.runtime.runAuditRelay();
+    expect(deliveredB).toBeGreaterThan(0);
+    const admin = await fleet.platformA.signIn(await fleet.worldA.principal('subject-admin-a'));
+    expect(admin.ok).toBe(true);
+    const trailA = await fleet.platformA.listAudit(admin.value!.token, 'fleet-audit-list-a');
+    expect(trailA.ok).toBe(true);
+    expect(trailA.value?.some((event) => event.eventId === local[0]?.event_id)).toBe(true);
+
+    const adminB = await fleet.platformB.signIn(await fleet.worldB.principal('subject-admin-b'));
+    expect(adminB.ok).toBe(true);
+    const trailB = await fleet.platformB.listAudit(adminB.value!.token, 'fleet-audit-list-b');
+    expect(trailB.ok).toBe(true);
+    expect(trailB.value?.some((event) => event.eventId === local[0]?.event_id)).toBe(false);
+    expect(trailB.value?.some((event) => event.eventId === localB[0]?.event_id)).toBe(true);
+    expect(trailA.value?.some((event) => event.eventId === localB[0]?.event_id)).toBe(false);
+    await expect(database.tenantA.runtime.audit.list(fleet.tenantB)).rejects.toThrow();
+    expect(database.databaseName).not.toBe(database.tenantB.databaseName);
+    expect(areaId).not.toBe(areaIdB);
+  }, 60_000);
 });

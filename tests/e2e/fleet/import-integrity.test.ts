@@ -108,7 +108,7 @@ suite('integrated CSV import on real MySQL', () => {
       `FOREIGN-001,FRGN001,Toyota,Hilux,2022,${areaId},10,`,
       '',
     ].join('\r\n');
-    const vehicleCountB = await database.rows<{ count: number }>(
+    const vehicleCountB = await database.rowsB<{ count: number }>(
       'SELECT COUNT(*) AS count FROM opslog_vehicles WHERE company_id = ?',
       [fleet.tenantB],
     );
@@ -136,7 +136,7 @@ suite('integrated CSV import on real MySQL', () => {
     expect(await fleet.adminA.get(`${IMPORTS}/${foreignCommit.json.job.id}`)).toMatchObject({
       status: 404,
     });
-    const vehicleCountBAfter = await database.rows<{ count: number }>(
+    const vehicleCountBAfter = await database.rowsB<{ count: number }>(
       'SELECT COUNT(*) AS count FROM opslog_vehicles WHERE company_id = ?',
       [fleet.tenantB],
     );

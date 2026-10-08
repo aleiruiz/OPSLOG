@@ -1,5 +1,6 @@
 import mysql from 'mysql2/promise';
 import { randomBytes } from 'node:crypto';
+import { AUDIT_TABLES } from '../../../packages/persistence/audit/src/index.js';
 import { AREA_TABLES } from '../../../packages/persistence/areas/src/index.js';
 import { VEHICLE_TABLES } from '../../../packages/persistence/vehicles/src/index.js';
 import { EMPLOYEE_TABLES } from '../../../packages/persistence/employees/src/index.js';
@@ -11,6 +12,7 @@ import { IMPORT_TABLES } from '../../../packages/persistence/imports/src/index.j
 import {
   createFleetMigrationModules,
   openFleetRuntimeStores,
+  runFleetAuditMigrations,
   runFleetMigrations,
   type FleetMigrationCredentials,
   type FleetRuntimeCredentials,
@@ -88,7 +90,7 @@ const modules: readonly Module[] = [
   'imports',
 ];
 
-export interface FleetDatabase {
+export interface FleetTenantDatabase {
   readonly databaseName: string;
   readonly host: string;
   readonly port: number;
@@ -99,11 +101,19 @@ export interface FleetDatabase {
   close(): Promise<void>;
 }
 
-export async function startFleetDatabase(): Promise<FleetDatabase> {
+export interface FleetDatabase extends FleetTenantDatabase {
+  /** Each side is a physically separate database and runtime composition. */
+  readonly tenantA: FleetTenantDatabase;
+  readonly tenantB: FleetTenantDatabase;
+  rowsB<T>(sql: string, params?: unknown[]): Promise<T[]>;
+  close(): Promise<void>;
+}
+
+async function startTenantDatabase(label: string): Promise<FleetTenantDatabase> {
   if (!adminUrl) throw new Error('OPSLOG_TEST_MYSQL_ADMIN_URL is not configured');
   const admin = adminConfig(adminUrl);
   const suffix = randomBytes(6).toString('hex');
-  const databaseName = `opslog_flt_${suffix}`;
+  const databaseName = `opslog_t_${suffix}`;
   const runtime = Object.fromEntries(
     modules.map((name) => [
       name,
@@ -112,7 +122,20 @@ export async function startFleetDatabase(): Promise<FleetDatabase> {
         password: randomBytes(24).toString('base64url'),
       },
     ]),
-  ) as Accounts;
+  ) as Omit<Accounts, 'auditRuntime' | 'auditRelay'>;
+  const auditRuntime = {
+    username: `opslog_audit_runtime_${suffix}`,
+    password: randomBytes(24).toString('base64url'),
+  };
+  const auditRelay = {
+    username: `opslog_audit_relay_${suffix}`,
+    password: randomBytes(24).toString('base64url'),
+  };
+  const auditMigrator = {
+    username: `opslog_audit_migrator_${suffix}`,
+    password: randomBytes(24).toString('base64url'),
+  };
+  const accounts = { ...runtime, auditRuntime, auditRelay } as Accounts;
   const users: string[] = [];
   const connection = await mysql.createConnection({ ...admin, database: 'mysql' });
   let stores: FleetRuntimeStores | undefined;
@@ -126,12 +149,13 @@ export async function startFleetDatabase(): Promise<FleetDatabase> {
       database: databaseName,
       username: admin.user,
       password: admin.password,
+      auditMigrator,
     };
-    const migrationModules = createFleetMigrationModules(migrationCredentials);
     const appliedMigrations = await runFleetMigrations(migrationCredentials);
     const idempotentMigrations = await runFleetMigrations(migrationCredentials);
     if (idempotentMigrations.join(',') !== appliedMigrations.join(','))
-      throw new Error('fleet migration registry changed during idempotent rerun');
+      throw new Error(`fleet migration registry changed during idempotent rerun: ${label}`);
+    const migrationModules = createFleetMigrationModules(migrationCredentials);
     for (const module of [...migrationModules].reverse()) {
       await module.source.initialize();
       try {
@@ -145,6 +169,15 @@ export async function startFleetDatabase(): Promise<FleetDatabase> {
         await module.source.destroy();
       }
     }
+    await connection.query(`CREATE USER '${auditMigrator.username}'@'%' IDENTIFIED BY ?`, [
+      auditMigrator.password,
+    ]);
+    users.push(auditMigrator.username);
+    await connection.query(
+      `GRANT CREATE, ALTER, INDEX, SELECT, INSERT, CREATE ROUTINE, ALTER ROUTINE ON ${identifier(databaseName)}.* TO '${auditMigrator.username}'@'%'`,
+    );
+    await runFleetAuditMigrations(migrationCredentials);
+    await runFleetAuditMigrations(migrationCredentials);
     for (const name of modules) {
       const account = runtime[name];
       await connection.query(`CREATE USER '${account.username}'@'%' IDENTIFIED BY ?`, [
@@ -157,21 +190,54 @@ export async function startFleetDatabase(): Promise<FleetDatabase> {
           `GRANT ${grant.privileges.join(', ')} ON ${table} TO '${account.username}'@'%'`,
         );
       }
+      await connection.query(
+        `GRANT EXECUTE ON PROCEDURE ${identifier(databaseName)}.\`opslog_append_local_audit_and_delivery\` TO '${account.username}'@'%'`,
+      );
     }
+
+    for (const account of [auditRuntime, auditRelay]) {
+      await connection.query(`CREATE USER '${account.username}'@'%' IDENTIFIED BY ?`, [
+        account.password,
+      ]);
+      users.push(account.username);
+    }
+    const table = (name: string) => `${identifier(databaseName)}.${identifier(name)}`;
+    await connection.query(
+      `GRANT EXECUTE ON PROCEDURE ${identifier(databaseName)}.\`opslog_append_local_audit_and_delivery\` TO '${auditRuntime.username}'@'%'`,
+    );
+    await connection.query(
+      `GRANT SELECT ON ${table(AUDIT_TABLES.projection)} TO '${auditRuntime.username}'@'%'`,
+    );
+    await connection.query(
+      `GRANT SELECT ON ${table(AUDIT_TABLES.local)} TO '${auditRelay.username}'@'%'`,
+    );
+    await connection.query(
+      `GRANT SELECT ON ${table(AUDIT_TABLES.delivery)} TO '${auditRelay.username}'@'%'`,
+    );
+    await connection.query(
+      `GRANT SELECT, INSERT ON ${table(AUDIT_TABLES.registry)} TO '${auditRelay.username}'@'%'`,
+    );
+    await connection.query(
+      `GRANT INSERT ON ${table(AUDIT_TABLES.projection)} TO '${auditRelay.username}'@'%'`,
+    );
+    await connection.query(
+      `GRANT UPDATE ON ${table(AUDIT_TABLES.delivery)} TO '${auditRelay.username}'@'%'`,
+    );
+
     stores = await openFleetRuntimeStores({
       host: admin.host,
       port: admin.port,
       database: databaseName,
-      accounts: runtime,
+      accounts,
     });
     await connection.changeUser({ database: databaseName });
     return {
       databaseName,
       host: admin.host,
       port: admin.port,
-      appliedMigrations,
+      appliedMigrations: [...appliedMigrations, 'audit:2026100700010'],
       runtime: stores,
-      accounts: runtime,
+      accounts,
       async rows<T>(sql: string, params: unknown[] = []): Promise<T[]> {
         const [result] = await connection.query(sql, params);
         return result as T[];
@@ -207,6 +273,27 @@ export async function startFleetDatabase(): Promise<FleetDatabase> {
     } finally {
       await connection.end();
     }
+    throw error;
+  }
+}
+
+export async function startFleetDatabase(): Promise<FleetDatabase> {
+  const tenantA = await startTenantDatabase('a');
+  try {
+    const tenantB = await startTenantDatabase('b');
+    return {
+      ...tenantA,
+      tenantA,
+      tenantB,
+      rowsB: tenantB.rows,
+      async close() {
+        const results = await Promise.allSettled([tenantA.close(), tenantB.close()]);
+        const failures = results.filter((result) => result.status === 'rejected');
+        if (failures.length > 0) throw new AggregateError(failures, 'fleet tenants cleanup failed');
+      },
+    };
+  } catch (error) {
+    await tenantA.close();
     throw error;
   }
 }

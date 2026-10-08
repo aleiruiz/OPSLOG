@@ -4,11 +4,16 @@ import {
   type BffWorld,
   type Browser,
 } from '../../../apps/api/bff/src/test-support.js';
+import type { Platform } from '../../../apps/api/composition/src/index.js';
 import { EnvelopePiiCipher, LocalDevKms } from '../../../packages/platform/pii/src/index.js';
 import type { FleetDatabase } from './mysql.js';
 
 export interface FleetWorld {
-  readonly world: BffWorld;
+  readonly world: { dispose(): void };
+  readonly worldA: BffWorld;
+  readonly worldB: BffWorld;
+  readonly platformA: Platform;
+  readonly platformB: Platform;
   readonly adminA: Browser;
   readonly adminA2: Browser;
   readonly adminB: Browser;
@@ -21,30 +26,78 @@ export interface FleetWorld {
   driver(browser: Browser, areaId: string, tag?: string, expiresOn?: string): Promise<string>;
 }
 
+class PreProvisionedTenantStore extends InMemoryTenantStore {
+  public readonly tenantId: string;
+  private available = true;
+  private readonly provisioned: ReturnType<InMemoryTenantStore['provisionVerified']>;
+
+  public constructor(private readonly tenantName: string) {
+    super();
+    this.provisioned = super.provisionVerified(tenantName);
+    this.tenantId = this.provisioned.id;
+  }
+
+  public override provisionVerified(
+    name: string,
+  ): ReturnType<InMemoryTenantStore['provisionVerified']> {
+    if (!this.available || name !== this.tenantName)
+      throw new Error('fleet world can provision only its pre-bound tenant');
+    this.available = false;
+    return this.provisioned;
+  }
+}
+
 let sequence = 0;
 
 export async function startFleetWorld(database: FleetDatabase): Promise<FleetWorld> {
-  const world = createBffWorld({
+  const tenantsA = new PreProvisionedTenantStore('Empresa Sintética A');
+  const tenantsB = new PreProvisionedTenantStore('Empresa Sintética B');
+  database.tenantA.runtime.bindTenant(tenantsA.tenantId);
+  database.tenantB.runtime.bindTenant(tenantsB.tenantId);
+  const worldA = createBffWorld({
     adapters: {
-      tenants: new InMemoryTenantStore(),
-      ...database.runtime.adapters,
+      tenants: tenantsA,
+      ...database.tenantA.runtime.adapters,
+      audit: database.tenantA.runtime.audit,
+      auditRelay: database.tenantA.runtime.auditRelay,
       pii: new EnvelopePiiCipher(LocalDevKms.ephemeral('test')),
     },
   });
-  const tenantA = (await world.tenant('Empresa Sintética A', 'subject-admin-a')).tenantId;
-  const tenantB = (await world.tenant('Empresa Sintética B', 'subject-admin-b')).tenantId;
-  await world.member('subject-admin-a', 'viewer', 'subject-viewer-a');
-  await world.member('subject-admin-a', 'editor', 'subject-editor-a');
+  const worldB = createBffWorld({
+    adapters: {
+      tenants: tenantsB,
+      ...database.tenantB.runtime.adapters,
+      audit: database.tenantB.runtime.audit,
+      auditRelay: database.tenantB.runtime.auditRelay,
+      pii: new EnvelopePiiCipher(LocalDevKms.ephemeral('test')),
+    },
+  });
+  const tenantA = (await worldA.tenant('Empresa Sintética A', 'subject-admin-a')).tenantId;
+  const tenantB = (await worldB.tenant('Empresa Sintética B', 'subject-admin-b')).tenantId;
+  if (tenantA === tenantB) throw new Error('fleet tenant fixtures must have distinct identities');
+  if (tenantA !== tenantsA.tenantId || tenantB !== tenantsB.tenantId)
+    throw new Error('fleet tenant provisioning escaped its physical database binding');
+  await worldA.member('subject-admin-a', 'viewer', 'subject-viewer-a');
+  await worldA.member('subject-admin-a', 'editor', 'subject-editor-a');
   const [adminA, adminA2, adminB, viewerA, editorA] = await Promise.all([
-    world.loginAs('subject-admin-a'),
-    world.loginAs('subject-admin-a'),
-    world.loginAs('subject-admin-b'),
-    world.loginAs('subject-viewer-a'),
-    world.loginAs('subject-editor-a'),
+    worldA.loginAs('subject-admin-a'),
+    worldA.loginAs('subject-admin-a'),
+    worldB.loginAs('subject-admin-b'),
+    worldA.loginAs('subject-viewer-a'),
+    worldA.loginAs('subject-editor-a'),
   ]);
 
   return {
-    world,
+    world: {
+      dispose: () => {
+        worldA.dispose();
+        worldB.dispose();
+      },
+    },
+    worldA,
+    worldB,
+    platformA: worldA.platform,
+    platformB: worldB.platform,
     adminA,
     adminA2,
     adminB,
