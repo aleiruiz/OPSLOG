@@ -109,7 +109,7 @@ async function createTenantDb(label: string): Promise<TenantDb> {
     await admin.query(`CREATE USER '${user}'@'%' IDENTIFIED BY ?`, [password]);
   }
   await admin.query(
-    `GRANT CREATE, ALTER, INDEX, SELECT, INSERT ON ${identifier(database)}.* TO '${migratorUser}'@'%'`,
+    `GRANT CREATE, ALTER, INDEX, SELECT, INSERT, CREATE ROUTINE, ALTER ROUTINE ON ${identifier(database)}.* TO '${migratorUser}'@'%'`,
   );
   await migrationSource.initialize();
   await runAuditMigrations(migrationSource);
@@ -118,8 +118,9 @@ async function createTenantDb(label: string): Promise<TenantDb> {
   await admin.query(`CREATE TABLE ${table('synthetic_history')} (id VARCHAR(128) PRIMARY KEY)`);
   await admin.query(`GRANT INSERT ON ${table('synthetic_business')} TO '${runtimeUser}'@'%'`);
   await admin.query(`GRANT INSERT ON ${table('synthetic_history')} TO '${runtimeUser}'@'%'`);
-  await admin.query(`GRANT INSERT ON ${table(AUDIT_TABLES.local)} TO '${runtimeUser}'@'%'`);
-  await admin.query(`GRANT INSERT ON ${table(AUDIT_TABLES.delivery)} TO '${runtimeUser}'@'%'`);
+  await admin.query(
+    `GRANT EXECUTE ON PROCEDURE ${identifier(database)}.\`opslog_append_local_audit_and_delivery\` TO '${runtimeUser}'@'%'`,
+  );
   await admin.query(`GRANT SELECT ON ${table(AUDIT_TABLES.projection)} TO '${runtimeUser}'@'%'`);
   await admin.query(`GRANT SELECT ON ${table(AUDIT_TABLES.local)} TO '${relayUser}'@'%'`);
   await admin.query(`GRANT SELECT ON ${table(AUDIT_TABLES.delivery)} TO '${relayUser}'@'%'`);
@@ -288,6 +289,10 @@ describe.skipIf(!adminUrl)('tenant-local audit persistence against MySQL 8', () 
   it('API AuditStore append queues locally and the concrete worker relay publishes the tenant view', async () => {
     const item = event(a.tenantId, 'api-audit-event');
     await apiStore.append(item);
+    await Promise.all([apiStore.append(item), apiStore.append(item)]);
+    await expect(apiStore.append({ ...item, action: 'vehicle.deleted' })).rejects.toMatchObject({
+      code: 'AUDIT_EVENT_CONFLICT',
+    });
     expect(await listPendingAuditEventIds(relayA, a.tenantId)).toEqual([item.eventId]);
     expect((await store.list(a.tenantId, range)).some((row) => row.eventId === item.eventId)).toBe(
       false,
@@ -378,6 +383,18 @@ describe.skipIf(!adminUrl)('tenant-local audit persistence against MySQL 8', () 
 
   it('enforces role grants and rolls back when runtime cannot insert initial delivery state', async () => {
     await expect(
+      runtimeA.query(
+        `INSERT INTO ${identifier(AUDIT_TABLES.local)} (tenant_id, event_id) VALUES (?, ?)`,
+        [a.tenantId, 'forbidden-direct-insert'],
+      ),
+    ).rejects.toBeDefined();
+    await expect(
+      runtimeA.query(
+        `INSERT INTO ${identifier(AUDIT_TABLES.delivery)} (tenant_id, event_id) VALUES (?, ?)`,
+        [a.tenantId, 'forbidden-direct-delivery'],
+      ),
+    ).rejects.toBeDefined();
+    await expect(
       runtimeA.query(`SELECT event_id FROM ${identifier(AUDIT_TABLES.local)}`),
     ).rejects.toBeDefined();
     await expect(
@@ -412,7 +429,7 @@ describe.skipIf(!adminUrl)('tenant-local audit persistence against MySQL 8', () 
       relayA.query(`UPDATE ${identifier(AUDIT_TABLES.registry)} SET content_hash = REPEAT('0',64)`),
     ).rejects.toBeDefined();
     await a.admin.query(
-      `REVOKE INSERT ON ${identifier(AUDIT_TABLES.delivery)} FROM '${a.runtimeUser}'@'%'`,
+      `REVOKE EXECUTE ON PROCEDURE ${identifier(a.database)}.\`opslog_append_local_audit_and_delivery\` FROM '${a.runtimeUser}'@'%'`,
     );
     const failed = runtimeA.transaction('READ COMMITTED', async (manager) => {
       await manager.query('INSERT INTO synthetic_business (id) VALUES (?)', ['grant-rollback']);
@@ -422,6 +439,9 @@ describe.skipIf(!adminUrl)('tenant-local audit persistence against MySQL 8', () 
       await appendLocalAuditAndDelivery(manager, event(a.tenantId, 'grant-rollback-event'));
     });
     await expect(failed).rejects.toBeDefined();
+    await a.admin.query(
+      `GRANT EXECUTE ON PROCEDURE ${identifier(a.database)}.\`opslog_append_local_audit_and_delivery\` TO '${a.runtimeUser}'@'%'`,
+    );
     const [business] = await a.admin.query('SELECT id FROM synthetic_business WHERE id = ?', [
       'grant-rollback',
     ]);

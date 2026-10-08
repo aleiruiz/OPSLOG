@@ -34,7 +34,6 @@ export {
 export {
   appendAuditProjection,
   appendLocalAuditAndDelivery,
-  AuditLocalDuplicateError,
   AuditPersistenceError,
   listPendingAuditEventIds,
   MySqlAuditStore,

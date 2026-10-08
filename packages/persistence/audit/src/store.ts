@@ -25,15 +25,6 @@ export class AuditPersistenceError extends Error {
   }
 }
 
-/** A command retry with an already-used local identity is resolved by its domain idempotency port. */
-export class AuditLocalDuplicateError extends Error {
-  readonly code = 'AUDIT_LOCAL_EVENT_DUPLICATE';
-  constructor() {
-    super('Local audit event was already written');
-    this.name = 'AuditLocalDuplicateError';
-  }
-}
-
 function requireTenantDatabase(manager: EntityManager): void {
   const database = manager.connection.options.database;
   if (typeof database !== 'string' || !AUDIT_TENANT_DATABASE.test(database))
@@ -132,10 +123,54 @@ export async function appendLocalAuditAndDelivery(
   const contentHash = hashEvent(event);
   const local = manager.getRepository(AuditLocalEventEntity);
   const delivery = manager.getRepository(AuditDeliveryEntity);
+  if (typeof manager.query === 'function') {
+    try {
+      await manager.query(
+        'CALL opslog_append_local_audit_and_delivery(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+          event.tenantId,
+          event.eventId,
+          event.action,
+          event.entityType,
+          event.entityId,
+          asDate(event.occurredAt),
+          event.actor.id,
+          event.actor.kind,
+          event.correlationId,
+          JSON.stringify(event.data),
+          contentHash,
+        ],
+      );
+      return event;
+    } catch (error) {
+      const driver = (error as { driverError?: { message?: string; sqlMessage?: string } })
+        ?.driverError;
+      if (`${driver?.message ?? ''} ${driver?.sqlMessage ?? ''}`.includes('AUDIT_EVENT_CONFLICT'))
+        throw new AuditConflictError();
+      throw new AuditPersistenceError();
+    }
+  }
   try {
+    const existing = await local.findOneBy({ tenantId: event.tenantId, eventId: event.eventId });
+    if (existing) {
+      sameHash(existing, contentHash);
+      const existingDelivery = await delivery.findOneBy({
+        tenantId: event.tenantId,
+        eventId: event.eventId,
+      });
+      if (!existingDelivery)
+        await delivery.insert({
+          tenantId: event.tenantId,
+          eventId: event.eventId,
+          status: 'pending',
+          createdAt: new Date(),
+          deliveredAt: null,
+        });
+      return persisted(existing);
+    }
     await local.insert(eventRow(event, contentHash));
   } catch (error) {
-    if (isDuplicate(error)) throw new AuditLocalDuplicateError();
+    if (error instanceof AuditConflictError) throw error;
     throw new AuditPersistenceError();
   }
   try {
@@ -293,8 +328,7 @@ export class MySqlAuditApiStore implements AuditStore {
         appendLocalAuditAndDelivery(manager, safeEvent),
       );
     } catch (error) {
-      if (error instanceof AuditConflictError || error instanceof AuditLocalDuplicateError)
-        throw error;
+      if (error instanceof AuditConflictError) throw error;
       throw new AuditPersistenceError();
     }
   }

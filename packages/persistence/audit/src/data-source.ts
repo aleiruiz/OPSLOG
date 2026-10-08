@@ -56,7 +56,7 @@ function runtimeOptions(config: AuditDatabaseConfig): DataSourceOptions {
   } as DataSourceOptions;
 }
 
-/** API account: module business DML, local audit/delivery INSERT, and projection SELECT only. */
+/** API account: module business DML, EXECUTE on the idempotent local append routine, projection SELECT. */
 export function createAuditRuntimeDataSource(config: AuditDatabaseConfig): DataSource {
   if (!AUDIT_RUNTIME_ACCOUNT.test(config.username))
     throw new Error('Audit runtime DataSource requires its restricted account');

@@ -45,6 +45,7 @@ describe('audit persistence schema', () => {
     expect(tables.map((table) => table.name)).toEqual([
       AUDIT_TABLES.local,
       AUDIT_TABLES.delivery,
+      'opslog_audit_local_keys',
       AUDIT_TABLES.projection,
       AUDIT_TABLES.registry,
     ]);
@@ -52,7 +53,7 @@ describe('audit persistence schema', () => {
       'tenant_id',
       'event_id',
     ]);
-    expect(tables[2]?.primaryColumns.map((column) => column.name)).toEqual([
+    expect(tables[3]?.primaryColumns.map((column) => column.name)).toEqual([
       'tenant_id',
       'event_id',
       'occurred_at',
@@ -60,6 +61,9 @@ describe('audit persistence schema', () => {
     expect(tables[1]?.foreignKeys).toEqual([]);
     expect(queries[0]).toContain('PARTITION BY RANGE COLUMNS (`occurred_at`)');
     expect(queries[0]).toContain('PARTITION pmax VALUES LESS THAN (MAXVALUE)');
+    expect(queries[1]).toContain('CREATE PROCEDURE opslog_append_local_audit_and_delivery');
+    expect(queries[1]).toContain('SQL SECURITY DEFINER');
+    expect(queries[1]).toContain('AUDIT_EVENT_CONFLICT');
     expect(migration.name.endsWith(AUDIT_MIGRATION_VERSION)).toBe(true);
     await expect(migration.down()).rejects.toThrow(/cannot be rolled back destructively/);
   });

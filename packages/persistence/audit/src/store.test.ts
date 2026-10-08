@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import type { DataSource, EntityManager } from 'typeorm';
 import {
   AuditConflictError,
-  AuditLocalDuplicateError,
   appendAuditProjection,
   appendLocalAuditAndDelivery,
   listPendingAuditEventIds,
@@ -109,12 +108,15 @@ describe('audit local writer and projection relay', () => {
     ]);
   });
 
-  it('fails closed on a duplicate local command identity without reading or overwriting rows', async () => {
+  it('deduplicates identical local events and rejects changed content without overwriting rows', async () => {
     const db = fakeManager();
     await appendLocalAuditAndDelivery(db.manager, makeEvent());
-    await expect(appendLocalAuditAndDelivery(db.manager, makeEvent())).rejects.toBeInstanceOf(
-      AuditLocalDuplicateError,
-    );
+    await expect(appendLocalAuditAndDelivery(db.manager, makeEvent())).resolves.toMatchObject({
+      eventId: 'audit-e1',
+    });
+    await expect(
+      appendLocalAuditAndDelivery(db.manager, makeEvent({ action: 'vehicle.deleted' })),
+    ).rejects.toBeInstanceOf(AuditConflictError);
     expect(db.rows(AuditLocalEventEntity)).toHaveLength(1);
     expect(db.rows(AuditDeliveryEntity)).toHaveLength(1);
   });

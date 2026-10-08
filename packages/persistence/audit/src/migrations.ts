@@ -78,6 +78,12 @@ export class CreateAuditStore2026100700010 implements MigrationInterface {
     );
     await queryRunner.createTable(
       new Table({
+        name: 'opslog_audit_local_keys',
+        columns: [text('tenant_id', 128, true), text('event_id', 128, true)],
+      }),
+    );
+    await queryRunner.createTable(
+      new Table({
         name: AUDIT_TABLES.projection,
         columns: eventColumns(true),
         indices: [
@@ -117,6 +123,39 @@ export class CreateAuditStore2026100700010 implements MigrationInterface {
     await queryRunner.query(
       `ALTER TABLE \`${AUDIT_TABLES.projection}\` PARTITION BY RANGE COLUMNS (\`occurred_at\`) (${partitions.join(', ')})`,
     );
+    await queryRunner.query(`CREATE PROCEDURE opslog_append_local_audit_and_delivery(
+      IN p_tenant_id VARCHAR(128), IN p_event_id VARCHAR(128), IN p_action VARCHAR(64),
+      IN p_entity_type VARCHAR(64), IN p_entity_id VARCHAR(128), IN p_occurred_at DATETIME(3),
+      IN p_actor_id VARCHAR(128), IN p_actor_kind VARCHAR(16), IN p_correlation_id VARCHAR(128),
+      IN p_data JSON, IN p_content_hash CHAR(64)
+    ) SQL SECURITY DEFINER
+    BEGIN
+      DECLARE v_key_exists BOOLEAN DEFAULT FALSE;
+      DECLARE v_content_hash CHAR(64) DEFAULT NULL;
+      BEGIN
+        DECLARE CONTINUE HANDLER FOR 1062 SET v_key_exists = TRUE;
+        INSERT INTO opslog_audit_local_keys (tenant_id, event_id) VALUES (p_tenant_id, p_event_id);
+      END;
+      BEGIN
+        DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_content_hash = NULL;
+        SELECT content_hash INTO v_content_hash FROM \`${AUDIT_TABLES.local}\`
+          WHERE tenant_id = p_tenant_id AND event_id = p_event_id;
+      END;
+      IF v_content_hash IS NOT NULL AND BINARY v_content_hash <> BINARY p_content_hash THEN
+        SIGNAL SQLSTATE '45000' SET MYSQL_ERRNO = 1644, MESSAGE_TEXT = 'AUDIT_EVENT_CONFLICT';
+      END IF;
+      IF v_content_hash IS NULL THEN
+        INSERT INTO \`${AUDIT_TABLES.local}\` (
+          tenant_id, event_id, action, entity_type, entity_id, occurred_at,
+          actor_id, actor_kind, correlation_id, data, content_hash
+        ) VALUES (
+          p_tenant_id, p_event_id, p_action, p_entity_type, p_entity_id, p_occurred_at,
+          p_actor_id, p_actor_kind, p_correlation_id, p_data, p_content_hash
+        );
+        INSERT INTO \`${AUDIT_TABLES.delivery}\` (tenant_id, event_id, status, created_at, delivered_at)
+          VALUES (p_tenant_id, p_event_id, 'pending', UTC_TIMESTAMP(3), NULL);
+      END IF;
+    END`);
   }
 
   /** Audit rows are append-only; destructive rollback requires a separate owner decision. */
