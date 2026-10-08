@@ -67,7 +67,7 @@ export async function startInsuranceDatabase(tag: string): Promise<InsuranceData
   const auditMigratorUser = `opslog_audit_migrator_${createHash('sha256')
     .update(suffix + tag)
     .digest('hex')
-    .slice(0, 16)}`;
+    .slice(0, 10)}`;
   const auditMigratorPassword = randomBytes(24).toString('base64url');
   const adminConfig = loopbackAdminConfig(adminUrl as string);
   const admin = await mysql.createConnection({ ...adminConfig, database: 'mysql' });
