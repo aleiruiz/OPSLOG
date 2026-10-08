@@ -6,6 +6,7 @@ import {
   type Browser,
 } from '../../../apps/api/bff/src/test-support.js';
 import { TypeOrmDocumentStore } from '../../../packages/persistence/documents/src/index.js';
+import { AUDIT_TABLES } from '../../../packages/persistence/audit/src/index.js';
 import {
   adminUrl,
   startDocumentsDatabase,
@@ -272,7 +273,10 @@ suite('BFF on the real MySQL documents store', () => {
       json: card(vehicleA, { title: 'Titulo-auditoria-99', documentNumber: 'NUM-AUDITORIA-99' }),
     });
     const text = JSON.stringify(
-      (await world.platform.audit.list(tenantA)).filter((event) => event.entityType === 'document'),
+      await db.rows(
+        `SELECT action, data FROM ${AUDIT_TABLES.local} WHERE tenant_id = ? AND entity_type = ?`,
+        [tenantA, 'document'],
+      ),
     );
     expect(text).toContain('document.created');
     expect(text).not.toContain('Titulo-auditoria-99');

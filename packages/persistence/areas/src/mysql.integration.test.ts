@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { DataSource } from 'typeorm';
+import { AUDIT_TABLES } from '../../audit/src/index.js';
 import {
   AreaError,
   AreaService,
@@ -445,6 +446,52 @@ suite('persistent area store on MySQL', () => {
         await rejection(storeA.transaction(tenant, (tx) => tx.replace(next, 1, bad))),
       ).toBeInstanceOf(Error);
       expect(await storeA.find(tenant, area.id)).toEqual(area);
+    });
+
+    it('rolls the area and history back when the runtime cannot append local audit', async () => {
+      const tenant = randomUUID();
+      const area = { ...areaOf(tenant), responsibleIds: ['user-a'] };
+      const entry = historyEntry(
+        area,
+        'created',
+        [],
+        { from: null, to: null },
+        randomUUID(),
+        ACTOR,
+        NOW,
+      );
+      await db.admin.query(
+        `REVOKE EXECUTE ON PROCEDURE \`${db.databaseName}\`.\`opslog_append_local_audit_and_delivery\` FROM '${db.runtimeUser}'@'%'`,
+      );
+      try {
+        expect(
+          await rejection(storeA.transaction(tenant, (tx) => tx.insert(area, entry))),
+        ).toBeInstanceOf(AreaStoreError);
+        expect(await storeA.find(tenant, area.id)).toBeNull();
+        expect(await storeA.history(tenant, area.id, { limit: 10, offset: 0 })).toMatchObject({
+          items: [],
+          total: 0,
+        });
+        expect(
+          await db.rows(`SELECT area_id FROM ${AREA_TABLES.responsibles} WHERE area_id = ?`, [
+            area.id,
+          ]),
+        ).toHaveLength(0);
+        expect(
+          await db.rows(`SELECT event_id FROM ${AUDIT_TABLES.local} WHERE event_id = ?`, [
+            entry.id,
+          ]),
+        ).toHaveLength(0);
+        expect(
+          await db.rows(`SELECT event_id FROM ${AUDIT_TABLES.delivery} WHERE event_id = ?`, [
+            entry.id,
+          ]),
+        ).toHaveLength(0);
+      } finally {
+        await db.admin.query(
+          `GRANT EXECUTE ON PROCEDURE \`${db.databaseName}\`.\`opslog_append_local_audit_and_delivery\` TO '${db.runtimeUser}'@'%'`,
+        );
+      }
     });
   });
 

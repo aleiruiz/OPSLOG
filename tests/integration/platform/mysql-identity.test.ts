@@ -55,6 +55,7 @@ suite('platform on a real MySQL identity store', () => {
   let storeA: TypeOrmIdentityStore;
   let storeB: TypeOrmIdentityStore;
   let platform: Platform;
+  let auditRuntime: ReturnType<typeof createMySqlAuditRuntime>;
 
   const principal = async (subject: string) => {
     const nonce = `nonce-${(nonces += 1)}`;
@@ -100,7 +101,7 @@ suite('platform on a real MySQL identity store', () => {
       if (!source) throw new Error('synthetic audit DataSource is unavailable');
       return source;
     };
-    const auditRuntime = createMySqlAuditRuntime({
+    auditRuntime = createMySqlAuditRuntime({
       listTenantIds: () => tenants.all().map((tenant) => tenant.id),
       resolveRuntime: auditSource,
       resolveRelay: auditSource,
@@ -500,9 +501,9 @@ suite('platform on a real MySQL identity store', () => {
           grantSecret: 'synthetic-grant-secret-for-tests-0123456789',
           adapters: {
             identityStore: latency.store as never,
-            tenants: new InMemoryTenantStore(),
-            audit: new InMemoryAuditStore(),
-            auditRelay: { runBatch: async () => 0 },
+            tenants,
+            audit: auditRuntime.audit,
+            auditRelay: auditRuntime.auditRelay,
           },
         });
         const principalFor = async (subject: string) => {
@@ -515,12 +516,14 @@ suite('platform on a real MySQL identity store', () => {
             principal: principalFor,
             findMembership: (tenantId, identityId) => storeB.findMembership(tenantId, identityId),
             started: latency.started,
+            flushAudit: () => auditRuntime.auditRelay.runBatch(),
           },
           `${order}-${round}-${suffix}`,
           order,
         );
       }
     },
+    30_000,
   );
 
   it('never leaves a phantom administrator when accept and revoke start together', async () => {
