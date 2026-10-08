@@ -94,25 +94,29 @@ export async function redeem(
   try {
     if (lockedTenantId !== null && k.tenants.status(lockedTenantId) !== 'active')
       throw new AuthError('unauthorized');
-    const meta =
-      typeof invitationToken === 'string'
-        ? k.invitations.get(opaqueTokenGenerator.hash(invitationToken))
-        : undefined;
-    const audit =
-      meta && k.identity.supportsAtomicAudit
-        ? k.auditEvent(
-            { tenantId: meta.tenantId, actorId: `user-${meta.identityId}`, actorKind: 'user' },
+    const correlationId = `accept-${randomUUID()}`;
+    const audit = k.identity.supportsAtomicAudit
+      ? (activation: { identity: { id: string }; membership: { tenantId: string } }) =>
+          k.auditEvent(
+            {
+              tenantId: activation.membership.tenantId,
+              actorId: `user-${activation.identity.id}`,
+              actorKind: 'user',
+            },
             'user.joined',
             'membership',
-            meta.identityId,
-            `accept-${randomUUID()}`,
+            activation.identity.id,
+            correlationId,
           )
-        : undefined;
+      : undefined;
     const activated = await k.auth.activateInvitation(invitationToken, principal, audit);
     if (!activated.ok || !activated.value) return failure(new AuthError('unauthorized'));
     const { identity, membership } = activated.value;
     k.invitations.delete(opaqueTokenGenerator.hash(invitationToken));
-    if (!k.access.activate(identity.id, membership.tenantId)) {
+    if (
+      !k.access.activate(identity.id, membership.tenantId) &&
+      !(await k.access.activateFromStore(identity.id, membership.tenantId))
+    ) {
       // No role was recorded for this invitation: it did not come from `inviteUser`; fail closed.
       await k.identity.revokeMembership(membership.tenantId, identity.id);
       throw new PlatformError('forbidden');

@@ -87,6 +87,15 @@ export class AccessDirectory implements IdentityAccessResolver {
     this.set({ tenantId, identityId, role: expected.role, status: 'active' });
     return true;
   }
+  /** Rebuilds this process's directory from the role persisted by the activation transaction. */
+  public async activateFromStore(identityId: string, tenantId: string): Promise<boolean> {
+    if (!this.stored) return false;
+    const role = await this.stored.findRole(tenantId, identityId);
+    if (!isRoleName(role)) return false;
+    this.pending.delete(identityId);
+    this.grant(tenantId, identityId, role);
+    return true;
+  }
   /** Drops an invitation that has not been activated; false when none is recorded for this tenant. */
   public revokePending(identityId: string, tenantId: string): boolean {
     if (this.pending.get(identityId)?.tenantId !== tenantId) return false;

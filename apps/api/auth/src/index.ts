@@ -6,6 +6,7 @@ import {
   type Permission,
   type TenantContext,
   type IdentityMutationAudit,
+  type InvitationActivationAudit,
 } from '../../../../packages/domain/identity/src/index.js';
 import { isVerifiedExternalPrincipal } from '../../../../packages/platform/auth/src/index.js';
 export interface AuthResponse<T> {
@@ -38,7 +39,7 @@ export class AuthApi {
   public async activateInvitation(
     token: string,
     principal: unknown,
-    audit?: IdentityMutationAudit,
+    audit?: IdentityMutationAudit | InvitationActivationAudit,
   ): Promise<AuthResponse<InvitationActivation>> {
     try {
       if (!isVerifiedExternalPrincipal(principal)) throw new AuthError('unauthorized');

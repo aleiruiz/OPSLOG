@@ -7,6 +7,7 @@ import {
   type InvitationActivation,
   type Membership,
   type IdentityMutationAudit,
+  type InvitationActivationAudit,
 } from '../../../domain/identity/src/index.js';
 import {
   ExternalIdentityEntity,
@@ -195,7 +196,7 @@ export async function activateInvitation(
   provider: string,
   subject: string,
   activatedAt: Date,
-  audit?: IdentityMutationAudit,
+  audit?: IdentityMutationAudit | InvitationActivationAudit,
 ): Promise<InvitationActivation | null> {
   if (
     !HASH_PATTERN.test(tokenHash) ||
@@ -253,11 +254,13 @@ export async function activateInvitation(
           { consumedAt: activatedAt },
         );
       if (consumed.affected !== 1) throw new ActivationRejected();
-      if (audit) await core.appendAudit(manager, audit);
-      return {
+      const activation = {
         identity: { ...toIdentity(identity), status: 'active' },
         membership: { ...toMembership(membership), status: 'active', activatedAt },
       } satisfies InvitationActivation;
+      if (audit)
+        await core.appendAudit(manager, typeof audit === 'function' ? audit(activation) : audit);
+      return activation;
     });
   } catch (error) {
     if (error instanceof ActivationRejected) return null;

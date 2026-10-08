@@ -30,6 +30,9 @@ export interface IdentityMutationAudit {
   readonly data: Readonly<Record<string, unknown>>;
 }
 
+/** Builds an activation audit event from the invitation row locked inside the transaction. */
+export type InvitationActivationAudit = (activation: InvitationActivation) => IdentityMutationAudit;
+
 export interface IdentityStore {
   /** True only when audit rows can be committed in the same transaction as identity mutations. */
   readonly supportsAtomicAudit?: boolean;
@@ -76,7 +79,7 @@ export interface IdentityStore {
     provider: string,
     subject: string,
     activatedAt: Date,
-    audit: IdentityMutationAudit,
+    audit: IdentityMutationAudit | InvitationActivationAudit,
   ): Promise<InvitationActivation | null>;
   findRecovery(tokenHash: string): Promise<RecoveryRequest | null>;
   /** Persist the request and mark older unused requests of the same identity as superseded (`supersededAt = request.issuedAt`). */

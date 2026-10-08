@@ -134,7 +134,7 @@ export class IdentityService {
     token: string,
     provider: string,
     subject: string,
-    audit?: IdentityMutationAudit,
+    audit?: IdentityMutationAudit | ((activation: InvitationActivation) => IdentityMutationAudit),
   ): Promise<InvitationActivation> {
     if (!nonEmpty(token) || !nonEmpty(provider) || !nonEmpty(subject))
       throw new AuthError('unauthorized');

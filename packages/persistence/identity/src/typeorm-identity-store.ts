@@ -5,6 +5,7 @@ import {
   type ExternalIdentity,
   type Identity,
   type IdentityMutationAudit,
+  type InvitationActivationAudit,
   type IdentityStore,
   type Invitation,
   type InvitationActivation,
@@ -167,7 +168,7 @@ export class TypeOrmIdentityStore implements IdentityStore {
     provider: string,
     subject: string,
     activatedAt: Date,
-    audit: IdentityMutationAudit,
+    audit: IdentityMutationAudit | InvitationActivationAudit,
   ): Promise<InvitationActivation | null> {
     if (!this.core.hasAuditWriter) return Promise.reject(new AuthError('conflict'));
     return activateInvitation(this.core, tokenHash, provider, subject, activatedAt, audit);

@@ -40,6 +40,15 @@ describe('AccessDirectory membership edges', () => {
     expect(directory.activate('bea', 't1')).toBe(false);
     expect(directory.roleOf('t1', 'bea')).toBe('editor');
   });
+
+  it('rebuilds an activated membership after restart from its persisted role', async () => {
+    const directory = new AccessDirectory(() => true, {
+      findRole: vi.fn(async () => 'editor'),
+    });
+    expect(directory.activate('bea', 't1')).toBe(false);
+    await expect(directory.activateFromStore('bea', 't1')).resolves.toBe(true);
+    expect(directory.roleOf('t1', 'bea')).toBe('editor');
+  });
 });
 
 describe('InMemoryTenantStore control-plane rules', () => {

@@ -247,6 +247,52 @@ suite('platform on a real MySQL identity store', () => {
     });
   });
 
+  it('accepts a persisted invitation after API restart and atomically audits the joined identity', async () => {
+    const a = await tenant('restart-accept');
+    const invitation = (await platform.inviteUser(a.token, 'restart-invite', 'editor')).value!;
+    const restartedPlatform = createPlatform({
+      verifier,
+      issuer: verifier.issuer,
+      grantSecret: 'synthetic-grant-secret-for-tests-0123456789',
+      adapters: {
+        identityStore: storeB,
+        tenants,
+        ...createMySqlAuditRuntime({
+          listTenantIds: () => tenants.all().map((entry) => entry.id),
+          resolveRuntime: () => sources[0]!,
+          resolveRelay: () => sources[0]!,
+          resolveReader: () => sources[0]!,
+        }),
+      },
+    });
+    const nonce = `restart-nonce-${(nonces += 1)}`;
+    const verified = await restartedPlatform.verifyPrincipal(
+      verifier.issueCode('restart-invitee', nonce),
+      nonce,
+    );
+    expect(verified.value).toBeDefined();
+    const accepted = await restartedPlatform.acceptInvitation(
+      invitation.invitationToken,
+      verified.value,
+    );
+    expect(accepted).toMatchObject({
+      ok: true,
+      value: { identityId: invitation.identityId, tenantId: a.tenantId },
+    });
+    const audits = await rows<{ action: string; entity_id: string; tenant_id: string }>(
+      `SELECT action, entity_id, tenant_id FROM ${identifier(AUDIT_TABLES.local)} WHERE action = 'user.joined' AND entity_id = ?`,
+      [invitation.identityId],
+    );
+    expect(audits).toEqual([
+      expect.objectContaining({
+        action: 'user.joined',
+        entity_id: invitation.identityId,
+        tenant_id: a.tenantId,
+      }),
+    ]);
+    expect(await restartedPlatform.signIn(verified.value)).toMatchObject({ ok: true });
+  });
+
   it('rolls back identity, membership, invitation and local audit when the audit append fails', async () => {
     const a = await tenant('audit-rollback');
     const failingStore = new TypeOrmIdentityStore(sources[0]!, {
