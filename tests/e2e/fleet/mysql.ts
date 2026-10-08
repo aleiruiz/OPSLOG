@@ -114,6 +114,7 @@ async function startTenantDatabase(label: string): Promise<FleetTenantDatabase> 
   const admin = adminConfig(adminUrl);
   const suffix = randomBytes(6).toString('hex');
   const databaseName = `opslog_t_${suffix}`;
+  const auditSuffix = randomBytes(5).toString('hex').slice(0, 9);
   const runtime = Object.fromEntries(
     modules.map((name) => [
       name,
@@ -124,15 +125,15 @@ async function startTenantDatabase(label: string): Promise<FleetTenantDatabase> 
     ]),
   ) as Omit<Accounts, 'auditRuntime' | 'auditRelay'>;
   const auditRuntime = {
-    username: `opslog_ar_${suffix}`,
+    username: `opslog_audit_runtime_${auditSuffix}`,
     password: randomBytes(24).toString('base64url'),
   };
   const auditRelay = {
-    username: `opslog_al_${suffix}`,
+    username: `opslog_audit_relay_${auditSuffix}`,
     password: randomBytes(24).toString('base64url'),
   };
   const auditMigrator = {
-    username: `opslog_am_${suffix}`,
+    username: `opslog_audit_migrator_${auditSuffix}`,
     password: randomBytes(24).toString('base64url'),
   };
   const accounts = { ...runtime, auditRuntime, auditRelay } as Accounts;
