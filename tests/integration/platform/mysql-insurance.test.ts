@@ -309,7 +309,7 @@ suite('BFF on the real MySQL insurance store', () => {
         [tenantA, 'insurance_policy'],
       ),
     );
-    expect(text).toContain('insurance_policy.created');
+    expect(text).toContain('insurance.created');
     for (const fragment of ['Aseguradora-auditoria-99', 'POL-AUDITORIA-99', '7654321'])
       expect(text).not.toContain(fragment);
   });

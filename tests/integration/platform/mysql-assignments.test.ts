@@ -341,10 +341,10 @@ suite('BFF on the real MySQL assignment store', () => {
     const text = JSON.stringify(
       await db.rows(
         `SELECT action, data FROM ${AUDIT_TABLES.local} WHERE tenant_id = ? AND entity_type = ?`,
-        [tenantA, 'vehicle_assignment'],
+        [tenantA, 'assignment'],
       ),
     );
-    expect(text).toContain('vehicle_assignment.created');
+    expect(text).toContain('assignment.assigned');
     expect(text).not.toContain('Motivo-auditoria-secreto-99');
     expect(tenantB).not.toBe(tenantA);
   });

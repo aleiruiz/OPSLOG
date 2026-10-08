@@ -19,6 +19,8 @@ import {
 } from '../../../packages/persistence/identity/src/index.js';
 import {
   AUDIT_TABLES,
+  listPendingAuditEventIds,
+  relayPendingAuditEvent,
   appendLocalAuditAndDelivery,
   createMySqlAuditRuntime,
 } from '../../../packages/persistence/audit/src/index.js';
@@ -516,7 +518,12 @@ suite('platform on a real MySQL identity store', () => {
             principal: principalFor,
             findMembership: (tenantId, identityId) => storeB.findMembership(tenantId, identityId),
             started: latency.started,
-            flushAudit: () => auditRuntime.auditRelay.runBatch(),
+            flushAudit: async (tenantId) => {
+              const source = sources[0]!;
+              const pending = await listPendingAuditEventIds(source, tenantId, 100);
+              for (const eventId of pending)
+                await relayPendingAuditEvent(source, tenantId, eventId);
+            },
           },
           `${order}-${round}-${suffix}`,
           order,

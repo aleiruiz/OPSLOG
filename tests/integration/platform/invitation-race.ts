@@ -11,7 +11,7 @@ export interface RaceEnv {
   ) => Promise<{ status: string } | null>;
   /** Resolves when the named identity-store call has started (see `withLatency`). */
   readonly started: (name: Slow) => Promise<void>;
-  readonly flushAudit?: () => Promise<unknown>;
+  readonly flushAudit?: (tenantId: string) => Promise<unknown>;
 }
 
 export type Order = 'accept-first' | 'revoke-first';
@@ -63,7 +63,7 @@ export async function raceAcceptAndRevoke(env: RaceEnv, tag: string, order: Orde
   expect(listed.find((member) => member.id === invited.identityId)?.status).not.toBe('invited');
 
   // The audit trail says what really happened.
-  await env.flushAudit?.();
+  await env.flushAudit?.(tenantId);
   const actions = (await platform.audit.list(tenantId)).map((event) => event.action);
   const count = (action: string) => actions.filter((item) => item === action).length;
   if (order === 'accept-first') {

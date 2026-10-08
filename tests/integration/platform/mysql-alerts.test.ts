@@ -243,10 +243,10 @@ suite('BFF on the real MySQL stores: expiry alerts and settings', () => {
     const text = JSON.stringify(
       await settings.rows(
         `SELECT action, data FROM ${AUDIT_TABLES.local} WHERE tenant_id = ? AND action = ?`,
-        [tenantA, 'company_settings.updated'],
+        [tenantA, 'settings.updated'],
       ),
     );
-    expect(text).toContain('company_settings.updated');
+    expect(text).toContain('settings.updated');
     expect(text).not.toContain('admin,viewer');
     expect(text).not.toContain('expiryWindowDays');
     // Back to the default window for the other tests.
