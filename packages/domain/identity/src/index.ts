@@ -15,6 +15,7 @@ export {
 export {
   type IdentityAccessResolver,
   type IdentityStore,
+  type IdentityMutationAudit,
   type RecoveryNotifier,
   type TokenGenerator,
   opaqueTokenGenerator,

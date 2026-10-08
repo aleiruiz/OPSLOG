@@ -1,4 +1,7 @@
-import type { Permission } from '../../../../packages/domain/identity/src/index.js';
+import type {
+  IdentityMutationAudit,
+  Permission,
+} from '../../../../packages/domain/identity/src/index.js';
 import { ROLE_PERMISSIONS, type RoleName } from './access.js';
 
 export const ROLE_LABELS: Readonly<Record<RoleName, string>> = {
@@ -103,6 +106,13 @@ export interface RoleDirectoryStore {
   ): Promise<CreateRoleOutcome>;
   /** Persists the role of a pending or active membership; false when there is none. */
   setRole(tenantId: string, identityId: string, role: string): Promise<boolean>;
+  /** Optional transactional variant for a durable tenant-local audit row and delivery state. */
+  setRoleWithAudit?(
+    tenantId: string,
+    identityId: string,
+    role: string,
+    audit: IdentityMutationAudit,
+  ): Promise<boolean>;
 }
 
 export const isRoleDirectoryStore = (value: unknown): value is RoleDirectoryStore =>
@@ -176,6 +186,17 @@ export class RoleDirectory {
     role: RoleName,
   ): Promise<boolean> {
     return this.store ? this.store.setRole(tenantId, identityId, role) : true;
+  }
+
+  public async setMemberRoleWithAudit(
+    tenantId: string,
+    identityId: string,
+    role: RoleName,
+    audit: IdentityMutationAudit,
+  ): Promise<boolean> {
+    if (!this.store) return true;
+    if (!this.store.setRoleWithAudit) return false;
+    return this.store.setRoleWithAudit(tenantId, identityId, role, audit);
   }
 }
 

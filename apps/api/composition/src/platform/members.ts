@@ -62,16 +62,24 @@ export function changeRole(
     if (!isRoleName(role)) throw new PlatformError('invalid_input');
     const current = k.access.roleOf(context.tenantId, targetIdentityId);
     if (!current) throw new PlatformError('not_found');
+    if (current === role) return null;
     if (
       current === 'admin' &&
       role !== 'admin' &&
       k.access.activeAdmins(context.tenantId).length <= 1
     )
       throw new PlatformError('last_admin');
+    const audit = k.auditEvent(
+      k.userActor(context),
+      'membership.role_changed',
+      'membership',
+      targetIdentityId,
+      correlationId,
+    );
     // Persisted first: the store enforces the last-administrator rule across processes and bumps
     // the persisted authorization version. The in-memory directory follows; if the rest of the
     // change fails, both writes are compensated so the directory and the store never disagree.
-    await k.persistRole(context.tenantId, targetIdentityId, role);
+    await k.persistRole(context.tenantId, targetIdentityId, role, audit);
     try {
       k.access.setRole(context.tenantId, targetIdentityId, role);
       await bumpProjection(k, context.tenantId, targetIdentityId, 'active');
@@ -80,13 +88,7 @@ export function changeRole(
       await k.persistRole(context.tenantId, targetIdentityId, current).catch(() => undefined);
       throw error;
     }
-    await k.auditNow(
-      k.userActor(context),
-      'membership.role_changed',
-      'membership',
-      targetIdentityId,
-      correlationId,
-    );
+    if (!k.roles.persistent) await k.audit.append(audit);
     return null;
   });
 }

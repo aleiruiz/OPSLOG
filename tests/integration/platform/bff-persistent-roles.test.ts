@@ -3,6 +3,10 @@ import {
   InMemoryTenantStore,
   type PlatformAdapters,
 } from '../../../apps/api/composition/src/index.js';
+import {
+  AUDIT_ENTITIES,
+  appendLocalAuditAndDelivery,
+} from '../../../packages/persistence/audit/src/index.js';
 import { createBffWorld, type BffWorld } from '../../../apps/api/bff/src/test-support.js';
 import {
   MembershipEntity,
@@ -23,8 +27,11 @@ let world: BffWorld;
 afterEach(() => world?.dispose());
 
 function persistentBff() {
-  const db = new FakeDatabase();
-  const identityStore = new TypeOrmIdentityStore(asDataSource(db));
+  const db = new FakeDatabase(AUDIT_ENTITIES);
+  const identityStore = new TypeOrmIdentityStore(asDataSource(db), {
+    appendAudit: (manager, event) =>
+      appendLocalAuditAndDelivery(manager, { ...event, data: {} }).then(() => undefined),
+  });
   const adapters: PlatformAdapters = { identityStore, tenants: new InMemoryTenantStore() };
   world = createBffWorld({ adapters });
   return { db, identityStore };

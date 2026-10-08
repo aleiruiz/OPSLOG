@@ -109,7 +109,7 @@ describe('audit local writer and projection relay', () => {
     ]);
   });
 
-  it('fails a duplicate local command identity closed without reading append-only rows', async () => {
+  it('fails closed on a duplicate local command identity without reading or overwriting rows', async () => {
     const db = fakeManager();
     await appendLocalAuditAndDelivery(db.manager, makeEvent());
     await expect(appendLocalAuditAndDelivery(db.manager, makeEvent())).rejects.toBeInstanceOf(

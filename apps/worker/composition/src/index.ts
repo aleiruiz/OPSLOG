@@ -114,6 +114,9 @@ export function createWorkerRuntime(deps: WorkerRuntimeDeps): WorkerRuntime {
     worker,
     drainOutbox: (max) => drain(worker, max),
     runScans: () => deps.pipeline.processScans(),
-    runAuditRelay: (max) => deps.auditRelay?.runBatch(max) ?? Promise.resolve(0),
+    runAuditRelay: (max) => {
+      if (!deps.auditRelay) throw new Error('audit relay is not configured');
+      return deps.auditRelay.runBatch(max);
+    },
   };
 }

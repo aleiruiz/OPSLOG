@@ -7,12 +7,15 @@ import {
   AUDIT_TABLES,
   appendAuditProjection,
   appendLocalAuditAndDelivery,
+  createMySqlAuditRuntime,
   createAuditMigrationDataSource,
   createAuditRelayDataSource,
   createAuditRuntimeDataSource,
   ensureAuditYearPartition,
   listPendingAuditEventIds,
   MySqlAuditStore,
+  MySqlAuditApiStore,
+  MySqlAuditRelay,
   relayPendingAuditEvent,
   runAuditMigrations,
   type AuditDatabaseConfig,
@@ -198,6 +201,8 @@ describe.skipIf(!adminUrl)('tenant-local audit persistence against MySQL 8', () 
   let relayA: DataSource;
   let relayB: DataSource;
   let store: MySqlAuditStore;
+  let apiStore: MySqlAuditApiStore;
+  let relay: MySqlAuditRelay;
 
   beforeAll(async () => {
     a = await createTenantDb('a');
@@ -206,10 +211,18 @@ describe.skipIf(!adminUrl)('tenant-local audit persistence against MySQL 8', () 
     runtimeB = await b.openRuntime();
     relayA = await a.openRelay();
     relayB = await b.openRelay();
+    const auditRuntime = createMySqlAuditRuntime({
+      listTenantIds: () => [a.tenantId, b.tenantId],
+      resolveRuntime: (tenantId) => (tenantId === a.tenantId ? runtimeA : runtimeB),
+      resolveRelay: (tenantId) => (tenantId === a.tenantId ? relayA : relayB),
+      resolveReader: (tenantId) => (tenantId === a.tenantId ? runtimeA : runtimeB),
+    });
+    apiStore = auditRuntime.audit;
     store = new MySqlAuditStore(
       (tenantId) => (tenantId === a.tenantId ? relayA : relayB),
       (tenantId) => (tenantId === a.tenantId ? runtimeA : runtimeB),
     );
+    relay = auditRuntime.auditRelay;
   });
 
   afterAll(async () => {
@@ -266,10 +279,23 @@ describe.skipIf(!adminUrl)('tenant-local audit persistence against MySQL 8', () 
     const restarted = await a.openRuntime();
     expect(
       await new MySqlAuditStore(
-        (id) => (id === a.tenantId ? relayA : relayB),
+        (id) => (id === a.tenantId ? restarted : runtimeB),
         (id) => (id === a.tenantId ? restarted : runtimeB),
       ).list(a.tenantId, range),
     ).toHaveLength(1);
+  });
+
+  it('API AuditStore append queues locally and the concrete worker relay publishes the tenant view', async () => {
+    const item = event(a.tenantId, 'api-audit-event');
+    await apiStore.append(item);
+    expect(await listPendingAuditEventIds(relayA, a.tenantId)).toEqual([item.eventId]);
+    expect((await store.list(a.tenantId, range)).some((row) => row.eventId === item.eventId)).toBe(
+      false,
+    );
+    expect(await relay.runBatch(10)).toBe(1);
+    expect(
+      (await store.list(a.tenantId, range)).filter((row) => row.eventId === item.eventId),
+    ).toMatchObject([{ eventId: item.eventId, tenantId: a.tenantId }]);
   });
 
   it('retries after projection commit before delivery acknowledgement without duplicating the projection', async () => {
@@ -306,6 +332,7 @@ describe.skipIf(!adminUrl)('tenant-local audit persistence against MySQL 8', () 
   it('deduplicates concurrent projection retries and rejects changed immutable content', async () => {
     const item = event(a.tenantId, 'race-event');
     await Promise.all([store.append(item), store.append(item)]);
+    expect(await listPendingAuditEventIds(relayA, a.tenantId)).not.toContain(item.eventId);
     await expect(store.append({ ...item, action: 'vehicle.deleted' })).rejects.toMatchObject({
       code: 'AUDIT_EVENT_CONFLICT',
     });
@@ -420,6 +447,7 @@ describe.skipIf(!adminUrl)('tenant-local audit persistence against MySQL 8', () 
     }
     const item = event(a.tenantId, 'rollover-event', '2036-06-01T00:00:00.000Z');
     await store.append(item);
+    await relay.runBatch(10);
     const [plan] = await a.admin.query(
       `EXPLAIN SELECT event_id FROM ${identifier(AUDIT_TABLES.projection)} WHERE tenant_id = ? AND occurred_at >= ? AND occurred_at < ?`,
       [a.tenantId, '2036-01-01 00:00:00', '2037-01-01 00:00:00'],

@@ -38,6 +38,13 @@ export {
   AuditPersistenceError,
   listPendingAuditEventIds,
   MySqlAuditStore,
+  MySqlAuditApiStore,
+  MySqlAuditRelay,
   relayPendingAuditEvent,
   type TenantAuditDataSourceResolver,
 } from './store.js';
+export {
+  createMySqlAuditRuntime,
+  type IdentityMutationAuditRecord,
+  type MySqlAuditRuntimeOptions,
+} from './runtime.js';

@@ -17,6 +17,19 @@ export interface IdentityAccessResolver {
   resolvePermissions(context: TenantContext): Promise<readonly Permission[]>;
 }
 
+/** Minimal sanitized audit envelope used to atomically record identity mutations. */
+export interface IdentityMutationAudit {
+  readonly eventId: string;
+  readonly tenantId: string;
+  readonly action: string;
+  readonly entityType: string;
+  readonly entityId: string;
+  readonly occurredAt: string;
+  readonly actor: { readonly id: string; readonly kind: 'user' | 'system' };
+  readonly correlationId: string;
+  readonly data: Readonly<Record<string, unknown>>;
+}
+
 export interface IdentityStore {
   /** Atomically persist a new identity and its provider+subject key. Enforce a unique constraint on that key and return the winner on conflict. */
   createExternalIdentity(identity: Identity, external: ExternalIdentity): Promise<ExternalIdentity>;
@@ -32,6 +45,15 @@ export interface IdentityStore {
     identity: Identity,
     membership: Membership,
     invitation: Invitation,
+    supersededAt?: Date,
+  ): Promise<void>;
+  /** Persistent adapters may atomically store invitation, role, local audit and pending delivery. */
+  createInvitationWithRoleAndAudit?(
+    identity: Identity,
+    membership: Membership,
+    invitation: Invitation,
+    role: string,
+    audit: IdentityMutationAudit,
     supersededAt?: Date,
   ): Promise<void>;
   /**
@@ -65,6 +87,13 @@ export interface IdentityStore {
    * adapter must refuse to revoke the final administrator of a tenant.
    */
   revokeMembership(tenantId: string, identityId: string): Promise<boolean>;
+  /** Persistent adapters may atomically store a role change and its local audit/delivery rows. */
+  setRoleWithAudit?(
+    tenantId: string,
+    identityId: string,
+    role: string,
+    audit: IdentityMutationAudit,
+  ): Promise<boolean>;
   saveSession(session: Session): Promise<void>;
   findSession(tokenHash: string): Promise<Session | null>;
   revokeSession(id: string, revokedAt: Date): Promise<boolean>;

@@ -3,6 +3,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   FakeOidcVerifier,
+  InMemoryAuditStore,
   InMemoryTenantStore,
   createPlatform,
   type Platform,
@@ -15,6 +16,10 @@ import {
   createIdentityMigrationDataSource,
   runIdentityMigrations,
 } from '../../../packages/persistence/identity/src/index.js';
+import {
+  AUDIT_TABLES,
+  createMySqlAuditRuntime,
+} from '../../../packages/persistence/audit/src/index.js';
 
 /**
  * The platform on a real MySQL identity store (CI: mysql service, OPSLOG_TEST_MYSQL_ADMIN_URL;
@@ -35,7 +40,7 @@ const identifier = (value: string): string => {
 
 suite('platform on a real MySQL identity store', () => {
   const suffix = `${Date.now()}_${process.pid}`;
-  const databaseName = `opslog_plat_${suffix}`;
+  const databaseName = `opslog_t_synthetic_${suffix}`;
   const runtimeUser = `opslog_identity_${createHash('sha256').update(suffix).digest('hex').slice(0, 16)}`;
   const runtimePassword = randomBytes(24).toString('base64url');
   const verifier = new FakeOidcVerifier();
@@ -82,6 +87,18 @@ suite('platform on a real MySQL identity store', () => {
       user: decodeURIComponent(url.username) || 'root',
       password: decodeURIComponent(url.password),
     };
+    const tenants = new InMemoryTenantStore();
+    const auditSource = () => {
+      const source = sources[0];
+      if (!source) throw new Error('synthetic audit DataSource is unavailable');
+      return source;
+    };
+    const auditRuntime = createMySqlAuditRuntime({
+      listTenantIds: () => tenants.all().map((tenant) => tenant.id),
+      resolveRuntime: auditSource,
+      resolveRelay: auditSource,
+      resolveReader: auditSource,
+    });
     admin = await mysql.createConnection({ ...config, database: 'mysql' });
     await admin.query(`CREATE DATABASE ${identifier(databaseName)} CHARACTER SET utf8mb4`);
     await admin.query(`CREATE USER '${runtimeUser}'@'%' IDENTIFIED BY ?`, [runtimePassword]);
@@ -94,6 +111,7 @@ suite('platform on a real MySQL identity store', () => {
       database: databaseName,
       username: config.user,
       password: config.password,
+      ...auditRuntime.identitySchema,
     });
     await migrations.initialize();
     try {
@@ -110,10 +128,11 @@ suite('platform on a real MySQL identity store', () => {
         username: runtimeUser,
         password: runtimePassword,
         connectionLimit: 6,
+        ...auditRuntime.identitySchema,
       });
       await source.initialize();
       sources.push(source);
-      return new TypeOrmIdentityStore(source);
+      return new TypeOrmIdentityStore(source, { appendAudit: auditRuntime.appendIdentityAudit });
     };
     storeA = await open();
     storeB = await open();
@@ -121,7 +140,11 @@ suite('platform on a real MySQL identity store', () => {
       verifier,
       issuer: verifier.issuer,
       grantSecret: 'synthetic-grant-secret-for-tests-0123456789',
-      adapters: { identityStore: storeA, tenants: new InMemoryTenantStore() },
+      adapters: {
+        identityStore: storeA,
+        tenants,
+        ...auditRuntime,
+      },
     });
   }, 120_000);
 
@@ -182,6 +205,38 @@ suite('platform on a real MySQL identity store', () => {
     expect(await storeA.findRole(a.tenantId, invited.identityId)).toBe('editor');
   });
 
+  it('persists invitation and role audit in MySQL before the concrete tenant relay publishes them', async () => {
+    const a = await tenant('audit-relay');
+    const invited = await platform.inviteUser(a.token, 'audit-invite', 'editor');
+    expect(invited.ok).toBe(true);
+    const invitationEvents = await rows<{ event_id: string; entity_id: string }>(
+      `SELECT event_id, entity_id FROM ${identifier(AUDIT_TABLES.local)} WHERE tenant_id = ? AND action = 'user.invited'`,
+      [a.tenantId],
+    );
+    expect(invitationEvents).toMatchObject([{ entity_id: invited.value?.identityId }]);
+    expect(
+      await rows<{ status: string }>(
+        `SELECT status FROM ${identifier(AUDIT_TABLES.delivery)} WHERE tenant_id = ? AND event_id = ?`,
+        [a.tenantId, invitationEvents[0]?.event_id],
+      ),
+    ).toEqual([{ status: 'pending' }]);
+    expect(await platform.listAudit(a.token, 'audit-list-before-relay')).toMatchObject({
+      ok: true,
+      value: [],
+    });
+
+    expect(await platform.runtime.runAuditRelay(20)).toBeGreaterThan(0);
+    expect(await platform.listAudit(a.token, 'audit-list-after-relay')).toMatchObject({
+      ok: true,
+      value: expect.arrayContaining([
+        expect.objectContaining({
+          action: 'user.invited',
+          entityId: invited.value?.identityId,
+        }),
+      ]),
+    });
+  });
+
   it('does not let a stale directory role outlive a demotion made by another process', async () => {
     const a = await tenant('drift');
     const invited = (await platform.inviteUser(a.token, 'corr-4', 'admin')).value!;
@@ -208,7 +263,12 @@ suite('platform on a real MySQL identity store', () => {
           verifier,
           issuer: verifier.issuer,
           grantSecret: 'synthetic-grant-secret-for-tests-0123456789',
-          adapters: { identityStore: latency.store as never, tenants: new InMemoryTenantStore() },
+          adapters: {
+            identityStore: latency.store as never,
+            tenants: new InMemoryTenantStore(),
+            audit: new InMemoryAuditStore(),
+            auditRelay: { runBatch: async () => 0 },
+          },
         });
         const principalFor = async (subject: string) => {
           const nonce = `nonce-${(nonces += 1)}`;

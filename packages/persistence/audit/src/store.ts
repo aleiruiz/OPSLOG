@@ -224,14 +224,14 @@ export async function listPendingAuditEventIds(
 /** Relay/projection adapter. Its resolver must return the exclusive database for the requested tenant. */
 export class MySqlAuditStore implements AuditStore {
   public constructor(
-    private readonly resolveRelay: TenantAuditDataSourceResolver,
-    private readonly resolveReader: TenantAuditDataSourceResolver = resolveRelay,
+    private readonly resolveProjectionWriter: TenantAuditDataSourceResolver,
+    private readonly resolveReader: TenantAuditDataSourceResolver = resolveProjectionWriter,
   ) {}
 
   public async append(event: AuditEvent): Promise<void> {
     try {
       const safeEvent = sanitizeAuditEvent(structuredClone(event));
-      const source = await this.resolveRelay(safeEvent.tenantId);
+      const source = await this.resolveProjectionWriter(safeEvent.tenantId);
       requireTenantSource(source);
       await source.transaction('READ COMMITTED', (manager) =>
         appendAuditProjection(manager, safeEvent),
@@ -246,26 +246,90 @@ export class MySqlAuditStore implements AuditStore {
     tenantId: string,
     range?: AuditListRange,
   ): Promise<readonly PersistedAuditEvent[]> {
-    if (typeof tenantId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(tenantId))
-      throw new Error('invalid audit tenantId');
-    const bounded = validateAuditListRange(range ?? defaultAuditListRange());
+    return listTenantAuditProjection(this.resolveReader, tenantId, range);
+  }
+}
+
+async function listTenantAuditProjection(
+  resolveReader: TenantAuditDataSourceResolver,
+  tenantId: string,
+  range?: AuditListRange,
+): Promise<readonly PersistedAuditEvent[]> {
+  if (typeof tenantId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(tenantId))
+    throw new Error('invalid audit tenantId');
+  const bounded = validateAuditListRange(range ?? defaultAuditListRange());
+  try {
+    const source = await resolveReader(tenantId);
+    requireTenantSource(source);
+    const rows = await source
+      .getRepository(AuditProjectionEntity)
+      .createQueryBuilder('audit')
+      .where('audit.tenantId = :tenantId', { tenantId })
+      .andWhere('audit.occurredAt >= :from', { from: new Date(bounded.from) })
+      .andWhere('audit.occurredAt < :to', { to: new Date(bounded.to) })
+      .orderBy('audit.occurredAt', 'DESC')
+      .addOrderBy('audit.eventId', 'ASC')
+      .take(bounded.limit)
+      .getMany();
+    return rows.map(persisted);
+  } catch {
+    throw new AuditPersistenceError();
+  }
+}
+
+/** API-facing store: append writes a durable tenant-local event and delivery row for later relay. */
+export class MySqlAuditApiStore implements AuditStore {
+  public constructor(
+    private readonly resolveRuntime: TenantAuditDataSourceResolver,
+    private readonly resolveReader: TenantAuditDataSourceResolver = resolveRuntime,
+  ) {}
+
+  public async append(event: AuditEvent): Promise<void> {
     try {
-      const source = await this.resolveReader(tenantId);
+      const safeEvent = sanitizeAuditEvent(structuredClone(event));
+      const source = await this.resolveRuntime(safeEvent.tenantId);
       requireTenantSource(source);
-      const rows = await source
-        .getRepository(AuditProjectionEntity)
-        .createQueryBuilder('audit')
-        .where('audit.tenantId = :tenantId', { tenantId })
-        .andWhere('audit.occurredAt >= :from', { from: new Date(bounded.from) })
-        .andWhere('audit.occurredAt < :to', { to: new Date(bounded.to) })
-        .orderBy('audit.occurredAt', 'DESC')
-        .addOrderBy('audit.eventId', 'ASC')
-        .take(bounded.limit)
-        .getMany();
-      return rows.map(persisted);
-    } catch {
+      await source.transaction('READ COMMITTED', (manager) =>
+        appendLocalAuditAndDelivery(manager, safeEvent),
+      );
+    } catch (error) {
+      if (error instanceof AuditConflictError || error instanceof AuditLocalDuplicateError)
+        throw error;
       throw new AuditPersistenceError();
     }
+  }
+
+  public async list(
+    tenantId: string,
+    range?: AuditListRange,
+  ): Promise<readonly PersistedAuditEvent[]> {
+    return listTenantAuditProjection(this.resolveReader, tenantId, range);
+  }
+}
+
+/** Runs the durable tenant-local delivery queue and never treats a missing relay as an empty batch. */
+export class MySqlAuditRelay {
+  public constructor(
+    private readonly tenantIds: () => readonly string[] | Promise<readonly string[]>,
+    private readonly resolveRelay: TenantAuditDataSourceResolver,
+  ) {}
+
+  public async runBatch(max = 100): Promise<number> {
+    if (!Number.isInteger(max) || max < 1 || max > 1000)
+      throw new Error('invalid audit relay batch size');
+    const tenants = [...new Set(await this.tenantIds())].sort();
+    let delivered = 0;
+    for (const tenantId of tenants) {
+      if (delivered >= max) break;
+      const source = await this.resolveRelay(tenantId);
+      requireTenantSource(source);
+      const ids = await listPendingAuditEventIds(source, tenantId, max - delivered);
+      for (const eventId of ids) {
+        if (await relayPendingAuditEvent(source, tenantId, eventId)) delivered += 1;
+        if (delivered >= max) break;
+      }
+    }
+    return delivered;
   }
 }
 

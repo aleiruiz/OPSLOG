@@ -20,6 +20,7 @@
     "../audit/src/entities.ts",
     "../audit/src/migrations.ts",
     "../audit/src/data-source.ts",
-    "../audit/src/store.ts"
+    "../audit/src/store.ts",
+    "../audit/src/runtime.ts"
   ]
 }

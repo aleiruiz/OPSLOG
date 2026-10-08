@@ -7,8 +7,10 @@ import {
 import { corr, createWorld } from './world.js';
 import {
   AccessDirectory,
+  FakeOidcVerifier,
   InMemoryTenantStore,
   TenantAwareScanQueue,
+  createPlatform,
   createWorkerRuntime,
 } from '../../../apps/api/composition/src/index.js';
 import type { TenantId, SubjectId } from '../../../packages/domain/tenants/src/index.js';
@@ -126,12 +128,37 @@ describe('createWorkerRuntime defaults', () => {
       tenants: new InMemoryTenantStore(),
       actors: { allows: () => true },
       audit: {} as never,
+      auditRelay: { runBatch: async () => 0 },
       pipeline: { processScans } as never,
       clock: () => 0,
     });
     await runtime.runScans();
     expect(processScans).toHaveBeenCalledOnce();
     expect(runtime.worker).toBeDefined();
+  });
+
+  it('fails visibly instead of reporting an empty batch when audit relay is missing', async () => {
+    const runtime = createWorkerRuntime({
+      outbox: { claimDue: async () => [] } as never,
+      tenants: new InMemoryTenantStore(),
+      actors: { allows: () => true },
+      audit: {} as never,
+      pipeline: { processScans: async () => ({ processed: 0 }) } as never,
+      clock: () => 0,
+    });
+    expect(() => runtime.runAuditRelay()).toThrow('audit relay is not configured');
+  });
+
+  it('requires explicit durable audit and relay adapters with a persistent identity store', () => {
+    const verifier = new FakeOidcVerifier();
+    expect(() =>
+      createPlatform({
+        verifier,
+        issuer: verifier.issuer,
+        grantSecret: 'synthetic-grant-secret-for-tests-0123456789',
+        adapters: { identityStore: {} as never },
+      }),
+    ).toThrow('persistent identity requires durable audit storage and a tenant-aware relay');
   });
 });
 

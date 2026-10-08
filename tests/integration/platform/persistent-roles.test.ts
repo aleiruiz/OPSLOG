@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  AuditDeliveryEntity,
+  AuditLocalEventEntity,
+} from '../../../packages/persistence/audit/src/entities.js';
+import {
   InMemoryTenantStore,
   MAX_CUSTOM_ROLES_PER_TENANT,
   RoleCatalog,
@@ -7,6 +11,10 @@ import {
   isRoleDirectoryStore,
   type RoleDirectoryStore,
 } from '../../../apps/api/composition/src/index.js';
+import {
+  AUDIT_ENTITIES,
+  appendLocalAuditAndDelivery,
+} from '../../../packages/persistence/audit/src/index.js';
 import {
   IdentityEntity,
   MembershipEntity,
@@ -32,8 +40,11 @@ afterEach(() => {
 });
 
 function persistentWorld(options: { roleStore?: RoleDirectoryStore } = {}) {
-  const db = new FakeDatabase();
-  const identityStore = new TypeOrmIdentityStore(asDataSource(db));
+  const db = new FakeDatabase(AUDIT_ENTITIES);
+  const identityStore = new TypeOrmIdentityStore(asDataSource(db), {
+    appendAudit: (manager, event) =>
+      appendLocalAuditAndDelivery(manager, { ...event, data: {} }).then(() => undefined),
+  });
   const tenants = new InMemoryTenantStore();
   world = createWorld({
     adapters: { identityStore, tenants, ...options },
@@ -254,7 +265,7 @@ describe('custom roles in the persistent store', () => {
 
 describe('membership roles written through setRole', () => {
   it('the first administrator, invited members and role changes keep the stored role equal to the directory', async () => {
-    const { identityStore } = persistentWorld();
+    const { db, identityStore } = persistentWorld();
     const { platform } = world;
     const a = await world.tenant('Empresa Alfa', 'subject-admin-a');
     expect(await roleOf(identityStore, a.tenantId, a.admin.identityId)).toBe('admin');
@@ -283,6 +294,14 @@ describe('membership roles written through setRole', () => {
     expect((await identityStore.findIdentity(pendingId))?.authorizationVersion).toBe(
       versionBefore + 1,
     );
+    const durableEvents = db
+      .committed(AuditLocalEventEntity)
+      .filter((event) => event.tenantId === a.tenantId);
+    expect(durableEvents.map((event) => event.action)).toContain('user.invited');
+    expect(durableEvents.map((event) => event.action)).toContain('membership.role_changed');
+    expect(
+      db.committed(AuditDeliveryEntity).filter((delivery) => delivery.tenantId === a.tenantId),
+    ).toHaveLength(durableEvents.length);
     expect((await platform.session(auditor.token, corr())).error?.code).toBe('unauthorized');
     const again = await world.signIn('subject-auditor', a.tenantId);
     expect((await platform.sessionDetails(again.token, corr())).value).toMatchObject({
@@ -292,6 +311,35 @@ describe('membership roles written through setRole', () => {
     // Changing to the same role is accepted and changes nothing.
     expect((await platform.changeRole(a.admin.token, corr(), pendingId, 'editor')).ok).toBe(true);
     expect(await roleOf(identityStore, a.tenantId, pendingId)).toBe('editor');
+  });
+
+  it('rolls back invitation and role mutations when the local audit insert fails', async () => {
+    const { db, identityStore } = persistentWorld();
+    const { platform } = world;
+    const a = await world.tenant('Empresa Alfa', 'subject-admin-a');
+
+    const beforeInvitations = db.committed(AuditLocalEventEntity).length;
+    db.failNext('insert', { errno: 1062, code: 'ER_DUP_ENTRY' }, { entity: AuditLocalEventEntity });
+    const rejectedInvite = await platform.inviteUser(a.admin.token, corr(), 'viewer');
+    expect(rejectedInvite.ok).toBe(false);
+    expect(db.committed(AuditLocalEventEntity)).toHaveLength(beforeInvitations);
+    expect(db.committed(MembershipEntity)).toHaveLength(1);
+
+    const member = await world.member(a.admin, 'viewer', 'subject-viewer');
+    const versionBefore = (await identityStore.findIdentity(member.identityId))
+      ?.authorizationVersion;
+    db.failNext('insert', { errno: 1062, code: 'ER_DUP_ENTRY' }, { entity: AuditLocalEventEntity });
+    const rejectedRole = await platform.changeRole(
+      a.admin.token,
+      corr(),
+      member.identityId,
+      'editor',
+    );
+    expect(rejectedRole.ok).toBe(false);
+    expect(await roleOf(identityStore, a.tenantId, member.identityId)).toBe('viewer');
+    expect((await identityStore.findIdentity(member.identityId))?.authorizationVersion).toBe(
+      versionBefore,
+    );
   });
 
   it('refuses a role change for a member of another tenant and changes nothing there', async () => {

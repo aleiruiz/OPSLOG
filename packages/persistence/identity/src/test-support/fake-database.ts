@@ -1,4 +1,5 @@
 import { FindOperator, type DataSource } from 'typeorm';
+import type { EntitySchema } from 'typeorm';
 import {
   ExternalIdentityEntity,
   IDENTITY_ENTITIES,
@@ -158,8 +159,8 @@ export class FakeDatabase {
   private readonly owners = new Map<string, { owner: Tx; waiters: (() => void)[] }>();
   private readonly faults: Fault[] = [];
 
-  public constructor() {
-    for (const schema of IDENTITY_ENTITIES) {
+  public constructor(additionalEntities: readonly EntitySchema[] = []) {
+    for (const schema of [...IDENTITY_ENTITIES, ...additionalEntities]) {
       const options = schema.options;
       const target = options.target as EntityClass;
       const columns = Object.entries(
@@ -227,8 +228,9 @@ export class FakeDatabase {
     const tx = new Tx(++this.txSeq);
     try {
       const result = await work({
-        getRepository: (entity) => new FakeRepository(this, entity, tx),
-      });
+        connection: { options: { database: 'opslog_t_synthetic_identity' } },
+        getRepository: (entity: EntityClass) => new FakeRepository(this, entity, tx),
+      } as never);
       this.finish(tx, false);
       return result;
     } catch (error) {

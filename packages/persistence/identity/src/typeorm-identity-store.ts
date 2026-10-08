@@ -4,6 +4,7 @@ import {
   AuthError,
   type ExternalIdentity,
   type Identity,
+  type IdentityMutationAudit,
   type IdentityStore,
   type Invitation,
   type InvitationActivation,
@@ -62,6 +63,7 @@ export class TypeOrmIdentityStore implements IdentityStore {
       options.now ?? (() => new Date()),
       Math.max(1, options.maxAttempts ?? 3),
       options.onError,
+      options.appendAudit,
     );
   }
 
@@ -102,6 +104,16 @@ export class TypeOrmIdentityStore implements IdentityStore {
     return setRole(this.core, tenantId, identityId, role);
   }
 
+  public setRoleWithAudit(
+    tenantId: string,
+    identityId: string,
+    role: string,
+    audit: IdentityMutationAudit,
+  ): Promise<boolean> {
+    if (!this.core.hasAuditWriter) return Promise.reject(new AuthError('conflict'));
+    return setRole(this.core, tenantId, identityId, role, audit);
+  }
+
   /** Port method: a plain invitation grants the least-privilege default role. */
   public createInvitation(
     identity: Identity,
@@ -122,6 +134,19 @@ export class TypeOrmIdentityStore implements IdentityStore {
   ): Promise<void> {
     if (!isRoleName(role)) return Promise.reject(new AuthError('invalid_input'));
     return writeInvitation(this.core, identity, membership, invitation, supersededAt, role);
+  }
+
+  public createInvitationWithRoleAndAudit(
+    identity: Identity,
+    membership: Membership,
+    invitation: Invitation,
+    role: string,
+    audit: IdentityMutationAudit,
+    supersededAt: Date = this.core.now(),
+  ): Promise<void> {
+    if (!isRoleName(role)) return Promise.reject(new AuthError('invalid_input'));
+    if (!this.core.hasAuditWriter) return Promise.reject(new AuthError('conflict'));
+    return writeInvitation(this.core, identity, membership, invitation, supersededAt, role, audit);
   }
 
   public activateInvitation(

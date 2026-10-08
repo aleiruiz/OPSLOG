@@ -6,6 +6,7 @@ import {
   type Invitation,
   type InvitationActivation,
   type Membership,
+  type IdentityMutationAudit,
 } from '../../../domain/identity/src/index.js';
 import {
   ExternalIdentityEntity,
@@ -79,6 +80,7 @@ export async function setRole(
   tenantId: string,
   identityId: string,
   role: string,
+  audit?: IdentityMutationAudit,
 ): Promise<boolean> {
   if (!nonBlank(tenantId, 64) || !nonBlank(identityId, 64) || !isRoleName(role)) return invalid();
   const known = await findMembership(core, tenantId, identityId);
@@ -97,6 +99,7 @@ export async function setRole(
     await memberships.update({ tenantId, identityId }, { role });
     if (current.status === 'active')
       await identities.increment({ id: identityId }, 'authorizationVersion', 1);
+    if (audit) await core.appendAudit(manager, audit);
     return true;
   });
 }
@@ -108,6 +111,7 @@ export async function writeInvitation(
   invitation: Invitation,
   supersededAt: Date,
   role: string | undefined,
+  audit?: IdentityMutationAudit,
 ): Promise<void> {
   if (
     !nonBlank(identity.id, 64) ||
@@ -181,6 +185,7 @@ export async function writeInvitation(
       expiresAt: invitation.expiresAt,
       consumedAt: invitation.consumedAt,
     });
+    if (audit) await core.appendAudit(manager, audit);
   });
 }
 

@@ -3,6 +3,7 @@ import { AuthError } from './errors.js';
 import {
   opaqueTokenGenerator,
   type IdentityStore,
+  type IdentityMutationAudit,
   type RecoveryNotifier,
   type TokenGenerator,
 } from './ports.js';
@@ -79,6 +80,7 @@ export class IdentityService {
     tenantId: string,
     identityId: string = randomUUID(),
     ttlMs = 72 * 60 * 60 * 1000,
+    options?: { readonly role?: string; readonly audit?: IdentityMutationAudit },
   ) {
     if (!nonEmpty(tenantId) || !nonEmpty(identityId) || !Number.isFinite(ttlMs) || ttlMs <= 0)
       throw new AuthError('invalid_input');
@@ -109,7 +111,20 @@ export class IdentityService {
       expiresAt: new Date(now.getTime() + ttlMs),
       consumedAt: null,
     };
-    await this.store.createInvitation(identity, membership, invitation, now);
+    if (options?.audit) {
+      if (!options.role || !this.store.createInvitationWithRoleAndAudit)
+        throw new AuthError('conflict');
+      await this.store.createInvitationWithRoleAndAudit(
+        identity,
+        membership,
+        invitation,
+        options.role,
+        { ...options.audit, entityId: identity.id },
+        now,
+      );
+    } else {
+      await this.store.createInvitation(identity, membership, invitation, now);
+    }
     return { id: invitation.id, identityId, token, expiresAt: invitation.expiresAt } as const;
   }
   public async activateInvitation(

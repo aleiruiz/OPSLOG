@@ -135,11 +135,16 @@ export class Platform {
     this.now = options.now ?? (() => new Date());
     const adapters = options.adapters ?? {};
     this.tenants = adapters.tenants ?? new InMemoryTenantStore(this.now);
+    const identityStore = adapters.identityStore ?? new InMemoryIdentityStore();
+    const persistentIdentity = !(identityStore instanceof InMemoryIdentityStore);
+    if (persistentIdentity && (!adapters.audit || !adapters.auditRelay))
+      throw new Error(
+        'persistent identity requires durable audit storage and a tenant-aware relay',
+      );
     this.audit = adapters.audit ?? new InMemoryAuditStore();
     this.outbox = adapters.outbox ?? new InMemoryOutboxStore(() => this.now().getTime());
     this.records = adapters.records ?? new InMemoryFileRecordStore();
     this.storage = adapters.storage ?? new InMemoryObjectStorage();
-    const identityStore = adapters.identityStore ?? new InMemoryIdentityStore();
     this.access = new AccessDirectory(
       (tenantId) => this.tenants.status(tenantId) === 'active',
       isStoredRoleReader(identityStore) ? identityStore : undefined,

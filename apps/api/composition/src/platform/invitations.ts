@@ -18,8 +18,23 @@ export async function inviteUser(
   try {
     if (!isRoleName(role)) throw new PlatformError('invalid_input');
     const context = await k.authorize(token, correlationId, ['manage_users']);
-    const invitation = await k.identity.issueInvitation(context.tenantId);
-    await k.persistRole(context.tenantId, invitation.identityId, role);
+    const audit = k.auditEvent(
+      k.userActor(context),
+      'user.invited',
+      'membership',
+      'pending',
+      correlationId,
+    );
+    const invitation = k.roles.persistent
+      ? await k.identity.issueInvitation(context.tenantId, undefined, undefined, {
+          role,
+          audit: { ...audit, entityId: 'pending' },
+        })
+      : await k.identity.issueInvitation(context.tenantId);
+    if (!k.roles.persistent) {
+      await k.persistRole(context.tenantId, invitation.identityId, role);
+      await k.audit.append(audit);
+    }
     k.access.expectInvitation(invitation.identityId, context.tenantId, role);
     const nowMs = k.now().getTime();
     for (const [hash, meta] of k.invitations)
@@ -30,13 +45,6 @@ export async function inviteUser(
       role,
       expiresAt: invitation.expiresAt,
     });
-    await k.auditNow(
-      k.userActor(context),
-      'user.invited',
-      'membership',
-      invitation.identityId,
-      correlationId,
-    );
     return success({
       invitationToken: invitation.token,
       expiresAt: invitation.expiresAt,

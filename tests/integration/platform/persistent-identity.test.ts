@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  AUDIT_ENTITIES,
+  appendLocalAuditAndDelivery,
+} from '../../../packages/persistence/audit/src/index.js';
+import {
   FakeScanner,
   InMemoryAuditStore,
   InMemoryObjectStorage,
@@ -29,8 +33,11 @@ let world: World;
 afterEach(() => world.dispose());
 
 function persistentWorld() {
-  const db = new FakeDatabase();
-  const identityStore = new TypeOrmIdentityStore(asDataSource(db));
+  const db = new FakeDatabase(AUDIT_ENTITIES);
+  const identityStore = new TypeOrmIdentityStore(asDataSource(db), {
+    appendAudit: (manager, event) =>
+      appendLocalAuditAndDelivery(manager, { ...event, data: {} }).then(() => undefined),
+  });
   world = createWorld({
     adapters: {
       identityStore,
