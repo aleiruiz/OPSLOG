@@ -43,22 +43,6 @@ export async function findMembership(
   });
 }
 
-/** Tenant of a valid invitation, scoped only to the token hash. */
-export async function findInvitationTenant(
-  core: IdentityStoreCore,
-  tokenHash: string,
-  at: Date,
-): Promise<string | null> {
-  if (!HASH_PATTERN.test(tokenHash) || !isDate(at)) return null;
-  return core.single('findInvitationTenant', async () => {
-    const row = await core.dataSource.getRepository(InvitationEntity).findOne({
-      where: { tokenHash, consumedAt: IsNull(), expiresAt: MoreThan(at) },
-      select: { tenantId: true },
-    });
-    return row?.tenantId ?? null;
-  });
-}
-
 /** Role of an active membership of this tenant, or null (never reads another tenant's rows). */
 export async function findRole(
   core: IdentityStoreCore,

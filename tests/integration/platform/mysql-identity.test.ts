@@ -247,8 +247,8 @@ suite('platform on a real MySQL identity store', () => {
     });
   });
 
-  it('accepts a persisted invitation after API restart and atomically audits the joined identity', async () => {
-    const a = await tenant('restart-accept');
+  it('fails closed after API restart without consuming or auditing a persisted invitation', async () => {
+    const a = await tenant('restart-fail-closed');
     const invitation = (await platform.inviteUser(a.token, 'restart-invite', 'editor')).value!;
     const restartedPlatform = createPlatform({
       verifier,
@@ -271,12 +271,11 @@ suite('platform on a real MySQL identity store', () => {
       nonce,
     );
     expect(verified.value).toBeDefined();
-    await platform.suspendTenant(a.tenantId);
-    const frozen = await restartedPlatform.acceptInvitation(
+    const refused = await restartedPlatform.acceptInvitation(
       invitation.invitationToken,
       verified.value,
     );
-    expect(frozen.error?.code).toBe('unauthorized');
+    expect(refused.error?.code).toBe('unauthorized');
     expect(
       await rows<{ status: string }>(
         'SELECT status FROM opslog_identity_memberships WHERE tenant_id = ? AND identity_id = ?',
@@ -289,11 +288,7 @@ suite('platform on a real MySQL identity store', () => {
         [invitation.identityId],
       ),
     ).toHaveLength(0);
-    await platform.reactivateTenant(a.tenantId);
-    const accepted = await restartedPlatform.acceptInvitation(
-      invitation.invitationToken,
-      verified.value,
-    );
+    const accepted = await platform.acceptInvitation(invitation.invitationToken, verified.value);
     expect(accepted).toMatchObject({
       ok: true,
       value: { identityId: invitation.identityId, tenantId: a.tenantId },
@@ -309,7 +304,7 @@ suite('platform on a real MySQL identity store', () => {
         tenant_id: a.tenantId,
       }),
     ]);
-    expect(await restartedPlatform.signIn(verified.value)).toMatchObject({ ok: true });
+    expect(await platform.signIn(verified.value)).toMatchObject({ ok: true });
   });
 
   it('rolls back identity, membership, invitation and local audit when the audit append fails', async () => {

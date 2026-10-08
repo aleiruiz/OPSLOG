@@ -40,8 +40,6 @@ export interface IdentityStore {
   createExternalIdentity(identity: Identity, external: ExternalIdentity): Promise<ExternalIdentity>;
   findIdentity(id: string): Promise<Identity | null>;
   findExternal(provider: string, subject: string): Promise<ExternalIdentity | null>;
-  /** Tenant of an unexpired, unconsumed invitation; used to acquire tenant-scoped coordination locks. */
-  findInvitationTenant(tokenHash: string, at: Date): Promise<string | null>;
   findMembership(tenantId: string, identityId: string): Promise<Membership | null>;
   /**
    * Atomically create the invitation and pending identity/membership, preserving existing non-revoked identities.

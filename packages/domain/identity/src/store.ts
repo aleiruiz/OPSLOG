@@ -117,13 +117,6 @@ export class InMemoryIdentityStore implements IdentityStore {
     this.invitations.set(invitation.id, { ...invitation, consumedAt: activatedAt });
     return { identity: activatedIdentity, membership: activatedMembership };
   }
-  public async findInvitationTenant(tokenHash: string, at: Date): Promise<string | null> {
-    const invitation =
-      [...this.invitations.values()].find((item) => sameSecret(item.tokenHash, tokenHash)) ?? null;
-    return invitation && !invitation.consumedAt && invitation.expiresAt > at
-      ? invitation.tenantId
-      : null;
-  }
   public async findRecovery(tokenHash: string) {
     return (
       [...this.recoveries.values()].find((item) => sameSecret(item.tokenHash, tokenHash)) ?? null
