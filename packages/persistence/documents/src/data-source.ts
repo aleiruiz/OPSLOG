@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { DataSource, type DataSourceOptions } from 'typeorm';
 import { DOCUMENT_ENTITIES } from './entities.js';
+import { AUDIT_ENTITIES } from '../../audit/src/index.js';
 import { CreateDocuments2026100600060, DOCUMENTS_MIGRATIONS_TABLE } from './migrations.js';
 
 export interface DocumentsDatabaseConfig {
@@ -22,7 +23,7 @@ export const DOCUMENTS_RUNTIME_ACCOUNT = /^opslog_documents_[a-z0-9_]+$/i;
 
 const common = {
   type: 'mysql',
-  entities: [...DOCUMENT_ENTITIES],
+  entities: [...DOCUMENT_ENTITIES, ...AUDIT_ENTITIES.slice(0, 2)],
   migrations: [CreateDocuments2026100600060],
   migrationsTableName: DOCUMENTS_MIGRATIONS_TABLE,
   synchronize: false,

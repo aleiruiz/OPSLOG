@@ -303,7 +303,9 @@ suite('BFF on the real MySQL insurance store', () => {
       }),
     });
     const text = JSON.stringify(
-      world.platform.audit.list(tenantA).filter((event) => event.entityType === 'insurance_policy'),
+      (await world.platform.audit.list(tenantA)).filter(
+        (event) => event.entityType === 'insurance_policy',
+      ),
     );
     expect(text).toContain('insurance_policy.created');
     for (const fragment of ['Aseguradora-auditoria-99', 'POL-AUDITORIA-99', '7654321'])

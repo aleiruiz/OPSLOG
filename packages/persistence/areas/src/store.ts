@@ -17,6 +17,7 @@ import {
   type AreaWindow,
 } from '../../../domain/areas/src/index.js';
 import { AREAS_RUNTIME_ACCOUNT } from './data-source.js';
+import { appendLocalAuditAndDelivery, type AuditEvent } from '../../audit/src/index.js';
 import {
   AreaEntity,
   AreaHistoryEntity,
@@ -110,6 +111,20 @@ const toEntryRow = (entry: AreaHistoryEntry): AreaHistoryEntity => ({
   actorId: entry.actorId,
   at: new Date(entry.at),
 });
+
+function areaAuditEvent(entry: AreaHistoryEntry): AuditEvent {
+  return {
+    eventId: entry.id,
+    tenantId: entry.tenantId,
+    action: `area.${entry.action}`,
+    entityType: 'area',
+    entityId: entry.areaId,
+    occurredAt: entry.at,
+    actor: { id: entry.actorId, kind: 'user' },
+    correlationId: entry.id,
+    data: {},
+  };
+}
 
 const parentCondition = (parentId: string | null) => (parentId === null ? IsNull() : parentId);
 
@@ -236,6 +251,7 @@ export class TypeOrmAreaStore implements AreaStore {
         const responsibles = manager.getRepository(AreaResponsibleEntity);
         for (const row of rowsFor(area, area.responsibleIds)) await responsibles.insert(row);
         await manager.getRepository(AreaHistoryEntity).insert(toEntryRow(entry));
+        await appendLocalAuditAndDelivery(manager, areaAuditEvent(entry));
       },
       replace: async (next, expectedVersion, entry) => {
         let affected: number | undefined;
@@ -260,6 +276,7 @@ export class TypeOrmAreaStore implements AreaStore {
         ))
           await responsibles.insert(row);
         await manager.getRepository(AreaHistoryEntity).insert(toEntryRow(entry));
+        await appendLocalAuditAndDelivery(manager, areaAuditEvent(entry));
         return true;
       },
       setDepth: async (id, depth) => {

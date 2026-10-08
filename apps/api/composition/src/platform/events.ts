@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { Permission } from '../../../../../packages/domain/identity/src/index.js';
-import type { PersistedAuditEvent } from '../../../../../packages/platform/audit/src/index.js';
+import type {
+  AuditListRange,
+  PersistedAuditEvent,
+} from '../../../../../packages/platform/audit/src/index.js';
 import { failure, success, type PlatformResponse } from './errors.js';
 import { ACTOR_PREFIX } from './kernel.js';
 import type { PlatformKernel } from './kernel.js';
@@ -11,10 +14,17 @@ export async function listAudit(
   k: PlatformKernel,
   token: string,
   correlationId: string,
+  range?: AuditListRange,
 ): Promise<PlatformResponse<readonly PersistedAuditEvent[]>> {
   try {
     const context = await k.authorize(token, correlationId, ['view_audit']);
-    return success(k.audit.list(context.tenantId));
+    const now = k.now();
+    const boundedRange = range ?? {
+      from: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+      to: new Date(now.getTime() + 1).toISOString(),
+      limit: 500,
+    };
+    return success(await k.audit.list(context.tenantId, boundedRange));
   } catch (error) {
     return failure(error);
   }

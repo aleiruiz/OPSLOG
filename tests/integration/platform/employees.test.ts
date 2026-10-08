@@ -106,7 +106,7 @@ const seed = async (w: World, session: Session, over: Record<string, unknown> = 
   ok(await w.platform.employees.create(session.token, corr(), input(over)));
 
 const auditOf = (w: World, tenantId: string) =>
-  w.audit.list(tenantId).filter((event) => event.entityType === 'employee');
+  w.audit.snapshotForTesting(tenantId).filter((event) => event.entityType === 'employee');
 
 let serial = 0;
 const fresh = (): Record<string, unknown> => {
@@ -645,8 +645,8 @@ describe('personal data protection (D23)', () => {
       .join(' ');
     const everything = JSON.stringify([
       results,
-      world.audit.list(f.a.tenantId),
-      world.audit.list(f.b.tenantId),
+      world.audit.snapshotForTesting(f.a.tenantId),
+      world.audit.snapshotForTesting(f.b.tenantId),
       consoled,
     ]);
     for (const fragment of FRAGMENTS) {

@@ -84,7 +84,7 @@ export interface CompanySettingsApiDeps {
     action: CompanySettingsAuditAction,
     entityId: string,
     correlationId: string,
-  ) => void;
+  ) => void | Promise<void>;
 }
 
 /**
@@ -139,7 +139,7 @@ export class CompanySettingsApi {
         version,
         input,
       );
-      this.deps.audit(context, 'company_settings.updated', context.tenantId, correlationId);
+      await this.deps.audit(context, 'company_settings.updated', context.tenantId, correlationId);
       return { ok: true, value: viewOf(saved) };
     } catch (error) {
       return failure(error);

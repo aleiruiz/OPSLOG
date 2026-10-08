@@ -5,6 +5,7 @@ import {
   ImportJobEntity,
   ImportRowEntity,
 } from '../entities.js';
+import { AUDIT_ENTITIES } from '../../../audit/src/index.js';
 
 /**
  * Test double of the TypeORM surface the import store uses (DataSource, Repository, transaction).
@@ -68,6 +69,7 @@ const clone = (row: Row): Row => {
 export class FakeDatabase {
   public readonly options = {
     type: 'mysql',
+    database: 'opslog_t_synthetic',
     username: 'opslog_imports_synthetic',
     synchronize: false,
   };
@@ -81,7 +83,7 @@ export class FakeDatabase {
   private readonly faults: Fault[] = [];
 
   public constructor() {
-    for (const schema of IMPORT_ORM_ENTITIES) {
+    for (const schema of [...IMPORT_ORM_ENTITIES, ...AUDIT_ENTITIES.slice(0, 2)]) {
       const options = schema.options;
       const target = options.target as EntityClass;
       const columns = Object.entries(options.columns as Record<string, { primary?: boolean }>);
@@ -136,7 +138,10 @@ export class FakeDatabase {
     for (const [entity, rows] of this.live)
       snapshot.set(entity, new Map([...rows].map(([key, row]) => [key, clone(row)])));
     try {
-      return await work({ getRepository: (entity) => new FakeRepository(this, entity) });
+      return await work({
+        connection: this,
+        getRepository: (entity: EntityClass) => new FakeRepository(this, entity),
+      } as never);
     } catch (error) {
       this.live = snapshot;
       throw error;

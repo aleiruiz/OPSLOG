@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
-/** pending_scan is the quarantine state; clean is the released state (SPECS §5/§7). */
-export type FileStatus = 'pending_scan' | 'clean' | 'rejected';
+/** pending_upload and pending_scan are private; only clean records are released (SPECS §5/§7). */
+export type FileStatus = 'pending_upload' | 'pending_scan' | 'clean' | 'rejected';
 export type FileKind = 'original' | 'derivative';
 export type Sensitivity = 'standard' | 'pii';
 export type RejectionReason = 'malware' | 'integrity';
@@ -197,6 +197,11 @@ export function newPendingRecord(input: {
     createdBy: input.createdBy,
     createdAt: input.now.toISOString(),
   };
+}
+
+/** A durable quarantine upload intent. It remains unavailable until the quarantine write is verified. */
+export function newUploadIntentRecord(input: Parameters<typeof newPendingRecord>[0]): FileRecord {
+  return { ...newPendingRecord(input), status: 'pending_upload' };
 }
 
 export type ScanOutcome =

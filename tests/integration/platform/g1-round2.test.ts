@@ -52,7 +52,9 @@ describe('isolation matrix: cambio de permisos con trabajo pendiente', () => {
       reason: 'actor not permitted',
     });
     // No delivery audit either: nothing happened.
-    expect(world.audit.list(a.tenantId).map((e) => e.action)).not.toContain('outbox.delivered');
+    expect(world.audit.snapshotForTesting(a.tenantId).map((e) => e.action)).not.toContain(
+      'outbox.delivered',
+    );
   });
 
   it('refuses a pending job when the actor membership was revoked', async () => {

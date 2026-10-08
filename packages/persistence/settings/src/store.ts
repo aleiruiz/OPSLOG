@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import type { DataSource } from 'typeorm';
+import { appendLocalAuditAndDelivery, type AuditEvent } from '../../audit/src/index.js';
 import {
   isAlertRecipientRole,
   normalizeRoles,
@@ -57,6 +58,18 @@ const mutableColumns = (settings: CompanySettings) => ({
   updatedAt: new Date(settings.updatedAt as string),
 });
 
+const auditEvent = (settings: CompanySettings): AuditEvent => ({
+  eventId: `${settings.tenantId}.settings.${settings.version}`,
+  tenantId: settings.tenantId,
+  action: 'settings.updated',
+  entityType: 'company_settings',
+  entityId: settings.tenantId,
+  occurredAt: settings.updatedAt ?? new Date().toISOString(),
+  actor: { id: settings.updatedBy ?? 'system', kind: 'user' },
+  correlationId: `${settings.tenantId}.settings.${settings.version}`,
+  data: {},
+});
+
 /**
  * Persistent TypeORM/MySQL implementation of the `SettingsStore` port.
  *
@@ -102,9 +115,12 @@ export class TypeOrmSettingsStore implements SettingsStore {
 
   public async insert(settings: CompanySettings): Promise<boolean> {
     try {
-      await this.dataSource
-        .getRepository(SettingsEntity)
-        .insert({ tenantId: settings.tenantId, ...mutableColumns(settings) });
+      await this.dataSource.transaction(async (manager) => {
+        await manager
+          .getRepository(SettingsEntity)
+          .insert({ tenantId: settings.tenantId, ...mutableColumns(settings) });
+        await appendLocalAuditAndDelivery(manager, auditEvent(settings));
+      });
       return true;
     } catch (error) {
       if (isDuplicateKey(error)) return false;
@@ -114,10 +130,14 @@ export class TypeOrmSettingsStore implements SettingsStore {
 
   public async replace(next: CompanySettings, expectedVersion: number): Promise<boolean> {
     try {
-      const result = await this.dataSource
-        .getRepository(SettingsEntity)
-        .update({ tenantId: next.tenantId, version: expectedVersion }, mutableColumns(next));
-      return result.affected === 1;
+      return await this.dataSource.transaction(async (manager) => {
+        const result = await manager
+          .getRepository(SettingsEntity)
+          .update({ tenantId: next.tenantId, version: expectedVersion }, mutableColumns(next));
+        if (result.affected !== 1) return false;
+        await appendLocalAuditAndDelivery(manager, auditEvent(next));
+        return true;
+      });
     } catch (error) {
       throw this.fail('replace', error);
     }

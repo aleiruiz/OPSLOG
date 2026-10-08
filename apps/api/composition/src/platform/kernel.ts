@@ -79,8 +79,8 @@ export class PlatformKernel {
     entityType: string,
     entityId: string,
     correlationId: string,
-  ): void {
-    this.audit.append(
+  ): Promise<void> {
+    return this.audit.append(
       createAuditEvent(
         { ...context, correlationId },
         {

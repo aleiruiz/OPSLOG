@@ -154,7 +154,7 @@ export interface AreasApiDeps {
     action: AreaAuditAction,
     entityId: string,
     correlationId: string,
-  ) => void;
+  ) => void | Promise<void>;
 }
 
 /**
@@ -190,7 +190,7 @@ export class AreasApi {
     try {
       const context = await this.deps.authorize(token, correlationId, permissions);
       const { area, audit } = await work(context);
-      for (const action of audit) this.deps.audit(context, action, area.id, correlationId);
+      for (const action of audit) await this.deps.audit(context, action, area.id, correlationId);
       return { ok: true, value: view(area) };
     } catch (error) {
       return failure(error);

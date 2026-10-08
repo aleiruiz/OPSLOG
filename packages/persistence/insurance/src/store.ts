@@ -23,6 +23,7 @@ import {
   type PolicyWindow,
 } from '../../../domain/insurance/src/index.js';
 import { INSURANCE_RUNTIME_ACCOUNT } from './data-source.js';
+import { appendLocalAuditAndDelivery, type AuditEvent } from '../../audit/src/index.js';
 import { PolicyEntity, PolicyRevisionEntity } from './entities.js';
 import {
   PolicyStoreError,
@@ -156,6 +157,18 @@ const toRevisionRow = (revision: PolicyRevision): PolicyRevisionEntity => ({
   at: new Date(revision.at),
 });
 
+const auditEvent = (revision: PolicyRevision): AuditEvent => ({
+  eventId: `${revision.policyId}.revision.${revision.revision}`,
+  tenantId: revision.tenantId,
+  action: revision.revision === 1 ? 'insurance.created' : 'insurance.renewed',
+  entityType: 'insurance_policy',
+  entityId: revision.policyId,
+  occurredAt: revision.at,
+  actor: { id: revision.actorId, kind: 'user' },
+  correlationId: `${revision.policyId}.revision.${revision.revision}`,
+  data: {},
+});
+
 /** The `ends_on` condition of a derived status (see `matchesExpiry` in the domain). */
 function expiryCondition(expiry: NonNullable<PolicyFilter['expiry']>) {
   if (expiry.status === 'expired') return LessThan(expiry.from);
@@ -227,6 +240,7 @@ export class TypeOrmPolicyStore implements PolicyStore {
     await this.transaction('insert', async (manager) => {
       await manager.getRepository(PolicyEntity).insert(toPolicyRow(policy));
       await manager.getRepository(PolicyRevisionEntity).insert(toRevisionRow(revision));
+      await appendLocalAuditAndDelivery(manager, auditEvent(revision));
     });
   }
 
@@ -279,8 +293,10 @@ export class TypeOrmPolicyStore implements PolicyStore {
           mutableColumns(next),
         );
       if (result.affected !== 1) return false;
-      if (revision)
+      if (revision) {
         await manager.getRepository(PolicyRevisionEntity).insert(toRevisionRow(revision));
+        await appendLocalAuditAndDelivery(manager, auditEvent(revision));
+      }
       return true;
     });
   }

@@ -8,6 +8,7 @@
   "include": [
     "src/**/*.ts",
     "../../domain/insurance/src/**/*.ts",
-    "../../domain/documents/src/**/*.ts"
+    "../../domain/documents/src/**/*.ts",
+    "../audit/src/*.ts"
   ]
 }

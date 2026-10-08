@@ -19,6 +19,7 @@ import {
   type RowFilter,
 } from '../../../domain/imports/src/index.js';
 import { IMPORTS_RUNTIME_ACCOUNT } from './data-source.js';
+import { appendLocalAuditAndDelivery, type AuditEvent } from '../../audit/src/index.js';
 import { ImportEventEntity, ImportJobEntity, ImportRowEntity } from './entities.js';
 import {
   ImportStoreError,
@@ -136,6 +137,18 @@ const toEventRow = (event: ImportEvent): ImportEventEntity => ({
   at: new Date(event.at),
 });
 
+const auditEvent = (event: ImportEvent): AuditEvent => ({
+  eventId: `${event.jobId}.event.${event.seq}`,
+  tenantId: event.tenantId,
+  action: `import.${event.kind}`,
+  entityType: 'import_job',
+  entityId: event.jobId,
+  occurredAt: event.at,
+  actor: { id: event.actorId, kind: 'user' },
+  correlationId: `${event.jobId}.event.${event.seq}`,
+  data: {},
+});
+
 /**
  * Persistent TypeORM/MySQL implementation of the `ImportStore` port.
  *
@@ -205,6 +218,7 @@ export class TypeOrmImportStore implements ImportStore {
       async (manager) => {
         await manager.getRepository(ImportJobEntity).insert(toJobRow(job));
         await manager.getRepository(ImportEventEntity).insert(toEventRow(event));
+        await appendLocalAuditAndDelivery(manager, auditEvent(event));
         return true;
       },
       () => false,
@@ -310,6 +324,7 @@ export class TypeOrmImportStore implements ImportStore {
         );
       if (result.affected !== 1) return false;
       await manager.getRepository(ImportEventEntity).insert(toEventRow(event));
+      await appendLocalAuditAndDelivery(manager, auditEvent(event));
       return true;
     });
   }

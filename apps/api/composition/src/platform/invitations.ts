@@ -30,7 +30,7 @@ export async function inviteUser(
       role,
       expiresAt: invitation.expiresAt,
     });
-    k.auditNow(
+    await k.auditNow(
       k.userActor(context),
       'user.invited',
       'membership',
@@ -100,7 +100,7 @@ export async function redeem(
       (current?.version ?? 0) + 1,
       'active',
     );
-    k.auditNow(
+    await k.auditNow(
       { tenantId: membership.tenantId, actorId: `user-${identity.id}`, actorKind: 'user' },
       'user.joined',
       'membership',

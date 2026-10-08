@@ -138,7 +138,7 @@ export interface AssignmentsApiDeps {
     action: AssignmentsAuditAction,
     entityId: string,
     correlationId: string,
-  ) => void;
+  ) => void | Promise<void>;
 }
 
 /**
@@ -208,8 +208,8 @@ export class AssignmentsApi {
         input,
       );
       if (replaced)
-        this.deps.audit(context, 'vehicle_assignment.ended', replaced.id, correlationId);
-      this.deps.audit(context, 'vehicle_assignment.created', assignment.id, correlationId);
+        await this.deps.audit(context, 'vehicle_assignment.ended', replaced.id, correlationId);
+      await this.deps.audit(context, 'vehicle_assignment.created', assignment.id, correlationId);
       return {
         ok: true,
         value: {
@@ -238,7 +238,7 @@ export class AssignmentsApi {
         version,
         input,
       );
-      this.deps.audit(context, 'vehicle_assignment.ended', ended.id, correlationId);
+      await this.deps.audit(context, 'vehicle_assignment.ended', ended.id, correlationId);
       return { ok: true, value: this.viewOf(ended) };
     } catch (error) {
       return failure(error);

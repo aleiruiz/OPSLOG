@@ -9,6 +9,7 @@ import {
 } from '../../../../packages/domain/identity/src/index.js';
 import {
   InMemoryAuditStore,
+  type AuditListRange,
   type AuditStore,
   type PersistedAuditEvent,
 } from '../../../../packages/platform/audit/src/index.js';
@@ -213,7 +214,12 @@ export class Platform {
     this.imports = apis.imports;
     this.companySettings = apis.companySettings;
     this.alerts = apis.alerts;
-    this.runtime = buildWorkerRuntime(this.kernel, this.pipeline, options.worker);
+    this.runtime = buildWorkerRuntime(
+      this.kernel,
+      this.pipeline,
+      options.worker,
+      adapters.auditRelay,
+    );
   }
 
   /** Verifies an authorization code through the injected OIDC verifier and seals the principal. */
@@ -397,8 +403,9 @@ export class Platform {
   public listAudit(
     token: string,
     correlationId: string,
+    range?: AuditListRange,
   ): Promise<PlatformResponse<readonly PersistedAuditEvent[]>> {
-    return listAudit(this.kernel, token, correlationId);
+    return listAudit(this.kernel, token, correlationId, range);
   }
 
   /**

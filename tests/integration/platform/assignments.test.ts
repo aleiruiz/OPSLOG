@@ -104,7 +104,7 @@ const input = (f: Fixture, over: Record<string, unknown> = {}) => ({
 const seed = async (w: World, f: Fixture, session: Session, over: Record<string, unknown> = {}) =>
   ok(await w.platform.assignments.create(session.token, corr(), input(f, over))).assignment;
 const auditOf = (w: World, tenantId: string) =>
-  w.audit.list(tenantId).filter((event) => event.entityType === 'vehicle_assignment');
+  w.audit.snapshotForTesting(tenantId).filter((event) => event.entityType === 'vehicle_assignment');
 
 describe('assignment lifecycle through the platform', () => {
   it('assigns, reads, replaces and ends, auditing each write without values', async () => {

@@ -96,7 +96,7 @@ const input = (f: Fixture, over: Record<string, unknown> = {}) => ({
 const seed = async (w: World, f: Fixture, session: Session, over: Record<string, unknown> = {}) =>
   ok(await w.platform.documents.create(session.token, corr(), input(f, over)));
 const auditOf = (w: World, tenantId: string) =>
-  w.audit.list(tenantId).filter((event) => event.entityType === 'document');
+  w.audit.snapshotForTesting(tenantId).filter((event) => event.entityType === 'document');
 
 describe('document lifecycle through the platform', () => {
   it('creates, reads, edits, renews and archives, auditing each write without values', async () => {

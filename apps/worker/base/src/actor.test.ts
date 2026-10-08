@@ -138,9 +138,9 @@ describe('worker re-checks the actor that enqueued a job', () => {
     const persisted = new InMemoryAuditStore();
     let failAudit = true;
     const audit = {
-      append: (event: Parameters<typeof persisted.append>[0]) => {
+      append: async (event: Parameters<typeof persisted.append>[0]) => {
         if (failAudit) throw new Error('unavailable');
-        persisted.append(event);
+        await persisted.append(event);
       },
       list: (tenantId: string) => persisted.list(tenantId),
     };

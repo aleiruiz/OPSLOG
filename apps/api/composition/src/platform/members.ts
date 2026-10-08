@@ -80,7 +80,7 @@ export function changeRole(
       await k.persistRole(context.tenantId, targetIdentityId, current).catch(() => undefined);
       throw error;
     }
-    k.auditNow(
+    await k.auditNow(
       k.userActor(context),
       'membership.role_changed',
       'membership',
@@ -116,7 +116,7 @@ export function removeMember(
         if (!(error instanceof AuthError && error.code === 'not_found')) throw error;
       }
       k.access.revokePending(targetIdentityId, context.tenantId);
-      k.auditNow(
+      await k.auditNow(
         k.userActor(context),
         'invitation.revoked',
         'membership',
@@ -130,7 +130,7 @@ export function removeMember(
     await k.identity.revokeMembership(context.tenantId, targetIdentityId);
     k.access.revoke(context.tenantId, targetIdentityId);
     await bumpProjection(k, context.tenantId, targetIdentityId, 'revoked');
-    k.auditNow(
+    await k.auditNow(
       k.userActor(context),
       'membership.revoked',
       'membership',
@@ -216,7 +216,7 @@ export async function copyRole(
     const role = { id: `custom-${randomUUID()}`, name: trimmed, permissions: source.permissions };
     if ((await k.roles.create(context.tenantId, role)) !== 'created')
       throw new PlatformError('conflict');
-    k.auditNow(k.userActor(context), 'role.copied', 'role', role.id, correlationId);
+    await k.auditNow(k.userActor(context), 'role.copied', 'role', role.id, correlationId);
     return success({ ...role, kind: 'custom' as const, memberCount: 0 });
   } catch (error) {
     return failure(error);

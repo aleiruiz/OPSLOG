@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { DataSource, type DataSourceOptions } from 'typeorm';
 import { VEHICLE_ENTITIES } from './entities.js';
+import { AUDIT_ENTITIES } from '../../audit/src/index.js';
 import { CreateVehicles2026100600030, VEHICLES_MIGRATIONS_TABLE } from './migrations.js';
 
 export interface VehiclesDatabaseConfig {
@@ -22,7 +23,7 @@ export const VEHICLES_RUNTIME_ACCOUNT = /^opslog_vehicles_[a-z0-9_]+$/i;
 
 const common = {
   type: 'mysql',
-  entities: [...VEHICLE_ENTITIES],
+  entities: [...VEHICLE_ENTITIES, ...AUDIT_ENTITIES.slice(0, 2)],
   migrations: [CreateVehicles2026100600030],
   migrationsTableName: VEHICLES_MIGRATIONS_TABLE,
   synchronize: false,

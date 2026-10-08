@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { DataSource, type DataSourceOptions } from 'typeorm';
 import { IMPORT_ORM_ENTITIES } from './entities.js';
+import { AUDIT_ENTITIES } from '../../audit/src/index.js';
 import { CreateImportJobs2026100600090, IMPORTS_MIGRATIONS_TABLE } from './migrations.js';
 
 export interface ImportsDatabaseConfig {
@@ -22,7 +23,7 @@ export const IMPORTS_RUNTIME_ACCOUNT = /^opslog_imports_[a-z0-9_]+$/i;
 
 const common = {
   type: 'mysql',
-  entities: [...IMPORT_ORM_ENTITIES],
+  entities: [...IMPORT_ORM_ENTITIES, ...AUDIT_ENTITIES.slice(0, 2)],
   migrations: [CreateImportJobs2026100600090],
   migrationsTableName: IMPORTS_MIGRATIONS_TABLE,
   synchronize: false,

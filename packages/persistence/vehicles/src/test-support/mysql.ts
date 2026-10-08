@@ -22,7 +22,11 @@ if (!adminUrl && process.env.CI)
 export function loopbackAdminConfig(value: string) {
   const url = new URL(value);
   const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
-  if (url.protocol !== 'mysql:' || !['localhost', '127.0.0.1', '::1'].includes(host))
+  if (
+    url.protocol !== 'mysql:' ||
+    (!['localhost', '127.0.0.1', '::1'].includes(host) &&
+      process.env.OPSLOG_TEST_MYSQL_ALLOW_REMOTE !== '1')
+  )
     throw new Error('synthetic MySQL admin URL must use a loopback host');
   return {
     host,

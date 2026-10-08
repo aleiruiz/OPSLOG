@@ -240,7 +240,9 @@ suite('BFF on the real MySQL stores: expiry alerts and settings', () => {
     for (const alert of narrowed.json.items) expect(alert.daysToExpiry).toBeLessThanOrEqual(3);
     expect((await adminB.get(S)).json).toMatchObject({ version: 0, expiryWindowDays: 30 });
     const text = JSON.stringify(
-      world.platform.audit.list(tenantA).filter((event) => event.entityType === 'company_settings'),
+      (await world.platform.audit.list(tenantA)).filter(
+        (event) => event.entityType === 'company_settings',
+      ),
     );
     expect(text).toContain('company_settings.updated');
     expect(text).not.toContain('admin,viewer');

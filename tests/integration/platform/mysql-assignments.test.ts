@@ -338,9 +338,9 @@ suite('BFF on the real MySQL assignment store', () => {
       json: body(f.vehicle, f.d1, { reason: 'Motivo-auditoria-secreto-99' }),
     });
     const text = JSON.stringify(
-      world.platform.audit
-        .list(tenantA)
-        .filter((event) => event.entityType === 'vehicle_assignment'),
+      (await world.platform.audit.list(tenantA)).filter(
+        (event) => event.entityType === 'vehicle_assignment',
+      ),
     );
     expect(text).toContain('vehicle_assignment.created');
     expect(text).not.toContain('Motivo-auditoria-secreto-99');

@@ -148,7 +148,7 @@ export interface InsuranceApiDeps {
     action: InsuranceAuditAction,
     entityId: string,
     correlationId: string,
-  ) => void;
+  ) => void | Promise<void>;
 }
 
 /**
@@ -212,7 +212,7 @@ export class InsuranceApi {
       // (the caller would retry and write twice).
       const costs = await this.deps.can(context, 'view_costs');
       const policy = await work(context);
-      this.deps.audit(context, action, policy.id, correlationId);
+      await this.deps.audit(context, action, policy.id, correlationId);
       return { ok: true, value: this.viewOf(policy, costs) };
     } catch (error) {
       return failure(error);

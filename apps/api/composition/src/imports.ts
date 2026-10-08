@@ -136,7 +136,7 @@ export interface ImportsApiDeps {
     entityType: ImportsAuditEntity,
     entityId: string,
     correlationId: string,
-  ) => void;
+  ) => void | Promise<void>;
 }
 
 /**
@@ -198,12 +198,12 @@ export class ImportsApi {
         this.actorOf(context),
         input,
         {
-          created: (entity, id) =>
+          created: async (entity, id) =>
             this.deps.audit(context, `${entity}.created`, entity, id, correlationId),
         },
       );
       if (!replayed)
-        this.deps.audit(context, 'import_job.created', 'import_job', job.id, correlationId);
+        await this.deps.audit(context, 'import_job.created', 'import_job', job.id, correlationId);
       return { ok: true, value: { job: viewOf(job), replayed } };
     } catch (error) {
       return failure(error);

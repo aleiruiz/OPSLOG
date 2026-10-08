@@ -61,7 +61,7 @@ export async function updateSettings(
       mfa: input.mfa as MfaPolicy,
       sessionIdleHours: hours,
     });
-    k.auditNow(
+    await k.auditNow(
       k.userActor(context),
       securityChanged ? 'tenant.security_settings_updated' : 'tenant.settings_updated',
       'tenant',

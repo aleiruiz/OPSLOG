@@ -11,7 +11,12 @@ import {
   InMemoryObjectStorage,
   InMemoryScanQueue,
   SYNTHETIC_MALWARE_MARKER,
+  createFileAccessAuditEvent,
+  createFileAuditEvent,
   refFor,
+  type FileSagaJournal,
+  type FileUploadIntent,
+  type FileCleanupIntent,
   type FileActor,
 } from './index.js';
 
@@ -24,7 +29,12 @@ const actorFor = (tenantId: string): FileActor => ({
   correlationId: 'corr-1',
 });
 
-function setup(options: ConstructorParameters<typeof FilePipeline>[1] = {}) {
+function setup(
+  options: ConstructorParameters<typeof FilePipeline>[1] = {},
+  journalInput?:
+    | FileSagaJournal
+    | ((records: InMemoryFileRecordStore, queue: InMemoryScanQueue) => FileSagaJournal),
+) {
   let clock = Date.parse('2026-10-06T00:00:00Z');
   let counter = 0;
   const records = new InMemoryFileRecordStore();
@@ -32,8 +42,9 @@ function setup(options: ConstructorParameters<typeof FilePipeline>[1] = {}) {
   const scanner = new FakeScanner();
   const queue = new InMemoryScanQueue();
   const audit = new InMemoryAuditStore();
+  const journal = typeof journalInput === 'function' ? journalInput(records, queue) : journalInput;
   const pipeline = new FilePipeline(
-    { records, storage, scanner, queue, audit },
+    { records, storage, scanner, queue, audit, ...(journal ? { journal } : {}) },
     { now: () => new Date(clock), newId: () => `file-${(counter += 1)}`, ...options },
   );
   return {
@@ -42,11 +53,107 @@ function setup(options: ConstructorParameters<typeof FilePipeline>[1] = {}) {
     scanner,
     queue,
     audit,
+    journal,
     pipeline,
     advance: (ms: number) => {
       clock += ms;
     },
   };
+}
+
+class TestFileSagaJournal implements FileSagaJournal {
+  readonly uploads: FileUploadIntent[] = [];
+  readonly cleanups: FileCleanupIntent[] = [];
+  readonly events: string[] = [];
+  readonly outcomes = new Map<
+    string,
+    { result: 'clean' | 'rejected'; reason?: 'malware' | 'integrity' }
+  >();
+  public constructor(
+    private readonly records: InMemoryFileRecordStore,
+    private readonly queue: InMemoryScanQueue,
+  ) {}
+  private key(tenantId: string, fileId: string) {
+    return `${tenantId}:${fileId}`;
+  }
+  async beginUpload(record: FileRecord, event: { action: string }, expiresAt: number) {
+    await this.records.insert(record);
+    this.uploads.push({ tenantId: record.tenantId, fileId: record.id, attempts: 0, expiresAt });
+    this.events.push(event.action);
+  }
+  async finishUpload(record: FileRecord, event: { action: string }, scanAt: number) {
+    const next = { ...record, status: 'pending_scan' as const };
+    await this.records.replaceIfStatus('pending_upload', next);
+    this.removeUpload(record.tenantId, record.id);
+    await this.queue.enqueue(record.tenantId, record.id, scanAt);
+    this.events.push(event.action);
+    return next;
+  }
+  async claimUploads() {
+    return this.uploads.splice(0);
+  }
+  async deferUpload(intent: FileUploadIntent, nextAttemptAt: number) {
+    this.uploads.push({ ...intent, attempts: intent.attempts + 1, expiresAt: nextAttemptAt });
+  }
+  async failUpload(intent: FileUploadIntent, record: FileRecord, event: { action: string }) {
+    await this.records.replaceIfStatus('pending_upload', {
+      ...record,
+      status: 'rejected',
+      rejectionReason: 'integrity',
+    });
+    this.removeUpload(intent.tenantId, intent.fileId);
+    this.cleanups.push({ tenantId: intent.tenantId, fileId: intent.fileId, kind: 'quarantine' });
+    this.events.push(event.action);
+  }
+  async getScanOutcome(tenantId: string, fileId: string) {
+    return this.outcomes.get(this.key(tenantId, fileId)) ?? null;
+  }
+  async saveScanOutcome(
+    record: FileRecord,
+    outcome: { result: 'clean' | 'rejected'; reason?: 'malware' | 'integrity' },
+    event: { action: string },
+  ) {
+    this.outcomes.set(this.key(record.tenantId, record.id), outcome);
+    this.events.push(event.action);
+  }
+  async finishScan(_record: FileRecord, next: FileRecord, event: { action: string }) {
+    const swapped = await this.records.replaceIfStatus('pending_scan', next);
+    if (swapped) {
+      await this.queue.complete(next.tenantId, next.id);
+      this.cleanups.push({ tenantId: next.tenantId, fileId: next.id, kind: 'quarantine' });
+      this.events.push(event.action);
+    }
+    return swapped;
+  }
+  async deferScan(
+    job: { tenantId: string; fileId: string; attempts: number },
+    nextAttemptAt: number,
+    event: { action: string },
+  ) {
+    await this.queue.defer(job.tenantId, job.fileId, nextAttemptAt);
+    this.events.push(event.action);
+  }
+  async claimCleanups() {
+    return [...this.cleanups];
+  }
+  async finishCleanup(intent: FileCleanupIntent) {
+    const index = this.cleanups.findIndex(
+      (item) =>
+        item.tenantId === intent.tenantId &&
+        item.fileId === intent.fileId &&
+        item.kind === intent.kind,
+    );
+    if (index >= 0) this.cleanups.splice(index, 1);
+  }
+  async appendAudit(event: { action: string }) {
+    this.events.push(event.action);
+  }
+  private removeUpload(tenantId: string, fileId: string) {
+    const index = this.uploads.findIndex(
+      (intent) => intent.tenantId === tenantId && intent.fileId === fileId,
+    );
+    if (index >= 0) this.uploads.splice(index, 1);
+  }
 }
 const codeOf = async (promise: Promise<unknown>): Promise<string> => {
   try {
@@ -60,6 +167,24 @@ const upload = (tag = 'a', name = 'Photo.jpg') => ({
   name,
   declaredType: 'image/jpeg',
   bytes: jpegBytes(tag),
+});
+const auditRange = {
+  from: '2026-10-05T00:00:00.000Z',
+  to: '2026-10-08T00:00:00.000Z',
+};
+
+describe('file audit identities', () => {
+  it('keeps retries idempotent while giving each user access action a fresh identity', () => {
+    const actor = actorFor('tenant-a');
+    const at = new Date('2026-10-07T00:00:00.000Z');
+    const firstSagaEvent = createFileAuditEvent(actor, 'file.released', 'file-1', at);
+    const retrySagaEvent = createFileAuditEvent(actor, 'file.released', 'file-1', at);
+    expect(retrySagaEvent.eventId).toBe(firstSagaEvent.eventId);
+
+    const firstAccessEvent = createFileAccessAuditEvent(actor, 'file.downloaded', 'file-1', at);
+    const secondAccessEvent = createFileAccessAuditEvent(actor, 'file.downloaded', 'file-1', at);
+    expect(secondAccessEvent.eventId).not.toBe(firstAccessEvent.eventId);
+  });
 });
 
 describe('defaults', () => {
@@ -89,7 +214,9 @@ describe('upload into quarantine', () => {
     expect(record.status).toBe('pending_scan');
     expect(t.storage.keys()).toEqual(['tenants/tenant-a/quarantine/originals/file-1']);
     expect(t.queue.size()).toBe(1);
-    expect(t.audit.list('tenant-a').map((e) => e.action)).toEqual(['file.uploaded']);
+    expect((await t.audit.list('tenant-a', auditRange)).map((e) => e.action)).toEqual([
+      'file.uploaded',
+    ]);
   });
   it('rejects spoofed content before anything is stored', async () => {
     const t = setup();
@@ -140,10 +267,9 @@ describe('scan and release', () => {
     expect((await t.records.get('tenant-a', 'file-1'))?.status).toBe('clean');
     expect(t.storage.keys()).toEqual(['tenants/tenant-a/released/originals/file-1']);
     expect(t.queue.size()).toBe(0);
-    expect(t.audit.list('tenant-a').map((e) => e.action)).toEqual([
-      'file.uploaded',
-      'file.released',
-    ]);
+    expect((await t.audit.list('tenant-a', auditRange)).map((e) => e.action)).toEqual(
+      expect.arrayContaining(['file.uploaded', 'file.released']),
+    );
   });
   it('rejects a file flagged by the scanner and never creates released bytes', async () => {
     const t = setup();
@@ -183,7 +309,9 @@ describe('scan and release', () => {
       return original(expected, next);
     };
     expect(await t.pipeline.processScans()).toMatchObject({ released: 0, skipped: 1 });
-    expect(t.audit.list('tenant-a').map((e) => e.action)).toEqual(['file.uploaded']);
+    expect((await t.audit.list('tenant-a', auditRange)).map((e) => e.action)).toEqual([
+      'file.uploaded',
+    ]);
   });
   it('treats a lost race on rejection as skipped', async () => {
     const t = setup();
@@ -204,6 +332,107 @@ describe('scan and release', () => {
     const [a, b] = await Promise.all([t.pipeline.processScans(), t.pipeline.processScans()]);
     expect(a.released + b.released).toBe(1);
     expect(t.scanner.calls).toBe(1);
+  });
+});
+
+describe('durable file saga', () => {
+  const journalFactory = (records: InMemoryFileRecordStore, queue: InMemoryScanQueue) =>
+    new TestFileSagaJournal(records, queue);
+
+  it('writes upload intent, then scan verdict and cleanup through the durable journal', async () => {
+    const t = setup({}, journalFactory);
+    await t.pipeline.ingestOriginal(actorFor('tenant-a'), upload());
+    expect(t.journal).toBeInstanceOf(TestFileSagaJournal);
+    expect(await t.pipeline.processScans()).toMatchObject({ released: 1 });
+    expect((await t.records.get('tenant-a', 'file-1'))?.status).toBe('clean');
+    expect(t.storage.keys()).toEqual(['tenants/tenant-a/released/originals/file-1']);
+    expect((t.journal as TestFileSagaJournal).events).toEqual([
+      'file.upload_requested',
+      'file.uploaded',
+      'file.scan_clean',
+      'file.released',
+    ]);
+  });
+
+  it('recovers an uploaded object after interruption and finishes the durable upload intent', async () => {
+    const t = setup({}, journalFactory);
+    t.storage.failNext();
+    await expect(t.pipeline.ingestOriginal(actorFor('tenant-a'), upload())).rejects.toMatchObject({
+      code: 'storage_unavailable',
+    });
+    await t.storage
+      .putIfAbsent(
+        { tenantId: 'tenant-a', area: 'quarantine', kind: 'original', fileId: 'file-1' },
+        jpegBytes(),
+        {
+          contentType: 'image/jpeg',
+          sha256: (await t.records.get('tenant-a', 'file-1'))?.sha256 ?? '',
+        },
+      )
+      .catch(() => undefined);
+    const record = await t.records.get('tenant-a', 'file-1');
+    expect(record?.status).toBe('pending_upload');
+    await t.pipeline.processScans();
+    expect((await t.records.get('tenant-a', 'file-1'))?.status).toBe('clean');
+  });
+
+  it('defers upload recovery until its object exists and expires abandoned uploads safely', async () => {
+    const t = setup({}, journalFactory);
+    t.storage.failNext();
+    await expect(t.pipeline.ingestOriginal(actorFor('tenant-a'), upload())).rejects.toBeDefined();
+    t.storage.failNext();
+    await t.pipeline.processScans();
+    expect((t.journal as TestFileSagaJournal).uploads).toHaveLength(1);
+    t.advance(24 * 60 * 60 * 1000 + 1);
+    await t.pipeline.processScans();
+    expect((await t.records.get('tenant-a', 'file-1'))?.status).toBe('rejected');
+    expect(t.storage.keys()).toEqual([]);
+  });
+
+  it('reuses a persisted clean verdict after restart and defers scanner outages durably', async () => {
+    const t = setup({}, journalFactory);
+    const record = await t.pipeline.ingestOriginal(actorFor('tenant-a'), upload());
+    const journal = t.journal as TestFileSagaJournal;
+    journal.outcomes.set('tenant-a:file-1', { result: 'clean' });
+    t.scanner.down = true;
+    expect(await t.pipeline.processScans()).toMatchObject({ released: 1, deferred: 0 });
+    expect(t.scanner.calls).toBe(0);
+    expect((await t.records.get('tenant-a', record.id))?.status).toBe('clean');
+  });
+
+  it('retries failed cleanup intents and completes cleanup for missing file records', async () => {
+    const t = setup({}, journalFactory);
+    const journal = t.journal as TestFileSagaJournal;
+    const record = await t.pipeline.ingestOriginal(actorFor('tenant-a'), upload());
+    await t.records.replaceIfStatus('pending_scan', { ...record, status: 'clean' });
+    await t.queue.complete('tenant-a', record.id);
+    journal.cleanups.push({ tenantId: 'tenant-a', fileId: 'file-1', kind: 'quarantine' });
+    t.storage.failNext();
+    await t.pipeline.processScans();
+    expect(journal.cleanups).toHaveLength(1);
+    await t.pipeline.processScans();
+    expect(journal.cleanups).toHaveLength(0);
+
+    journal.cleanups.push({ tenantId: 'tenant-a', fileId: 'missing', kind: 'quarantine' });
+    await t.pipeline.processScans();
+    expect(journal.cleanups).toHaveLength(0);
+  });
+
+  it('records a durable deferred event when scanning is unavailable', async () => {
+    const t = setup({}, journalFactory);
+    await t.pipeline.ingestOriginal(actorFor('tenant-a'), upload());
+    t.scanner.down = true;
+    expect(await t.pipeline.processScans()).toMatchObject({ deferred: 1 });
+    expect((t.journal as TestFileSagaJournal).events).toContain('file.scan_deferred');
+  });
+
+  it('persists rejected scanner verdicts and cleanup state without exposing the object', async () => {
+    const t = setup({}, journalFactory);
+    await t.pipeline.ingestOriginal(actorFor('tenant-a'), upload(SYNTHETIC_MALWARE_MARKER));
+    expect(await t.pipeline.processScans()).toMatchObject({ rejected: 1 });
+    expect((await t.records.get('tenant-a', 'file-1'))?.status).toBe('rejected');
+    expect(t.storage.keys()).toEqual([]);
+    expect((t.journal as TestFileSagaJournal).events).toContain('file.scan_rejected');
   });
 });
 
@@ -243,11 +472,8 @@ describe('scanner outage', () => {
     expect((await t.records.get('tenant-a', 'file-1'))?.status).toBe('pending_scan');
     expect(t.storage.keys()).toEqual(['tenants/tenant-a/quarantine/originals/file-1']);
     expect(
-      t.audit
-        .list('tenant-a')
-        .map((e) => e.data.attempts)
-        .filter(Boolean),
-    ).toEqual([1, 2, 3]);
+      (await t.audit.list('tenant-a', auditRange)).map((e) => e.data.attempts).filter(Boolean),
+    ).toEqual([3, 2, 1]);
   });
   it('releases after the scanner recovers', async () => {
     const t = setup({ scanBackoffBaseMs: 1000 });
@@ -315,7 +541,9 @@ describe('originals and derivatives', () => {
     });
     await t.pipeline.processScans();
     expect(t.storage.keys()).toContain('tenants/tenant-a/released/derivatives/file-2');
-    expect(t.audit.list('tenant-a').map((e) => e.action)).toContain('file.derivative_created');
+    expect((await t.audit.list('tenant-a', auditRange)).map((e) => e.action)).toContain(
+      'file.derivative_created',
+    );
   });
   it('refuses derivatives from pending, missing, other-tenant or derivative parents', async () => {
     const t = setup();

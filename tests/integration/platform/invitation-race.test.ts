@@ -71,7 +71,8 @@ describe('accept racing a tenant suspension (same process)', () => {
     const a = await world.tenant('Empresa Alfa', 'subject-admin-a');
     const invited = (await world.platform.inviteUser(a.admin.token, 'c', 'editor')).value!;
     tenantStore.rearm('setTenantStatus');
-    const actions = () => world.platform.audit.list(a.tenantId).map((event) => event.action);
+    const actions = async () =>
+      (await world.platform.audit.list(a.tenantId)).map((event) => event.action);
     return { a, invited, identity, tenantStore, actions, principal: world.principal };
   }
 
@@ -87,7 +88,7 @@ describe('accept racing a tenant suspension (same process)', () => {
     expect(accepted.ok).toBe(true);
     expect(world.platform.tenants.status(t.a.tenantId)).toBe('suspended');
     expect(world.platform.access.roleOf(t.a.tenantId, t.invited.identityId)).toBe('editor');
-    const actions = t.actions();
+    const actions = await t.actions();
     expect(actions.indexOf('user.joined')).toBeGreaterThan(-1);
     expect(actions.indexOf('user.joined')).toBeLessThan(actions.indexOf('tenant.suspended'));
   });
@@ -103,7 +104,7 @@ describe('accept racing a tenant suspension (same process)', () => {
     const [, accepted] = await Promise.all([suspend, accept]);
     expect(accepted.error?.code).toBe('unauthorized');
     expect(world.platform.access.hasPending(t.invited.identityId, t.a.tenantId)).toBe(true);
-    expect(t.actions()).not.toContain('user.joined');
+    expect(await t.actions()).not.toContain('user.joined');
     await world.platform.reactivateTenant(t.a.tenantId);
     expect(
       (

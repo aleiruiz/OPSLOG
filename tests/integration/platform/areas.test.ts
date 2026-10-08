@@ -48,7 +48,7 @@ const seed = async (w: World, session: Session, input: Record<string, unknown> =
   ok(await w.platform.areas.create(session.token, corr(), { name: 'Operaciones', ...input }));
 
 const auditOf = (w: World, tenantId: string) =>
-  w.audit.list(tenantId).filter((event) => event.entityType === 'area');
+  w.audit.snapshotForTesting(tenantId).filter((event) => event.entityType === 'area');
 
 const vehicleInput = (areaId: string, over: Record<string, unknown> = {}) => ({
   economicNumber: 'U-001',

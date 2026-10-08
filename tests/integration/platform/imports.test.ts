@@ -85,11 +85,10 @@ describe('imports through the platform', () => {
       report,
       ok(await world.platform.imports.history(a.admin.token, corr(), done.job.id, {})),
       ok(await world.platform.imports.list(a.admin.token, corr(), {})),
-      world.audit.list(a.tenantId),
+      world.audit.snapshotForTesting(a.tenantId),
     ]);
     for (const fragment of PII_FRAGMENTS) expect(surfaces).not.toContain(fragment);
-    const actions = world.audit
-      .list(a.tenantId)
+    const actions = (await world.audit.list(a.tenantId))
       .filter((event) => ['import_job', 'employee'].includes(event.entityType))
       .map((event) => `${event.entityType}:${event.action}`);
     expect(actions).toEqual(['employee:employee.created', 'import_job:import_job.created']);
@@ -140,7 +139,9 @@ describe('imports through the platform', () => {
     // Tenant B cannot import into tenant A's area.
     const foreign = ok(await world.platform.imports.submit(b.admin.token, corr(), input));
     expect(foreign.job).toMatchObject({ invalidRows: 1, validRows: 0 });
-    expect(world.audit.list(b.tenantId).every((event) => event.tenantId === b.tenantId)).toBe(true);
+    expect(
+      world.audit.snapshotForTesting(b.tenantId).every((event) => event.tenantId === b.tenantId),
+    ).toBe(true);
   });
 });
 

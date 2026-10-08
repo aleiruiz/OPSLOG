@@ -132,7 +132,7 @@ describe('suspended tenants', () => {
 
     await platform.reactivateTenant(a.tenantId);
     expect((await platform.session(a.admin.token, corr())).ok).toBe(true);
-    const operatorTrail = world.audit.list(a.tenantId).map((event) => event.action);
+    const operatorTrail = world.audit.snapshotForTesting(a.tenantId).map((event) => event.action);
     expect(operatorTrail).toEqual(
       expect.arrayContaining(['tenant.suspended', 'tenant.reactivated']),
     );

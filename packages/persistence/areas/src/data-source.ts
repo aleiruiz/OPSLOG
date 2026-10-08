@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { DataSource, type DataSourceOptions } from 'typeorm';
 import { AREA_ENTITIES } from './entities.js';
 import { CreateAreas2026100600040, AREAS_MIGRATIONS_TABLE } from './migrations.js';
+import { AUDIT_ENTITIES } from '../../audit/src/index.js';
 
 export interface AreasDatabaseConfig {
   readonly host: string;
@@ -22,7 +23,7 @@ export const AREAS_RUNTIME_ACCOUNT = /^opslog_areas_[a-z0-9_]+$/i;
 
 const common = {
   type: 'mysql',
-  entities: [...AREA_ENTITIES],
+  entities: [...AREA_ENTITIES, ...AUDIT_ENTITIES.slice(0, 2)],
   migrations: [CreateAreas2026100600040],
   migrationsTableName: AREAS_MIGRATIONS_TABLE,
   synchronize: false,

@@ -125,7 +125,7 @@ const policy = async (
 
 const SETTINGS = { expiryWindowDays: 7, recipientRoles: ['editor', 'admin'] };
 const auditOf = (w: World, tenantId: string) =>
-  w.audit.list(tenantId).filter((event) => event.entityType === 'company_settings');
+  w.audit.snapshotForTesting(tenantId).filter((event) => event.entityType === 'company_settings');
 const ids = (items: readonly AlertView[]): string[] => items.map((alert) => alert.subjectId);
 
 describe('alerts derived through the platform', () => {
@@ -180,7 +180,7 @@ describe('alerts derived through the platform', () => {
     const far = await policy(world, admin, f.vehicle, '2026-10-30');
     const archived = await document(world, admin, f.vehicle2, '2026-10-08', 'technical_inspection');
     ok(await platform.documents.archive(admin.token, corr(), archived.id, 1));
-    const auditBefore = world.audit.list(f.a.tenantId).length;
+    const auditBefore = world.audit.snapshotForTesting(f.a.tenantId).length;
     expect(ids(ok(await platform.alerts.list(admin.token, corr(), {})).items)).toEqual([
       near.id,
       far.id,
@@ -189,7 +189,7 @@ describe('alerts derived through the platform', () => {
     expect(ids(ok(await platform.alerts.list(admin.token, corr(), {})).items)).toEqual([near.id]);
     expect(ok(await platform.alerts.list(admin.token, corr(), {})).windowDays).toBe(7);
     // Reads add no audit event; only the settings write did.
-    expect(world.audit.list(f.a.tenantId).length - auditBefore).toBe(1);
+    expect(world.audit.snapshotForTesting(f.a.tenantId).length - auditBefore).toBe(1);
   });
 
   it('restarts the cycle when a document is renewed (new key) and drops it out of the window', async () => {

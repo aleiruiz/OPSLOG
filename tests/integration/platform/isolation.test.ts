@@ -44,7 +44,7 @@ describe('a user of tenant A is denied on tenant B', () => {
       ).error?.code,
     ).toBe('not_found');
     // The denials are audited for A with opaque ids only, and never leak into B's trail.
-    const trailB = world.audit.list(
+    const trailB = world.audit.snapshotForTesting(
       (await platform.session(editorB.token, corr())).value!.tenantId,
     );
     expect(trailB.some((event) => event.action === 'file.access_denied')).toBe(false);

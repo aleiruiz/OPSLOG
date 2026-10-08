@@ -231,7 +231,7 @@ export class ImportService {
             this.result(job, row.rowNumber, { outcome: 'invalid', issue: created.issue }),
           ]);
         else {
-          observer?.created(job.entity, created.id);
+          await observer?.created(job.entity, created.id);
           await this.store.appendRows(tenantId, job.id, [
             this.result(job, row.rowNumber, { outcome: 'imported', entityId: created.id }),
           ]);

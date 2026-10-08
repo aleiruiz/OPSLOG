@@ -46,10 +46,14 @@ if (!adminUrlValue)
 function withLoopbackAdminConfig<T>(
   value: string,
   action: (config: { host: string; port: number; user: string; password: string }) => T,
+  allowRemote = process.env.OPSLOG_TEST_MYSQL_ALLOW_REMOTE === '1',
 ): T {
   const url = new URL(value);
   const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
-  if (url.protocol !== 'mysql:' || !['localhost', '127.0.0.1', '::1'].includes(host))
+  if (
+    url.protocol !== 'mysql:' ||
+    (!['localhost', '127.0.0.1', '::1'].includes(host) && !allowRemote)
+  )
     throw new Error('synthetic MySQL admin URL must use a loopback host');
   return action({
     host,
@@ -365,9 +369,13 @@ describe('synthetic MySQL admin URL guard', () => {
   it('rejects non-loopback hosts before the connection or DDL callback can run', () => {
     let ddlCalls = 0;
     expect(() =>
-      withLoopbackAdminConfig('mysql://fixture@db.example.invalid/mysql', () => {
-        ddlCalls += 1;
-      }),
+      withLoopbackAdminConfig(
+        'mysql://fixture@db.example.invalid/mysql',
+        () => {
+          ddlCalls += 1;
+        },
+        false,
+      ),
     ).toThrow('loopback host');
     expect(ddlCalls).toBe(0);
     expect(withLoopbackAdminConfig('mysql://fixture@127.0.0.1/mysql', ({ host }) => host)).toBe(

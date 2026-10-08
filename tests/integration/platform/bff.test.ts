@@ -312,9 +312,9 @@ describe('A/B isolation through HTTP', () => {
     // B can still sign in and use everything.
     expect((await f.adminB.get('/api/users')).status).toBe(200);
     expect(
-      world.platform.audit
-        .list(f.b.tenantId)
-        .some((event) => event.action === 'membership.revoked'),
+      (await world.platform.audit.list(f.b.tenantId)).some(
+        (event) => event.action === 'membership.revoked',
+      ),
     ).toBe(false);
   });
 
@@ -322,12 +322,12 @@ describe('A/B isolation through HTTP', () => {
     const f = await fixture();
     await f.adminA.put('/api/company/settings', { json: { ...SETTINGS, name: 'Alfa' } });
     await f.adminB.post('/api/roles/viewer/copy', { json: { name: 'Beta' } });
-    const actions = (tenantId: string) =>
-      world.platform.audit.list(tenantId).map((event) => event.action);
-    expect(actions(f.a.tenantId)).toContain('tenant.settings_updated');
-    expect(actions(f.a.tenantId)).not.toContain('role.copied');
-    expect(actions(f.b.tenantId)).toContain('role.copied');
-    expect(actions(f.b.tenantId)).not.toContain('tenant.settings_updated');
+    const actions = async (tenantId: string) =>
+      (await world.platform.audit.list(tenantId)).map((event) => event.action);
+    expect(await actions(f.a.tenantId)).toContain('tenant.settings_updated');
+    expect(await actions(f.a.tenantId)).not.toContain('role.copied');
+    expect(await actions(f.b.tenantId)).toContain('role.copied');
+    expect(await actions(f.b.tenantId)).not.toContain('tenant.settings_updated');
   });
 
   it('refuses a cursor minted for one tenant when presented by the other', async () => {
@@ -648,10 +648,11 @@ describe('invitation lifecycle through HTTP', () => {
     const f = await fixture();
     const token = (await f.adminA.post('/api/users/invitations', { json: { roleId: 'viewer' } }))
       .json.invitationToken as string;
-    const joined = () =>
-      world.platform.audit.list(f.a.tenantId).filter((event) => event.action === 'user.joined')
-        .length;
-    const before = joined();
+    const joined = async () =>
+      (await world.platform.audit.list(f.a.tenantId)).filter(
+        (event) => event.action === 'user.joined',
+      ).length;
+    const before = await joined();
     await world.platform.suspendTenant(f.a.tenantId);
 
     const refused = await accept(token, 'subject-late');
@@ -659,13 +660,13 @@ describe('invitation lifecycle through HTTP', () => {
     expect(refused.reply.json.code).toBe('not_found');
     expect(refused.visitor.jar.has('opslog_session')).toBe(false);
     expect((await inspect(token)).status).toBe(404);
-    expect(joined()).toBe(before);
+    expect(await joined()).toBe(before);
 
     await world.platform.reactivateTenant(f.a.tenantId);
     expect((await inspect(token)).status).toBe(200);
     const redeemed = await accept(token, 'subject-late');
     expect(redeemed.reply.status).toBe(201);
-    expect(joined()).toBe(before + 1);
+    expect(await joined()).toBe(before + 1);
     // Single use still holds after the suspension cycle.
     expect((await accept(token, 'subject-other')).reply.status).toBe(404);
   });

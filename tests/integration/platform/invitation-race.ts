@@ -62,7 +62,7 @@ export async function raceAcceptAndRevoke(env: RaceEnv, tag: string, order: Orde
   expect(listed.find((member) => member.id === invited.identityId)?.status).not.toBe('invited');
 
   // The audit trail says what really happened.
-  const actions = platform.audit.list(tenantId).map((event) => event.action);
+  const actions = (await platform.audit.list(tenantId)).map((event) => event.action);
   const count = (action: string) => actions.filter((item) => item === action).length;
   if (order === 'accept-first') {
     expect([

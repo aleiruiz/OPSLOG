@@ -5,5 +5,10 @@
     "outDir": "dist",
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
   },
-  "include": ["src/**/*.ts", "../../domain/employees/src/**/*.ts", "../../platform/pii/src/**/*.ts"]
+  "include": [
+    "src/**/*.ts",
+    "../../domain/employees/src/**/*.ts",
+    "../../platform/pii/src/**/*.ts",
+    "../audit/src/*.ts"
+  ]
 }

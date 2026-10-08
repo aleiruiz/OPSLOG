@@ -272,7 +272,7 @@ suite('BFF on the real MySQL documents store', () => {
       json: card(vehicleA, { title: 'Titulo-auditoria-99', documentNumber: 'NUM-AUDITORIA-99' }),
     });
     const text = JSON.stringify(
-      world.platform.audit.list(tenantA).filter((event) => event.entityType === 'document'),
+      (await world.platform.audit.list(tenantA)).filter((event) => event.entityType === 'document'),
     );
     expect(text).toContain('document.created');
     expect(text).not.toContain('Titulo-auditoria-99');

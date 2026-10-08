@@ -1,5 +1,6 @@
 import type { DataSource } from 'typeorm';
 import { SETTINGS_ENTITIES, SettingsEntity } from '../entities.js';
+import { AuditDeliveryEntity, AuditLocalEventEntity } from '../../../audit/src/entities.js';
 
 /**
  * Test double of the TypeORM surface the settings store uses (DataSource and Repository). It models
@@ -53,6 +54,7 @@ const TABLE = SETTINGS_ENTITIES[0].options.tableName as string;
 export class FakeDatabase {
   public readonly options = {
     type: 'mysql',
+    database: 'opslog_t_synthetic',
     username: 'opslog_settings_synthetic',
     synchronize: false,
   };
@@ -60,6 +62,10 @@ export class FakeDatabase {
   /** Runs at the start of every statement; tests use it to commit a competing change in between. */
   public intercept: ((operation: string) => void) | null = null;
   public readonly rows = new Map<string, Row>();
+  public readonly auditRows = new Map<unknown, Map<string, Row>>([
+    [AuditLocalEventEntity, new Map()],
+    [AuditDeliveryEntity, new Map()],
+  ]);
   private readonly faults: Fault[] = [];
 
   public failNext(
@@ -84,9 +90,31 @@ export class FakeDatabase {
     this.rows.set(String(row['tenantId']), clone(row));
   }
 
-  public getRepository(entity: unknown): FakeRepository {
-    if (entity !== SettingsEntity) throw new Error('fake database: unknown entity');
-    return new FakeRepository(this);
+  public getRepository(entity: unknown): FakeRepository | FakeAuditRepository {
+    if (entity === SettingsEntity) return new FakeRepository(this);
+    if (this.auditRows.has(entity)) return new FakeAuditRepository(this, entity);
+    throw new Error('fake database: unknown entity');
+  }
+
+  public async transaction<T>(work: (manager: never) => Promise<T>): Promise<T> {
+    const rowsBefore = new Map([...this.rows].map(([key, row]) => [key, clone(row)]));
+    const auditBefore = new Map(
+      [...this.auditRows].map(([entity, rows]) => [
+        entity,
+        new Map([...rows].map(([key, row]) => [key, clone(row)])),
+      ]),
+    );
+    try {
+      return await work({
+        connection: this,
+        getRepository: (entity: unknown) => this.getRepository(entity),
+      } as never);
+    } catch (error) {
+      this.rows.clear();
+      for (const [key, row] of rowsBefore) this.rows.set(key, row);
+      for (const [entity, rows] of auditBefore) this.auditRows.set(entity, rows);
+      throw error;
+    }
   }
 
   public begin(operation: string, where: Row | null, row: Row | null): void {
@@ -102,6 +130,17 @@ export class FakeDatabase {
         row?.['updatedBy'],
       ]);
     }
+  }
+}
+
+export class FakeAuditRepository {
+  public constructor(
+    private readonly db: FakeDatabase,
+    private readonly entity: unknown,
+  ) {}
+  public async insert(row: Row): Promise<void> {
+    this.db.begin('insert', null, row);
+    this.db.auditRows.get(this.entity)?.set(String(row['eventId']), clone(row));
   }
 }
 

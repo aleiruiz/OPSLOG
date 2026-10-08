@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { DataSource, type DataSourceOptions } from 'typeorm';
 import { EMPLOYEE_ENTITIES } from './entities.js';
+import { AUDIT_ENTITIES } from '../../audit/src/index.js';
 import { CreateEmployees2026100600050, EMPLOYEES_MIGRATIONS_TABLE } from './migrations.js';
 
 export interface EmployeesDatabaseConfig {
@@ -22,7 +23,7 @@ export const EMPLOYEES_RUNTIME_ACCOUNT = /^opslog_employees_[a-z0-9_]+$/i;
 
 const common = {
   type: 'mysql',
-  entities: [...EMPLOYEE_ENTITIES],
+  entities: [...EMPLOYEE_ENTITIES, ...AUDIT_ENTITIES.slice(0, 2)],
   migrations: [CreateEmployees2026100600050],
   migrationsTableName: EMPLOYEES_MIGRATIONS_TABLE,
   synchronize: false,

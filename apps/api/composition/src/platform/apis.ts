@@ -62,11 +62,28 @@ export interface DomainApis {
 /** Wires the domain services and their HTTP-facing APIs over the adapters (in-memory by default). */
 export function buildDomainApis(kernel: PlatformKernel, adapters: PlatformAdapters): DomainApis {
   const vehicleStore = adapters.vehicles ?? new InMemoryVehicleStore();
+  const vehicleAuditInTransaction =
+    adapters.vehicles !== undefined && !(adapters.vehicles instanceof InMemoryVehicleStore);
   // A persistent store with the throwaway local KMS would seal rows that cannot be opened after a
   // restart (and would put real data under a dev key): the cipher must be chosen explicitly.
   if (adapters.employees && !adapters.pii)
     throw new Error('adapters.employees requires adapters.pii (no local KMS fallback)');
   const employeeStore = adapters.employees ?? new InMemoryEmployeeStore();
+  const employeeAuditInTransaction =
+    adapters.employees !== undefined && !(adapters.employees instanceof InMemoryEmployeeStore);
+  const areaAuditInTransaction =
+    adapters.areas !== undefined && !(adapters.areas instanceof InMemoryAreaStore);
+  const documentAuditInTransaction =
+    adapters.documents !== undefined && !(adapters.documents instanceof InMemoryDocumentStore);
+  const insuranceAuditInTransaction =
+    adapters.insurance !== undefined && !(adapters.insurance instanceof InMemoryPolicyStore);
+  const assignmentAuditInTransaction =
+    adapters.assignments !== undefined &&
+    !(adapters.assignments instanceof InMemoryAssignmentStore);
+  const settingsAuditInTransaction =
+    adapters.settings !== undefined && !(adapters.settings instanceof InMemorySettingsStore);
+  const importAuditInTransaction =
+    adapters.imports !== undefined && !(adapters.imports instanceof InMemoryImportStore);
   const areaService = new AreaService(adapters.areas ?? new InMemoryAreaStore(), {
     now: kernel.now,
     resources: {
@@ -100,8 +117,10 @@ export function buildDomainApis(kernel: PlatformKernel, adapters: PlatformAdapte
   const vehicles = new VehiclesApi({
     service: vehicleService,
     authorize: (token, correlationId, required) => kernel.authorize(token, correlationId, required),
-    audit: (context, action, entityId, correlationId) =>
-      kernel.auditNow(kernel.userActor(context), action, 'vehicle', entityId, correlationId),
+    audit: vehicleAuditInTransaction
+      ? () => undefined
+      : (context, action, entityId, correlationId) =>
+          kernel.auditNow(kernel.userActor(context), action, 'vehicle', entityId, correlationId),
   });
   const employeeService = new EmployeeService(employeeStore, {
     now: kernel.now,
@@ -123,8 +142,10 @@ export function buildDomainApis(kernel: PlatformKernel, adapters: PlatformAdapte
     authorize: (token, correlationId, required) => kernel.authorize(token, correlationId, required),
     can: async (context, permission) =>
       (await kernel.access.resolvePermissions(context)).includes(permission),
-    audit: (context, action, entityId, correlationId) =>
-      kernel.auditNow(kernel.userActor(context), action, 'employee', entityId, correlationId),
+    audit: employeeAuditInTransaction
+      ? () => undefined
+      : (context, action, entityId, correlationId) =>
+          kernel.auditNow(kernel.userActor(context), action, 'employee', entityId, correlationId),
   });
   const documentStore = adapters.documents ?? new InMemoryDocumentStore();
   const policyStore = adapters.insurance ?? new InMemoryPolicyStore();
@@ -153,8 +174,10 @@ export function buildDomainApis(kernel: PlatformKernel, adapters: PlatformAdapte
       },
     }),
     authorize: (token, correlationId, required) => kernel.authorize(token, correlationId, required),
-    audit: (context, action, entityId, correlationId) =>
-      kernel.auditNow(kernel.userActor(context), action, 'document', entityId, correlationId),
+    audit: documentAuditInTransaction
+      ? () => undefined
+      : (context, action, entityId, correlationId) =>
+          kernel.auditNow(kernel.userActor(context), action, 'document', entityId, correlationId),
   });
   const insurance = new InsuranceApi({
     service: new PolicyService(policyStore, {
@@ -176,14 +199,16 @@ export function buildDomainApis(kernel: PlatformKernel, adapters: PlatformAdapte
     authorize: (token, correlationId, required) => kernel.authorize(token, correlationId, required),
     can: async (context, permission) =>
       (await kernel.access.resolvePermissions(context)).includes(permission),
-    audit: (context, action, entityId, correlationId) =>
-      kernel.auditNow(
-        kernel.userActor(context),
-        action,
-        'insurance_policy',
-        entityId,
-        correlationId,
-      ),
+    audit: insuranceAuditInTransaction
+      ? () => undefined
+      : (context, action, entityId, correlationId) =>
+          kernel.auditNow(
+            kernel.userActor(context),
+            action,
+            'insurance_policy',
+            entityId,
+            correlationId,
+          ),
   });
   const assignments = new AssignmentsApi({
     service: new AssignmentService(adapters.assignments ?? new InMemoryAssignmentStore(), {
@@ -224,14 +249,16 @@ export function buildDomainApis(kernel: PlatformKernel, adapters: PlatformAdapte
       },
     }),
     authorize: (token, correlationId, required) => kernel.authorize(token, correlationId, required),
-    audit: (context, action, entityId, correlationId) =>
-      kernel.auditNow(
-        kernel.userActor(context),
-        action,
-        'vehicle_assignment',
-        entityId,
-        correlationId,
-      ),
+    audit: assignmentAuditInTransaction
+      ? () => undefined
+      : (context, action, entityId, correlationId) =>
+          kernel.auditNow(
+            kernel.userActor(context),
+            action,
+            'vehicle_assignment',
+            entityId,
+            correlationId,
+          ),
   });
   const settingsService = new SettingsService(adapters.settings ?? new InMemorySettingsStore(), {
     now: kernel.now,
@@ -239,14 +266,16 @@ export function buildDomainApis(kernel: PlatformKernel, adapters: PlatformAdapte
   const companySettings = new CompanySettingsApi({
     service: settingsService,
     authorize: (token, correlationId, required) => kernel.authorize(token, correlationId, required),
-    audit: (context, action, entityId, correlationId) =>
-      kernel.auditNow(
-        kernel.userActor(context),
-        action,
-        'company_settings',
-        entityId,
-        correlationId,
-      ),
+    audit: settingsAuditInTransaction
+      ? () => undefined
+      : (context, action, entityId, correlationId) =>
+          kernel.auditNow(
+            kernel.userActor(context),
+            action,
+            'company_settings',
+            entityId,
+            correlationId,
+          ),
   });
   // Alerts are derived from the documents and policies stores on every read (no queue, no outbox
   // yet): vehicle documents and insurance policies whose last valid day falls inside the company's
@@ -311,8 +340,10 @@ export function buildDomainApis(kernel: PlatformKernel, adapters: PlatformAdapte
   const areas = new AreasApi({
     service: areaService,
     authorize: (token, correlationId, required) => kernel.authorize(token, correlationId, required),
-    audit: (context, action, entityId, correlationId) =>
-      kernel.auditNow(kernel.userActor(context), action, 'area', entityId, correlationId),
+    audit: areaAuditInTransaction
+      ? () => undefined
+      : (context, action, entityId, correlationId) =>
+          kernel.auditNow(kernel.userActor(context), action, 'area', entityId, correlationId),
   });
   // FLT-IMPORT: rows are created through the vehicle and employee services above, so VIN/plate
   // uniqueness per company, the active-area rule and the sealing of personal data all apply.
@@ -325,8 +356,20 @@ export function buildDomainApis(kernel: PlatformKernel, adapters: PlatformAdapte
       },
     }),
     authorize: (token, correlationId, required) => kernel.authorize(token, correlationId, required),
-    audit: (context, action, entityType, entityId, correlationId) =>
-      kernel.auditNow(kernel.userActor(context), action, entityType, entityId, correlationId),
+    audit: (context, action, entityType, entityId, correlationId) => {
+      const isTransactional =
+        (entityType === 'vehicle' && vehicleAuditInTransaction) ||
+        (entityType === 'employee' && employeeAuditInTransaction) ||
+        (entityType === 'import_job' && importAuditInTransaction);
+      if (isTransactional) return undefined;
+      return kernel.auditNow(
+        kernel.userActor(context),
+        action,
+        entityType,
+        entityId,
+        correlationId,
+      );
+    },
   });
   return {
     vehicles,

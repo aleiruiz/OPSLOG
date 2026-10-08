@@ -39,7 +39,7 @@ export async function bootstrapTenant(
       const identityId = activation.identity.id;
       k.access.grant(tenant.id, identityId, 'admin');
       await k.tenants.projectMembership(tenant.id, subjectId(identityId), 1, 'active');
-      k.auditNow(
+      await k.auditNow(
         { tenantId: tenant.id, actorId: 'system', actorKind: 'system' },
         'tenant.bootstrapped',
         'tenant',
@@ -74,7 +74,7 @@ export function setStatus(
 ) {
   return k.locked(tenantId, async () => {
     await k.tenants.setTenantStatus(tenantId as TenantId, status);
-    k.auditNow(
+    await k.auditNow(
       { tenantId, actorId: 'system', actorKind: 'system' },
       action,
       'tenant',

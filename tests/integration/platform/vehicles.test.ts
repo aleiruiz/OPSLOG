@@ -64,7 +64,7 @@ const seed = async (w: World, session: Session, over: Record<string, unknown> = 
   ok(await w.platform.vehicles.create(session.token, corr(), input(over)));
 
 const auditOf = (w: World, tenantId: string) =>
-  w.audit.list(tenantId).filter((event) => event.entityType === 'vehicle');
+  w.audit.snapshotForTesting(tenantId).filter((event) => event.entityType === 'vehicle');
 
 describe('vehicle lifecycle through the platform', () => {
   it('creates, reads, edits, changes status, records the odometer and archives, auditing each write', async () => {
