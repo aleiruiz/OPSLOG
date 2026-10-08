@@ -104,6 +104,12 @@ export interface RoleDirectoryStore {
     role: { id: string; name: string; permissions: readonly string[] },
     maxRoles: number,
   ): Promise<CreateRoleOutcome>;
+  createCustomRoleWithAudit?(
+    tenantId: string,
+    role: { id: string; name: string; permissions: readonly string[] },
+    maxRoles: number,
+    audit: IdentityMutationAudit,
+  ): Promise<CreateRoleOutcome>;
   /** Persists the role of a pending or active membership; false when there is none. */
   setRole(tenantId: string, identityId: string, role: string): Promise<boolean>;
   /** Optional transactional variant for a durable tenant-local audit row and delivery state. */
@@ -177,6 +183,17 @@ export class RoleDirectory {
     }
     if (isSystemRoleName(role.name)) return 'name_taken';
     return this.store.createCustomRole(tenantId, role, MAX_CUSTOM_ROLES_PER_TENANT);
+  }
+
+  public async createWithAudit(
+    tenantId: string,
+    role: CustomRole,
+    audit: IdentityMutationAudit,
+  ): Promise<CreateRoleOutcome | null> {
+    if (!this.store) return null;
+    if (isSystemRoleName(role.name)) return 'name_taken';
+    if (!this.store.createCustomRoleWithAudit) return null;
+    return this.store.createCustomRoleWithAudit(tenantId, role, MAX_CUSTOM_ROLES_PER_TENANT, audit);
   }
 
   /** Writes a membership's role through to the store; true (nothing to do) without a store. */

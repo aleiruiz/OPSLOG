@@ -138,6 +138,14 @@ export class FakeAuditRepository {
     private readonly db: FakeDatabase,
     private readonly entity: unknown,
   ) {}
+  public async findOneBy(where: Row): Promise<Row | null> {
+    this.db.begin('find', where, null);
+    const rows = this.db.auditRows.get(this.entity);
+    const found = [...(rows?.values() ?? [])].find((row) =>
+      Object.entries(where).every(([column, expected]) => row[column] === expected),
+    );
+    return found ? clone(found) : null;
+  }
   public async insert(row: Row): Promise<void> {
     this.db.begin('insert', null, row);
     this.db.auditRows.get(this.entity)?.set(String(row['eventId']), clone(row));

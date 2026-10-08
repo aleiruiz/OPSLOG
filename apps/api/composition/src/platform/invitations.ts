@@ -25,15 +25,20 @@ export async function inviteUser(
       'pending',
       correlationId,
     );
-    const invitation = k.roles.persistent
-      ? await k.identity.issueInvitation(context.tenantId, undefined, undefined, {
-          role,
-          audit: { ...audit, entityId: 'pending' },
-        })
-      : await k.identity.issueInvitation(context.tenantId);
+    const invitation =
+      k.roles.persistent && k.identity.supportsAtomicAudit
+        ? await k.identity.issueInvitation(context.tenantId, undefined, undefined, {
+            role,
+            audit: { ...audit, entityId: 'pending' },
+          })
+        : k.roles.persistent
+          ? await k.identity.issueInvitation(context.tenantId, undefined, undefined, { role })
+          : await k.identity.issueInvitation(context.tenantId);
     if (!k.roles.persistent) {
       await k.persistRole(context.tenantId, invitation.identityId, role);
       await k.audit.append(audit);
+    } else if (!k.identity.supportsAtomicAudit) {
+      await k.audit.append({ ...audit, entityId: invitation.identityId });
     }
     k.access.expectInvitation(invitation.identityId, context.tenantId, role);
     const nowMs = k.now().getTime();
@@ -89,7 +94,21 @@ export async function redeem(
   try {
     if (lockedTenantId !== null && k.tenants.status(lockedTenantId) !== 'active')
       throw new AuthError('unauthorized');
-    const activated = await k.auth.activateInvitation(invitationToken, principal);
+    const meta =
+      typeof invitationToken === 'string'
+        ? k.invitations.get(opaqueTokenGenerator.hash(invitationToken))
+        : undefined;
+    const audit =
+      meta && k.identity.supportsAtomicAudit
+        ? k.auditEvent(
+            { tenantId: meta.tenantId, actorId: `user-${meta.identityId}`, actorKind: 'user' },
+            'user.joined',
+            'membership',
+            meta.identityId,
+            `accept-${randomUUID()}`,
+          )
+        : undefined;
+    const activated = await k.auth.activateInvitation(invitationToken, principal, audit);
     if (!activated.ok || !activated.value) return failure(new AuthError('unauthorized'));
     const { identity, membership } = activated.value;
     k.invitations.delete(opaqueTokenGenerator.hash(invitationToken));
@@ -108,13 +127,14 @@ export async function redeem(
       (current?.version ?? 0) + 1,
       'active',
     );
-    await k.auditNow(
-      { tenantId: membership.tenantId, actorId: `user-${identity.id}`, actorKind: 'user' },
-      'user.joined',
-      'membership',
-      identity.id,
-      `accept-${randomUUID()}`,
-    );
+    if (!k.identity.supportsAtomicAudit)
+      await k.auditNow(
+        { tenantId: membership.tenantId, actorId: `user-${identity.id}`, actorKind: 'user' },
+        'user.joined',
+        'membership',
+        identity.id,
+        `accept-${randomUUID()}`,
+      );
     return success({ identityId: identity.id, tenantId: membership.tenantId });
   } catch (error) {
     return failure(error);

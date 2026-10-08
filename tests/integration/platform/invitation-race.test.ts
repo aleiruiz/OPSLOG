@@ -7,10 +7,7 @@ import {
   InMemoryTenantStore,
 } from '../../../apps/api/composition/src/index.js';
 import { InMemoryIdentityStore } from '../../../packages/domain/identity/src/index.js';
-import {
-  AUDIT_ENTITIES,
-  appendLocalAuditAndDelivery,
-} from '../../../packages/persistence/audit/src/index.js';
+import { AUDIT_ENTITIES } from '../../../packages/persistence/audit/src/index.js';
 import { TypeOrmIdentityStore } from '../../../packages/persistence/identity/src/index.js';
 import {
   FakeDatabase,
@@ -26,10 +23,7 @@ afterEach(() => world.dispose());
 const stores = {
   'in-memory store': () => new InMemoryIdentityStore(),
   'TypeORM store (fake driver)': () =>
-    new TypeOrmIdentityStore(asDataSource(new FakeDatabase(AUDIT_ENTITIES)), {
-      appendAudit: (manager, event) =>
-        appendLocalAuditAndDelivery(manager, { ...event, data: {} }).then(() => undefined),
-    }),
+    new TypeOrmIdentityStore(asDataSource(new FakeDatabase(AUDIT_ENTITIES))),
 } as const;
 
 describe.each(Object.entries(stores))('accept racing revoke, %s', (_name, makeStore) => {

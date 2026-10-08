@@ -11,6 +11,7 @@ import {
   type Membership,
   type RecoveryRequest,
   type Session,
+  type IdentityMutationAudit,
 } from '../../../domain/identity/src/index.js';
 import {
   IDENTITY_TABLES,
@@ -39,7 +40,7 @@ import {
   LOCK_TIMEOUT,
   asDataSource,
 } from './test-support/fake-database.js';
-import { HOUR, PROVIDER, T0, setup } from './test-support/harness.js';
+import { Clock, HOUR, PROVIDER, T0, createHarness, setup } from './test-support/harness.js';
 
 const tenantA = 'tenant-a';
 const tenantB = 'tenant-b';
@@ -81,6 +82,55 @@ describe('construction guards', () => {
     expect(['Admin', '', '1x', 'a-b', 'x'.repeat(33), 5].map(isRoleName)).toEqual(
       Array(6).fill(false),
     );
+  });
+});
+
+describe('transactional audit mutation ports', () => {
+  it('commits audit with invitation activation, membership revocation and role creation', async () => {
+    const db = new FakeDatabase();
+    const store = new TypeOrmIdentityStore(asDataSource(db), {
+      appendAudit: async () => undefined,
+    });
+    const harness = createHarness(store, new Clock());
+    const tenantId = 'tenant-audit';
+    const makeAudit = (action: string, entityId: string): IdentityMutationAudit => ({
+      eventId: randomUUID(),
+      tenantId,
+      action,
+      entityType: 'membership',
+      entityId,
+      occurredAt: T0.toISOString(),
+      actor: { id: 'user-admin', kind: 'user' },
+      correlationId: randomUUID(),
+      data: {},
+    });
+    await harness.join(tenantId, 'audit-admin', ADMIN_ROLE);
+    const pending = await harness.invite(tenantId, 'viewer');
+    expect(
+      await store.activateInvitationWithAudit(
+        pending.tokenHash,
+        PROVIDER,
+        'audit-viewer',
+        T0,
+        makeAudit('user.joined', pending.identityId),
+      ),
+    ).not.toBeNull();
+    const member = await harness.join(tenantId, 'audit-revoked', 'editor');
+    expect(
+      await store.revokeMembershipWithAudit(
+        tenantId,
+        member.identityId,
+        makeAudit('membership.revoked', member.identityId),
+      ),
+    ).toBe(true);
+    expect(
+      await store.createCustomRoleWithAudit(
+        tenantId,
+        { id: 'custom-audit-role', name: 'Audit role', permissions: [] },
+        50,
+        makeAudit('role.copied', 'custom-audit-role'),
+      ),
+    ).toBe('created');
   });
 });
 

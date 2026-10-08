@@ -306,6 +306,112 @@ suite('platform on a real MySQL identity store', () => {
     expect(await counts()).toEqual(before);
   });
 
+  it('rolls back invitation acceptance, membership revocation and role creation with their audit rows', async () => {
+    let failAudit = false;
+    const failingStore = new TypeOrmIdentityStore(sources[0]!, {
+      appendAudit: async (manager, event) => {
+        await appendLocalAuditAndDelivery(manager, { ...event, data: {} });
+        if (failAudit) throw new Error('synthetic audit failure');
+      },
+    });
+    const failingPlatform = createPlatform({
+      verifier,
+      issuer: verifier.issuer,
+      grantSecret: 'synthetic-grant-secret-for-tests-0123456789',
+      adapters: {
+        identityStore: failingStore,
+        tenants,
+        audit: new InMemoryAuditStore(),
+        auditRelay: { runBatch: async () => 0 },
+      },
+    });
+    const a = await (async () => {
+      const created = await failingPlatform.bootstrapTenant({
+        name: 'Empresa audit-route-rollback',
+        adminPrincipal: await principal('admin-audit-route-rollback'),
+      });
+      if (!created.value) throw new Error('tenant fixture failed');
+      const login = await failingPlatform.signIn(await principal('admin-audit-route-rollback'));
+      if (!login.value) throw new Error('login fixture failed');
+      return { tenantId: created.value.tenantId, token: login.value.token };
+    })();
+    const invitation = (await failingPlatform.inviteUser(a.token, 'audit-route-invite', 'editor'))
+      .value!;
+    failAudit = true;
+    const beforeAccept = await rows(
+      'SELECT * FROM opslog_identity_memberships WHERE tenant_id = ?',
+      [a.tenantId],
+    );
+    expect(
+      await failingPlatform.acceptInvitation(
+        invitation.invitationToken,
+        await principal('invitee-audit-route-rollback'),
+      ),
+    ).toMatchObject({ ok: false });
+    expect(
+      await rows('SELECT * FROM opslog_identity_memberships WHERE tenant_id = ?', [a.tenantId]),
+    ).toEqual(beforeAccept);
+    expect(
+      await rows(
+        `SELECT * FROM ${identifier(AUDIT_TABLES.local)} WHERE tenant_id = ? AND action = 'user.joined'`,
+        [a.tenantId],
+      ),
+    ).toEqual([]);
+
+    failAudit = false;
+    const acceptedInvitation = (
+      await failingPlatform.inviteUser(a.token, 'audit-route-revoke-invite', 'editor')
+    ).value!;
+    const accepted = await failingPlatform.acceptInvitation(
+      acceptedInvitation.invitationToken,
+      await principal('member-audit-route-revoke'),
+    );
+    if (!accepted.value) throw new Error('member fixture failed');
+    failAudit = true;
+    const beforeRevoke = await rows(
+      'SELECT * FROM opslog_identity_memberships WHERE tenant_id = ?',
+      [a.tenantId],
+    );
+    expect(
+      await failingPlatform.removeMember(a.token, 'audit-route-revoke', accepted.value.identityId),
+    ).toMatchObject({ ok: false });
+    expect(
+      await rows('SELECT * FROM opslog_identity_memberships WHERE tenant_id = ?', [a.tenantId]),
+    ).toEqual(beforeRevoke);
+    expect(
+      await rows(
+        `SELECT * FROM ${identifier(AUDIT_TABLES.local)} WHERE tenant_id = ? AND action = 'membership.revoked'`,
+        [a.tenantId],
+      ),
+    ).toEqual([]);
+
+    failAudit = false;
+    failAudit = true;
+    const roleCount = (
+      await rows<{ total: number }>(
+        `SELECT COUNT(*) AS total FROM ${identifier(IDENTITY_TABLES.roles)} WHERE tenant_id = ?`,
+        [a.tenantId],
+      )
+    )[0]?.total;
+    expect(
+      await failingPlatform.copyRole(a.token, 'audit-route-copy', 'editor', 'Copied editor'),
+    ).toMatchObject({ ok: false });
+    expect(
+      (
+        await rows<{ total: number }>(
+          `SELECT COUNT(*) AS total FROM ${identifier(IDENTITY_TABLES.roles)} WHERE tenant_id = ?`,
+          [a.tenantId],
+        )
+      )[0]?.total,
+    ).toBe(roleCount);
+    expect(
+      await rows(
+        `SELECT * FROM ${identifier(AUDIT_TABLES.local)} WHERE tenant_id = ? AND action = 'role.copied'`,
+        [a.tenantId],
+      ),
+    ).toEqual([]);
+  });
+
   it('does not let a stale directory role outlive a demotion made by another process', async () => {
     const a = await tenant('drift');
     const invited = (await platform.inviteUser(a.token, 'corr-4', 'admin')).value!;

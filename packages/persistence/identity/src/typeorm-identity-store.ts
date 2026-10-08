@@ -52,6 +52,10 @@ import type { TypeOrmIdentityStoreOptions } from './store-types.js';
 export class TypeOrmIdentityStore implements IdentityStore {
   private readonly core: IdentityStoreCore;
 
+  public get supportsAtomicAudit(): boolean {
+    return this.core.hasAuditWriter;
+  }
+
   public constructor(dataSource: DataSource, options: TypeOrmIdentityStoreOptions = {}) {
     if (dataSource.options.type !== 'mysql' || dataSource.options.synchronize === true)
       throw new Error('Identity store requires MySQL with synchronize disabled');
@@ -158,9 +162,29 @@ export class TypeOrmIdentityStore implements IdentityStore {
     return activateInvitation(this.core, tokenHash, provider, subject, activatedAt);
   }
 
+  public activateInvitationWithAudit(
+    tokenHash: string,
+    provider: string,
+    subject: string,
+    activatedAt: Date,
+    audit: IdentityMutationAudit,
+  ): Promise<InvitationActivation | null> {
+    if (!this.core.hasAuditWriter) return Promise.reject(new AuthError('conflict'));
+    return activateInvitation(this.core, tokenHash, provider, subject, activatedAt, audit);
+  }
+
   /** See `revokeMembership` in membership-ops.ts: the final active administrator cannot be revoked. */
   public revokeMembership(tenantId: string, identityId: string): Promise<boolean> {
     return revokeMembership(this.core, tenantId, identityId);
+  }
+
+  public revokeMembershipWithAudit(
+    tenantId: string,
+    identityId: string,
+    audit: IdentityMutationAudit,
+  ): Promise<boolean> {
+    if (!this.core.hasAuditWriter) return Promise.reject(new AuthError('conflict'));
+    return revokeMembership(this.core, tenantId, identityId, audit);
   }
 
   // ---- custom roles -------------------------------------------------------------------------
@@ -190,6 +214,16 @@ export class TypeOrmIdentityStore implements IdentityStore {
     maxRoles: number,
   ): Promise<CreateCustomRoleOutcome> {
     return createCustomRole(this.core, tenantId, role, maxRoles);
+  }
+
+  public createCustomRoleWithAudit(
+    tenantId: string,
+    role: CustomRoleRecord,
+    maxRoles: number,
+    audit: IdentityMutationAudit,
+  ): Promise<CreateCustomRoleOutcome> {
+    if (!this.core.hasAuditWriter) return Promise.reject(new AuthError('conflict'));
+    return createCustomRole(this.core, tenantId, role, maxRoles, audit);
   }
 
   // ---- recovery -----------------------------------------------------------------------------

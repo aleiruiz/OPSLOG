@@ -110,35 +110,45 @@ export function removeMember(
         throw new PlatformError('not_found');
       // A pending invitation (of any role) is revoked: the token can no longer be redeemed. It
       // holds no active seat, so the last-administrator rule does not apply.
-      try {
-        await k.identity.revokeMembership(context.tenantId, targetIdentityId);
-      } catch (error) {
-        // The store already holds no live membership (revoked elsewhere): the directory entry
-        // must still go, or the member would stay listed as "invited" forever.
-        if (!(error instanceof AuthError && error.code === 'not_found')) throw error;
-      }
-      k.access.revokePending(targetIdentityId, context.tenantId);
-      await k.auditNow(
+      const audit = k.auditEvent(
         k.userActor(context),
         'invitation.revoked',
         'membership',
         targetIdentityId,
         correlationId,
       );
+      try {
+        await k.identity.revokeMembership(
+          context.tenantId,
+          targetIdentityId,
+          k.identity.supportsAtomicAudit ? audit : undefined,
+        );
+      } catch (error) {
+        // The store already holds no live membership (revoked elsewhere): the directory entry
+        // must still go, or the member would stay listed as "invited" forever.
+        if (!(error instanceof AuthError && error.code === 'not_found')) throw error;
+      }
+      k.access.revokePending(targetIdentityId, context.tenantId);
+      if (!k.identity.supportsAtomicAudit) await k.audit.append(audit);
       return null;
     }
     if (current === 'admin' && k.access.activeAdmins(context.tenantId).length <= 1)
       throw new PlatformError('last_admin');
-    await k.identity.revokeMembership(context.tenantId, targetIdentityId);
-    k.access.revoke(context.tenantId, targetIdentityId);
-    await bumpProjection(k, context.tenantId, targetIdentityId, 'revoked');
-    await k.auditNow(
+    const audit = k.auditEvent(
       k.userActor(context),
       'membership.revoked',
       'membership',
       targetIdentityId,
       correlationId,
     );
+    await k.identity.revokeMembership(
+      context.tenantId,
+      targetIdentityId,
+      k.identity.supportsAtomicAudit ? audit : undefined,
+    );
+    k.access.revoke(context.tenantId, targetIdentityId);
+    await bumpProjection(k, context.tenantId, targetIdentityId, 'revoked');
+    if (!k.identity.supportsAtomicAudit) await k.audit.append(audit);
     return null;
   });
 }
@@ -216,9 +226,12 @@ export async function copyRole(
     const trimmed = typeof name === 'string' ? name.trim() : '';
     if (!trimmed || trimmed.length > 80) throw new PlatformError('invalid_input');
     const role = { id: `custom-${randomUUID()}`, name: trimmed, permissions: source.permissions };
-    if ((await k.roles.create(context.tenantId, role)) !== 'created')
-      throw new PlatformError('conflict');
-    await k.auditNow(k.userActor(context), 'role.copied', 'role', role.id, correlationId);
+    const audit = k.auditEvent(k.userActor(context), 'role.copied', 'role', role.id, correlationId);
+    const outcome = k.identity.supportsAtomicAudit
+      ? await k.roles.createWithAudit(context.tenantId, role, audit)
+      : await k.roles.create(context.tenantId, role);
+    if (outcome !== 'created') throw new PlatformError('conflict');
+    if (!k.identity.supportsAtomicAudit) await k.audit.append(audit);
     return success({ ...role, kind: 'custom' as const, memberCount: 0 });
   } catch (error) {
     return failure(error);

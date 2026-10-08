@@ -38,6 +38,9 @@ export class IdentityService {
   ) {
     this.recoveryMinIntervalMs = options.recoveryMinIntervalMs ?? 60_000;
   }
+  public get supportsAtomicAudit(): boolean {
+    return this.store.supportsAtomicAudit === true;
+  }
   /** Resolve an already-linked external subject. Never provisions: identities are created only by invitations. */
   public async resolveExternal(provider: string, subject: string): Promise<Identity> {
     if (!nonEmpty(provider) || !nonEmpty(subject)) throw new AuthError('invalid_input');
@@ -131,15 +134,15 @@ export class IdentityService {
     token: string,
     provider: string,
     subject: string,
+    audit?: IdentityMutationAudit,
   ): Promise<InvitationActivation> {
     if (!nonEmpty(token) || !nonEmpty(provider) || !nonEmpty(subject))
       throw new AuthError('unauthorized');
-    const result = await this.store.activateInvitation(
-      this.tokens.hash(token),
-      provider,
-      subject,
-      this.now(),
-    );
+    const args = [this.tokens.hash(token), provider, subject, this.now()] as const;
+    const result = audit
+      ? await this.store.activateInvitationWithAudit?.(...args, audit)
+      : await this.store.activateInvitation(...args);
+    if (audit && !this.store.activateInvitationWithAudit) throw new AuthError('conflict');
     if (!result) throw new AuthError('unauthorized');
     return result;
   }
@@ -212,10 +215,17 @@ export class IdentityService {
     return refreshed;
   }
   /** Revoke a tenant membership and invalidate the identity's sessions. Callers must authorize `manage_users` first. */
-  public async revokeMembership(tenantId: string, identityId: string): Promise<void> {
+  public async revokeMembership(
+    tenantId: string,
+    identityId: string,
+    audit?: IdentityMutationAudit,
+  ): Promise<void> {
     if (!nonEmpty(tenantId) || !nonEmpty(identityId)) throw new AuthError('invalid_input');
-    if (!(await this.store.revokeMembership(tenantId, identityId)))
-      throw new AuthError('not_found');
+    const revoked = audit
+      ? await this.store.revokeMembershipWithAudit?.(tenantId, identityId, audit)
+      : await this.store.revokeMembership(tenantId, identityId);
+    if (audit && !this.store.revokeMembershipWithAudit) throw new AuthError('conflict');
+    if (!revoked) throw new AuthError('not_found');
   }
   public async createSession(identityId: string, tenantId: string, ttlMs = 8 * 60 * 60 * 1000) {
     if (!nonEmpty(identityId) || !nonEmpty(tenantId) || !Number.isFinite(ttlMs) || ttlMs <= 0)

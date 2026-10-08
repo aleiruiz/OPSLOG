@@ -31,6 +31,8 @@ export interface IdentityMutationAudit {
 }
 
 export interface IdentityStore {
+  /** True only when audit rows can be committed in the same transaction as identity mutations. */
+  readonly supportsAtomicAudit?: boolean;
   /** Atomically persist a new identity and its provider+subject key. Enforce a unique constraint on that key and return the winner on conflict. */
   createExternalIdentity(identity: Identity, external: ExternalIdentity): Promise<ExternalIdentity>;
   findIdentity(id: string): Promise<Identity | null>;
@@ -69,6 +71,13 @@ export interface IdentityStore {
     subject: string,
     activatedAt: Date,
   ): Promise<InvitationActivation | null>;
+  activateInvitationWithAudit?(
+    tokenHash: string,
+    provider: string,
+    subject: string,
+    activatedAt: Date,
+    audit: IdentityMutationAudit,
+  ): Promise<InvitationActivation | null>;
   findRecovery(tokenHash: string): Promise<RecoveryRequest | null>;
   /** Persist the request and mark older unused requests of the same identity as superseded (`supersededAt = request.issuedAt`). */
   saveRecovery(request: RecoveryRequest): Promise<void>;
@@ -87,6 +96,11 @@ export interface IdentityStore {
    * adapter must refuse to revoke the final administrator of a tenant.
    */
   revokeMembership(tenantId: string, identityId: string): Promise<boolean>;
+  revokeMembershipWithAudit?(
+    tenantId: string,
+    identityId: string,
+    audit: IdentityMutationAudit,
+  ): Promise<boolean>;
   /** Persistent adapters may atomically store a role change and its local audit/delivery rows. */
   setRoleWithAudit?(
     tenantId: string,

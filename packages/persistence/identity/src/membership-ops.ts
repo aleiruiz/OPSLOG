@@ -195,6 +195,7 @@ export async function activateInvitation(
   provider: string,
   subject: string,
   activatedAt: Date,
+  audit?: IdentityMutationAudit,
 ): Promise<InvitationActivation | null> {
   if (
     !HASH_PATTERN.test(tokenHash) ||
@@ -252,6 +253,7 @@ export async function activateInvitation(
           { consumedAt: activatedAt },
         );
       if (consumed.affected !== 1) throw new ActivationRejected();
+      if (audit) await core.appendAudit(manager, audit);
       return {
         identity: { ...toIdentity(identity), status: 'active' },
         membership: { ...toMembership(membership), status: 'active', activatedAt },
@@ -274,6 +276,7 @@ export async function revokeMembership(
   core: IdentityStoreCore,
   tenantId: string,
   identityId: string,
+  audit?: IdentityMutationAudit,
 ): Promise<boolean> {
   if (!nonBlank(tenantId, 64) || !nonBlank(identityId, 64)) return false;
   // No lock rows are created for unknown tenants: only an existing membership proves the tenant.
@@ -298,6 +301,7 @@ export async function revokeMembership(
       .getRepository(SessionEntity)
       .update({ tenantId, identityId, revokedAt: IsNull() }, { revokedAt: core.now() });
     await identities.increment({ id: identityId }, 'authorizationVersion', 1);
+    if (audit) await core.appendAudit(manager, audit);
     return true;
   });
 }
