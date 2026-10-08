@@ -25,8 +25,8 @@ export function withLatency<T extends object>(
       const value = Reflect.get(target, property, target) as unknown;
       if (typeof value !== 'function') return value;
       const name =
-        typeof property === 'string' ? (auditedMethods[property] ?? (property as Slow)) : '';
-      if (!(name in delays))
+        typeof property === 'string' ? (auditedMethods[property] ?? (property as Slow)) : undefined;
+      if (!name || !(name in delays))
         return (...args: unknown[]) => (value as (...a: unknown[]) => unknown).apply(target, args);
       return async (...args: unknown[]) => {
         resolvers.get(name)?.();
