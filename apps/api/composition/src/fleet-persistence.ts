@@ -239,13 +239,32 @@ export interface FleetRuntimeStores {
       | 'fileSagaJournal'
       | 'audit'
       | 'auditRelay'
+      | 'outbox'
     >
   >;
   readonly audit: NonNullable<PlatformAdapters['audit']>;
   readonly auditRelay: NonNullable<PlatformAdapters['auditRelay']>;
+  readonly outbox: NonNullable<PlatformAdapters['outbox']>;
   /** Bind this runtime to the tenant provisioned by its isolated BFF world. */
   bindTenant(tenantId: string): void;
   close(): Promise<void>;
+}
+
+/** Ensure the Fleet Platform receives the same tenant-local durable outbox as its audit adapters. */
+export function withFleetAuditRuntime<T extends object>(
+  adapters: T,
+  auditRuntime: ReturnType<typeof createMySqlAuditRuntime>,
+): T & Pick<PlatformAdapters, 'audit' | 'auditRelay' | 'outbox'> {
+  const composed = Object.create(
+    Object.getPrototypeOf(adapters),
+    Object.getOwnPropertyDescriptors(adapters),
+  ) as T & Pick<PlatformAdapters, 'audit' | 'auditRelay' | 'outbox'>;
+  Object.defineProperties(composed, {
+    audit: { value: auditRuntime.audit, enumerable: true, configurable: true },
+    auditRelay: { value: auditRuntime.auditRelay, enumerable: true, configurable: true },
+    outbox: { value: auditRuntime.outbox, enumerable: true, configurable: true },
+  });
+  return composed;
 }
 
 /** Open module-owned runtime accounts against one tenant database; no credential can perform DDL. */
@@ -312,34 +331,36 @@ export async function openFleetRuntimeStores(
         return auditRelaySource;
       },
     });
-    const adapters: FleetRuntimeStores['adapters'] = {
-      areas: new TypeOrmAreaStore(sources[0] as FleetDataSource),
-      vehicles: new TypeOrmVehicleStore(sources[1] as FleetDataSource),
-      employees: new TypeOrmEmployeeStore(sources[2] as FleetDataSource),
-      documents: new TypeOrmDocumentStore(sources[3] as FleetDataSource),
-      insurance: new TypeOrmPolicyStore(sources[4] as FleetDataSource),
-      assignments: new TypeOrmAssignmentStore(sources[5] as FleetDataSource),
-      settings: new TypeOrmSettingsStore(sources[6] as FleetDataSource),
-      imports: new TypeOrmImportStore(sources[7] as FleetDataSource),
-      get records() {
-        if (!fileStore) throw new Error('fleet file runtime must be bound to a tenant first');
-        return fileStore;
+    const adapters = withFleetAuditRuntime(
+      {
+        areas: new TypeOrmAreaStore(sources[0] as FleetDataSource),
+        vehicles: new TypeOrmVehicleStore(sources[1] as FleetDataSource),
+        employees: new TypeOrmEmployeeStore(sources[2] as FleetDataSource),
+        documents: new TypeOrmDocumentStore(sources[3] as FleetDataSource),
+        insurance: new TypeOrmPolicyStore(sources[4] as FleetDataSource),
+        assignments: new TypeOrmAssignmentStore(sources[5] as FleetDataSource),
+        settings: new TypeOrmSettingsStore(sources[6] as FleetDataSource),
+        imports: new TypeOrmImportStore(sources[7] as FleetDataSource),
+        get records() {
+          if (!fileStore) throw new Error('fleet file runtime must be bound to a tenant first');
+          return fileStore;
+        },
+        get scanQueue() {
+          if (!fileStore) throw new Error('fleet file runtime must be bound to a tenant first');
+          return fileStore;
+        },
+        get fileSagaJournal() {
+          if (!fileStore) throw new Error('fleet file runtime must be bound to a tenant first');
+          return fileStore;
+        },
       },
-      get scanQueue() {
-        if (!fileStore) throw new Error('fleet file runtime must be bound to a tenant first');
-        return fileStore;
-      },
-      get fileSagaJournal() {
-        if (!fileStore) throw new Error('fleet file runtime must be bound to a tenant first');
-        return fileStore;
-      },
-      audit: auditRuntime.audit,
-      auditRelay: auditRuntime.auditRelay,
-    };
+      auditRuntime,
+    ) as FleetRuntimeStores['adapters'];
     return {
       adapters,
       audit: auditRuntime.audit,
       auditRelay: auditRuntime.auditRelay,
+      outbox: auditRuntime.outbox,
       bindTenant(tenantId) {
         if (!/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(tenantId))
           throw new Error('invalid fleet tenant id');

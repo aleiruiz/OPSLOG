@@ -8,6 +8,7 @@ import {
 import { AUDIT_TABLES } from './entities.js';
 
 export const AUDIT_MIGRATION_VERSION = '2026100700010';
+export const OUTBOX_MIGRATION_VERSION = '2026100900010';
 export const AUDIT_MIGRATIONS_TABLE = 'opslog_audit_migrations';
 const text = (name: string, length: number, primary = false): TableColumnOptions => ({
   name,
@@ -161,6 +162,57 @@ export class CreateAuditStore2026100700010 implements MigrationInterface {
   /** Audit rows are append-only; destructive rollback requires a separate owner decision. */
   public async down(): Promise<void> {
     throw new Error('Audit migrations cannot be rolled back destructively');
+  }
+}
+
+/** Durable tenant-scoped job state, including the handler checkpoint and monotonic fence. */
+export class CreateTenantOutbox2026100900010 implements MigrationInterface {
+  name = 'CreateTenantOutbox2026100900010';
+
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.createTable(
+      new Table({
+        name: AUDIT_TABLES.outbox,
+        columns: [
+          text('tenant_id', 128, true),
+          text('event_id', 128, true),
+          text('type', 128),
+          { name: 'payload', type: 'json' },
+          date('occurred_at'),
+          text('idempotency_key', 128),
+          { name: 'correlation_id', type: 'varchar', length: '128', isNullable: true },
+          { name: 'actor_subject', type: 'varchar', length: '128', isNullable: true },
+          { name: 'actor_kind', type: 'varchar', length: '16', isNullable: true },
+          { name: 'required_permission', type: 'varchar', length: '64', isNullable: true },
+          { name: 'entity_id', type: 'varchar', length: '128', isNullable: true },
+          { name: 'schema_version', type: 'int', isNullable: true },
+          {
+            name: 'status',
+            type: 'enum',
+            enum: ['pending', 'processing', 'retry', 'delivered', 'dead_letter'],
+            default: "'pending'",
+          },
+          { name: 'attempts', type: 'int', unsigned: true, default: 0 },
+          date('available_at'),
+          date('lease_until', false, true),
+          { name: 'fencing', type: 'bigint', unsigned: true, default: 0 },
+          { name: 'worker_id', type: 'varchar', length: '128', isNullable: true },
+          { name: 'last_error', type: 'varchar', length: '500', isNullable: true },
+          { name: 'handler_completed', type: 'boolean', default: false },
+        ],
+        indices: [
+          new TableIndex({
+            name: 'ix_tenant_outbox_due',
+            columnNames: ['status', 'available_at', 'occurred_at'],
+          }),
+        ],
+      }),
+    );
+  }
+
+  /** Durable event history is not destructively rolled back. */
+  public async down(): Promise<void> {
+    throw new Error('Outbox migrations cannot be rolled back destructively');
   }
 }
 

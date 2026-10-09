@@ -43,7 +43,7 @@ export async function publish<T>(
 ): Promise<PlatformResponse<T>> {
   try {
     const context = await k.authorize(token, correlationId, [permission]);
-    const result = k.outbox.transaction((tx) =>
+    const result = await k.outbox.transaction((tx) =>
       work((event) => {
         tx.enqueue({
           eventId: event.eventId ?? `evt-${randomUUID()}`,

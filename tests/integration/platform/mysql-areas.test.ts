@@ -124,6 +124,7 @@ suite('BFF on real MySQL areas and vehicles stores', () => {
         people,
         audit: auditRuntime.audit,
         auditRelay: auditRuntime.auditRelay,
+        outbox: auditRuntime.outbox,
       },
     });
     tenantA = (await world.tenant('Empresa Alfa', 'subject-admin-a')).tenantId;

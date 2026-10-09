@@ -100,7 +100,7 @@ describe.each(Object.entries(stores))('accept racing revoke, %s', (_name, makeSt
           storage: new InMemoryObjectStorage(),
           audit: auditRuntime?.audit ?? new InMemoryAuditStore(),
           auditRelay: auditRuntime?.auditRelay ?? { runBatch: async () => 0 },
-          outbox: new InMemoryOutboxStore(() => Date.now()),
+          outbox: auditRuntime?.outbox ?? new InMemoryOutboxStore(() => Date.now()),
           tenants,
         },
       });

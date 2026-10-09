@@ -39,10 +39,14 @@ export class OutboxConflictError extends Error {
   }
 }
 export interface OutboxStore {
-  transaction<T>(work: (tx: OutboxTransaction) => T): T;
-  claim<T>(now: number, leaseMs: number, workerId: string): EventClaim<T> | undefined;
-  markHandlerCompleted(tenantId: string, eventId: string, fencing: number): void;
-  acknowledge(tenantId: string, eventId: string, fencing: number): void;
+  transaction<T>(work: (tx: OutboxTransaction) => T): T | Promise<T>;
+  claim<T>(
+    now: number,
+    leaseMs: number,
+    workerId: string,
+  ): EventClaim<T> | undefined | Promise<EventClaim<T> | undefined>;
+  markHandlerCompleted(tenantId: string, eventId: string, fencing: number): void | Promise<void>;
+  acknowledge(tenantId: string, eventId: string, fencing: number): void | Promise<void>;
   retry(
     tenantId: string,
     eventId: string,
@@ -50,10 +54,13 @@ export interface OutboxStore {
     error: string,
     now: number,
     maxAttempts: number,
-  ): OutboxStatus;
-  reconcile(now: number): number;
-  get(tenantId: string, eventId: string): OutboxRecord | undefined;
-  all(): readonly OutboxRecord[];
+  ): OutboxStatus | Promise<OutboxStatus>;
+  reconcile(now: number): number | Promise<number>;
+  get(
+    tenantId: string,
+    eventId: string,
+  ): OutboxRecord | undefined | Promise<OutboxRecord | undefined>;
+  all(): readonly OutboxRecord[] | Promise<readonly OutboxRecord[]>;
 }
 /**
  * In-memory reference adapter. Durable adapters must persist handlerCompleted with

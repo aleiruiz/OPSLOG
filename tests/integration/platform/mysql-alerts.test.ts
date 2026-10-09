@@ -72,6 +72,7 @@ suite('BFF on the real MySQL stores: expiry alerts and settings', () => {
         settings: new TypeOrmSettingsStore(await settings.openRuntime()),
         audit: auditRuntime.audit,
         auditRelay: auditRuntime.auditRelay,
+        outbox: auditRuntime.outbox,
       },
     });
     tenantA = (await world.tenant('Empresa Alfa', 'subject-admin-a')).tenantId;

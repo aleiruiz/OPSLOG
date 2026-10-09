@@ -102,6 +102,7 @@ suite('persistent area store on MySQL', () => {
           'opslog_audit_log',
           'opslog_audit_registry',
           'opslog_audit_migrations',
+          AUDIT_TABLES.outbox,
         ].sort(),
       );
       const areaTableList = [...Object.values(AREA_TABLES)].map((name) => `'${name}'`).join(', ');
@@ -224,7 +225,7 @@ suite('persistent area store on MySQL', () => {
         'SELECT TABLE_NAME AS t FROM information_schema.TABLES WHERE TABLE_SCHEMA = ?',
         [db.databaseName],
       );
-      expect(names).toHaveLength(Object.keys(AREA_TABLES).length + 7);
+      expect(names).toHaveLength(Object.keys(AREA_TABLES).length + 8);
     });
   });
 
