@@ -13,11 +13,8 @@ import {
   type AuditStore,
   type PersistedAuditEvent,
 } from '../../../../packages/platform/audit/src/index.js';
-import {
-  MySqlAuditApiStore,
-  MySqlAuditRelay,
-} from '../../../../packages/persistence/audit/src/index.js';
 import { TypeOrmAreaStore } from '../../../../packages/persistence/areas/src/index.js';
+import { isDurableAuditAdapterSet } from './platform/durable-audit.js';
 import { TypeOrmAssignmentStore } from '../../../../packages/persistence/assignments/src/index.js';
 import { TypeOrmDocumentStore } from '../../../../packages/persistence/documents/src/index.js';
 import { TypeOrmEmployeeStore } from '../../../../packages/persistence/employees/src/index.js';
@@ -107,12 +104,7 @@ export type {
   SettingsView,
 } from './platform/types.js';
 
-/**
- * Composition root: authentication, tenant control-plane gate, role directory, private files,
- * audit and outbox wired together with in-memory adapters. Tenant, actor and permissions always
- * come from the server-side session, never from caller input. The feature methods delegate to the
- * collaborator modules in `./platform/`, which share state through a private `PlatformKernel`.
- */
+/** Composition root for tenant-safe API, persistence, audit, and worker adapters. */
 export class Platform {
   public readonly identity: GatedIdentityService;
   private readonly identityOnly: IdentityService;
@@ -165,10 +157,9 @@ export class Platform {
     const requiresDurableAudit = persistentIdentity || persistentBusinessStores.some(Boolean);
     if (
       requiresDurableAudit &&
-      (!(adapters.audit instanceof MySqlAuditApiStore) ||
-        !(adapters.auditRelay instanceof MySqlAuditRelay))
+      !isDurableAuditAdapterSet(adapters.audit, adapters.auditRelay, adapters.outbox)
     )
-      throw new Error('persistent stores require durable tenant-scoped audit storage and relay');
+      throw new Error('persistent stores require durable tenant-scoped audit, relay, and outbox');
     if (
       adapters.records instanceof TypeOrmFileSagaStore &&
       (adapters.fileSagaJournal !== adapters.records || adapters.scanQueue !== adapters.records)

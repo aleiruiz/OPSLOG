@@ -62,6 +62,7 @@ suite('BFF on the real MySQL import store', () => {
         imports: new TypeOrmImportStore(source),
         audit: auditRuntime.audit,
         auditRelay: auditRuntime.auditRelay,
+        outbox: auditRuntime.outbox,
       },
     });
     await world.tenant('Empresa Alfa', 'subject-admin-a');

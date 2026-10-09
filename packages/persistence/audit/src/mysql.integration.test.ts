@@ -16,6 +16,7 @@ import {
   MySqlAuditStore,
   MySqlAuditApiStore,
   MySqlAuditRelay,
+  MySqlTenantOutboxStore,
   relayPendingAuditEvent,
   runAuditMigrations,
   type AuditDatabaseConfig,
@@ -129,6 +130,13 @@ async function createTenantDb(label: string): Promise<TenantDb> {
   );
   await admin.query(`GRANT INSERT ON ${table(AUDIT_TABLES.projection)} TO '${relayUser}'@'%'`);
   await admin.query(`GRANT UPDATE ON ${table(AUDIT_TABLES.delivery)} TO '${relayUser}'@'%'`);
+  await admin.query(
+    `GRANT SELECT, INSERT ON ${table(AUDIT_TABLES.outbox)} TO '${runtimeUser}'@'%'`,
+  );
+  await admin.query(`GRANT SELECT ON ${table(AUDIT_TABLES.outbox)} TO '${relayUser}'@'%'`);
+  await admin.query(
+    `GRANT UPDATE (status, attempts, available_at, lease_until, fencing, worker_id, last_error, handler_completed) ON ${table(AUDIT_TABLES.outbox)} TO '${relayUser}'@'%'`,
+  );
   await admin.changeUser({ database });
 
   return {
@@ -204,6 +212,8 @@ describe.skipIf(!adminUrl)('tenant-local audit persistence against MySQL 8', () 
   let store: MySqlAuditStore;
   let apiStore: MySqlAuditApiStore;
   let relay: MySqlAuditRelay;
+  let outbox: MySqlTenantOutboxStore;
+  const outboxNow = 1_800_000_000_000;
 
   beforeAll(async () => {
     a = await createTenantDb('a');
@@ -224,6 +234,13 @@ describe.skipIf(!adminUrl)('tenant-local audit persistence against MySQL 8', () 
       (tenantId) => (tenantId === a.tenantId ? runtimeA : runtimeB),
     );
     relay = auditRuntime.auditRelay;
+    outbox = new MySqlTenantOutboxStore(
+      () => [a.tenantId, b.tenantId],
+      (tenantId) => (tenantId === a.tenantId ? runtimeA : runtimeB),
+      (tenantId) => (tenantId === a.tenantId ? relayA : relayB),
+      () => outboxNow,
+      () => 0.5,
+    );
   });
 
   afterAll(async () => {
@@ -379,6 +396,111 @@ describe.skipIf(!adminUrl)('tenant-local audit persistence against MySQL 8', () 
     });
     await expect(wrongTenant.initialize()).rejects.toBeDefined();
     await wrongTenant.destroy().catch(() => undefined);
+  });
+
+  it('persists tenant-scoped handler checkpoint and fencing across worker restart and lease retry', async () => {
+    const enqueue = (tenantId: string) => ({
+      eventId: 'restart-checkpoint-event',
+      tenantId,
+      type: 'synthetic.restart',
+      payload: { value: 'synthetic' },
+      occurredAt: new Date(outboxNow).toISOString(),
+      idempotencyKey: 'restart-checkpoint-event',
+    });
+    await Promise.all([
+      outbox.transaction((tx) => tx.enqueue(enqueue(a.tenantId))),
+      outbox.transaction((tx) => tx.enqueue(enqueue(b.tenantId))),
+    ]);
+    const first = await outbox.claim(outboxNow, 1_000, 'worker-before-restart');
+    expect(first?.record.tenantId).toBe(a.tenantId);
+    expect(first?.record.handlerCompleted).toBeUndefined();
+    await outbox.markHandlerCompleted(a.tenantId, first!.record.eventId, first!.fencing);
+
+    // A new adapter models a restarted worker process; the database remains the source of truth.
+    const restarted = new MySqlTenantOutboxStore(
+      () => [a.tenantId, b.tenantId],
+      (tenantId) => (tenantId === a.tenantId ? runtimeA : runtimeB),
+      (tenantId) => (tenantId === a.tenantId ? relayA : relayB),
+      () => outboxNow,
+      () => 0.5,
+    );
+    expect(await restarted.reconcile(first!.leaseUntil + 1)).toBe(1);
+    const second = await restarted.claim(first!.leaseUntil + 1, 1_000, 'worker-after-restart');
+    expect(second).toMatchObject({
+      record: { tenantId: a.tenantId, eventId: first!.record.eventId, handlerCompleted: true },
+    });
+    expect(second!.fencing).toBeGreaterThan(first!.fencing);
+    await expect(
+      restarted.acknowledge(a.tenantId, first!.record.eventId, first!.fencing),
+    ).rejects.toThrow('stale fencing');
+    await restarted.acknowledge(a.tenantId, second!.record.eventId, second!.fencing);
+    expect(await restarted.get(a.tenantId, second!.record.eventId)).toMatchObject({
+      status: 'delivered',
+      handlerCompleted: true,
+    });
+    expect(await restarted.get(b.tenantId, second!.record.eventId)).toMatchObject({
+      tenantId: b.tenantId,
+      status: 'pending',
+    });
+    await expect(
+      relayA.query(
+        `UPDATE ${identifier(AUDIT_TABLES.outbox)} SET payload = JSON_OBJECT('forbidden', TRUE)`,
+      ),
+    ).rejects.toBeDefined();
+    await expect(
+      runtimeA.query(`UPDATE ${identifier(AUDIT_TABLES.outbox)} SET handler_completed = 1`),
+    ).rejects.toBeDefined();
+  });
+
+  it('persists retry backoff across process restart and reclaims with a higher fence', async () => {
+    const eventId = 'retry-after-restart-event';
+    const beforeRestart = new MySqlTenantOutboxStore(
+      () => [a.tenantId],
+      () => runtimeA,
+      () => relayA,
+      () => outboxNow,
+      () => 0.5,
+    );
+    await beforeRestart.transaction((tx) =>
+      tx.enqueue({
+        eventId,
+        tenantId: a.tenantId,
+        type: 'synthetic.retry',
+        payload: { value: 'synthetic' },
+        occurredAt: new Date(outboxNow).toISOString(),
+        idempotencyKey: eventId,
+      }),
+    );
+    const first = await beforeRestart.claim(outboxNow, 1_000, 'worker-before-retry');
+    expect(first?.record.eventId).toBe(eventId);
+    expect(
+      await beforeRestart.retry(
+        a.tenantId,
+        eventId,
+        first!.fencing,
+        'temporary failure',
+        outboxNow,
+        6,
+      ),
+    ).toBe('retry');
+
+    const restarted = new MySqlTenantOutboxStore(
+      () => [a.tenantId],
+      () => runtimeA,
+      () => relayA,
+      () => outboxNow,
+      () => 0.5,
+    );
+    expect(await restarted.get(a.tenantId, eventId)).toMatchObject({
+      status: 'retry',
+      attempts: 1,
+      availableAt: outboxNow + 60_000,
+      lastError: 'temporary failure',
+    });
+    expect(await restarted.claim(outboxNow + 59_999, 1_000, 'early-worker')).toBeUndefined();
+    const second = await restarted.claim(outboxNow + 60_000, 1_000, 'worker-after-restart');
+    expect(second).toMatchObject({ record: { eventId, tenantId: a.tenantId, attempts: 2 } });
+    expect(second!.fencing).toBeGreaterThan(first!.fencing);
   });
 
   it('enforces role grants and rolls back when runtime cannot insert initial delivery state', async () => {
