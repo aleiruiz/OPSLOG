@@ -19,6 +19,7 @@ import {
   type AreasDatabase,
 } from '../../../packages/persistence/areas/src/test-support/mysql.js';
 import { TypeOrmEmployeeStore } from '../../../packages/persistence/employees/src/index.js';
+import { createMySqlAuditRuntime } from '../../../packages/persistence/audit/src/index.js';
 import {
   adminUrl,
   startEmployeesDatabase,
@@ -117,15 +118,24 @@ suite('BFF on real MySQL employees and areas stores', () => {
   beforeAll(async () => {
     areasDb = await startAreasDatabase('empa');
     employeesDb = await startEmployeesDatabase('empl');
-    const areas = new TypeOrmAreaStore(await areasDb.openRuntime());
+    const areasSource = await areasDb.openRuntime();
+    const areas = new TypeOrmAreaStore(areasSource);
     const employees = new HeldEmployeeStore(await employeesDb.openRuntime());
     const tenants = new InMemoryTenantStore();
+    const auditRuntime = createMySqlAuditRuntime({
+      listTenantIds: () => tenants.all().map((tenant) => tenant.id),
+      resolveRuntime: () => areasSource,
+      resolveRelay: () => areasSource,
+      resolveReader: () => areasSource,
+    });
     world = createBffWorld({
       adapters: {
         tenants,
         areas,
         employees,
         pii: new EnvelopePiiCipher(LocalDevKms.ephemeral('test')),
+        audit: auditRuntime.audit,
+        auditRelay: auditRuntime.auditRelay,
       },
     });
     tenantA = (await world.tenant('Empresa Alfa', 'subject-admin-a')).tenantId;

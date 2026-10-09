@@ -10,6 +10,12 @@ import { ASSIGNMENT_TABLES } from '../../../packages/persistence/assignments/src
 import { SETTINGS_TABLES } from '../../../packages/persistence/settings/src/index.js';
 import { IMPORT_TABLES } from '../../../packages/persistence/imports/src/index.js';
 import {
+  FILE_TABLES,
+  FILES_MIGRATOR_ACCOUNT,
+  FILES_MIGRATIONS_TABLE,
+  FILES_RUNTIME_ACCOUNT,
+} from '../../../packages/persistence/files/src/index.js';
+import {
   createFleetMigrationModules,
   openFleetRuntimeStores,
   runFleetAuditMigrations,
@@ -75,6 +81,11 @@ const grants = {
     { table: IMPORT_TABLES.rows, privileges: ['SELECT', 'INSERT'] },
     { table: IMPORT_TABLES.events, privileges: ['SELECT', 'INSERT'] },
   ],
+  files: [
+    { table: FILE_TABLES.records, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
+    { table: FILE_TABLES.history, privileges: ['SELECT', 'INSERT'] },
+    { table: FILE_TABLES.saga, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
+  ],
 } satisfies Record<string, readonly Grant[]>;
 
 type Module = keyof typeof grants;
@@ -88,6 +99,7 @@ const modules: readonly Module[] = [
   'assignments',
   'settings',
   'imports',
+  'files',
 ];
 
 export interface FleetTenantDatabase {
@@ -136,6 +148,14 @@ async function startTenantDatabase(label: string): Promise<FleetTenantDatabase> 
     username: `opslog_audit_migrator_${auditSuffix}`,
     password: randomBytes(24).toString('base64url'),
   };
+  const filesMigrator = {
+    username: `opslog_files_migrator_${auditSuffix}`,
+    password: randomBytes(24).toString('base64url'),
+  };
+  if (!FILES_MIGRATOR_ACCOUNT.test(filesMigrator.username))
+    throw new Error('synthetic Fleet files migrator account name is invalid');
+  if (!FILES_RUNTIME_ACCOUNT.test(runtime.files.username))
+    throw new Error('synthetic Fleet files runtime account name is invalid');
   const accounts = { ...runtime, auditRuntime, auditRelay } as Accounts;
   const users: string[] = [];
   const connection = await mysql.createConnection({ ...admin, database: 'mysql' });
@@ -151,8 +171,19 @@ async function startTenantDatabase(label: string): Promise<FleetTenantDatabase> 
       username: admin.user,
       password: admin.password,
       auditMigrator,
+      filesMigrator,
     };
+    await connection.query(`CREATE USER '${filesMigrator.username}'@'%' IDENTIFIED BY ?`, [
+      filesMigrator.password,
+    ]);
+    users.push(filesMigrator.username);
+    await connection.query(
+      `GRANT CREATE, ALTER, DROP, INDEX, SELECT, INSERT, REFERENCES ON ${identifier(databaseName)}.* TO '${filesMigrator.username}'@'%'`,
+    );
     const appliedMigrations = await runFleetMigrations(migrationCredentials);
+    await connection.query(
+      `GRANT DELETE ON ${identifier(databaseName)}.${identifier(FILES_MIGRATIONS_TABLE)} TO '${filesMigrator.username}'@'%'`,
+    );
     const idempotentMigrations = await runFleetMigrations(migrationCredentials);
     if (idempotentMigrations.join(',') !== appliedMigrations.join(','))
       throw new Error(`fleet migration registry changed during idempotent rerun: ${label}`);

@@ -41,6 +41,7 @@
     { "path": "../../../packages/persistence/assignments" },
     { "path": "../../../packages/persistence/settings" },
     { "path": "../../../packages/persistence/imports" },
+    { "path": "../../../packages/persistence/files" },
     { "path": "../../../packages/persistence/audit" }
   ]
 }

@@ -6,6 +6,7 @@ import {
   type Browser,
 } from '../../../apps/api/bff/src/test-support.js';
 import { TypeOrmDocumentStore } from '../../../packages/persistence/documents/src/index.js';
+import { createMySqlAuditRuntime } from '../../../packages/persistence/audit/src/index.js';
 import {
   adminUrl,
   startDocumentsDatabase,
@@ -55,12 +56,22 @@ suite('BFF on the real MySQL stores: expiry alerts and settings', () => {
     documents = await startDocumentsDatabase('alr');
     policies = await startInsuranceDatabase('alr');
     settings = await startSettingsDatabase('alr');
+    const source = await documents.openRuntime();
+    const tenants = new InMemoryTenantStore();
+    const auditRuntime = createMySqlAuditRuntime({
+      listTenantIds: () => tenants.all().map((tenant) => tenant.id),
+      resolveRuntime: () => source,
+      resolveRelay: () => source,
+      resolveReader: () => source,
+    });
     world = createBffWorld({
       adapters: {
-        tenants: new InMemoryTenantStore(),
-        documents: new TypeOrmDocumentStore(await documents.openRuntime()),
+        tenants,
+        documents: new TypeOrmDocumentStore(source),
         insurance: new TypeOrmPolicyStore(await policies.openRuntime()),
         settings: new TypeOrmSettingsStore(await settings.openRuntime()),
+        audit: auditRuntime.audit,
+        auditRelay: auditRuntime.auditRelay,
       },
     });
     tenantA = (await world.tenant('Empresa Alfa', 'subject-admin-a')).tenantId;

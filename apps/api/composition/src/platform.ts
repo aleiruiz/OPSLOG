@@ -14,6 +14,19 @@ import {
   type PersistedAuditEvent,
 } from '../../../../packages/platform/audit/src/index.js';
 import {
+  MySqlAuditApiStore,
+  MySqlAuditRelay,
+} from '../../../../packages/persistence/audit/src/index.js';
+import { TypeOrmAreaStore } from '../../../../packages/persistence/areas/src/index.js';
+import { TypeOrmAssignmentStore } from '../../../../packages/persistence/assignments/src/index.js';
+import { TypeOrmDocumentStore } from '../../../../packages/persistence/documents/src/index.js';
+import { TypeOrmEmployeeStore } from '../../../../packages/persistence/employees/src/index.js';
+import { TypeOrmImportStore } from '../../../../packages/persistence/imports/src/index.js';
+import { TypeOrmPolicyStore } from '../../../../packages/persistence/insurance/src/index.js';
+import { TypeOrmSettingsStore } from '../../../../packages/persistence/settings/src/index.js';
+import { TypeOrmVehicleStore } from '../../../../packages/persistence/vehicles/src/index.js';
+import { TypeOrmFileSagaStore } from '../../../../packages/persistence/files/src/index.js';
+import {
   verifyExternalPrincipal,
   type VerifiedExternalPrincipal,
 } from '../../../../packages/platform/auth/src/index.js';
@@ -137,9 +150,31 @@ export class Platform {
     this.tenants = adapters.tenants ?? new InMemoryTenantStore(this.now);
     const identityStore = adapters.identityStore ?? new InMemoryIdentityStore();
     const persistentIdentity = !(identityStore instanceof InMemoryIdentityStore);
-    if (persistentIdentity && (!adapters.audit || !adapters.auditRelay))
+    const persistentBusinessStores = [
+      adapters.roleStore !== undefined,
+      adapters.areas instanceof TypeOrmAreaStore,
+      adapters.vehicles instanceof TypeOrmVehicleStore,
+      adapters.employees instanceof TypeOrmEmployeeStore,
+      adapters.documents instanceof TypeOrmDocumentStore,
+      adapters.insurance instanceof TypeOrmPolicyStore,
+      adapters.assignments instanceof TypeOrmAssignmentStore,
+      adapters.settings instanceof TypeOrmSettingsStore,
+      adapters.imports instanceof TypeOrmImportStore,
+      adapters.records !== undefined,
+    ];
+    const requiresDurableAudit = persistentIdentity || persistentBusinessStores.some(Boolean);
+    if (
+      requiresDurableAudit &&
+      (!(adapters.audit instanceof MySqlAuditApiStore) ||
+        !(adapters.auditRelay instanceof MySqlAuditRelay))
+    )
+      throw new Error('persistent stores require durable tenant-scoped audit storage and relay');
+    if (
+      adapters.records instanceof TypeOrmFileSagaStore &&
+      (adapters.fileSagaJournal !== adapters.records || adapters.scanQueue !== adapters.records)
+    )
       throw new Error(
-        'persistent identity requires durable audit storage and a tenant-aware relay',
+        'persistent file stores require one durable file saga store for records, queue and journal',
       );
     this.audit = adapters.audit ?? new InMemoryAuditStore();
     this.outbox = adapters.outbox ?? new InMemoryOutboxStore(() => this.now().getTime());
@@ -198,6 +233,7 @@ export class Platform {
         scanner: adapters.scanner ?? new FakeScanner(),
         queue: this.scanQueue,
         audit: this.audit,
+        ...(adapters.fileSagaJournal ? { journal: adapters.fileSagaJournal } : {}),
       },
       { ...options.pipeline, now: this.now },
     );
@@ -207,6 +243,7 @@ export class Platform {
       pipeline: this.pipeline,
       grants: new DownloadGrants(options.grantSecret, this.now),
       audit: this.audit,
+      ...(adapters.fileSagaJournal ? { journal: adapters.fileSagaJournal } : {}),
       now: this.now,
     });
     const apis = buildDomainApis(this.kernel, adapters);

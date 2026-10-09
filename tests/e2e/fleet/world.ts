@@ -58,8 +58,6 @@ export async function startFleetWorld(database: FleetDatabase): Promise<FleetWor
     adapters: {
       tenants: tenantsA,
       ...database.tenantA.runtime.adapters,
-      audit: database.tenantA.runtime.audit,
-      auditRelay: database.tenantA.runtime.auditRelay,
       pii: new EnvelopePiiCipher(LocalDevKms.ephemeral('test')),
     },
   });
@@ -67,8 +65,6 @@ export async function startFleetWorld(database: FleetDatabase): Promise<FleetWor
     adapters: {
       tenants: tenantsB,
       ...database.tenantB.runtime.adapters,
-      audit: database.tenantB.runtime.audit,
-      auditRelay: database.tenantB.runtime.auditRelay,
       pii: new EnvelopePiiCipher(LocalDevKms.ephemeral('test')),
     },
   });

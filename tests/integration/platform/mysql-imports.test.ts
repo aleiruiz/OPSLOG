@@ -6,6 +6,7 @@ import {
   type Browser,
 } from '../../../apps/api/bff/src/test-support.js';
 import { TypeOrmImportStore } from '../../../packages/persistence/imports/src/index.js';
+import { createMySqlAuditRuntime } from '../../../packages/persistence/audit/src/index.js';
 import {
   adminUrl,
   startImportsDatabase,
@@ -47,10 +48,20 @@ suite('BFF on the real MySQL import store', () => {
 
   beforeAll(async () => {
     db = await startImportsDatabase('imp');
+    const source = await db.openRuntime();
+    const tenants = new InMemoryTenantStore();
+    const auditRuntime = createMySqlAuditRuntime({
+      listTenantIds: () => tenants.all().map((tenant) => tenant.id),
+      resolveRuntime: () => source,
+      resolveRelay: () => source,
+      resolveReader: () => source,
+    });
     world = createBffWorld({
       adapters: {
-        tenants: new InMemoryTenantStore(),
-        imports: new TypeOrmImportStore(await db.openRuntime()),
+        tenants,
+        imports: new TypeOrmImportStore(source),
+        audit: auditRuntime.audit,
+        auditRelay: auditRuntime.auditRelay,
       },
     });
     await world.tenant('Empresa Alfa', 'subject-admin-a');

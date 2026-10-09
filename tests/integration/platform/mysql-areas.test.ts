@@ -13,6 +13,7 @@ import {
 } from '../../../packages/persistence/areas/src/test-support/mysql.js';
 import type { Vehicle, VehicleStatusEntry } from '../../../packages/domain/vehicles/src/index.js';
 import { TypeOrmVehicleStore } from '../../../packages/persistence/vehicles/src/index.js';
+import { createMySqlAuditRuntime } from '../../../packages/persistence/audit/src/index.js';
 import {
   startVehiclesDatabase,
   type VehiclesDatabase,
@@ -94,9 +95,16 @@ suite('BFF on real MySQL areas and vehicles stores', () => {
   beforeAll(async () => {
     areasDb = await startAreasDatabase('plat');
     vehiclesDb = await startVehiclesDatabase('platv');
-    const areas = new TypeOrmAreaStore(await areasDb.openRuntime());
+    const areasSource = await areasDb.openRuntime();
+    const areas = new TypeOrmAreaStore(areasSource);
     const vehicles = new HeldVehicleStore(await vehiclesDb.openRuntime());
     const tenants = new InMemoryTenantStore();
+    const auditRuntime = createMySqlAuditRuntime({
+      listTenantIds: () => tenants.all().map((tenant) => tenant.id),
+      resolveRuntime: () => areasSource,
+      resolveRelay: () => areasSource,
+      resolveReader: () => areasSource,
+    });
     const people = {
       countActive: async () => {
         const held = hooks.count;
@@ -108,7 +116,16 @@ suite('BFF on real MySQL areas and vehicles stores', () => {
         return 0;
       },
     };
-    world = createBffWorld({ adapters: { tenants, areas, vehicles, people } });
+    world = createBffWorld({
+      adapters: {
+        tenants,
+        areas,
+        vehicles,
+        people,
+        audit: auditRuntime.audit,
+        auditRelay: auditRuntime.auditRelay,
+      },
+    });
     tenantA = (await world.tenant('Empresa Alfa', 'subject-admin-a')).tenantId;
     tenantB = (await world.tenant('Empresa Beta', 'subject-admin-b')).tenantId;
     await world.member('subject-admin-a', 'viewer', 'subject-viewer-a');

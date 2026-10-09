@@ -14,6 +14,7 @@ import {
 import {
   AUDIT_ENTITIES,
   appendLocalAuditAndDelivery,
+  createMySqlAuditRuntime,
 } from '../../../packages/persistence/audit/src/index.js';
 import {
   IdentityEntity,
@@ -31,7 +32,8 @@ import { corr, createWorld, type World } from './world.js';
 /**
  * The platform on the persistent identity store with the persistent role directory: custom roles
  * are rows of the same store, membership roles are written through `setRole`, and the tenant
- * boundary and the last-administrator rule hold in the database as well as in the directory.
+ * boundary and last-administrator rule hold in the fake driver as well as in the directory. The
+ * real MySQL behavior is covered by the dedicated integration suites.
  */
 let world: World;
 afterEach(() => {
@@ -41,13 +43,27 @@ afterEach(() => {
 
 function persistentWorld(options: { roleStore?: RoleDirectoryStore } = {}) {
   const db = new FakeDatabase(AUDIT_ENTITIES);
+  Object.defineProperty(db.options, 'database', { value: 'opslog_t_fake_roles' });
+  const tenants = new InMemoryTenantStore();
+  const source = asDataSource(db);
+  const auditRuntime = createMySqlAuditRuntime({
+    listTenantIds: () => tenants.all().map((tenant) => tenant.id),
+    resolveRuntime: () => source,
+    resolveRelay: () => source,
+    resolveReader: () => source,
+  });
   const identityStore = new TypeOrmIdentityStore(asDataSource(db), {
     appendAudit: (manager, event) =>
       appendLocalAuditAndDelivery(manager, { ...event, data: {} }).then(() => undefined),
   });
-  const tenants = new InMemoryTenantStore();
   world = createWorld({
-    adapters: { identityStore, tenants, ...options },
+    adapters: {
+      identityStore,
+      tenants,
+      audit: auditRuntime.audit,
+      auditRelay: auditRuntime.auditRelay,
+      ...options,
+    },
   });
   return { db, identityStore, tenants };
 }
@@ -94,7 +110,7 @@ describe('role directory wiring', () => {
     ).toBe('conflict');
   });
 
-  it('accepts an explicit role store and maps its refusals to conflicts', async () => {
+  it('accepts an explicit role store with fake-driver durable audit and maps refusals to conflicts', async () => {
     const calls: string[] = [];
     const store: RoleDirectoryStore = {
       listCustomRoles: async () => [],
@@ -105,7 +121,24 @@ describe('role directory wiring', () => {
       },
       setRole: async () => true,
     };
-    world = createWorld({ adapters: { roleStore: store } });
+    const db = new FakeDatabase(AUDIT_ENTITIES);
+    Object.defineProperty(db.options, 'database', { value: 'opslog_t_fake_roles_explicit' });
+    const tenants = new InMemoryTenantStore();
+    const source = asDataSource(db);
+    const auditRuntime = createMySqlAuditRuntime({
+      listTenantIds: () => tenants.all().map((tenant) => tenant.id),
+      resolveRuntime: () => source,
+      resolveRelay: () => source,
+      resolveReader: () => source,
+    });
+    world = createWorld({
+      adapters: {
+        roleStore: store,
+        tenants,
+        audit: auditRuntime.audit,
+        auditRelay: auditRuntime.auditRelay,
+      },
+    });
     expect(world.platform.roles.persistent).toBe(true);
     const a = await world.tenant('Empresa Alfa', 'subject-admin-a');
     for (const name of ['Lleno', 'Repetido', 'Administrador'])
