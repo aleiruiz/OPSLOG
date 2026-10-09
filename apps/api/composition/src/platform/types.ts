@@ -21,6 +21,7 @@ import type { OidcVerifier } from '../../../../../packages/platform/auth/src/ind
 import type { OutboxStore } from '../../../../../packages/platform/outbox/src/index.js';
 import type {
   ObjectStorage,
+  FileSagaJournal,
   PipelineOptions,
   ScanQueue,
   VirusScanner,
@@ -38,6 +39,8 @@ export interface PlatformAdapters {
   readonly storage?: ObjectStorage;
   readonly scanner?: VirusScanner;
   readonly scanQueue?: ScanQueue;
+  /** Durable file lifecycle journal; production TypeORM file stores also implement this port. */
+  readonly fileSagaJournal?: FileSagaJournal;
   readonly records?: FileRecordStore;
   /** Persistent vehicle store (the TypeORM adapter of `packages/persistence/vehicles`); in-memory by default. */
   readonly vehicles?: VehicleStore;

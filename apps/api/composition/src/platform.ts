@@ -25,6 +25,7 @@ import { TypeOrmImportStore } from '../../../../packages/persistence/imports/src
 import { TypeOrmPolicyStore } from '../../../../packages/persistence/insurance/src/index.js';
 import { TypeOrmSettingsStore } from '../../../../packages/persistence/settings/src/index.js';
 import { TypeOrmVehicleStore } from '../../../../packages/persistence/vehicles/src/index.js';
+import { TypeOrmFileSagaStore } from '../../../../packages/persistence/files/src/index.js';
 import {
   verifyExternalPrincipal,
   type VerifiedExternalPrincipal,
@@ -150,7 +151,7 @@ export class Platform {
     const identityStore = adapters.identityStore ?? new InMemoryIdentityStore();
     const persistentIdentity = !(identityStore instanceof InMemoryIdentityStore);
     const persistentBusinessStores = [
-      adapters.roleStore !== undefined && !(identityStore instanceof InMemoryIdentityStore),
+      adapters.roleStore !== undefined,
       adapters.areas instanceof TypeOrmAreaStore,
       adapters.vehicles instanceof TypeOrmVehicleStore,
       adapters.employees instanceof TypeOrmEmployeeStore,
@@ -168,6 +169,13 @@ export class Platform {
         !(adapters.auditRelay instanceof MySqlAuditRelay))
     )
       throw new Error('persistent stores require durable tenant-scoped audit storage and relay');
+    if (
+      adapters.records instanceof TypeOrmFileSagaStore &&
+      (adapters.fileSagaJournal !== adapters.records || adapters.scanQueue !== adapters.records)
+    )
+      throw new Error(
+        'persistent file stores require one durable file saga store for records, queue and journal',
+      );
     this.audit = adapters.audit ?? new InMemoryAuditStore();
     this.outbox = adapters.outbox ?? new InMemoryOutboxStore(() => this.now().getTime());
     this.records = adapters.records ?? new InMemoryFileRecordStore();
@@ -225,6 +233,7 @@ export class Platform {
         scanner: adapters.scanner ?? new FakeScanner(),
         queue: this.scanQueue,
         audit: this.audit,
+        ...(adapters.fileSagaJournal ? { journal: adapters.fileSagaJournal } : {}),
       },
       { ...options.pipeline, now: this.now },
     );
@@ -234,6 +243,7 @@ export class Platform {
       pipeline: this.pipeline,
       grants: new DownloadGrants(options.grantSecret, this.now),
       audit: this.audit,
+      ...(adapters.fileSagaJournal ? { journal: adapters.fileSagaJournal } : {}),
       now: this.now,
     });
     const apis = buildDomainApis(this.kernel, adapters);

@@ -47,6 +47,12 @@ import {
   TypeOrmImportStore,
 } from '../../../../packages/persistence/imports/src/index.js';
 import {
+  createFilesDataSource,
+  createFilesMigrationDataSource,
+  runFilesMigrations,
+  TypeOrmFileSagaStore,
+} from '../../../../packages/persistence/files/src/index.js';
+import {
   createAuditMigrationDataSource,
   createAuditRelayDataSource,
   createAuditRuntimeDataSource,
@@ -68,6 +74,7 @@ export interface FleetMigrationCredentials extends FleetDatabaseEndpoint {
   readonly username: string;
   readonly password: string;
   readonly auditMigrator: { readonly username: string; readonly password: string };
+  readonly filesMigrator: { readonly username: string; readonly password: string };
 }
 
 export interface FleetRuntimeCredentials extends FleetDatabaseEndpoint {
@@ -80,6 +87,7 @@ export interface FleetRuntimeCredentials extends FleetDatabaseEndpoint {
     readonly assignments: { readonly username: string; readonly password: string };
     readonly settings: { readonly username: string; readonly password: string };
     readonly imports: { readonly username: string; readonly password: string };
+    readonly files: { readonly username: string; readonly password: string };
     readonly auditRuntime: { readonly username: string; readonly password: string };
     readonly auditRelay: { readonly username: string; readonly password: string };
   };
@@ -159,6 +167,18 @@ export function createFleetMigrationModules(
       createImportsMigrationDataSource(endpoint),
       runImportsMigrations,
     ),
+    migrationModule(
+      'files',
+      '2026100700010',
+      createFilesMigrationDataSource({
+        host: credentials.host,
+        port: credentials.port,
+        database: credentials.database,
+        username: credentials.filesMigrator.username,
+        password: credentials.filesMigrator.password,
+      }),
+      runFilesMigrations,
+    ),
   ];
 }
 
@@ -214,6 +234,9 @@ export interface FleetRuntimeStores {
       | 'assignments'
       | 'settings'
       | 'imports'
+      | 'records'
+      | 'scanQueue'
+      | 'fileSagaJournal'
       | 'audit'
       | 'auditRelay'
     >
@@ -253,9 +276,14 @@ export async function openFleetRuntimeStores(
     ...endpoint,
     ...credentials.accounts.auditRelay,
   });
+  const filesSource = createFilesDataSource({
+    ...endpoint,
+    ...credentials.accounts.files,
+  });
   const initialized: FleetDataSource[] = [];
   let auditRuntimeInitialized = false;
   let auditRelayInitialized = false;
+  let filesInitialized = false;
   try {
     for (const source of sources) {
       await source.initialize();
@@ -265,7 +293,10 @@ export async function openFleetRuntimeStores(
     auditRuntimeInitialized = true;
     await auditRelaySource.initialize();
     auditRelayInitialized = true;
+    await filesSource.initialize();
+    filesInitialized = true;
     let boundTenantId: string | undefined;
+    let fileStore: TypeOrmFileSagaStore | undefined;
     const resolveTenantSource = (tenantId: string) => {
       if (!boundTenantId || tenantId !== boundTenantId)
         throw new Error('audit resolver tenant mismatch');
@@ -281,19 +312,32 @@ export async function openFleetRuntimeStores(
         return auditRelaySource;
       },
     });
-    return {
-      adapters: {
-        areas: new TypeOrmAreaStore(sources[0] as FleetDataSource),
-        vehicles: new TypeOrmVehicleStore(sources[1] as FleetDataSource),
-        employees: new TypeOrmEmployeeStore(sources[2] as FleetDataSource),
-        documents: new TypeOrmDocumentStore(sources[3] as FleetDataSource),
-        insurance: new TypeOrmPolicyStore(sources[4] as FleetDataSource),
-        assignments: new TypeOrmAssignmentStore(sources[5] as FleetDataSource),
-        settings: new TypeOrmSettingsStore(sources[6] as FleetDataSource),
-        imports: new TypeOrmImportStore(sources[7] as FleetDataSource),
-        audit: auditRuntime.audit,
-        auditRelay: auditRuntime.auditRelay,
+    const adapters: FleetRuntimeStores['adapters'] = {
+      areas: new TypeOrmAreaStore(sources[0] as FleetDataSource),
+      vehicles: new TypeOrmVehicleStore(sources[1] as FleetDataSource),
+      employees: new TypeOrmEmployeeStore(sources[2] as FleetDataSource),
+      documents: new TypeOrmDocumentStore(sources[3] as FleetDataSource),
+      insurance: new TypeOrmPolicyStore(sources[4] as FleetDataSource),
+      assignments: new TypeOrmAssignmentStore(sources[5] as FleetDataSource),
+      settings: new TypeOrmSettingsStore(sources[6] as FleetDataSource),
+      imports: new TypeOrmImportStore(sources[7] as FleetDataSource),
+      get records() {
+        if (!fileStore) throw new Error('fleet file runtime must be bound to a tenant first');
+        return fileStore;
       },
+      get scanQueue() {
+        if (!fileStore) throw new Error('fleet file runtime must be bound to a tenant first');
+        return fileStore;
+      },
+      get fileSagaJournal() {
+        if (!fileStore) throw new Error('fleet file runtime must be bound to a tenant first');
+        return fileStore;
+      },
+      audit: auditRuntime.audit,
+      auditRelay: auditRuntime.auditRelay,
+    };
+    return {
+      adapters,
       audit: auditRuntime.audit,
       auditRelay: auditRuntime.auditRelay,
       bindTenant(tenantId) {
@@ -302,12 +346,14 @@ export async function openFleetRuntimeStores(
         if (boundTenantId && boundTenantId !== tenantId)
           throw new Error('fleet audit runtime already bound to another tenant');
         boundTenantId = tenantId;
+        fileStore ??= new TypeOrmFileSagaStore(filesSource, tenantId);
       },
       close: async () => {
         await Promise.allSettled([
           ...initialized.map((source) => source.destroy()),
           ...(auditRuntimeInitialized ? [auditRuntimeSource.destroy()] : []),
           ...(auditRelayInitialized ? [auditRelaySource.destroy()] : []),
+          ...(filesInitialized ? [filesSource.destroy()] : []),
         ]);
       },
     };
@@ -316,6 +362,7 @@ export async function openFleetRuntimeStores(
       ...initialized.map((source) => source.destroy()),
       ...(auditRuntimeInitialized ? [auditRuntimeSource.destroy()] : []),
       ...(auditRelayInitialized ? [auditRelaySource.destroy()] : []),
+      ...(filesInitialized ? [filesSource.destroy()] : []),
     ]);
     throw error;
   }

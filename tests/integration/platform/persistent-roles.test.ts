@@ -110,7 +110,7 @@ describe('role directory wiring', () => {
     ).toBe('conflict');
   });
 
-  it('accepts an explicit role store and maps its refusals to conflicts', async () => {
+  it('accepts an explicit role store with fake-driver durable audit and maps refusals to conflicts', async () => {
     const calls: string[] = [];
     const store: RoleDirectoryStore = {
       listCustomRoles: async () => [],
@@ -121,7 +121,24 @@ describe('role directory wiring', () => {
       },
       setRole: async () => true,
     };
-    world = createWorld({ adapters: { roleStore: store } });
+    const db = new FakeDatabase(AUDIT_ENTITIES);
+    Object.defineProperty(db.options, 'database', { value: 'opslog_t_fake_roles_explicit' });
+    const tenants = new InMemoryTenantStore();
+    const source = asDataSource(db);
+    const auditRuntime = createMySqlAuditRuntime({
+      listTenantIds: () => tenants.all().map((tenant) => tenant.id),
+      resolveRuntime: () => source,
+      resolveRelay: () => source,
+      resolveReader: () => source,
+    });
+    world = createWorld({
+      adapters: {
+        roleStore: store,
+        tenants,
+        audit: auditRuntime.audit,
+        auditRelay: auditRuntime.auditRelay,
+      },
+    });
     expect(world.platform.roles.persistent).toBe(true);
     const a = await world.tenant('Empresa Alfa', 'subject-admin-a');
     for (const name of ['Lleno', 'Repetido', 'Administrador'])

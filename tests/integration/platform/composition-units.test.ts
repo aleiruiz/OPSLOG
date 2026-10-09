@@ -10,6 +10,7 @@ import {
   MySqlAuditApiStore,
   MySqlAuditRelay,
 } from '../../../packages/persistence/audit/src/index.js';
+import { TypeOrmFileSagaStore } from '../../../packages/persistence/files/src/index.js';
 import { TypeOrmVehicleStore } from '../../../packages/persistence/vehicles/src/index.js';
 import { corr, createWorld } from './world.js';
 import {
@@ -190,6 +191,18 @@ describe('createWorkerRuntime defaults', () => {
     ).toThrow('persistent stores require durable tenant-scoped audit storage and relay');
   });
 
+  it('requires durable audit when a role store is explicitly injected with an in-memory identity store', () => {
+    const verifier = new FakeOidcVerifier();
+    expect(() =>
+      createPlatform({
+        verifier,
+        issuer: verifier.issuer,
+        grantSecret: 'synthetic-grant-secret-for-tests-0123456789',
+        adapters: { roleStore: {} as never },
+      }),
+    ).toThrow('persistent stores require durable tenant-scoped audit storage and relay');
+  });
+
   it('rejects structural no-op or in-memory audit adapters for persistent stores', () => {
     const verifier = new FakeOidcVerifier();
     const base = {
@@ -251,6 +264,41 @@ describe('createWorkerRuntime defaults', () => {
         },
       }),
     ).toThrow('persistent stores require durable tenant-scoped audit storage and relay');
+  });
+
+  it('requires one durable TypeORM file store to back records, scan queue and saga journal', () => {
+    const verifier = new FakeOidcVerifier();
+    const base = {
+      verifier,
+      issuer: verifier.issuer,
+      grantSecret: 'synthetic-grant-secret-for-tests-0123456789',
+    };
+    const resolveDatabase = async (): Promise<never> => {
+      throw new Error('database resolver must not run during composition');
+    };
+    const store = new TypeOrmFileSagaStore(
+      {
+        options: {
+          type: 'mysql',
+          synchronize: false,
+          database: 'opslog_t_synthetic',
+          username: 'opslog_files_synthetic',
+        },
+      } as never,
+      'tenant-synthetic',
+    );
+    const audit = new MySqlAuditApiStore(resolveDatabase);
+    const auditRelay = new MySqlAuditRelay(() => [], resolveDatabase);
+
+    expect(() =>
+      createPlatform({ ...base, adapters: { records: store, audit, auditRelay } }),
+    ).toThrow('persistent file stores require one durable file saga store');
+    expect(() =>
+      createPlatform({
+        ...base,
+        adapters: { records: store, scanQueue: store, fileSagaJournal: store, audit, auditRelay },
+      }),
+    ).not.toThrow();
   });
 });
 

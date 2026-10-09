@@ -9,6 +9,7 @@ import { POLICY_TABLES } from '../../../packages/persistence/insurance/src/index
 import { ASSIGNMENT_TABLES } from '../../../packages/persistence/assignments/src/index.js';
 import { SETTINGS_TABLES } from '../../../packages/persistence/settings/src/index.js';
 import { IMPORT_TABLES } from '../../../packages/persistence/imports/src/index.js';
+import { FILE_TABLES } from '../../../packages/persistence/files/src/index.js';
 import { adminUrl, startFleetDatabase, type FleetDatabase } from './mysql.js';
 
 const suite = adminUrl ? describe : describe.skip;
@@ -34,6 +35,7 @@ suite('fleet tenant migration composition on real MySQL', () => {
       'assignments:2026100600080',
       'settings:2026100600090',
       'imports:2026100600090',
+      'files:2026100700010',
       'audit:2026100700010',
     ]);
     expect(database.databaseName).toMatch(/^opslog_t_[a-f0-9]+$/);
@@ -61,6 +63,9 @@ suite('fleet tenant migration composition on real MySQL', () => {
         'opslog_import_jobs',
         'opslog_import_job_rows',
         'opslog_import_job_events',
+        FILE_TABLES.records,
+        FILE_TABLES.history,
+        FILE_TABLES.saga,
         'opslog_audit_local',
         'opslog_audit_delivery',
         'opslog_audit_log',
@@ -76,22 +81,27 @@ suite('fleet tenant migration composition on real MySQL', () => {
   });
 
   it('keeps schema-owner DDL outside the runtime account grants', async () => {
-    const account = database.accounts.vehicles;
-    const runtime = await mysql.createConnection({
-      host: database.host,
-      port: database.port,
-      user: account.username,
-      password: account.password,
-      database: database.databaseName,
-    });
-    try {
-      await expect(
-        runtime.query('CREATE TABLE opslog_runtime_must_not_ddl (id INT PRIMARY KEY)'),
-      ).rejects.toThrow(/denied|privilege/i);
-      const [rows] = await runtime.query('SELECT id FROM opslog_vehicles LIMIT 0');
-      expect(rows).toEqual([]);
-    } finally {
-      await runtime.end();
+    for (const [module, table] of [
+      ['vehicles', 'opslog_vehicles'],
+      ['files', FILE_TABLES.records],
+    ] as const) {
+      const account = database.accounts[module];
+      const runtime = await mysql.createConnection({
+        host: database.host,
+        port: database.port,
+        user: account.username,
+        password: account.password,
+        database: database.databaseName,
+      });
+      try {
+        await expect(
+          runtime.query(`CREATE TABLE opslog_${module}_runtime_must_not_ddl (id INT PRIMARY KEY)`),
+        ).rejects.toThrow(/denied|privilege/i);
+        const [rows] = await runtime.query(`SELECT id FROM ${table} LIMIT 0`);
+        expect(rows).toEqual([]);
+      } finally {
+        await runtime.end();
+      }
     }
   });
 
@@ -105,6 +115,7 @@ suite('fleet tenant migration composition on real MySQL', () => {
       assignments: ASSIGNMENT_TABLES.assignments,
       settings: SETTINGS_TABLES.settings,
       imports: IMPORT_TABLES.jobs,
+      files: FILE_TABLES.records,
       auditRuntime: AUDIT_TABLES.projection,
       auditRelay: AUDIT_TABLES.local,
     } as const;
