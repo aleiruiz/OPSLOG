@@ -7,7 +7,12 @@ import {
   InMemoryTenantStore,
 } from '../../../apps/api/composition/src/index.js';
 import { InMemoryIdentityStore } from '../../../packages/domain/identity/src/index.js';
-import { AUDIT_ENTITIES } from '../../../packages/persistence/audit/src/index.js';
+import {
+  AUDIT_ENTITIES,
+  AuditProjectionEntity,
+  createMySqlAuditRuntime,
+} from '../../../packages/persistence/audit/src/index.js';
+import type { PersistedAuditEvent } from '../../../packages/platform/audit/src/index.js';
 import { TypeOrmIdentityStore } from '../../../packages/persistence/identity/src/index.js';
 import {
   FakeDatabase,
@@ -39,24 +44,64 @@ describe('withLatency', () => {
 });
 
 const stores = {
-  'in-memory store': () => new InMemoryIdentityStore(),
-  'TypeORM store (fake driver)': () =>
-    new TypeOrmIdentityStore(asDataSource(new FakeDatabase(AUDIT_ENTITIES))),
+  'in-memory store': () => ({ store: new InMemoryIdentityStore(), db: undefined }),
+  'TypeORM store (fake driver)': () => {
+    const db = new FakeDatabase(AUDIT_ENTITIES);
+    Object.defineProperty(db.options, 'database', { value: 'opslog_t_fake_race' });
+    return { store: new TypeOrmIdentityStore(asDataSource(db)), db };
+  },
 } as const;
 
 describe.each(Object.entries(stores))('accept racing revoke, %s', (_name, makeStore) => {
   it.each<Order>(['accept-first', 'revoke-first'])(
     'ends consistent when the second operation starts inside the first (%s)',
     async (order) => {
-      const latency = withLatency(makeStore(), { activateInvitation: 1, revokeMembership: 10 });
+      const fixture = makeStore();
+      const latency = withLatency(fixture.store, { activateInvitation: 1, revokeMembership: 10 });
+      const tenants = new InMemoryTenantStore();
+      const source = fixture.db ? asDataSource(fixture.db) : undefined;
+      const auditRuntime = source
+        ? createMySqlAuditRuntime({
+            listTenantIds: () => tenants.all().map((tenant) => tenant.id),
+            resolveRuntime: () => source,
+            resolveRelay: () => source,
+            resolveReader: () => source,
+          })
+        : undefined;
+      if (fixture.db && auditRuntime) {
+        // FakeDatabase intentionally lacks TypeORM QueryBuilder; keep append/relay real and read
+        // the committed projection rows it produced for this fake-driver test.
+        auditRuntime.audit.list = async (tenantId) => {
+          const projection = fixture.db!.committed(
+            AuditProjectionEntity,
+          ) as unknown as AuditProjectionEntity[];
+          return projection
+            .filter((event) => event.tenantId === tenantId)
+            .map(
+              (event) =>
+                ({
+                  eventId: event.eventId,
+                  tenantId: event.tenantId,
+                  action: event.action,
+                  entityType: event.entityType,
+                  entityId: event.entityId,
+                  occurredAt: event.occurredAt.toISOString(),
+                  actor: { id: event.actorId, kind: event.actorKind },
+                  correlationId: event.correlationId,
+                  data: event.data,
+                }) as PersistedAuditEvent,
+            );
+        };
+      }
       world = createWorld({
         adapters: {
           identityStore: latency.store as never,
           scanner: new FakeScanner(),
           storage: new InMemoryObjectStorage(),
-          audit: new InMemoryAuditStore(),
+          audit: auditRuntime?.audit ?? new InMemoryAuditStore(),
+          auditRelay: auditRuntime?.auditRelay ?? { runBatch: async () => 0 },
           outbox: new InMemoryOutboxStore(() => Date.now()),
-          tenants: new InMemoryTenantStore(),
+          tenants,
         },
       });
       await raceAcceptAndRevoke(
@@ -66,6 +111,13 @@ describe.each(Object.entries(stores))('accept racing revoke, %s', (_name, makeSt
           findMembership: (tenantId, identityId) =>
             (latency.store as InMemoryIdentityStore).findMembership(tenantId, identityId),
           started: latency.started,
+          ...(auditRuntime
+            ? {
+                flushAudit: async () => {
+                  await auditRuntime.auditRelay.runBatch();
+                },
+              }
+            : {}),
         },
         order,
         order,

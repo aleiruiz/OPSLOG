@@ -6,6 +6,7 @@ import {
   type Browser,
 } from '../../../apps/api/bff/src/test-support.js';
 import { TypeOrmAssignmentStore } from '../../../packages/persistence/assignments/src/index.js';
+import { createMySqlAuditRuntime } from '../../../packages/persistence/audit/src/index.js';
 import { AUDIT_TABLES } from '../../../packages/persistence/audit/src/index.js';
 import {
   adminUrl,
@@ -42,9 +43,22 @@ suite('BFF on the real MySQL assignment store', () => {
 
   beforeAll(async () => {
     db = await startAssignmentsDatabase('asg');
-    const store = new TypeOrmAssignmentStore(await db.openRuntime());
+    const source = await db.openRuntime();
+    const store = new TypeOrmAssignmentStore(source);
+    const tenants = new InMemoryTenantStore();
+    const auditRuntime = createMySqlAuditRuntime({
+      listTenantIds: () => tenants.all().map((tenant) => tenant.id),
+      resolveRuntime: () => source,
+      resolveRelay: () => source,
+      resolveReader: () => source,
+    });
     world = createBffWorld({
-      adapters: { tenants: new InMemoryTenantStore(), assignments: store },
+      adapters: {
+        tenants,
+        assignments: store,
+        audit: auditRuntime.audit,
+        auditRelay: auditRuntime.auditRelay,
+      },
     });
     tenantA = (await world.tenant('Empresa Alfa', 'subject-admin-a')).tenantId;
     tenantB = (await world.tenant('Empresa Beta', 'subject-admin-b')).tenantId;

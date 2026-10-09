@@ -3,7 +3,6 @@ import { createHash, randomBytes } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   FakeOidcVerifier,
-  InMemoryAuditStore,
   InMemoryTenantStore,
   createPlatform,
   type Platform,
@@ -325,8 +324,8 @@ suite('platform on a real MySQL identity store', () => {
       adapters: {
         identityStore: failingStore,
         tenants,
-        audit: new InMemoryAuditStore(),
-        auditRelay: { runBatch: async () => 0 },
+        audit: auditRuntime.audit,
+        auditRelay: auditRuntime.auditRelay,
       },
     });
     const counts = async () => ({
@@ -384,8 +383,8 @@ suite('platform on a real MySQL identity store', () => {
       adapters: {
         identityStore: failingStore,
         tenants,
-        audit: new InMemoryAuditStore(),
-        auditRelay: { runBatch: async () => 0 },
+        audit: auditRuntime.audit,
+        auditRelay: auditRuntime.auditRelay,
       },
     });
     const a = await (async () => {

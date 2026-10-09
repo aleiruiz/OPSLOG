@@ -6,6 +6,7 @@ import {
 import {
   AUDIT_ENTITIES,
   appendLocalAuditAndDelivery,
+  createMySqlAuditRuntime,
 } from '../../../packages/persistence/audit/src/index.js';
 import { createBffWorld, type BffWorld } from '../../../apps/api/bff/src/test-support.js';
 import {
@@ -21,18 +22,33 @@ import {
 
 /**
  * The BFF routes over the persistent identity store and role directory: the HTTP behaviour of
- * roles and users does not change, and what the routes write lands in the database.
+ * roles and users do not change, and what the routes write lands in the fake driver. The real
+ * MySQL behavior is covered by the dedicated integration suites.
  */
 let world: BffWorld;
 afterEach(() => world?.dispose());
 
 function persistentBff() {
   const db = new FakeDatabase(AUDIT_ENTITIES);
+  Object.defineProperty(db.options, 'database', { value: 'opslog_t_fake_bff_roles' });
+  const tenants = new InMemoryTenantStore();
+  const source = asDataSource(db);
+  const auditRuntime = createMySqlAuditRuntime({
+    listTenantIds: () => tenants.all().map((tenant) => tenant.id),
+    resolveRuntime: () => source,
+    resolveRelay: () => source,
+    resolveReader: () => source,
+  });
   const identityStore = new TypeOrmIdentityStore(asDataSource(db), {
     appendAudit: (manager, event) =>
       appendLocalAuditAndDelivery(manager, { ...event, data: {} }).then(() => undefined),
   });
-  const adapters: PlatformAdapters = { identityStore, tenants: new InMemoryTenantStore() };
+  const adapters: PlatformAdapters = {
+    identityStore,
+    tenants,
+    audit: auditRuntime.audit,
+    auditRelay: auditRuntime.auditRelay,
+  };
   world = createBffWorld({ adapters });
   return { db, identityStore };
 }

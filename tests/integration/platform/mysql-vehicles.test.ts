@@ -6,6 +6,7 @@ import {
   type Browser,
 } from '../../../apps/api/bff/src/test-support.js';
 import { TypeOrmVehicleStore } from '../../../packages/persistence/vehicles/src/index.js';
+import { createMySqlAuditRuntime } from '../../../packages/persistence/audit/src/index.js';
 import {
   adminUrl,
   startVehiclesDatabase,
@@ -46,10 +47,24 @@ suite('BFF on a real MySQL vehicles store', () => {
 
   beforeAll(async () => {
     database = await startVehiclesDatabase('plat');
-    const store = new TypeOrmVehicleStore(await database.openRuntime());
+    const source = await database.openRuntime();
+    const store = new TypeOrmVehicleStore(source);
     // One process, one pool; the concurrency tests use two sessions of it.
     const tenants = new InMemoryTenantStore();
-    world = createBffWorld({ adapters: { tenants, vehicles: store } });
+    const auditRuntime = createMySqlAuditRuntime({
+      listTenantIds: () => tenants.all().map((tenant) => tenant.id),
+      resolveRuntime: () => source,
+      resolveRelay: () => source,
+      resolveReader: () => source,
+    });
+    world = createBffWorld({
+      adapters: {
+        tenants,
+        vehicles: store,
+        audit: auditRuntime.audit,
+        auditRelay: auditRuntime.auditRelay,
+      },
+    });
     tenantA = (await world.tenant('Empresa Alfa', 'subject-admin-a')).tenantId;
     tenantB = (await world.tenant('Empresa Beta', 'subject-admin-b')).tenantId;
     await world.member('subject-admin-a', 'viewer', 'subject-viewer-a');

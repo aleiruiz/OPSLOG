@@ -1,9 +1,16 @@
+import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import {
   AuthError,
   InMemoryIdentityStore,
   type Session,
 } from '../../../packages/domain/identity/src/index.js';
+import { InMemoryAuditStore } from '../../../packages/platform/audit/src/index.js';
+import {
+  MySqlAuditApiStore,
+  MySqlAuditRelay,
+} from '../../../packages/persistence/audit/src/index.js';
+import { TypeOrmVehicleStore } from '../../../packages/persistence/vehicles/src/index.js';
 import { corr, createWorld } from './world.js';
 import {
   AccessDirectory,
@@ -18,6 +25,19 @@ import type { ScanJob, ScanQueue } from '../../../packages/platform/files/src/in
 
 const tid = (value: string): TenantId => value as TenantId;
 const sid = (value: string): SubjectId => value as SubjectId;
+
+describe('workspace type entrypoints', () => {
+  it('resolves platform-audit types from tracked source before a build creates dist', () => {
+    const manifestUrl = new URL('../../../packages/platform/audit/package.json', import.meta.url);
+    const manifest = JSON.parse(readFileSync(manifestUrl, 'utf8')) as {
+      exports: { '.': { types: string } };
+    };
+    const typeEntry = manifest.exports['.'].types;
+
+    expect(typeEntry).toBe('./src/index.ts');
+    expect(existsSync(new URL(typeEntry, manifestUrl))).toBe(true);
+  });
+});
 
 describe('AccessDirectory membership edges', () => {
   it('refuses to change or revoke the role of someone who is not an active member', () => {
@@ -167,35 +187,70 @@ describe('createWorkerRuntime defaults', () => {
         grantSecret: 'synthetic-grant-secret-for-tests-0123456789',
         adapters: { identityStore: {} as never },
       }),
-    ).toThrow('persistent identity requires durable audit storage and a tenant-aware relay');
+    ).toThrow('persistent stores require durable tenant-scoped audit storage and relay');
   });
 
-  it('refuses persistent module stores that would otherwise fall back to an in-memory AuditStore', () => {
+  it('rejects structural no-op or in-memory audit adapters for persistent stores', () => {
     const verifier = new FakeOidcVerifier();
     const base = {
       verifier,
       issuer: verifier.issuer,
       grantSecret: 'synthetic-grant-secret-for-tests-0123456789',
     };
-    expect(() => createPlatform({ ...base, adapters: { vehicles: {} as never } })).toThrow(
-      'persistent business stores require durable audit storage and a tenant-aware relay',
+    const resolveDatabase = async (): Promise<never> => {
+      throw new Error('database resolver must not run during composition');
+    };
+    const noOpAudit = { append: async () => undefined, list: async () => [] };
+    const noOpRelay = { runBatch: async () => 0 };
+    const durableAudit = new MySqlAuditApiStore(resolveDatabase);
+    const durableRelay = new MySqlAuditRelay(() => [], resolveDatabase);
+
+    const vehicleDataSource = {
+      options: {
+        type: 'mysql',
+        synchronize: false,
+        username: 'opslog_vehicles_runtime',
+      },
+    } as never;
+    const persistentVehicles = new TypeOrmVehicleStore(vehicleDataSource);
+    const testDoubleVehicles = { insert: async () => undefined };
+
+    expect(() => createPlatform({ ...base, adapters: { vehicles: persistentVehicles } })).toThrow(
+      'persistent stores require durable tenant-scoped audit storage and relay',
     );
+    for (const audit of [noOpAudit, new InMemoryAuditStore()])
+      expect(() =>
+        createPlatform({
+          ...base,
+          adapters: { vehicles: persistentVehicles, audit: audit as never, auditRelay: noOpRelay },
+        }),
+      ).toThrow('persistent stores require durable tenant-scoped audit storage and relay');
     expect(() =>
       createPlatform({
         ...base,
-        adapters: { vehicles: {} as never, audit: {} as never },
+        adapters: { vehicles: persistentVehicles, audit: durableAudit, auditRelay: noOpRelay },
       }),
-    ).toThrow('persistent business stores require durable audit storage and a tenant-aware relay');
+    ).toThrow('persistent stores require durable tenant-scoped audit storage and relay');
+    expect(() =>
+      createPlatform({
+        ...base,
+        adapters: { vehicles: persistentVehicles, audit: durableAudit, auditRelay: durableRelay },
+      }),
+    ).not.toThrow();
+    expect(() =>
+      createPlatform({ ...base, adapters: { vehicles: testDoubleVehicles as never } }),
+    ).not.toThrow();
+
     expect(() =>
       createPlatform({
         ...base,
         adapters: {
-          vehicles: {} as never,
-          audit: {} as never,
-          auditRelay: { runBatch: async () => 0 },
+          identityStore: {} as never,
+          audit: noOpAudit as never,
+          auditRelay: noOpRelay,
         },
       }),
-    ).not.toThrow();
+    ).toThrow('persistent stores require durable tenant-scoped audit storage and relay');
   });
 });
 

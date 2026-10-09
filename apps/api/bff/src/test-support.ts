@@ -122,12 +122,13 @@ export class Browser {
 
 export interface BffWorldOptions {
   readonly bff?: Partial<Omit<BffOptions, 'platform'>>;
-  /** Adapters that replace the in-memory defaults (for example a persistent identity store). */
+  /** Test doubles that replace in-memory defaults, such as stores that simulate driver failures. */
   readonly adapters?: PlatformAdapters;
 }
 
 /**
- * Platform + BFF handler over in-memory adapters with a controllable clock (only `Date` is faked).
+ * Platform + BFF over in-memory defaults and optional test doubles with a controllable clock.
+ * Production TypeORM adapters belong in the MySQL composition fixture, not this in-memory world.
  * Call `world.dispose()` in `afterEach`.
  */
 export function createBffWorld(options: BffWorldOptions = {}) {

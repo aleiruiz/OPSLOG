@@ -2,10 +2,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   AUDIT_ENTITIES,
   appendLocalAuditAndDelivery,
+  createMySqlAuditRuntime,
 } from '../../../packages/persistence/audit/src/index.js';
 import {
   FakeScanner,
-  InMemoryAuditStore,
   InMemoryObjectStorage,
   InMemoryOutboxStore,
   InMemoryTenantStore,
@@ -27,13 +27,23 @@ import { corr, createWorld, type World } from './world.js';
  * The composition takes the identity store through the same `IdentityStore` port. These tests run
  * the platform on the persistent TypeORM adapter (over the in-process fake driver, so no MySQL is
  * needed here; the adapter itself is exercised against MySQL in packages/persistence/identity).
- * They prove the swap does not change observable behaviour of the existing flows.
+ * Their audit adapters also use a fake driver. Durable MySQL behaviour is covered by the dedicated
+ * mysql-identity integration suite; these cases prove the port swap does not change the flows.
  */
 let world: World;
 afterEach(() => world.dispose());
 
 function persistentWorld() {
   const db = new FakeDatabase(AUDIT_ENTITIES);
+  Object.defineProperty(db.options, 'database', { value: 'opslog_t_fake_identity' });
+  const tenants = new InMemoryTenantStore();
+  const source = asDataSource(db);
+  const auditRuntime = createMySqlAuditRuntime({
+    listTenantIds: () => tenants.all().map((tenant) => tenant.id),
+    resolveRuntime: () => source,
+    resolveRelay: () => source,
+    resolveReader: () => source,
+  });
   const identityStore = new TypeOrmIdentityStore(asDataSource(db), {
     appendAudit: (manager, event) =>
       appendLocalAuditAndDelivery(manager, { ...event, data: {} }).then(() => undefined),
@@ -43,9 +53,10 @@ function persistentWorld() {
       identityStore,
       scanner: new FakeScanner(),
       storage: new InMemoryObjectStorage(),
-      audit: new InMemoryAuditStore(),
+      audit: auditRuntime.audit,
+      auditRelay: auditRuntime.auditRelay,
       outbox: new InMemoryOutboxStore(() => Date.now()),
-      tenants: new InMemoryTenantStore(),
+      tenants,
     },
   });
   return { db, identityStore };

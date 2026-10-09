@@ -14,6 +14,18 @@ import {
   type PersistedAuditEvent,
 } from '../../../../packages/platform/audit/src/index.js';
 import {
+  MySqlAuditApiStore,
+  MySqlAuditRelay,
+} from '../../../../packages/persistence/audit/src/index.js';
+import { TypeOrmAreaStore } from '../../../../packages/persistence/areas/src/index.js';
+import { TypeOrmAssignmentStore } from '../../../../packages/persistence/assignments/src/index.js';
+import { TypeOrmDocumentStore } from '../../../../packages/persistence/documents/src/index.js';
+import { TypeOrmEmployeeStore } from '../../../../packages/persistence/employees/src/index.js';
+import { TypeOrmImportStore } from '../../../../packages/persistence/imports/src/index.js';
+import { TypeOrmPolicyStore } from '../../../../packages/persistence/insurance/src/index.js';
+import { TypeOrmSettingsStore } from '../../../../packages/persistence/settings/src/index.js';
+import { TypeOrmVehicleStore } from '../../../../packages/persistence/vehicles/src/index.js';
+import {
   verifyExternalPrincipal,
   type VerifiedExternalPrincipal,
 } from '../../../../packages/platform/auth/src/index.js';
@@ -137,29 +149,25 @@ export class Platform {
     this.tenants = adapters.tenants ?? new InMemoryTenantStore(this.now);
     const identityStore = adapters.identityStore ?? new InMemoryIdentityStore();
     const persistentIdentity = !(identityStore instanceof InMemoryIdentityStore);
-    if (persistentIdentity && (!adapters.audit || !adapters.auditRelay))
-      throw new Error(
-        'persistent identity requires durable audit storage and a tenant-aware relay',
-      );
     const persistentBusinessStores = [
-      adapters.roleStore,
-      adapters.areas,
-      adapters.vehicles,
-      adapters.employees,
-      adapters.documents,
-      adapters.insurance,
-      adapters.assignments,
-      adapters.settings,
-      adapters.imports,
-      adapters.records,
+      adapters.roleStore !== undefined && !(identityStore instanceof InMemoryIdentityStore),
+      adapters.areas instanceof TypeOrmAreaStore,
+      adapters.vehicles instanceof TypeOrmVehicleStore,
+      adapters.employees instanceof TypeOrmEmployeeStore,
+      adapters.documents instanceof TypeOrmDocumentStore,
+      adapters.insurance instanceof TypeOrmPolicyStore,
+      adapters.assignments instanceof TypeOrmAssignmentStore,
+      adapters.settings instanceof TypeOrmSettingsStore,
+      adapters.imports instanceof TypeOrmImportStore,
+      adapters.records !== undefined,
     ];
+    const requiresDurableAudit = persistentIdentity || persistentBusinessStores.some(Boolean);
     if (
-      persistentBusinessStores.some((store) => store !== undefined) &&
-      (!adapters.audit || !adapters.auditRelay)
+      requiresDurableAudit &&
+      (!(adapters.audit instanceof MySqlAuditApiStore) ||
+        !(adapters.auditRelay instanceof MySqlAuditRelay))
     )
-      throw new Error(
-        'persistent business stores require durable audit storage and a tenant-aware relay',
-      );
+      throw new Error('persistent stores require durable tenant-scoped audit storage and relay');
     this.audit = adapters.audit ?? new InMemoryAuditStore();
     this.outbox = adapters.outbox ?? new InMemoryOutboxStore(() => this.now().getTime());
     this.records = adapters.records ?? new InMemoryFileRecordStore();
