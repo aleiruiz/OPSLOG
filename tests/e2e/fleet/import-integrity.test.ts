@@ -71,7 +71,7 @@ const xlsxPackage = (worksheet: string) => ({
 const xlsxCell = (column: number, row: number, value: string): string =>
   `<c r="${String.fromCharCode(65 + column)}${row}" t="inlineStr"><is><t>${value}</t></is></c>`;
 
-function vehicleXlsx(areaId: string, invalidFormula = false): string {
+function vehicleXlsx(areaId: string, invalidFormula = false, tag = 'XLS'): string {
   const headers = [
     'economicNumber',
     'plate',
@@ -86,8 +86,8 @@ function vehicleXlsx(areaId: string, invalidFormula = false): string {
   const rows = Array.from({ length: invalidFormula ? 1 : 300 }, (_, index) => {
     const n = index + 1;
     const values = [
-      n <= 6 ? `NEW-${pad(n)}` : `XLS-NEW-${pad(n)}`,
-      `XLS${pad(n)}`,
+      `${tag}-NEW-${pad(n)}`,
+      `${tag}${pad(n)}`,
       'Toyota',
       'Hilux',
       '2022',
@@ -478,6 +478,104 @@ suite('integrated XLSX import on real MySQL', () => {
     expect(history).toEqual([
       { kind: 'started', accepted_rows: null },
       { kind: 'imported', accepted_rows: 288 },
+    ]);
+  }, 120_000);
+
+  it('submits one XLSX commit job for simultaneous requests with the same idempotency key', async () => {
+    const areaId = await fleet.area(fleet.adminA, 'Importación XLSX concurrente');
+    for (let n = 1; n <= 6; n += 1) {
+      const existing = await fleet.adminA.post(VEHICLES, {
+        json: {
+          economicNumber: `BASE-RACE-${pad(n)}`,
+          plate: `RACE${pad(n)}`,
+          vin: null,
+          make: 'Toyota',
+          model: 'Hilux',
+          year: 2022,
+          areaId,
+          odometerKm: 5,
+        },
+      });
+      expect(existing.status, existing.text).toBe(201);
+    }
+
+    const xlsxBase64 = vehicleXlsx(areaId, false, 'RACE');
+    const preview = await fleet.adminA.post(IMPORTS, {
+      json: { entity: 'vehicle', mode: 'dry_run', xlsxBase64 },
+    });
+    expect(preview.status, preview.text).toBe(201);
+    expect(preview.json.job).toMatchObject({
+      status: 'validated',
+      totalRows: 300,
+      validRows: 288,
+      invalidRows: 12,
+      importedRows: 0,
+    });
+    const before = (await fleet.adminA.get(`${VEHICLES}?includeArchived=true&limit=100`)).json
+      .total as number;
+    const request = {
+      entity: 'vehicle',
+      mode: 'commit_valid',
+      idempotencyKey: 'flt-xlsx-race-300-commit-01',
+      dryRunJobId: preview.json.job.id,
+      xlsxBase64,
+    };
+
+    // Separate authenticated browser sessions start both requests in the same turn.
+    const simultaneous = await Promise.all([
+      fleet.adminA.post(IMPORTS, { json: request }),
+      fleet.adminA2.post(IMPORTS, { json: request }),
+    ]);
+    const completed = simultaneous.filter(
+      (reply) => reply.status === 201 && reply.json.replayed === false,
+    );
+    expect(completed).toHaveLength(1);
+    const completedReply = completed[0]!;
+    expect(completedReply.json.job).toMatchObject({
+      status: 'imported',
+      totalRows: 300,
+      validRows: 288,
+      invalidRows: 12,
+      importedRows: 288,
+    });
+    const completedJobId = completedReply.json.job.id as string;
+    const competingReply = simultaneous.find((reply) => reply !== completedReply)!;
+    if (competingReply.status === 409) {
+      expect(competingReply.json.code).toBe('conflict');
+      expect(competingReply.text).not.toMatch(/Toyota|Hilux|RACE-NEW|2026-02-31/);
+      const retry = await fleet.adminA.post(IMPORTS, { json: request });
+      expect(retry.status, retry.text).toBe(201);
+      expect(retry.json).toMatchObject({
+        replayed: true,
+        job: { id: completedJobId, status: 'imported', importedRows: 288 },
+      });
+    } else {
+      expect(competingReply.status, competingReply.text).toBe(201);
+      expect(competingReply.json).toMatchObject({
+        replayed: true,
+        job: { id: completedJobId, status: 'imported', importedRows: 288 },
+      });
+    }
+
+    const after = (await fleet.adminA.get(`${VEHICLES}?includeArchived=true&limit=100`)).json
+      .total as number;
+    expect(after).toBe(before + 288);
+    const matchingJobs = await database.rows<{
+      id: string;
+      status: string;
+      total_rows: number;
+      imported_rows: number;
+    }>(
+      'SELECT id, status, total_rows, imported_rows FROM opslog_import_jobs WHERE company_id = ? AND idempotency_key = ?',
+      [fleet.tenantA, request.idempotencyKey],
+    );
+    expect(matchingJobs).toEqual([
+      {
+        id: completedJobId,
+        status: 'imported',
+        total_rows: 300,
+        imported_rows: 288,
+      },
     ]);
   }, 120_000);
 });
