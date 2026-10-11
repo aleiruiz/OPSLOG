@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { describe, expect, it, vi } from 'vitest';
 import { DataSource, type EntityMetadata, type QueryRunner, type Table } from 'typeorm';
 import { BINARY_COLLATION, POLICY_ENTITIES, POLICY_TABLES, PolicyEntity } from './entities.js';
+import { AUDIT_ENTITIES } from '../../audit/src/entities.js';
 import {
   CreateInsurancePolicies2026100600070,
   INSURANCE_MIGRATIONS_TABLE,
@@ -253,7 +254,9 @@ describe('DataSource factories', () => {
         /restricted runtime account/,
       );
     expect(INSURANCE_RUNTIME_ACCOUNT.test('opslog_insurance_abc123')).toBe(true);
-    expect(dataSource.options.entities).toHaveLength(POLICY_ENTITIES.length + 2);
+    expect(dataSource.options.entities).toHaveLength(
+      POLICY_ENTITIES.length + AUDIT_ENTITIES.length,
+    );
   });
 
   it('creates a migration DataSource that is never used at runtime', () => {

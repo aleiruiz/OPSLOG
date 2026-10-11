@@ -7,6 +7,7 @@ import {
   EMPLOYEE_TABLES,
   EmployeeEntity,
 } from './entities.js';
+import { AUDIT_ENTITIES } from '../../audit/src/entities.js';
 import {
   CreateEmployees2026100600050,
   EMPLOYEES_MIGRATIONS_TABLE,
@@ -257,7 +258,9 @@ describe('DataSource factories', () => {
         /restricted runtime account/,
       );
     expect(EMPLOYEES_RUNTIME_ACCOUNT.test('opslog_employees_abc123')).toBe(true);
-    expect(dataSource.options.entities).toHaveLength(EMPLOYEE_ENTITIES.length + 2);
+    expect(dataSource.options.entities).toHaveLength(
+      EMPLOYEE_ENTITIES.length + AUDIT_ENTITIES.length,
+    );
   });
 
   it('creates a migration DataSource that is never used at runtime', () => {

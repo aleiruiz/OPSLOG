@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { describe, expect, it, vi } from 'vitest';
 import { DataSource, type EntityMetadata, type QueryRunner, type Table } from 'typeorm';
 import { BINARY_COLLATION, VEHICLE_ENTITIES, VEHICLE_TABLES, VehicleEntity } from './entities.js';
+import { AUDIT_ENTITIES } from '../../audit/src/entities.js';
 import {
   CreateVehicles2026100600030,
   VEHICLES_MIGRATIONS_TABLE,
@@ -247,7 +248,9 @@ describe('DataSource factories', () => {
         /restricted runtime account/,
       );
     expect(VEHICLES_RUNTIME_ACCOUNT.test('opslog_vehicles_abc123')).toBe(true);
-    expect(dataSource.options.entities).toHaveLength(VEHICLE_ENTITIES.length + 2);
+    expect(dataSource.options.entities).toHaveLength(
+      VEHICLE_ENTITIES.length + AUDIT_ENTITIES.length,
+    );
   });
 
   it('creates a migration DataSource that is never used at runtime', () => {
