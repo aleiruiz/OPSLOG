@@ -27,7 +27,7 @@ describe('import file rules', () => {
   });
 
   it('explains an empty, oversized or unreadable file', () => {
-    expect(errorOf('  ')).toBe('Pega las filas o carga un archivo CSV.');
+    expect(errorOf('  ')).toBe('Pega las filas o carga un archivo CSV o Excel.');
     expect(errorOf('a'.repeat(MAX_CSV_LENGTH + 1))).toMatch(/Divídelo en varios archivos/);
     expect(errorOf('a,"b')).toMatch(/revisa las comillas/);
   });

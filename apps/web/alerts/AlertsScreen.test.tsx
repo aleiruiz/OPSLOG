@@ -145,7 +145,7 @@ describe('alert list', () => {
       await screen.findByRole('heading', { name: 'Sin vencimientos pendientes' }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/Ningún documento ni seguro vence en los próximos 30 días/),
+      screen.getByText(/Ningún documento, seguro ni licencia vence en los próximos 30 días/),
     ).toBeInTheDocument();
   });
 
