@@ -153,7 +153,7 @@ export function ImportCreateScreen() {
     <>
       <PageHeader
         title="Nueva importación"
-        description="Importa vehículos o empleados desde un archivo CSV. Valida primero: la validación no crea nada y te dice qué filas tienen errores."
+        description="Importa vehículos o empleados desde archivos CSV o Excel (.xlsx). Valida primero: la validación no crea nada y te dice qué filas tienen errores."
       />
       <ImportForm
         canViewPii={canViewPii}

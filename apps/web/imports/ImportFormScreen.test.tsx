@@ -146,6 +146,7 @@ describe('new import form', () => {
 
   it('validates without creating anything, then imports with a key and the validation id', async () => {
     const { api } = await fill(file(good(1), good(2), 'ECO-X,,Nissan,NP300,2022,area-norte,100'));
+    expect(screen.getByText(/desde archivos CSV o Excel \(\.xlsx\)/)).toBeInTheDocument();
     const before = (await api.vehicles.list({ limit: 100 })).ok ? 1 : 0;
     expect(before).toBe(1);
     await validate();
