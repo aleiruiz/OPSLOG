@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { InMemoryOutboxStore, OutboxConflictError, backoffMs } from './index.js';
+import {
+  InMemoryOutboxStore,
+  OutboxConflictError,
+  backoffMs,
+  type OutboxTransaction,
+} from './index.js';
 
 const input = (eventId: string, tenantId = 'tenant-a', key = eventId) => ({
   eventId,
@@ -22,7 +27,6 @@ describe('outbox atomicity and fencing', () => {
     store.transaction((tx) => {
       tx.enqueue(input('e1'));
       tx.enqueue(input('e1'));
-      tx.enqueue(input('e1', 'tenant-a', 'different-idempotency-key'));
       tx.enqueue(input('e1', 'tenant-b', 'e1'));
       tx.enqueue(input('e2', 'tenant-a', 'e1'));
     });
@@ -35,6 +39,9 @@ describe('outbox atomicity and fencing', () => {
     ).toEqual(['tenant-a', 'tenant-a', 'tenant-b']);
     expect(store.get('tenant-a', 'e1')?.tenantId).toBe('tenant-a');
     expect(store.get('tenant-b', 'e1')?.tenantId).toBe('tenant-b');
+    expect(() =>
+      store.transaction((tx) => tx.enqueue(input('e1', 'tenant-a', 'different-idempotency-key'))),
+    ).toThrow(OutboxConflictError);
   });
   it('claims each event once, reclaims expired leases, and rejects stale fences', () => {
     const store = new InMemoryOutboxStore();
@@ -97,21 +104,23 @@ describe('outbox atomicity and fencing', () => {
     store.acknowledge('tenant-a', 'e1', next.fencing);
     expect(() => store.acknowledge('tenant-a', 'e1', next.fencing)).not.toThrow();
   });
-  it('rejects async transaction work instead of committing before it settles', async () => {
+  it('rejects async transaction work and rolls back staged records', async () => {
     const store = new InMemoryOutboxStore();
+    let callbackSettled = false;
     expect(() =>
       store.transaction(async (tx) => {
         tx.enqueue(input('async-e'));
         await Promise.resolve();
-        throw new Error('late failure');
+        callbackSettled = true;
       }),
-    ).toThrow('synchronous');
+    ).toThrow('outbox transactions must be synchronous');
     await Promise.resolve();
+    expect(callbackSettled).toBe(true);
     expect(store.all()).toHaveLength(0);
   });
   it('closes the transaction handle after commit or rollback', () => {
     const store = new InMemoryOutboxStore();
-    let leaked: Parameters<Parameters<typeof store.transaction>[0]>[0] | undefined;
+    let leaked: OutboxTransaction | undefined;
     store.transaction((tx) => {
       leaked = tx;
     });
@@ -142,6 +151,33 @@ describe('outbox atomicity and fencing', () => {
     );
     expect(() => store.transaction((tx) => tx.enqueue(input('e1')))).not.toThrow();
     expect(store.all()).toHaveLength(1);
+  });
+  it('rejects reusing an event id when any immutable envelope metadata changes', () => {
+    const store = new InMemoryOutboxStore();
+    const original = {
+      ...input('metadata-conflict'),
+      correlationId: 'corr-original',
+      actorRef: { subject: 'actor-a', kind: 'user' as const },
+      requiredPermission: 'create',
+      entityId: 'entity-a',
+      schemaVersion: 1,
+    };
+    store.transaction((tx) => tx.enqueue(original));
+    const changes = [
+      { occurredAt: '2026-10-05T00:00:00.000Z' },
+      { idempotencyKey: 'different-key' },
+      { correlationId: 'corr-other' },
+      { actorRef: { subject: 'actor-b', kind: 'user' as const } },
+      { requiredPermission: 'manage_users' },
+      { entityId: 'entity-b' },
+      { schemaVersion: 2 },
+    ];
+    for (const change of changes) {
+      expect(() => store.transaction((tx) => tx.enqueue({ ...original, ...change }))).toThrow(
+        OutboxConflictError,
+      );
+    }
+    expect(store.get('tenant-a', 'metadata-conflict')).toMatchObject(original);
   });
   it('treats an identical replay with a non-plain payload as the same event', () => {
     const store = new InMemoryOutboxStore();

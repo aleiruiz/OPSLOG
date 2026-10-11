@@ -4,6 +4,7 @@ import type {
   AuditListRange,
   PersistedAuditEvent,
 } from '../../../../../packages/platform/audit/src/index.js';
+import type { OutboxTransaction } from '../../../../../packages/platform/outbox/src/index.js';
 import { failure, success, type PlatformResponse } from './errors.js';
 import { ACTOR_PREFIX } from './kernel.js';
 import type { PlatformKernel } from './kernel.js';
@@ -38,12 +39,13 @@ export async function publish<T>(
   k: PlatformKernel,
   token: string,
   correlationId: string,
-  work: (emit: Emit) => T,
+  work: (emit: Emit) => T | Promise<T>,
   permission: Permission = 'create',
-): Promise<PlatformResponse<T>> {
+  manager?: unknown,
+): Promise<PlatformResponse<Awaited<T>>> {
   try {
     const context = await k.authorize(token, correlationId, [permission]);
-    const result = k.outbox.transaction((tx) =>
+    const enqueueEvents = (tx: OutboxTransaction) =>
       work((event) => {
         tx.enqueue({
           eventId: event.eventId ?? `evt-${randomUUID()}`,
@@ -58,10 +60,13 @@ export async function publish<T>(
           entityId: event.entityId,
           schemaVersion: 1,
         });
-      }),
-    );
+      });
+    const result = manager
+      ? await k.outbox.transaction(manager, enqueueEvents)
+      : await k.outbox.transaction(enqueueEvents);
     return success(result);
   } catch (error) {
+    if (manager) throw error;
     return failure(error);
   }
 }

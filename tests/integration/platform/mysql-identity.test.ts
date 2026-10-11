@@ -326,6 +326,7 @@ suite('platform on a real MySQL identity store', () => {
         tenants,
         audit: auditRuntime.audit,
         auditRelay: auditRuntime.auditRelay,
+        outbox: auditRuntime.outbox,
       },
     });
     const counts = async () => ({
@@ -385,6 +386,7 @@ suite('platform on a real MySQL identity store', () => {
         tenants,
         audit: auditRuntime.audit,
         auditRelay: auditRuntime.auditRelay,
+        outbox: auditRuntime.outbox,
       },
     });
     const a = await (async () => {
@@ -505,6 +507,7 @@ suite('platform on a real MySQL identity store', () => {
             tenants,
             audit: auditRuntime.audit,
             auditRelay: auditRuntime.auditRelay,
+            outbox: auditRuntime.outbox,
           },
         });
         const principalFor = async (subject: string) => {

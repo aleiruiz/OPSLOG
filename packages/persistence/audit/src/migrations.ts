@@ -8,6 +8,7 @@ import {
 import { AUDIT_TABLES } from './entities.js';
 
 export const AUDIT_MIGRATION_VERSION = '2026100700010';
+export const OUTBOX_MIGRATION_VERSION = '2026100900010';
 export const AUDIT_MIGRATIONS_TABLE = 'opslog_audit_migrations';
 const text = (name: string, length: number, primary = false): TableColumnOptions => ({
   name,
@@ -161,6 +162,74 @@ export class CreateAuditStore2026100700010 implements MigrationInterface {
   /** Audit rows are append-only; destructive rollback requires a separate owner decision. */
   public async down(): Promise<void> {
     throw new Error('Audit migrations cannot be rolled back destructively');
+  }
+}
+
+/** Durable tenant-scoped job state, including the handler checkpoint and monotonic fence. */
+export class CreateTenantOutbox2026100900010 implements MigrationInterface {
+  name = 'CreateTenantOutbox2026100900010';
+
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.createTable(
+      new Table({
+        name: AUDIT_TABLES.outbox,
+        columns: [
+          text('tenant_id', 128, true),
+          text('event_id', 128, true),
+          text('type', 128),
+          { name: 'payload', type: 'json' },
+          date('occurred_at'),
+          text('idempotency_key', 128),
+          { name: 'correlation_id', type: 'varchar', length: '128', isNullable: true },
+          { name: 'actor_subject', type: 'varchar', length: '128', isNullable: true },
+          { name: 'actor_kind', type: 'varchar', length: '16', isNullable: true },
+          { name: 'required_permission', type: 'varchar', length: '64', isNullable: true },
+          { name: 'entity_id', type: 'varchar', length: '128', isNullable: true },
+          { name: 'schema_version', type: 'int', isNullable: true },
+          {
+            name: 'status',
+            type: 'enum',
+            enum: ['pending', 'processing', 'retry', 'delivered', 'dead_letter'],
+            default: "'pending'",
+          },
+          { name: 'attempts', type: 'int', unsigned: true, default: 0 },
+          date('available_at'),
+          date('lease_until', false, true),
+          { name: 'fencing', type: 'bigint', unsigned: true, default: 0 },
+          { name: 'worker_id', type: 'varchar', length: '128', isNullable: true },
+          { name: 'last_error', type: 'varchar', length: '500', isNullable: true },
+          { name: 'handler_completed', type: 'boolean', default: false },
+        ],
+        indices: [
+          new TableIndex({
+            name: 'ix_tenant_outbox_due',
+            columnNames: ['status', 'available_at', 'occurred_at'],
+          }),
+        ],
+      }),
+    );
+    await queryRunner.query(`CREATE PROCEDURE opslog_enqueue_tenant_outbox(
+      IN p_tenant_id VARCHAR(128), IN p_event_id VARCHAR(128), IN p_type VARCHAR(128),
+      IN p_payload JSON, IN p_occurred_at DATETIME(3), IN p_idempotency_key VARCHAR(128),
+      IN p_correlation_id VARCHAR(128), IN p_actor_subject VARCHAR(128), IN p_actor_kind VARCHAR(16),
+      IN p_required_permission VARCHAR(64), IN p_entity_id VARCHAR(128), IN p_schema_version INT
+    ) SQL SECURITY DEFINER
+    BEGIN
+      INSERT INTO \`${AUDIT_TABLES.outbox}\` (
+        tenant_id, event_id, type, payload, occurred_at, idempotency_key,
+        correlation_id, actor_subject, actor_kind, required_permission, entity_id,
+        schema_version, available_at
+      ) VALUES (
+        p_tenant_id, p_event_id, p_type, p_payload, p_occurred_at, p_idempotency_key,
+        p_correlation_id, p_actor_subject, p_actor_kind, p_required_permission, p_entity_id,
+        p_schema_version, UTC_TIMESTAMP(3)
+      );
+    END`);
+  }
+
+  /** Durable event history is not destructively rolled back. */
+  public async down(): Promise<void> {
+    throw new Error('Outbox migrations cannot be rolled back destructively');
   }
 }
 

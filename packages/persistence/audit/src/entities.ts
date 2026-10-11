@@ -6,7 +6,31 @@ export const AUDIT_TABLES = {
   delivery: 'opslog_audit_delivery',
   projection: 'opslog_audit_log',
   registry: 'opslog_audit_registry',
+  outbox: 'opslog_tenant_outbox',
 } as const;
+
+export class TenantOutboxEntity {
+  eventId!: string;
+  tenantId!: string;
+  type!: string;
+  payload!: object;
+  occurredAt!: Date;
+  idempotencyKey!: string;
+  correlationId!: string | null;
+  actorSubject!: string | null;
+  actorKind!: string | null;
+  requiredPermission!: string | null;
+  entityId!: string | null;
+  schemaVersion!: number | null;
+  status!: 'pending' | 'processing' | 'retry' | 'delivered' | 'dead_letter';
+  attempts!: number;
+  availableAt!: Date;
+  leaseUntil!: Date | null;
+  fencing!: string;
+  workerId!: string | null;
+  lastError!: string | null;
+  handlerCompleted!: boolean;
+}
 
 export class AuditLocalEventEntity {
   eventId!: string;
@@ -75,6 +99,49 @@ const eventColumns = {
   },
 };
 
+export const TenantOutboxSchema = new EntitySchema<TenantOutboxEntity>({
+  name: 'TenantOutboxEntity',
+  target: TenantOutboxEntity,
+  tableName: AUDIT_TABLES.outbox,
+  columns: {
+    tenantId: { name: 'tenant_id', ...text(128), primary: true },
+    eventId: { name: 'event_id', ...text(128), primary: true },
+    type: { type: 'varchar', length: '128', collation: 'utf8mb4_bin' },
+    payload: { type: 'json' },
+    occurredAt: { name: 'occurred_at', type: 'datetime', precision: 3 },
+    idempotencyKey: {
+      name: 'idempotency_key',
+      type: 'varchar',
+      length: '128',
+      collation: 'utf8mb4_bin',
+    },
+    correlationId: { name: 'correlation_id', type: 'varchar', length: '128', nullable: true },
+    actorSubject: { name: 'actor_subject', type: 'varchar', length: '128', nullable: true },
+    actorKind: { name: 'actor_kind', type: 'varchar', length: '16', nullable: true },
+    requiredPermission: {
+      name: 'required_permission',
+      type: 'varchar',
+      length: '64',
+      nullable: true,
+    },
+    entityId: { name: 'entity_id', type: 'varchar', length: '128', nullable: true },
+    schemaVersion: { name: 'schema_version', type: 'int', nullable: true },
+    status: {
+      type: 'enum',
+      enum: ['pending', 'processing', 'retry', 'delivered', 'dead_letter'],
+      default: 'pending',
+    },
+    attempts: { type: 'int', unsigned: true, default: 0 },
+    availableAt: { name: 'available_at', type: 'datetime', precision: 3 },
+    leaseUntil: { name: 'lease_until', type: 'datetime', precision: 3, nullable: true },
+    fencing: { type: 'bigint', unsigned: true, default: 0 },
+    workerId: { name: 'worker_id', type: 'varchar', length: '128', nullable: true },
+    lastError: { name: 'last_error', type: 'varchar', length: '500', nullable: true },
+    handlerCompleted: { name: 'handler_completed', type: 'boolean', default: false },
+  },
+  indices: [{ name: 'ix_tenant_outbox_due', columns: ['status', 'availableAt', 'occurredAt'] }],
+});
+
 export const AuditLocalEventSchema = new EntitySchema<AuditLocalEventEntity>({
   name: 'AuditLocalEventEntity',
   target: AuditLocalEventEntity,
@@ -123,4 +190,5 @@ export const AUDIT_ENTITIES = [
   AuditDeliverySchema,
   AuditProjectionSchema,
   AuditRegistrySchema,
+  TenantOutboxSchema,
 ] as const;

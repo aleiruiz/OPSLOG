@@ -2,7 +2,8 @@ import { MySqlAuditApiStore, MySqlAuditRelay } from './store.js';
 import { appendLocalAuditAndDelivery, type TenantAuditDataSourceResolver } from './store.js';
 import type { EntityManager } from 'typeorm';
 import { AUDIT_ENTITIES } from './entities.js';
-import { CreateAuditStore2026100700010 } from './migrations.js';
+import { CreateAuditStore2026100700010, CreateTenantOutbox2026100900010 } from './migrations.js';
+import { MySqlTenantOutboxStore } from './outbox-store.js';
 
 export interface IdentityMutationAuditRecord {
   readonly eventId: string;
@@ -34,12 +35,17 @@ export function createMySqlAuditRuntime(options: MySqlAuditRuntimeOptions) {
   return {
     audit: new MySqlAuditApiStore(options.resolveRuntime, options.resolveReader),
     auditRelay: new MySqlAuditRelay(options.listTenantIds, options.resolveRelay),
+    outbox: new MySqlTenantOutboxStore(
+      options.listTenantIds,
+      options.resolveRuntime,
+      options.resolveRelay,
+    ),
     /** Pass to TypeOrmIdentityStoreOptions.appendAudit to share the identity transaction. */
     appendIdentityAudit,
     /** Spread into createIdentityDataSource/createIdentityMigrationDataSource for same-DB tables. */
     identitySchema: {
       additionalEntities: AUDIT_ENTITIES,
-      additionalMigrations: [CreateAuditStore2026100700010],
+      additionalMigrations: [CreateAuditStore2026100700010, CreateTenantOutbox2026100900010],
     },
   } as const;
 }

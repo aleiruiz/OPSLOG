@@ -7,6 +7,7 @@ import {
   SettingsEntity,
   BINARY_COLLATION,
 } from './entities.js';
+import { AUDIT_ENTITIES } from '../../audit/src/entities.js';
 import {
   SETTINGS_CHECKS,
   SETTINGS_MIGRATIONS_TABLE,
@@ -177,7 +178,9 @@ describe('DataSource factories', () => {
         /restricted runtime account/,
       );
     expect(SETTINGS_RUNTIME_ACCOUNT.test('opslog_settings_abc123')).toBe(true);
-    expect(dataSource.options.entities).toHaveLength(SETTINGS_ENTITIES.length + 2);
+    expect(dataSource.options.entities).toHaveLength(
+      SETTINGS_ENTITIES.length + AUDIT_ENTITIES.length,
+    );
   });
 
   it('creates a migration DataSource that is never used at runtime', () => {

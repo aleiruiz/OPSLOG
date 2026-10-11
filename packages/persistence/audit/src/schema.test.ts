@@ -5,6 +5,7 @@ import { AUDIT_ENTITIES, AUDIT_TABLES } from './entities.js';
 import {
   AUDIT_MIGRATION_VERSION,
   CreateAuditStore2026100700010,
+  CreateTenantOutbox2026100900010,
   ensureAuditYearPartition,
 } from './migrations.js';
 import {
@@ -91,6 +92,20 @@ describe('audit persistence schema', () => {
       source.entityMetadatas.find((entity) => entity.tableName === AUDIT_TABLES.delivery)
         ?.foreignKeys,
     ).toEqual([]);
+  });
+
+  it('creates an insert-only definer procedure for initial outbox state', async () => {
+    const { runner, tables, queries } = runnerForMigration();
+    const migration = new CreateTenantOutbox2026100900010();
+    await migration.up(runner);
+    expect(tables.map((table) => table.name)).toEqual([AUDIT_TABLES.outbox]);
+    expect(queries[0]).toContain('CREATE PROCEDURE opslog_enqueue_tenant_outbox');
+    expect(queries[0]).toContain('SQL SECURITY DEFINER');
+    expect(queries[0]).toContain('schema_version, available_at');
+    expect(queries[0]).toContain('p_schema_version, UTC_TIMESTAMP(3)');
+    expect(queries[0]).not.toContain('p_available_at');
+    expect(queries[0]).not.toContain('status, attempts');
+    await expect(migration.down()).rejects.toThrow(/cannot be rolled back destructively/);
   });
 
   it('extends the future catch-all one safe annual partition at a time', async () => {

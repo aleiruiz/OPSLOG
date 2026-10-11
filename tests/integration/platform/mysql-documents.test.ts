@@ -53,6 +53,7 @@ suite('BFF on the real MySQL documents store', () => {
         documents: store,
         audit: auditRuntime.audit,
         auditRelay: auditRuntime.auditRelay,
+        outbox: auditRuntime.outbox,
       },
     });
     tenantA = (await world.tenant('Empresa Alfa', 'subject-admin-a')).tenantId;

@@ -8,7 +8,8 @@ jobs:
     timeout-minutes: 45
     services:
       mysql:
-        image: mysql:8.0.45
+        # Mirror avoids Docker Hub pull limits; verified linux/amd64 config digest matches the local image: sha256:9272481a67f6ca40b0b29b2e102d29fa86b54c69e969883ce4705ece06bbf3d5.
+        image: mirror.gcr.io/library/mysql:8.0.45@sha256:bcfecfdd2f8c2988c0db7335dfeed0dc336defe7007e98c5308f58168d808a05
         env:
           MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
         ports: ['3306:3306']

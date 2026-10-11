@@ -13,11 +13,14 @@ export {
   AuditLocalEventEntity,
   AuditProjectionEntity,
   AuditRegistryEntity,
+  TenantOutboxEntity,
 } from './entities.js';
 export {
   AUDIT_MIGRATION_VERSION,
+  OUTBOX_MIGRATION_VERSION,
   AUDIT_MIGRATIONS_TABLE,
   CreateAuditStore2026100700010,
+  CreateTenantOutbox2026100900010,
   ensureAuditYearPartition,
 } from './migrations.js';
 export {
@@ -42,6 +45,7 @@ export {
   relayPendingAuditEvent,
   type TenantAuditDataSourceResolver,
 } from './store.js';
+export { MySqlTenantOutboxStore, type TenantOutboxDataSourceResolver } from './outbox-store.js';
 export {
   createMySqlAuditRuntime,
   type IdentityMutationAuditRecord,

@@ -23,7 +23,7 @@ export const IMPORTS_RUNTIME_ACCOUNT = /^opslog_imports_[a-z0-9_]+$/i;
 
 const common = {
   type: 'mysql',
-  entities: [...IMPORT_ORM_ENTITIES, ...AUDIT_ENTITIES.slice(0, 2)],
+  entities: [...IMPORT_ORM_ENTITIES, ...AUDIT_ENTITIES],
   migrations: [CreateImportJobs2026100600090],
   migrationsTableName: IMPORTS_MIGRATIONS_TABLE,
   synchronize: false,

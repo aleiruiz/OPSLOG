@@ -62,6 +62,7 @@ function persistentWorld(options: { roleStore?: RoleDirectoryStore } = {}) {
       tenants,
       audit: auditRuntime.audit,
       auditRelay: auditRuntime.auditRelay,
+      outbox: auditRuntime.outbox,
       ...options,
     },
   });
@@ -137,6 +138,7 @@ describe('role directory wiring', () => {
         tenants,
         audit: auditRuntime.audit,
         auditRelay: auditRuntime.auditRelay,
+        outbox: auditRuntime.outbox,
       },
     });
     expect(world.platform.roles.persistent).toBe(true);

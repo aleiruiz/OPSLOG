@@ -7,9 +7,12 @@ import {
 } from '../../../packages/domain/identity/src/index.js';
 import { InMemoryAuditStore } from '../../../packages/platform/audit/src/index.js';
 import {
+  createMySqlAuditRuntime,
   MySqlAuditApiStore,
   MySqlAuditRelay,
+  MySqlTenantOutboxStore,
 } from '../../../packages/persistence/audit/src/index.js';
+import { withFleetAuditRuntime } from '../../../apps/api/composition/src/fleet-persistence.js';
 import { TypeOrmFileSagaStore } from '../../../packages/persistence/files/src/index.js';
 import { TypeOrmVehicleStore } from '../../../packages/persistence/vehicles/src/index.js';
 import { corr, createWorld } from './world.js';
@@ -188,7 +191,7 @@ describe('createWorkerRuntime defaults', () => {
         grantSecret: 'synthetic-grant-secret-for-tests-0123456789',
         adapters: { identityStore: {} as never },
       }),
-    ).toThrow('persistent stores require durable tenant-scoped audit storage and relay');
+    ).toThrow('persistent stores require durable tenant-scoped audit, relay, and outbox');
   });
 
   it('requires durable audit when a role store is explicitly injected with an in-memory identity store', () => {
@@ -200,7 +203,7 @@ describe('createWorkerRuntime defaults', () => {
         grantSecret: 'synthetic-grant-secret-for-tests-0123456789',
         adapters: { roleStore: {} as never },
       }),
-    ).toThrow('persistent stores require durable tenant-scoped audit storage and relay');
+    ).toThrow('persistent stores require durable tenant-scoped audit, relay, and outbox');
   });
 
   it('rejects structural no-op or in-memory audit adapters for persistent stores', () => {
@@ -217,6 +220,7 @@ describe('createWorkerRuntime defaults', () => {
     const noOpRelay = { runBatch: async () => 0 };
     const durableAudit = new MySqlAuditApiStore(resolveDatabase);
     const durableRelay = new MySqlAuditRelay(() => [], resolveDatabase);
+    const durableOutbox = new MySqlTenantOutboxStore(() => [], resolveDatabase, resolveDatabase);
 
     const vehicleDataSource = {
       options: {
@@ -229,7 +233,7 @@ describe('createWorkerRuntime defaults', () => {
     const testDoubleVehicles = { insert: async () => undefined };
 
     expect(() => createPlatform({ ...base, adapters: { vehicles: persistentVehicles } })).toThrow(
-      'persistent stores require durable tenant-scoped audit storage and relay',
+      'persistent stores require durable tenant-scoped audit, relay, and outbox',
     );
     for (const audit of [noOpAudit, new InMemoryAuditStore()])
       expect(() =>
@@ -237,19 +241,40 @@ describe('createWorkerRuntime defaults', () => {
           ...base,
           adapters: { vehicles: persistentVehicles, audit: audit as never, auditRelay: noOpRelay },
         }),
-      ).toThrow('persistent stores require durable tenant-scoped audit storage and relay');
+      ).toThrow('persistent stores require durable tenant-scoped audit, relay, and outbox');
     expect(() =>
       createPlatform({
         ...base,
         adapters: { vehicles: persistentVehicles, audit: durableAudit, auditRelay: noOpRelay },
       }),
-    ).toThrow('persistent stores require durable tenant-scoped audit storage and relay');
+    ).toThrow('persistent stores require durable tenant-scoped audit, relay, and outbox');
     expect(() =>
       createPlatform({
         ...base,
         adapters: { vehicles: persistentVehicles, audit: durableAudit, auditRelay: durableRelay },
       }),
+    ).toThrow('persistent stores require durable tenant-scoped audit, relay, and outbox');
+    expect(() =>
+      createPlatform({
+        ...base,
+        adapters: {
+          vehicles: persistentVehicles,
+          audit: durableAudit,
+          auditRelay: durableRelay,
+          outbox: durableOutbox,
+        },
+      }),
     ).not.toThrow();
+    const platform = createPlatform({
+      ...base,
+      adapters: {
+        vehicles: persistentVehicles,
+        audit: durableAudit,
+        auditRelay: durableRelay,
+        outbox: durableOutbox,
+      },
+    });
+    expect(platform.outbox).toBe(durableOutbox);
     expect(() =>
       createPlatform({ ...base, adapters: { vehicles: testDoubleVehicles as never } }),
     ).not.toThrow();
@@ -263,7 +288,23 @@ describe('createWorkerRuntime defaults', () => {
           auditRelay: noOpRelay,
         },
       }),
-    ).toThrow('persistent stores require durable tenant-scoped audit storage and relay');
+    ).toThrow('persistent stores require durable tenant-scoped audit, relay, and outbox');
+  });
+
+  it('wires the durable MySQL outbox into Fleet adapters with audit and relay', () => {
+    const resolveDatabase = async (): Promise<never> => {
+      throw new Error('database resolver must not run during composition');
+    };
+    const auditRuntime = createMySqlAuditRuntime({
+      listTenantIds: () => [],
+      resolveRuntime: resolveDatabase,
+      resolveRelay: resolveDatabase,
+    });
+    const adapters = withFleetAuditRuntime({ marker: true }, auditRuntime);
+    expect(adapters.audit).toBe(auditRuntime.audit);
+    expect(adapters.auditRelay).toBe(auditRuntime.auditRelay);
+    expect(adapters.outbox).toBe(auditRuntime.outbox);
+    expect(adapters.outbox).toBeInstanceOf(MySqlTenantOutboxStore);
   });
 
   it('requires one durable TypeORM file store to back records, scan queue and saga journal', () => {
@@ -289,14 +330,22 @@ describe('createWorkerRuntime defaults', () => {
     );
     const audit = new MySqlAuditApiStore(resolveDatabase);
     const auditRelay = new MySqlAuditRelay(() => [], resolveDatabase);
+    const outbox = new MySqlTenantOutboxStore(() => [], resolveDatabase, resolveDatabase);
 
     expect(() =>
-      createPlatform({ ...base, adapters: { records: store, audit, auditRelay } }),
+      createPlatform({ ...base, adapters: { records: store, audit, auditRelay, outbox } }),
     ).toThrow('persistent file stores require one durable file saga store');
     expect(() =>
       createPlatform({
         ...base,
-        adapters: { records: store, scanQueue: store, fileSagaJournal: store, audit, auditRelay },
+        adapters: {
+          records: store,
+          scanQueue: store,
+          fileSagaJournal: store,
+          audit,
+          auditRelay,
+          outbox,
+        },
       }),
     ).not.toThrow();
   });

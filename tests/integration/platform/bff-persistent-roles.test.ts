@@ -48,6 +48,7 @@ function persistentBff() {
     tenants,
     audit: auditRuntime.audit,
     auditRelay: auditRuntime.auditRelay,
+    outbox: auditRuntime.outbox,
   };
   world = createBffWorld({ adapters });
   return { db, identityStore };

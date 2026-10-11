@@ -1,7 +1,11 @@
 import 'reflect-metadata';
 import { DataSource, type DataSourceOptions } from 'typeorm';
 import { AUDIT_ENTITIES } from './entities.js';
-import { CreateAuditStore2026100700010, AUDIT_MIGRATIONS_TABLE } from './migrations.js';
+import {
+  CreateAuditStore2026100700010,
+  CreateTenantOutbox2026100900010,
+  AUDIT_MIGRATIONS_TABLE,
+} from './migrations.js';
 
 export interface AuditDatabaseConfig {
   readonly host: string;
@@ -23,7 +27,7 @@ export const AUDIT_MIGRATOR_ACCOUNT = /^opslog_audit_migrator_[a-z0-9_]{1,48}$/i
 const common = {
   type: 'mysql',
   entities: [...AUDIT_ENTITIES],
-  migrations: [CreateAuditStore2026100700010],
+  migrations: [CreateAuditStore2026100700010, CreateTenantOutbox2026100900010],
   migrationsTableName: AUDIT_MIGRATIONS_TABLE,
   synchronize: false,
   migrationsRun: false,

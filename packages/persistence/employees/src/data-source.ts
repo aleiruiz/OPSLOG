@@ -23,7 +23,7 @@ export const EMPLOYEES_RUNTIME_ACCOUNT = /^opslog_employees_[a-z0-9_]+$/i;
 
 const common = {
   type: 'mysql',
-  entities: [...EMPLOYEE_ENTITIES, ...AUDIT_ENTITIES.slice(0, 2)],
+  entities: [...EMPLOYEE_ENTITIES, ...AUDIT_ENTITIES],
   migrations: [CreateEmployees2026100600050],
   migrationsTableName: EMPLOYEES_MIGRATIONS_TABLE,
   synchronize: false,

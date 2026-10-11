@@ -7,7 +7,6 @@ import {
 import {
   FakeScanner,
   InMemoryObjectStorage,
-  InMemoryOutboxStore,
   InMemoryTenantStore,
 } from '../../../apps/api/composition/src/index.js';
 import {
@@ -55,7 +54,7 @@ function persistentWorld() {
       storage: new InMemoryObjectStorage(),
       audit: auditRuntime.audit,
       auditRelay: auditRuntime.auditRelay,
-      outbox: new InMemoryOutboxStore(() => Date.now()),
+      outbox: auditRuntime.outbox,
       tenants,
     },
   });

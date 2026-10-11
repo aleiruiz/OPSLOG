@@ -26,7 +26,7 @@ export const ASSIGNMENTS_RUNTIME_ACCOUNT = /^opslog_assignments_[a-z0-9_]+$/i;
 
 const common = {
   type: 'mysql',
-  entities: [...ASSIGNMENT_ENTITIES, ...AUDIT_ENTITIES.slice(0, 2)],
+  entities: [...ASSIGNMENT_ENTITIES, ...AUDIT_ENTITIES],
   migrations: [CreateVehicleAssignments2026100600080],
   migrationsTableName: ASSIGNMENTS_MIGRATIONS_TABLE,
   synchronize: false,

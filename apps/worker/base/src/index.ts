@@ -64,14 +64,14 @@ export class Worker {
   }
   async process(explicitNow?: number): Promise<boolean> {
     const now = explicitNow ?? this.clock();
-    const claim = this.store.claim(now, this.leaseMs, this.workerId);
+    const claim = await this.store.claim(now, this.leaseMs, this.workerId);
     if (!claim) return false;
     this.metrics.claimed += 1;
     const { record, fencing } = claim;
     if (record.attempts > this.maxAttempts) {
       // Reclaimed after repeated lease expiries without ever reaching a terminal state.
-      this.guarded(() => {
-        this.store.retry(
+      await this.guarded(async () => {
+        await this.store.retry(
           record.tenantId,
           record.eventId,
           fencing,
@@ -92,8 +92,15 @@ export class Worker {
     }
     if (!record.handlerCompleted && this.tenants.status(record.tenantId) !== 'active') {
       this.metrics.rejectedTenants += 1;
-      this.guarded(() => {
-        this.store.retry(record.tenantId, record.eventId, fencing, 'tenant unavailable', now, 1);
+      await this.guarded(async () => {
+        await this.store.retry(
+          record.tenantId,
+          record.eventId,
+          fencing,
+          'tenant unavailable',
+          now,
+          1,
+        );
         this.metrics.deadLettered += 1;
         this.dlq.send({
           eventId: record.eventId,
@@ -110,8 +117,15 @@ export class Worker {
       !(await this.actorStillAllowed(record))
     ) {
       this.metrics.rejectedActors += 1;
-      this.guarded(() => {
-        this.store.retry(record.tenantId, record.eventId, fencing, 'actor not permitted', now, 1);
+      await this.guarded(async () => {
+        await this.store.retry(
+          record.tenantId,
+          record.eventId,
+          fencing,
+          'actor not permitted',
+          now,
+          1,
+        );
         this.metrics.deadLettered += 1;
         this.dlq.send({
           eventId: record.eventId,
@@ -123,9 +137,9 @@ export class Worker {
     }
     const handler = this.handlers.get(record.type);
     if (!record.handlerCompleted && !handler) {
-      this.guarded(() => {
+      await this.guarded(async () => {
         this.metrics.handlerFailures += 1;
-        const status = this.store.retry(
+        const status = await this.store.retry(
           record.tenantId,
           record.eventId,
           fencing,
@@ -156,9 +170,9 @@ export class Worker {
       } catch (error) {
         // Backoff counts from the failure, not from the claim: a slow handler must not retry immediately.
         const failedAt = explicitNow ?? this.clock();
-        this.guarded(() => {
+        await this.guarded(async () => {
           this.metrics.handlerFailures += 1;
-          const status = this.store.retry(
+          const status = await this.store.retry(
             record.tenantId,
             record.eventId,
             fencing,
@@ -177,7 +191,7 @@ export class Worker {
         });
         return true;
       }
-      const checkpointed = this.guarded(() =>
+      const checkpointed = await this.guarded(() =>
         this.store.markHandlerCompleted(record.tenantId, record.eventId, fencing),
       );
       if (!checkpointed) return true;
@@ -202,8 +216,8 @@ export class Worker {
       this.metrics.auditFailures += 1;
       return true;
     }
-    this.guarded(() => {
-      this.store.acknowledge(record.tenantId, record.eventId, fencing);
+    await this.guarded(async () => {
+      await this.store.acknowledge(record.tenantId, record.eventId, fencing);
       this.metrics.delivered += 1;
     });
     return true;
@@ -225,9 +239,9 @@ export class Worker {
     }
   }
   /** Runs a fenced store mutation; a lost lease drops the claim instead of crashing the drain loop. */
-  private guarded(work: () => void): boolean {
+  private async guarded(work: () => void | Promise<void>): Promise<boolean> {
     try {
-      work();
+      await work();
       return true;
     } catch (error) {
       if (

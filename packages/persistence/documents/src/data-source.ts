@@ -23,7 +23,7 @@ export const DOCUMENTS_RUNTIME_ACCOUNT = /^opslog_documents_[a-z0-9_]+$/i;
 
 const common = {
   type: 'mysql',
-  entities: [...DOCUMENT_ENTITIES, ...AUDIT_ENTITIES.slice(0, 2)],
+  entities: [...DOCUMENT_ENTITIES, ...AUDIT_ENTITIES],
   migrations: [CreateDocuments2026100600060],
   migrationsTableName: DOCUMENTS_MIGRATIONS_TABLE,
   synchronize: false,
