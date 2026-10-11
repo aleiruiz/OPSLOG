@@ -194,14 +194,10 @@ export class InMemoryOutboxStore implements OutboxStore {
     };
     try {
       const result = work(tx);
-      if (isThenable(result))
-        return Promise.resolve(result)
-          .then((value) => {
-            commit();
-            return value;
-          })
-          .catch(rollback)
-          .finally(finish);
+      if (isThenable(result)) {
+        finish();
+        return rollback(new Error('outbox transactions must be synchronous'));
+      }
       commit();
       finish();
       return result;

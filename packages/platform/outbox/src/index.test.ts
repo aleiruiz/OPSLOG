@@ -104,18 +104,19 @@ describe('outbox atomicity and fencing', () => {
     store.acknowledge('tenant-a', 'e1', next.fencing);
     expect(() => store.acknowledge('tenant-a', 'e1', next.fencing)).not.toThrow();
   });
-  it('awaits async transaction work and rolls back failures after the callback settles', async () => {
+  it('rejects async transaction work and rolls back staged records', async () => {
     const store = new InMemoryOutboxStore();
-    await expect(
+    let callbackSettled = false;
+    expect(() =>
       store.transaction(async (tx) => {
         tx.enqueue(input('async-e'));
         await Promise.resolve();
-        throw new Error('late failure');
+        callbackSettled = true;
       }),
-    ).rejects.toThrow('late failure');
+    ).toThrow('outbox transactions must be synchronous');
+    await Promise.resolve();
+    expect(callbackSettled).toBe(true);
     expect(store.all()).toHaveLength(0);
-    await store.transaction(async (tx) => tx.enqueue(input('async-commit')));
-    expect(store.all()).toMatchObject([{ eventId: 'async-commit' }]);
   });
   it('closes the transaction handle after commit or rollback', () => {
     const store = new InMemoryOutboxStore();
