@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { Buffer } from 'node:buffer';
 import {
   BFF_IMPORT_ENTITIES,
   BFF_IMPORT_MAX_BODY_BYTES,
@@ -95,6 +96,77 @@ const withoutId = (reply: Reply) => ({ ...reply.json, correlationId: '' });
 const vehiclesTotal = async (browser: Browser): Promise<number> =>
   (await browser.get('/api/vehicles?includeArchived=true&limit=100')).json.total as number;
 
+const crcTable = Array.from({ length: 256 }, (_, n) => {
+  let value = n;
+  for (let bit = 0; bit < 8; bit += 1) value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+  return value >>> 0;
+});
+
+function zipFixture(files: Readonly<Record<string, string>>): Buffer {
+  const localParts: Buffer[] = [];
+  const directoryParts: Buffer[] = [];
+  let offset = 0;
+  for (const [name, text] of Object.entries(files)) {
+    const filename = Buffer.from(name);
+    const data = Buffer.from(text);
+    let crc = 0xffffffff;
+    for (const byte of data) crc = crcTable[(crc ^ byte) & 0xff]! ^ (crc >>> 8);
+    crc = (crc ^ 0xffffffff) >>> 0;
+    const local = Buffer.alloc(30 + filename.length);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(filename.length, 26);
+    filename.copy(local, 30);
+    localParts.push(local, data);
+    const record = Buffer.alloc(46 + filename.length);
+    record.writeUInt32LE(0x02014b50, 0);
+    record.writeUInt16LE(20, 4);
+    record.writeUInt16LE(20, 6);
+    record.writeUInt32LE(crc, 16);
+    record.writeUInt32LE(data.length, 20);
+    record.writeUInt32LE(data.length, 24);
+    record.writeUInt16LE(filename.length, 28);
+    record.writeUInt32LE(offset, 42);
+    filename.copy(record, 46);
+    directoryParts.push(record);
+    offset += local.length + data.length;
+  }
+  const directory = Buffer.concat(directoryParts);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(directoryParts.length, 8);
+  end.writeUInt16LE(directoryParts.length, 10);
+  end.writeUInt32LE(directory.length, 12);
+  end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...localParts, directory, end]);
+}
+
+function vehicleXlsx(area: string, n: number): string {
+  const headers = ['economicNumber', 'plate', 'make', 'model', 'year', 'areaId', 'odometerKm'];
+  const values = [`XLS-${pad(n)}`, `XLS${pad(n)}`, 'Toyota', 'Hilux', '2022', area, '120'];
+  const cells = (items: readonly string[], row: number) =>
+    items
+      .map(
+        (value, index) =>
+          `<c r="${String.fromCharCode(65 + index)}${row}" t="inlineStr"><is><t>${value}</t></is></c>`,
+      )
+      .join('');
+  return zipFixture({
+    '[Content_Types].xml':
+      '<Types><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/></Types>',
+    '_rels/.rels':
+      '<Relationships><Relationship Id="rId0" Type="x/officeDocument" Target="xl/workbook.xml"/></Relationships>',
+    'xl/workbook.xml':
+      '<workbook xmlns:r="r"><sheets><sheet name="Import" sheetId="1" r:id="rId1"/></sheets></workbook>',
+    'xl/_rels/workbook.xml.rels':
+      '<Relationships><Relationship Id="rId1" Type="x/worksheet" Target="worksheets/sheet1.xml"/></Relationships>',
+    'xl/worksheets/sheet1.xml': `<worksheet><sheetData><row r="1">${cells(headers, 1)}</row><row r="2">${cells(values, 2)}</row></sheetData></worksheet>`,
+  }).toString('base64');
+}
+
 describe('contract', () => {
   it('declares the same vocabulary and template as the domain', () => {
     expect([...BFF_IMPORT_ENTITIES]).toEqual([...IMPORT_ENTITIES]);
@@ -121,6 +193,43 @@ describe('contract', () => {
         id,
         definition.method === 'GET' ? 'session' : 'session-csrf',
       ]);
+  });
+});
+
+describe('XLSX submission', () => {
+  it('normalizes a bounded workbook through the existing import path and rejects mixed formats', async () => {
+    const { adminA, a } = await fixture();
+    const workbook = vehicleXlsx(a.area, 1);
+    const dry = await submit(adminA, { entity: 'vehicle', mode: 'dry_run', xlsxBase64: workbook });
+    expect(dry.status).toBe(201);
+    expect(dry.json.job).toMatchObject({
+      entity: 'vehicle',
+      mode: 'dry_run',
+      status: 'validated',
+      totalRows: 1,
+      validRows: 1,
+      invalidRows: 0,
+    });
+    expect(await vehiclesTotal(adminA)).toBe(0);
+    const mixed = await submit(adminA, {
+      entity: 'vehicle',
+      mode: 'dry_run',
+      rows: [vehicleRow(a.area, 2)],
+      xlsxBase64: workbook,
+    });
+    expect(mixed.status).toBe(400);
+    const malformed = await submit(adminA, {
+      entity: 'vehicle',
+      mode: 'dry_run',
+      xlsxBase64: Buffer.from('not an XLSX').toString('base64'),
+    });
+    expect(malformed.status).toBe(400);
+    const oversized = await submit(adminA, {
+      entity: 'vehicle',
+      mode: 'dry_run',
+      xlsxBase64: Buffer.alloc(400_001).toString('base64'),
+    });
+    expect(oversized.status).toBe(400);
   });
 });
 

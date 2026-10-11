@@ -1,7 +1,11 @@
 import type { ISODateTime, Page } from '../index.js';
 import type { BffRouteDefinition } from './shared.js';
 
-export const BFF_ALERT_SOURCES = ['vehicle_document', 'insurance_policy'] as const;
+export const BFF_ALERT_SOURCES = [
+  'vehicle_document',
+  'insurance_policy',
+  'employee_license',
+] as const;
 export type BffAlertSource = (typeof BFF_ALERT_SOURCES)[number];
 
 /** `expiring`: from the window start to the last valid day (inclusive); `expired`: after it. */
@@ -19,17 +23,19 @@ export const BFF_ALERT_RECIPIENT_ROLES = [
 export type BffAlertRecipientRole = (typeof BFF_ALERT_RECIPIENT_ROLES)[number];
 
 /**
- * An expiring or expired vehicle document or insurance policy, derived on every read from the
- * company's data as of the UTC date of the server (`asOf` of the page). Never stored, queued or
- * sent. Ids and dates only: no title, number or person. The company is implicit.
+ * An expiring or expired vehicle document, insurance policy or driver's license, derived on every
+ * read from the company's data as of the UTC date of the server (`asOf` of the page). Never stored,
+ * queued or sent. A license alert exposes only the internal employee id, fixed type code and expiry
+ * date; no name, license number or encrypted field. The company is implicit.
  */
 export interface BffAlert {
   /** Dedupe key: source, subject and expiry date (a renewal changes the date: a new cycle). */
   readonly key: string;
   readonly source: BffAlertSource;
-  /** Id of the document or of the policy. */
+  /** Id of the source record; for a license alert this is the employee id. */
   readonly subjectId: string;
-  readonly vehicleId: string;
+  /** Linked vehicle for vehicle records; null for a driver's license. */
+  readonly vehicleId: string | null;
   /** Document type code, or the coverage type of the policy. */
   readonly typeCode: string;
   /** `YYYY-MM-DD`: the last valid day, inclusive. */

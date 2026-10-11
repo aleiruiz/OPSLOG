@@ -14,7 +14,7 @@ export function makeAlert(overrides: Partial<Alert> = {}): Alert {
   };
   return {
     key: `${base.source}:${base.subjectId}:${base.dueOn}`,
-    vehicleId: 'veh-001',
+    vehicleId: base.source === 'employee_license' ? null : 'veh-001',
     typeCode: 'registration_card',
     daysToExpiry: 5,
     severity: 'expiring',
@@ -51,19 +51,23 @@ const shift = (days: number): string =>
   new Date(Date.parse(`${TODAY}T00:00:00.000Z`) + days * DAY_MS).toISOString().slice(0, 10);
 const OFFSETS = [-40, -3, 0, 5, 12, 20, 30] as const;
 
-/** `count` alerts around the mock "today": both sources, both severities and the inclusive last day. */
+/** `count` alerts around the mock "today": all sources, both severities and the inclusive last day. */
 export function demoAlerts(count = 8): Alert[] {
   return Array.from({ length: count }, (_, index) => {
     const n = index + 1;
     const offset = OFFSETS[index % OFFSETS.length] as number;
-    const policy = n % 3 === 0;
+    const license = n % 5 === 0;
+    const policy = !license && n % 3 === 0;
+    const source = license ? 'employee_license' : policy ? 'insurance_policy' : 'vehicle_document';
     return makeAlert({
-      source: policy ? 'insurance_policy' : 'vehicle_document',
-      subjectId: `${policy ? 'pol' : 'doc'}-${String(n).padStart(3, '0')}`,
-      vehicleId: `veh-${String(((index * 2) % 28) + 1).padStart(3, '0')}`,
-      typeCode: policy
-        ? (COVERAGE_TYPES[index % COVERAGE_TYPES.length] as string)
-        : (DOCUMENT_TYPES.vehicle[index % 4]?.code as string),
+      source,
+      subjectId: `${license ? 'emp' : policy ? 'pol' : 'doc'}-${String(n).padStart(3, '0')}`,
+      vehicleId: license ? null : `veh-${String(((index * 2) % 28) + 1).padStart(3, '0')}`,
+      typeCode: license
+        ? 'driver_license'
+        : policy
+          ? (COVERAGE_TYPES[index % COVERAGE_TYPES.length] as string)
+          : (DOCUMENT_TYPES.vehicle[index % 4]?.code as string),
       dueOn: shift(offset),
       daysToExpiry: offset,
       severity: offset < 0 ? 'expired' : 'expiring',

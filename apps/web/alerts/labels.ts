@@ -3,6 +3,7 @@ import { documentPath } from '../documents/DocumentMessages';
 import { typeLabel } from '../documents/labels';
 import { policyPath } from '../insurance/PolicyMessages';
 import { coverageLabel } from '../insurance/labels';
+import { employeePath } from '../employees/EmployeeMessages';
 import {
   BFF_ALERT_RECIPIENT_ROLES,
   BFF_ALERT_SEVERITIES,
@@ -28,11 +29,13 @@ export const severityOrder: readonly AlertSeverity[] = BFF_ALERT_SEVERITIES;
 export const sourceLabels: Record<AlertSource, string> = {
   vehicle_document: 'Documento de vehículo',
   insurance_policy: 'Seguro',
+  employee_license: 'Licencia de conductor',
 };
 
 export const sourceChoiceLabels: Record<AlertSource, string> = {
   vehicle_document: 'Documentos de vehículo',
   insurance_policy: 'Seguros',
+  employee_license: 'Licencias de conducir',
 };
 
 export const severityPresentation: Record<AlertSeverity, { label: string; tone: StatusTone }> = {
@@ -44,11 +47,17 @@ export const severityPresentation: Record<AlertSeverity, { label: string; tone: 
 export const alertTitle = (alert: Pick<Alert, 'source' | 'typeCode'>): string =>
   alert.source === 'vehicle_document'
     ? typeLabel('vehicle', alert.typeCode)
-    : coverageLabel(alert.typeCode);
+    : alert.source === 'insurance_policy'
+      ? coverageLabel(alert.typeCode)
+      : 'Licencia de conducir';
 
 /** The record that raised the alert (the document or the policy). */
 export const alertRecordPath = (alert: Pick<Alert, 'source' | 'subjectId'>): string =>
-  alert.source === 'vehicle_document' ? documentPath(alert.subjectId) : policyPath(alert.subjectId);
+  alert.source === 'vehicle_document'
+    ? documentPath(alert.subjectId)
+    : alert.source === 'insurance_policy'
+      ? policyPath(alert.subjectId)
+      : employeePath(alert.subjectId);
 
 export const recipientLabels: Record<AlertRecipientRole, string> = {
   admin: 'Administración de la empresa',

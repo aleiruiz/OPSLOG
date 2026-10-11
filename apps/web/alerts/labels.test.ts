@@ -20,6 +20,9 @@ describe('alert labels', () => {
     expect(alertTitle(makeAlert({ source: 'insurance_policy', typeCode: 'new_cover' }))).toBe(
       'Otra cobertura',
     );
+    expect(alertTitle(makeAlert({ source: 'employee_license', typeCode: 'driver_license' }))).toBe(
+      'Licencia de conducir',
+    );
   });
 
   it('links to the record that raised the alert, encoding its id', () => {
@@ -27,10 +30,17 @@ describe('alert labels', () => {
     expect(alertRecordPath(makeAlert({ source: 'insurance_policy', subjectId: 'p/1' }))).toBe(
       '/flota/seguros/p%2F1',
     );
+    expect(alertRecordPath(makeAlert({ source: 'employee_license', subjectId: 'e/1' }))).toBe(
+      '/plantilla/empleados/e%2F1',
+    );
   });
 
   it('has a Spanish label for every source, severity and recipient role', () => {
-    expect(Object.values(sourceLabels)).toEqual(['Documento de vehículo', 'Seguro']);
+    expect(Object.values(sourceLabels)).toEqual([
+      'Documento de vehículo',
+      'Seguro',
+      'Licencia de conductor',
+    ]);
     expect(severityPresentation.expiring).toEqual({ label: 'Por vencer', tone: 'warning' });
     expect(severityPresentation.expired).toEqual({ label: 'Vencido', tone: 'danger' });
     for (const role of recipientOrder)
@@ -42,7 +52,7 @@ describe('alert labels', () => {
 
   it('builds synthetic alerts that cover both sources and both severities', () => {
     const alerts = demoAlerts(8);
-    expect(new Set(alerts.map((alert) => alert.source)).size).toBe(2);
+    expect(new Set(alerts.map((alert) => alert.source)).size).toBe(3);
     expect(new Set(alerts.map((alert) => alert.severity)).size).toBe(2);
     expect(
       alerts.every((alert) => alert.key === `${alert.source}:${alert.subjectId}:${alert.dueOn}`),

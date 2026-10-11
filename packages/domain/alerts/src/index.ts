@@ -11,7 +11,7 @@ import {
 
 /**
  * Base expiry alerts (FLT-ALERTS, first slice: BRD §15.1, FR-091, FR-132, FR-150, BR-007). An alert
- * is a vehicle document or an insurance policy that is `expiring` (from `windowDays` before its
+ * is a vehicle document, insurance policy or active driver's license that is `expiring` (from `windowDays` before its
  * last valid day, inclusive, until that day) or `expired` (after it). Alerts are DERIVED on every
  * read from the documents and policies stores, as of the UTC date of the service clock and with the
  * company's window setting: nothing is stored, queued or sent. The durable outbox, e-mail and
@@ -20,7 +20,7 @@ import {
  */
 export { DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT };
 
-export const ALERT_SOURCES = ['vehicle_document', 'insurance_policy'] as const;
+export const ALERT_SOURCES = ['vehicle_document', 'insurance_policy', 'employee_license'] as const;
 export type AlertSourceKind = (typeof ALERT_SOURCES)[number];
 export const isAlertSource = (value: unknown): value is AlertSourceKind =>
   typeof value === 'string' && (ALERT_SOURCES as readonly string[]).includes(value);
@@ -46,9 +46,10 @@ export interface Alert {
   /** Dedupe key: source, subject and expiry date. A renewal changes the date, so it starts a new cycle. */
   readonly key: string;
   readonly source: AlertSourceKind;
-  /** Id of the document or of the policy. */
+  /** Id of the source record; for a license alert this is the employee id. */
   readonly subjectId: string;
-  readonly vehicleId: string;
+  /** Linked vehicle for vehicle records; null for a driver's license. */
+  readonly vehicleId: string | null;
   /** Document type code, or the coverage type of the policy. */
   readonly typeCode: string;
   /** `YYYY-MM-DD`: the last valid day, inclusive. */
@@ -78,7 +79,7 @@ const isInteger = (value: unknown, min: number, max: number): value is number =>
 /** A document or policy that is due, as the sources report it (never a person, never a title). */
 export interface AlertCandidate {
   readonly subjectId: string;
-  readonly vehicleId: string;
+  readonly vehicleId: string | null;
   readonly typeCode: string;
   readonly dueOn: string;
 }
@@ -101,7 +102,7 @@ export interface AlertCandidateSlice {
 }
 
 /**
- * One source of due items. Tenant-scoped; excludes archived documents and policies; ordered by
+ * One source of due items. Tenant-scoped; excludes archived records; ordered by
  * expiry date and then subject id (code-unit order), so sources can be merged.
  */
 export interface AlertSource {

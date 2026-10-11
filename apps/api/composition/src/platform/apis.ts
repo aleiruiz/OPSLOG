@@ -35,6 +35,7 @@ import {
 } from '../../../../../packages/domain/vehicles/src/index.js';
 import { EnvelopePiiCipher, LocalDevKms } from '../../../../../packages/platform/pii/src/index.js';
 import { AlertsApi } from '../alerts.js';
+import { driverLicenseAlerts } from '../driver-license-alerts.js';
 import { AreasApi } from '../areas.js';
 import { AssignmentsApi } from '../assignments.js';
 import { DocumentsApi } from '../documents.js';
@@ -328,6 +329,7 @@ export function buildDomainApis(kernel: PlatformKernel, adapters: PlatformAdapte
             };
           },
         },
+        employee_license: driverLicenseAlerts(employeeStore),
       },
       {
         expiryWindowDays: async (tenantId) =>

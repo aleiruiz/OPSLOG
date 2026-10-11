@@ -100,18 +100,33 @@ export function ImportForm({
   };
 
   const readFile = (file: File) => {
-    if (file.size > MAX_CSV_LENGTH * 4) {
+    const isXlsx = file.name.toLowerCase().endsWith('.xlsx');
+    setFileName(null);
+    setField('csv', '');
+    setField('xlsxBase64', '');
+    if (file.size > (isXlsx ? 400_000 : MAX_CSV_LENGTH * 4)) {
       setClientErrors({ csv: 'El archivo es demasiado grande. Divídelo en varios archivos.' });
       return;
     }
     const reader = new FileReader();
     reader.onload = () => {
       setFileName(file.name);
-      setField('csv', typeof reader.result === 'string' ? reader.result : '');
+      if (isXlsx && reader.result instanceof ArrayBuffer) {
+        const bytes = new Uint8Array(reader.result);
+        let binary = '';
+        for (let start = 0; start < bytes.length; start += 0x8000)
+          binary += String.fromCharCode(...bytes.subarray(start, start + 0x8000));
+        setField('csv', '');
+        setField('xlsxBase64', globalThis.btoa(binary));
+      } else {
+        setField('xlsxBase64', '');
+        setField('csv', typeof reader.result === 'string' ? reader.result : '');
+      }
     };
     reader.onerror = () =>
       setClientErrors({ csv: 'No pudimos leer el archivo. Intenta con otro o pega las filas.' });
-    reader.readAsText(file, 'utf-8');
+    if (isXlsx) reader.readAsArrayBuffer(file);
+    else reader.readAsText(file, 'utf-8');
   };
 
   const found = values.csv.trim() ? inspect(values.csv, values.entity) : null;
@@ -181,7 +196,13 @@ export function ImportForm({
               SelectProps={{ native: true }}
               InputLabelProps={{ shrink: true }}
               value={values.entity}
-              onChange={(event) => setField('entity', event.target.value as ImportEntity)}
+              onChange={(event) => {
+                if (values.xlsxBase64) {
+                  setFileName(null);
+                  setField('xlsxBase64', '');
+                }
+                setField('entity', event.target.value as ImportEntity);
+              }}
               required
               error={Boolean(errors.entity)}
               {...(errors.entity ? { helperText: errors.entity } : {})}
@@ -225,7 +246,7 @@ export function ImportForm({
         </FormSection>
         <FormSection
           title="Archivo"
-          description="Carga un archivo CSV o pega las filas. El archivo se lee en tu navegador."
+          description="Carga un archivo CSV o Excel (.xlsx), o pega las filas. Los archivos se leen en tu navegador."
         >
           <Box>
             <Typography
@@ -234,12 +255,12 @@ export function ImportForm({
               variant="body2"
               sx={{ display: 'block', mb: 0.5 }}
             >
-              Cargar archivo CSV
+              Cargar archivo CSV o Excel
             </Typography>
             <input
               id={`${uid}-file`}
               type="file"
-              accept=".csv,text/csv"
+              accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               onChange={(event) => {
                 const file = event.target.files?.[0];
                 if (file) readFile(file);
@@ -258,6 +279,7 @@ export function ImportForm({
             value={values.csv}
             onChange={(event) => {
               setFileName(null);
+              setField('xlsxBase64', '');
               setField('csv', event.target.value);
             }}
             required
