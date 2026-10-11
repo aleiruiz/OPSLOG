@@ -23,7 +23,7 @@ export const INSURANCE_RUNTIME_ACCOUNT = /^opslog_insurance_[a-z0-9_]+$/i;
 
 const common = {
   type: 'mysql',
-  entities: [...POLICY_ENTITIES, ...AUDIT_ENTITIES.slice(0, 2)],
+  entities: [...POLICY_ENTITIES, ...AUDIT_ENTITIES],
   migrations: [CreateInsurancePolicies2026100600070],
   migrationsTableName: INSURANCE_MIGRATIONS_TABLE,
   synchronize: false,

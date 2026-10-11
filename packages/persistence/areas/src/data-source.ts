@@ -23,7 +23,7 @@ export const AREAS_RUNTIME_ACCOUNT = /^opslog_areas_[a-z0-9_]+$/i;
 
 const common = {
   type: 'mysql',
-  entities: [...AREA_ENTITIES, ...AUDIT_ENTITIES.slice(0, 2)],
+  entities: [...AREA_ENTITIES, ...AUDIT_ENTITIES],
   migrations: [CreateAreas2026100600040],
   migrationsTableName: AREAS_MIGRATIONS_TABLE,
   synchronize: false,

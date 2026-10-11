@@ -31,6 +31,41 @@ export interface EventClaim<T = unknown> {
 export interface OutboxTransaction {
   enqueue<T>(record: Omit<OutboxRecord<T>, 'status' | 'attempts' | 'availableAt'>): OutboxRecord<T>;
 }
+
+type ImmutableOutboxEnvelope = Pick<
+  OutboxRecord,
+  | 'eventId'
+  | 'tenantId'
+  | 'type'
+  | 'payload'
+  | 'occurredAt'
+  | 'idempotencyKey'
+  | 'correlationId'
+  | 'actorRef'
+  | 'requiredPermission'
+  | 'entityId'
+  | 'schemaVersion'
+>;
+
+function sameImmutableEnvelope(
+  left: ImmutableOutboxEnvelope,
+  right: ImmutableOutboxEnvelope,
+): boolean {
+  const normalized = (record: ImmutableOutboxEnvelope) => ({
+    eventId: record.eventId,
+    tenantId: record.tenantId,
+    type: record.type,
+    payload: structuredClone(record.payload),
+    occurredAt: new Date(record.occurredAt).toISOString(),
+    idempotencyKey: record.idempotencyKey,
+    correlationId: record.correlationId ?? null,
+    actorRef: record.actorRef ?? null,
+    requiredPermission: record.requiredPermission ?? null,
+    entityId: record.entityId ?? null,
+    schemaVersion: record.schemaVersion ?? null,
+  });
+  return isDeepStrictEqual(normalized(left), normalized(right));
+}
 export class OutboxConflictError extends Error {
   readonly code = 'OUTBOX_EVENT_CONFLICT';
   constructor() {
@@ -40,6 +75,7 @@ export class OutboxConflictError extends Error {
 }
 export interface OutboxStore {
   transaction<T>(work: (tx: OutboxTransaction) => T): T | Promise<T>;
+  transaction<T>(manager: unknown, work: (tx: OutboxTransaction) => T | Promise<T>): Promise<T>;
   claim<T>(
     now: number,
     leaseMs: number,
@@ -76,7 +112,19 @@ export class InMemoryOutboxStore implements OutboxStore {
     private readonly clock: () => number = Date.now,
     private readonly random: () => number = Math.random,
   ) {}
-  transaction<T>(work: (tx: OutboxTransaction) => T): T {
+  transaction<T>(work: (tx: OutboxTransaction) => T): T | Promise<T>;
+  transaction<T>(manager: unknown, work: (tx: OutboxTransaction) => T | Promise<T>): Promise<T>;
+  transaction<T>(
+    workOrManager: unknown | ((tx: OutboxTransaction) => T),
+    managerWork?: (tx: OutboxTransaction) => T | Promise<T>,
+  ): T | Promise<T> {
+    if (typeof workOrManager !== 'function') {
+      if (workOrManager !== undefined)
+        throw new Error('in-memory outbox cannot share a persistence EntityManager');
+      if (!managerWork) throw new Error('transaction callback is required');
+      return Promise.resolve(this.transaction(managerWork));
+    }
+    const work = workOrManager;
     if (this.inTransaction) throw new Error('nested outbox transactions are not supported');
     this.inTransaction = true;
     const staged: OutboxRecord[] = [];
@@ -95,12 +143,7 @@ export class InMemoryOutboxStore implements OutboxStore {
         const existing = store.records.get(recordKey);
         const sameEventStaged = staged.find((r) => scopedKey(r.tenantId, r.eventId) === recordKey);
         const prior = existing ?? sameEventStaged;
-        if (
-          prior &&
-          (prior.type !== input.type ||
-            !isDeepStrictEqual(prior.payload, structuredClone(input.payload)))
-        )
-          throw new OutboxConflictError();
+        if (prior && !sameImmutableEnvelope(prior, input)) throw new OutboxConflictError();
         if (existing || keys.has(eventKey) || keys.has(idempotencyKey))
           return structuredClone(
             existing ??
@@ -135,24 +178,36 @@ export class InMemoryOutboxStore implements OutboxStore {
         return structuredClone(record) as OutboxRecord<T>;
       },
     };
-    try {
-      const result = work(tx);
-      if (isThenable(result)) {
-        // An async callback would commit before it settles, so a later rejection could not roll back.
-        void Promise.resolve(result).catch(() => undefined);
-        throw new Error('outbox transactions must be synchronous');
-      }
+    const commit = () => {
       closed = true;
       for (const record of staged) {
         this.records.set(scopedKey(record.tenantId, record.eventId), record);
       }
-      return result;
-    } catch (error) {
+    };
+    const rollback = (error: unknown): never => {
       closed = true;
       staged.length = 0;
       throw error;
-    } finally {
+    };
+    const finish = () => {
       this.inTransaction = false;
+    };
+    try {
+      const result = work(tx);
+      if (isThenable(result))
+        return Promise.resolve(result)
+          .then((value) => {
+            commit();
+            return value;
+          })
+          .catch(rollback)
+          .finally(finish);
+      commit();
+      finish();
+      return result;
+    } catch (error) {
+      finish();
+      return rollback(error);
     }
   }
   claim<T>(now: number, leaseMs: number, workerId: string): EventClaim<T> | undefined {

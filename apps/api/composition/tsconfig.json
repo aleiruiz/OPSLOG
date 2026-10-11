@@ -29,7 +29,6 @@
     "../../../packages/platform/files/src/**/*.ts",
     "../../../infra/queues/src/**/*.ts"
   ],
-  "exclude": ["src/**/*.test.ts"],
   "references": [
     { "path": "../../../packages/domain/tenants" },
     { "path": "../../../packages/persistence/tenancy" },

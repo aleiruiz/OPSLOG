@@ -196,8 +196,9 @@ export class MySqlTenantOutboxWorkerStore
     const repository = await this.workerRepo(tenantId);
     const row = await repository.findOne({ where: { tenantId, eventId } });
     if (!row) throw new Error('outbox event not found');
-    if (Number(row.fencing) !== fencing || row.status !== 'processing')
-      throw new Error('stale fencing');
+    if (Number(row.fencing) !== fencing) throw new Error('stale fencing');
+    if (row.status === 'retry' || row.status === 'dead_letter') return row.status;
+    if (row.status !== 'processing') throw new Error('stale fencing');
     const status: OutboxStatus = row.attempts >= maxAttempts ? 'dead_letter' : 'retry';
     const result = await repository
       .createQueryBuilder()
@@ -217,7 +218,16 @@ export class MySqlTenantOutboxWorkerStore
         { tenantId, eventId, fencing: String(fencing), processing: 'processing' },
       )
       .execute();
-    if (result.affected !== 1) throw new Error('stale fencing');
+    if (result.affected !== 1) {
+      const raced = await repository.findOne({ where: { tenantId, eventId } });
+      if (
+        raced &&
+        Number(raced.fencing) === fencing &&
+        (raced.status === 'retry' || raced.status === 'dead_letter')
+      )
+        return raced.status;
+      throw new Error('stale fencing');
+    }
     return status;
   }
 

@@ -35,8 +35,23 @@ export interface EventClaim<T = unknown> {
 export interface OutboxTransaction {
   enqueue<T>(record: Omit<OutboxRecord<T>, 'status' | 'attempts' | 'availableAt'>): OutboxRecord<T>;
 }
+type ImmutableOutboxEnvelope = Pick<
+  OutboxRecord,
+  | 'eventId'
+  | 'tenantId'
+  | 'type'
+  | 'payload'
+  | 'occurredAt'
+  | 'idempotencyKey'
+  | 'correlationId'
+  | 'actorRef'
+  | 'requiredPermission'
+  | 'entityId'
+  | 'schemaVersion'
+>;
 export interface DurableOutboxAdapter {
   transaction<T>(work: (tx: OutboxTransaction) => T): T | Promise<T>;
+  transaction<T>(manager: unknown, work: (tx: OutboxTransaction) => T | Promise<T>): Promise<T>;
   claim<T>(
     now: number,
     leaseMs: number,
@@ -74,6 +89,49 @@ class OutboxConflictError extends Error {
 
 function copy<T>(record: OutboxRecord<T>): OutboxRecord<T> {
   return structuredClone(record);
+}
+
+function sameImmutableEnvelope(
+  left: ImmutableOutboxEnvelope,
+  right: ImmutableOutboxEnvelope,
+): boolean {
+  const normalized = (record: ImmutableOutboxEnvelope) => ({
+    eventId: record.eventId,
+    tenantId: record.tenantId,
+    type: record.type,
+    payload: structuredClone(record.payload),
+    occurredAt: new Date(record.occurredAt).toISOString(),
+    idempotencyKey: record.idempotencyKey,
+    correlationId: record.correlationId ?? null,
+    actorRef: record.actorRef ?? null,
+    requiredPermission: record.requiredPermission ?? null,
+    entityId: record.entityId ?? null,
+    schemaVersion: record.schemaVersion ?? null,
+  });
+  return isDeepStrictEqual(normalized(left), normalized(right));
+}
+
+function storedEnvelope(row: TenantOutboxEntity): ImmutableOutboxEnvelope {
+  return {
+    eventId: row.eventId,
+    tenantId: row.tenantId,
+    type: row.type,
+    payload: row.payload,
+    occurredAt: row.occurredAt.toISOString(),
+    idempotencyKey: row.idempotencyKey,
+    ...(row.correlationId === null ? {} : { correlationId: row.correlationId }),
+    ...(row.actorSubject === null || row.actorKind === null
+      ? {}
+      : {
+          actorRef: {
+            subject: row.actorSubject,
+            kind: row.actorKind as NonNullable<OutboxRecord['actorRef']>['kind'],
+          },
+        }),
+    ...(row.requiredPermission === null ? {} : { requiredPermission: row.requiredPermission }),
+    ...(row.entityId === null ? {} : { entityId: row.entityId }),
+    ...(row.schemaVersion === null ? {} : { schemaVersion: row.schemaVersion }),
+  };
 }
 
 function requireSource(source: DataSource): void {
@@ -116,7 +174,46 @@ export class MySqlTenantOutboxStore implements DurableOutboxAdapter {
     );
   }
 
-  async transaction<T>(work: (tx: OutboxTransaction) => T): Promise<T> {
+  transaction<T>(work: (tx: OutboxTransaction) => T): Promise<T>;
+  transaction<T>(
+    manager: unknown,
+    managerWork: (tx: OutboxTransaction) => T | Promise<T>,
+  ): Promise<T>;
+  async transaction<T>(
+    managerOrWork: unknown | ((tx: OutboxTransaction) => T),
+    managerWork?: (tx: OutboxTransaction) => T | Promise<T>,
+  ): Promise<T> {
+    if (typeof managerOrWork === 'function')
+      throw new Error('durable outbox transaction requires the business EntityManager');
+    if (!managerWork) throw new Error('transaction callback is required');
+    const manager = managerOrWork as EntityManager;
+    if (!manager.queryRunner?.isTransactionActive)
+      throw new Error('outbox transaction requires an active EntityManager');
+    const staged = this.createStagedTransaction();
+    try {
+      const result = await managerWork(staged.tx);
+      staged.close();
+      const tenants = new Set([...staged.records.values()].map((record) => record.tenantId));
+      if (tenants.size > 1) throw new Error('outbox transaction cannot span tenant databases');
+      for (const tenantId of tenants) {
+        const source = await this.resolveRuntime(tenantId);
+        requireSource(source);
+        if (manager.connection.options.database !== source.options.database)
+          throw new Error('outbox EntityManager must use the tenant database');
+      }
+      for (const record of staged.records.values()) await this.insertIdempotently(manager, record);
+      return result;
+    } catch (error) {
+      staged.close();
+      throw error;
+    }
+  }
+
+  private createStagedTransaction(): {
+    readonly records: Map<string, OutboxRecord>;
+    readonly tx: OutboxTransaction;
+    close(): void;
+  } {
     const staged = new Map<string, OutboxRecord>();
     let closed = false;
     const tx: OutboxTransaction = {
@@ -127,8 +224,7 @@ export class MySqlTenantOutboxStore implements DurableOutboxAdapter {
         const key = scoped(input.tenantId, input.eventId);
         const previous = staged.get(key);
         if (previous) {
-          if (previous.type !== input.type || !isDeepStrictEqual(previous.payload, input.payload))
-            throw new OutboxConflictError();
+          if (!sameImmutableEnvelope(previous, input)) throw new OutboxConflictError();
           return copy(previous) as OutboxRecord<typeof input.payload>;
         }
         const record: OutboxRecord = {
@@ -153,34 +249,7 @@ export class MySqlTenantOutboxStore implements DurableOutboxAdapter {
         return copy(record) as OutboxRecord<typeof input.payload>;
       },
     };
-    let result: T;
-    try {
-      result = work(tx);
-      if (
-        (typeof result === 'object' || typeof result === 'function') &&
-        result !== null &&
-        typeof (result as { then?: unknown }).then === 'function'
-      ) {
-        void Promise.resolve(result).catch(() => undefined);
-        throw new Error('outbox transactions must be synchronous');
-      }
-      closed = true;
-    } catch (error) {
-      closed = true;
-      staged.clear();
-      throw error;
-    }
-    const tenants = new Set([...staged.values()].map((record) => record.tenantId));
-    if (tenants.size > 1) throw new Error('outbox transaction cannot span tenant databases');
-    const tenantId = [...tenants][0];
-    if (tenantId) {
-      const source = await this.resolveRuntime(tenantId);
-      requireSource(source);
-      await source.transaction('READ COMMITTED', async (manager) => {
-        for (const record of staged.values()) await this.insertIdempotently(manager, record);
-      });
-    }
-    return result;
+    return { records: staged, tx, close: () => (closed = true) };
   }
 
   private async insertIdempotently(manager: EntityManager, record: OutboxRecord): Promise<void> {
@@ -190,8 +259,7 @@ export class MySqlTenantOutboxStore implements DurableOutboxAdapter {
       where: { tenantId: record.tenantId, eventId: record.eventId },
     });
     if (existing) {
-      if (existing.type !== record.type || !isDeepStrictEqual(existing.payload, record.payload))
-        throw new OutboxConflictError();
+      if (!sameImmutableEnvelope(storedEnvelope(existing), record)) throw new OutboxConflictError();
       return;
     }
     try {
@@ -201,7 +269,7 @@ export class MySqlTenantOutboxStore implements DurableOutboxAdapter {
       const raced = await repository.findOne({
         where: { tenantId: record.tenantId, eventId: record.eventId },
       });
-      if (!raced || raced.type !== record.type || !isDeepStrictEqual(raced.payload, record.payload))
+      if (!raced || !sameImmutableEnvelope(storedEnvelope(raced), record))
         throw new OutboxConflictError();
     }
   }

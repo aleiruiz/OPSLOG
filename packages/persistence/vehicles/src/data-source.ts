@@ -23,7 +23,7 @@ export const VEHICLES_RUNTIME_ACCOUNT = /^opslog_vehicles_[a-z0-9_]+$/i;
 
 const common = {
   type: 'mysql',
-  entities: [...VEHICLE_ENTITIES, ...AUDIT_ENTITIES.slice(0, 2)],
+  entities: [...VEHICLE_ENTITIES, ...AUDIT_ENTITIES],
   migrations: [CreateVehicles2026100600030],
   migrationsTableName: VEHICLES_MIGRATIONS_TABLE,
   synchronize: false,

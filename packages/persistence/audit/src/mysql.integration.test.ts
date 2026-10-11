@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import mysql from 'mysql2/promise';
 import { createHash, randomBytes } from 'node:crypto';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { DataSource } from 'typeorm';
 import {
   AUDIT_TABLES,
@@ -247,6 +247,15 @@ describe.skipIf(!adminUrl)('tenant-local audit persistence against MySQL 8', () 
     await Promise.allSettled([a?.close(), b?.close()]);
   });
 
+  afterEach(async () => {
+    for (const tenant of [a, b]) {
+      if (!tenant) continue;
+      await tenant.admin.query(`DELETE FROM ${identifier(AUDIT_TABLES.outbox)}`);
+      await tenant.admin.query(`DELETE FROM ${identifier(AUDIT_TABLES.delivery)}`);
+      await tenant.admin.query(`DELETE FROM ${identifier(AUDIT_TABLES.local)}`);
+    }
+  });
+
   it('rolls back business, history stand-in, immutable local audit, and initial delivery together', async () => {
     const rejected = runtimeA.transaction('READ COMMITTED', async (manager) => {
       await manager.query('INSERT INTO synthetic_business (id) VALUES (?)', ['rollback-item']);
@@ -301,6 +310,122 @@ describe.skipIf(!adminUrl)('tenant-local audit persistence against MySQL 8', () 
         (id) => (id === a.tenantId ? restarted : runtimeB),
       ).list(a.tenantId, range),
     ).toHaveLength(1);
+  });
+
+  it('commits business, history, local audit, delivery, and API outbox through one EntityManager', async () => {
+    const eventId = 'atomic-api-commit-event';
+    await runtimeA.transaction('READ COMMITTED', async (manager) => {
+      await manager.query('INSERT INTO synthetic_business (id) VALUES (?)', [eventId]);
+      await manager.query('INSERT INTO synthetic_history (id) VALUES (?)', [eventId]);
+      await appendLocalAuditAndDelivery(manager, event(a.tenantId, eventId));
+      await outbox.transaction(manager, (tx) =>
+        tx.enqueue({
+          eventId,
+          tenantId: a.tenantId,
+          type: 'synthetic.atomic',
+          payload: { value: eventId },
+          occurredAt: new Date(outboxNow).toISOString(),
+          idempotencyKey: eventId,
+          correlationId: 'atomic-api-correlation',
+          actorRef: { subject: 'user-synthetic-actor', kind: 'user' },
+          requiredPermission: 'create',
+          entityId: 'opaque-vehicle-1',
+          schemaVersion: 1,
+        }),
+      );
+    });
+
+    const [business] = await a.admin.query('SELECT id FROM synthetic_business WHERE id = ?', [
+      eventId,
+    ]);
+    const [history] = await a.admin.query('SELECT id FROM synthetic_history WHERE id = ?', [
+      eventId,
+    ]);
+    const [local] = await a.admin.query(
+      `SELECT event_id FROM ${identifier(AUDIT_TABLES.local)} WHERE tenant_id = ? AND event_id = ?`,
+      [a.tenantId, eventId],
+    );
+    const [delivery] = await a.admin.query(
+      `SELECT event_id FROM ${identifier(AUDIT_TABLES.delivery)} WHERE tenant_id = ? AND event_id = ?`,
+      [a.tenantId, eventId],
+    );
+    const [outboxRows] = await a.admin.query(
+      `SELECT event_id FROM ${identifier(AUDIT_TABLES.outbox)} WHERE tenant_id = ? AND event_id = ?`,
+      [a.tenantId, eventId],
+    );
+    expect(business).toEqual([{ id: eventId }]);
+    expect(history).toEqual([{ id: eventId }]);
+    expect(local).toEqual([{ event_id: eventId }]);
+    expect(delivery).toEqual([{ event_id: eventId }]);
+    expect(outboxRows).toEqual([{ event_id: eventId }]);
+  });
+
+  it('rolls business, history, local audit, and delivery back when API outbox enqueue conflicts', async () => {
+    const eventId = 'atomic-api-rollback-event';
+    const idempotencyKey = 'atomic-api-rollback-key';
+    await runtimeA.transaction('READ COMMITTED', (manager) =>
+      outbox.transaction(manager, (tx) =>
+        tx.enqueue({
+          eventId,
+          tenantId: a.tenantId,
+          type: 'synthetic.atomic',
+          payload: { value: 'existing' },
+          occurredAt: new Date(outboxNow).toISOString(),
+          idempotencyKey,
+          correlationId: 'atomic-api-correlation',
+          actorRef: { subject: 'user-synthetic-actor', kind: 'user' },
+          requiredPermission: 'create',
+          entityId: 'opaque-vehicle-1',
+          schemaVersion: 1,
+        }),
+      ),
+    );
+
+    const failed = runtimeA.transaction('READ COMMITTED', async (manager) => {
+      await manager.query('INSERT INTO synthetic_business (id) VALUES (?)', [eventId]);
+      await manager.query('INSERT INTO synthetic_history (id) VALUES (?)', [eventId]);
+      await appendLocalAuditAndDelivery(manager, event(a.tenantId, eventId));
+      await outbox.transaction(manager, (tx) =>
+        tx.enqueue({
+          eventId,
+          tenantId: a.tenantId,
+          type: 'synthetic.atomic',
+          payload: { value: 'changed' },
+          occurredAt: new Date(outboxNow).toISOString(),
+          idempotencyKey,
+          correlationId: 'atomic-api-correlation',
+          actorRef: { subject: 'user-synthetic-actor', kind: 'user' },
+          requiredPermission: 'create',
+          entityId: 'opaque-vehicle-1',
+          schemaVersion: 1,
+        }),
+      );
+    });
+    await expect(failed).rejects.toMatchObject({ code: 'OUTBOX_EVENT_CONFLICT' });
+
+    const [business] = await a.admin.query('SELECT id FROM synthetic_business WHERE id = ?', [
+      eventId,
+    ]);
+    const [history] = await a.admin.query('SELECT id FROM synthetic_history WHERE id = ?', [
+      eventId,
+    ]);
+    const [local] = await a.admin.query(
+      `SELECT event_id FROM ${identifier(AUDIT_TABLES.local)} WHERE tenant_id = ? AND event_id = ?`,
+      [a.tenantId, eventId],
+    );
+    const [delivery] = await a.admin.query(
+      `SELECT event_id FROM ${identifier(AUDIT_TABLES.delivery)} WHERE tenant_id = ? AND event_id = ?`,
+      [a.tenantId, eventId],
+    );
+    const [outboxRows] = await a.admin.query(
+      `SELECT payload FROM ${identifier(AUDIT_TABLES.outbox)} WHERE tenant_id = ? AND event_id = ?`,
+      [a.tenantId, eventId],
+    );
+    expect(business).toEqual([]);
+    expect(history).toEqual([]);
+    expect(local).toEqual([]);
+    expect(delivery).toEqual([]);
+    expect(outboxRows).toEqual([{ payload: { value: 'existing' } }]);
   });
 
   it('API AuditStore append queues locally and the concrete worker relay publishes the tenant view', async () => {
@@ -408,8 +533,12 @@ describe.skipIf(!adminUrl)('tenant-local audit persistence against MySQL 8', () 
       idempotencyKey: 'restart-checkpoint-event',
     });
     await Promise.all([
-      outbox.transaction((tx) => tx.enqueue(enqueue(a.tenantId))),
-      outbox.transaction((tx) => tx.enqueue(enqueue(b.tenantId))),
+      runtimeA.transaction('READ COMMITTED', (manager) =>
+        outbox.transaction(manager, (tx) => tx.enqueue(enqueue(a.tenantId))),
+      ),
+      runtimeB.transaction('READ COMMITTED', (manager) =>
+        outbox.transaction(manager, (tx) => tx.enqueue(enqueue(b.tenantId))),
+      ),
     ]);
     const first = await outbox.claim(outboxNow, 1_000, 'worker-before-restart');
     expect(first?.record.tenantId).toBe(a.tenantId);
@@ -461,15 +590,17 @@ describe.skipIf(!adminUrl)('tenant-local audit persistence against MySQL 8', () 
       () => outboxNow,
       () => 0.5,
     );
-    await beforeRestart.transaction((tx) =>
-      tx.enqueue({
-        eventId,
-        tenantId: a.tenantId,
-        type: 'synthetic.retry',
-        payload: { value: 'synthetic' },
-        occurredAt: new Date(outboxNow).toISOString(),
-        idempotencyKey: eventId,
-      }),
+    await runtimeA.transaction('READ COMMITTED', (manager) =>
+      beforeRestart.transaction(manager, (tx) =>
+        tx.enqueue({
+          eventId,
+          tenantId: a.tenantId,
+          type: 'synthetic.retry',
+          payload: { value: 'synthetic' },
+          occurredAt: new Date(outboxNow).toISOString(),
+          idempotencyKey: eventId,
+        }),
+      ),
     );
     const first = await beforeRestart.claim(outboxNow, 1_000, 'worker-before-retry');
     expect(first?.record.eventId).toBe(eventId);
@@ -501,6 +632,79 @@ describe.skipIf(!adminUrl)('tenant-local audit persistence against MySQL 8', () 
     const second = await restarted.claim(outboxNow + 60_000, 1_000, 'worker-after-restart');
     expect(second).toMatchObject({ record: { eventId, tenantId: a.tenantId, attempts: 2 } });
     expect(second!.fencing).toBeGreaterThan(first!.fencing);
+  });
+
+  it('makes retry idempotent for a repeated MySQL fence', async () => {
+    const eventId = 'same-fence-retry-event';
+    await runtimeA.transaction('READ COMMITTED', (manager) =>
+      outbox.transaction(manager, (tx) =>
+        tx.enqueue({
+          eventId,
+          tenantId: a.tenantId,
+          type: 'synthetic.retry',
+          payload: { value: 'synthetic' },
+          occurredAt: new Date(outboxNow).toISOString(),
+          idempotencyKey: eventId,
+        }),
+      ),
+    );
+    const claim = await outbox.claim(outboxNow, 1_000, 'same-fence-worker');
+    expect(claim?.record.eventId).toBe(eventId);
+    await expect(
+      outbox.retry(a.tenantId, eventId, claim!.fencing, 'first failure', outboxNow, 6),
+    ).resolves.toBe('retry');
+    await expect(
+      outbox.retry(a.tenantId, eventId, claim!.fencing, 'second failure', outboxNow + 99_000, 6),
+    ).resolves.toBe('retry');
+    expect(await outbox.get(a.tenantId, eventId)).toMatchObject({
+      status: 'retry',
+      attempts: 1,
+      availableAt: outboxNow + 60_000,
+      lastError: 'first failure',
+      fencing: claim!.fencing,
+    });
+  });
+
+  it('rejects MySQL replays that change any immutable outbox envelope field', async () => {
+    const original = {
+      eventId: 'mysql-envelope-conflict-event',
+      tenantId: a.tenantId,
+      type: 'synthetic.envelope',
+      payload: { value: 'original' },
+      occurredAt: new Date(outboxNow).toISOString(),
+      idempotencyKey: 'mysql-envelope-conflict-key',
+      correlationId: 'mysql-envelope-correlation',
+      actorRef: { subject: 'user-synthetic-actor', kind: 'user' as const },
+      requiredPermission: 'create',
+      entityId: 'opaque-vehicle-1',
+      schemaVersion: 1,
+    };
+    await runtimeA.transaction('READ COMMITTED', (manager) =>
+      outbox.transaction(manager, (tx) => tx.enqueue(original)),
+    );
+
+    const changes = [
+      { type: 'synthetic.other' },
+      { payload: { value: 'changed' } },
+      { occurredAt: '2026-10-08T10:00:00.000Z' },
+      { idempotencyKey: 'different-idempotency-key' },
+      { correlationId: 'different-correlation' },
+      { actorRef: { subject: 'user-other-actor', kind: 'user' as const } },
+      { requiredPermission: 'manage_users' },
+      { entityId: 'opaque-vehicle-2' },
+      { schemaVersion: 2 },
+    ];
+    for (const change of changes) {
+      const failed = runtimeA.transaction('READ COMMITTED', (manager) =>
+        outbox.transaction(manager, (tx) => tx.enqueue({ ...original, ...change })),
+      );
+      await expect(failed).rejects.toMatchObject({ code: 'OUTBOX_EVENT_CONFLICT' });
+    }
+    await expect(
+      runtimeA.transaction('READ COMMITTED', (manager) =>
+        outbox.transaction(manager, (tx) => tx.enqueue(original)),
+      ),
+    ).resolves.toBeDefined();
   });
 
   it('enforces role grants and rolls back when runtime cannot insert initial delivery state', async () => {

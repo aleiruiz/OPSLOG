@@ -349,3 +349,13 @@ Con Node `24.19.0` y pnpm `11.25.0`, `pnpm typecheck`, `pnpm lint`, `pnpm format
 - pnpm-lock.yaml no tiene diff. El status del worktree no incluye artefactos de build o reportes generados; solo fuentes, pruebas y este registro de tarea.
 
 El checkpoint reduce la repetición del handler después de que handler_completed queda confirmado. Un crash entre el efecto externo del handler y el commit de ese checkpoint aún puede volver a invocar el handler; cada handler con efectos externos debe ser idempotente usando (tenantId,eventId). No se declara G2 pasado: CI del SHA candidato, una auditoría independiente única por SHA y aceptación del orquestador permanecen pendientes.
+
+### Remediación de la auditoría del SHA `244dbbd25b4d38c944b88279afae9c80b41cdc19`
+
+La auditoría independiente de ese SHA encontró tres defectos: el callback de negocio podía ejecutarse fuera de la transacción del outbox, la deduplicación no comparaba todos los campos inmutables del evento y el retry MySQL no aceptaba una repetición con el mismo fencing. La remediación en curso conserva el SHA de origen y aborda esos hallazgos así:
+
+- `publish` propaga el `EntityManager` activo al outbox durable. El adaptador verifica que la transacción esté abierta y que corresponda a la base del tenant, y hace enqueue con ese mismo manager. La prueba MySQL cubre commit y rollback conjuntos de mutación, historial sintético, audit local, delivery inicial y outbox.
+- El adaptador en memoria y el MySQL comparan el sobre inmutable completo para una repetición `(tenantId,eventId)`; los metadatos distintos producen conflicto sin reemplazar la fila original.
+- El retry MySQL devuelve el estado ya aplicado cuando se repite con el mismo fencing; fences distintos siguen fallando como obsoletos.
+
+Revalidación local del cambio de código: 32/32 pruebas unitarias focalizadas; `pnpm typecheck`; Prettier y ESLint dirigidos a los archivos cambiados, todos pasan con Node 24.19.0 y pnpm 11.25.0. En esta sesión las suites MySQL se omitieron porque no había endpoint de loopback disponible; el único host configurado en `.env` corresponde al entorno AWS diferido por ADR-0002 y no se usó como fixture. El autor informó anteriormente 15/15 pruebas MySQL sintéticas, pero esa evidencia no sustituye el resultado del SHA final. CI del nuevo SHA debe ejecutar el conjunto MySQL y `outbox-restart` en su servicio sintético; sigue pendiente junto con la auditoría independiente única para el nuevo SHA. Ninguno de estos resultados declara G2 aprobado.

@@ -143,15 +143,17 @@ describe.skipIf(!adminUrl)('durable outbox worker on synthetic MySQL 8', () => {
       () => 0.5,
     );
   const enqueue = (store: MySqlTenantOutboxStore, eventId: string) =>
-    store.transaction((tx) =>
-      tx.enqueue({
-        eventId,
-        tenantId,
-        type: 'synthetic.worker-job',
-        payload: { value: eventId },
-        occurredAt: new Date(now).toISOString(),
-        idempotencyKey: eventId,
-      }),
+    runtime.transaction('READ COMMITTED', (manager) =>
+      store.transaction(manager, (tx) =>
+        tx.enqueue({
+          eventId,
+          tenantId,
+          type: 'synthetic.worker-job',
+          payload: { value: eventId },
+          occurredAt: new Date(now).toISOString(),
+          idempotencyKey: eventId,
+        }),
+      ),
     );
   const tenantDirectory = { status: () => 'active' as const };
 

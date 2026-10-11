@@ -448,10 +448,11 @@ export class Platform {
   public publish<T>(
     token: string,
     correlationId: string,
-    work: (emit: Emit) => T,
+    work: (emit: Emit) => T | Promise<T>,
     permission: Permission = 'create',
-  ): Promise<PlatformResponse<T>> {
-    return publish(this.kernel, token, correlationId, work, permission);
+    manager?: unknown,
+  ): Promise<PlatformResponse<Awaited<T>>> {
+    return publish(this.kernel, token, correlationId, work, permission, manager);
   }
 }
 

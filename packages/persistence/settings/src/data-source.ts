@@ -23,7 +23,7 @@ export const SETTINGS_RUNTIME_ACCOUNT = /^opslog_settings_[a-z0-9_]+$/i;
 
 const common = {
   type: 'mysql',
-  entities: [...SETTINGS_ENTITIES, ...AUDIT_ENTITIES.slice(0, 2)],
+  entities: [...SETTINGS_ENTITIES, ...AUDIT_ENTITIES],
   migrations: [CreateCompanySettings2026100600090],
   migrationsTableName: SETTINGS_MIGRATIONS_TABLE,
   synchronize: false,
