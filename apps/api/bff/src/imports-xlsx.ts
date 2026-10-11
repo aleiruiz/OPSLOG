@@ -87,6 +87,7 @@ function readZip(buffer: Buffer): Promise<ReadonlyMap<string, Buffer>> {
         if (
           !files.has('[Content_Types].xml') ||
           !files.has('xl/workbook.xml') ||
+          !files.has('xl/_rels/workbook.xml.rels') ||
           !files.has('xl/worksheets/sheet1.xml')
         )
           invalid();

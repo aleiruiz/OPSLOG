@@ -173,7 +173,7 @@ describe('alerts derived through the platform', () => {
     const serialized = JSON.stringify(visible);
     expect(serialized).not.toContain(secretName);
     expect(serialized).not.toContain(secretLicense);
-    expect(serialized).not.toContain('SYNTHETIC-ID-443322');
+    expect(serialized).not.toContain('TEST-ID-00000000');
     expect(serialized).not.toContain('private.synthetic@example.invalid');
 
     const tenantB = ok(await world.platform.alerts.list(f.adminB.token, corr(), {}));

@@ -140,6 +140,15 @@ describe('bounded XLSX reader', () => {
     ).rejects.toBeInstanceOf(InvalidXlsx);
   });
 
+  it('rejects a workbook without its workbook relationships file', async () => {
+    const files: Record<string, string> = packageFiles(
+      '<worksheet><sheetData><row r="1"/></sheetData></worksheet>',
+    );
+    delete files['xl/_rels/workbook.xml.rels'];
+
+    await expect(parseXlsx(zip(files), 'vehicle')).rejects.toBeInstanceOf(InvalidXlsx);
+  });
+
   it('rejects external relationships and hidden worksheets', async () => {
     const sheet = '<worksheet><sheetData><row r="1"/></sheetData></worksheet>';
     await expect(
