@@ -45,7 +45,9 @@ suite('integrated vehicle lifecycle on real MySQL', () => {
     const licenseIdsA = licensesA.map((item: { subjectId: string }) => item.subjectId);
     expect(licenseIdsA).not.toContain(outsideWindowDriver);
     expect(licenseIdsA).not.toContain(tenantBDriver);
-    expect(alertsA.text).not.toMatch(/SYNTH-ID-|driver-\d+@synthetic\.example|LIC-\d+/);
+    expect(alertsA.text).not.toMatch(
+      /Ana|Perez|SYNTH-ID-\d+|\+52 555 100 \d{4}|driver-\d+@synthetic\.example|LIC-\d+/,
+    );
 
     const alertsB = await fleet.adminB.get('/api/alerts');
     expect(alertsB.status, alertsB.text).toBe(200);
