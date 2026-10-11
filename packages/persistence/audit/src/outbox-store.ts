@@ -292,14 +292,7 @@ export class MySqlTenantOutboxStore implements DurableOutboxAdapter {
       requiredPermission: record.requiredPermission ?? null,
       entityId: record.entityId ?? null,
       schemaVersion: record.schemaVersion ?? null,
-      status: 'pending',
-      attempts: 0,
       availableAt: new Date(record.availableAt),
-      leaseUntil: null,
-      fencing: '0',
-      workerId: null,
-      lastError: null,
-      handlerCompleted: false,
     };
   }
 

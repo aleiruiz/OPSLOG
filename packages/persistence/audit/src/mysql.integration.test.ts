@@ -131,8 +131,9 @@ async function createTenantDb(label: string): Promise<TenantDb> {
   );
   await admin.query(`GRANT INSERT ON ${table(AUDIT_TABLES.projection)} TO '${relayUser}'@'%'`);
   await admin.query(`GRANT UPDATE ON ${table(AUDIT_TABLES.delivery)} TO '${relayUser}'@'%'`);
+  await admin.query(`GRANT SELECT ON ${table(AUDIT_TABLES.outbox)} TO '${runtimeUser}'@'%'`);
   await admin.query(
-    `GRANT SELECT, INSERT ON ${table(AUDIT_TABLES.outbox)} TO '${runtimeUser}'@'%'`,
+    `GRANT INSERT (tenant_id, event_id, type, payload, occurred_at, idempotency_key, correlation_id, actor_subject, actor_kind, required_permission, entity_id, schema_version, available_at) ON ${table(AUDIT_TABLES.outbox)} TO '${runtimeUser}'@'%'`,
   );
   await admin.query(`GRANT SELECT ON ${table(AUDIT_TABLES.outbox)} TO '${relayUser}'@'%'`);
   await admin.query(
@@ -776,6 +777,23 @@ describe.skipIf(!adminUrl)('tenant-local audit persistence against MySQL 8', () 
         [a.tenantId, 'forbidden-direct-delivery'],
       ),
     ).rejects.toBeDefined();
+    const mutableOutboxFields: readonly (readonly [string, string])[] = [
+      ['status', 'delivered'],
+      ['attempts', '1'],
+      ['lease_until', "'2026-10-07 10:01:00.000'"],
+      ['fencing', '1'],
+      ['worker_id', "'forged-worker'"],
+      ['last_error', "'forged-error'"],
+      ['handler_completed', '1'],
+    ];
+    for (const [field, value] of mutableOutboxFields) {
+      await expect(
+        runtimeA.query(
+          `INSERT INTO ${identifier(AUDIT_TABLES.outbox)} (tenant_id, event_id, type, payload, occurred_at, idempotency_key, available_at, ${field}) VALUES (?, ?, 'synthetic.forbidden', JSON_OBJECT(), UTC_TIMESTAMP(3), ?, UTC_TIMESTAMP(3), ${value})`,
+          [a.tenantId, `forged-outbox-${field}`, `forged-key-${field}`],
+        ),
+      ).rejects.toBeDefined();
+    }
     await expect(
       runtimeA.query(`SELECT event_id FROM ${identifier(AUDIT_TABLES.local)}`),
     ).rejects.toBeDefined();
