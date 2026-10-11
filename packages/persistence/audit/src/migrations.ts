@@ -208,6 +208,24 @@ export class CreateTenantOutbox2026100900010 implements MigrationInterface {
         ],
       }),
     );
+    await queryRunner.query(`CREATE PROCEDURE opslog_enqueue_tenant_outbox(
+      IN p_tenant_id VARCHAR(128), IN p_event_id VARCHAR(128), IN p_type VARCHAR(128),
+      IN p_payload JSON, IN p_occurred_at DATETIME(3), IN p_idempotency_key VARCHAR(128),
+      IN p_correlation_id VARCHAR(128), IN p_actor_subject VARCHAR(128), IN p_actor_kind VARCHAR(16),
+      IN p_required_permission VARCHAR(64), IN p_entity_id VARCHAR(128), IN p_schema_version INT,
+      IN p_available_at DATETIME(3)
+    ) SQL SECURITY DEFINER
+    BEGIN
+      INSERT INTO \`${AUDIT_TABLES.outbox}\` (
+        tenant_id, event_id, type, payload, occurred_at, idempotency_key,
+        correlation_id, actor_subject, actor_kind, required_permission, entity_id,
+        schema_version, available_at
+      ) VALUES (
+        p_tenant_id, p_event_id, p_type, p_payload, p_occurred_at, p_idempotency_key,
+        p_correlation_id, p_actor_subject, p_actor_kind, p_required_permission, p_entity_id,
+        p_schema_version, p_available_at
+      );
+    END`);
   }
 
   /** Durable event history is not destructively rolled back. */

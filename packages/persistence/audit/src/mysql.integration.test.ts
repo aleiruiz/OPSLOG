@@ -133,7 +133,7 @@ async function createTenantDb(label: string): Promise<TenantDb> {
   await admin.query(`GRANT UPDATE ON ${table(AUDIT_TABLES.delivery)} TO '${relayUser}'@'%'`);
   await admin.query(`GRANT SELECT ON ${table(AUDIT_TABLES.outbox)} TO '${runtimeUser}'@'%'`);
   await admin.query(
-    `GRANT INSERT (tenant_id, event_id, type, payload, occurred_at, idempotency_key, correlation_id, actor_subject, actor_kind, required_permission, entity_id, schema_version, available_at) ON ${table(AUDIT_TABLES.outbox)} TO '${runtimeUser}'@'%'`,
+    `GRANT EXECUTE ON PROCEDURE ${identifier(database)}.\`opslog_enqueue_tenant_outbox\` TO '${runtimeUser}'@'%'`,
   );
   await admin.query(`GRANT SELECT ON ${table(AUDIT_TABLES.outbox)} TO '${relayUser}'@'%'`);
   await admin.query(

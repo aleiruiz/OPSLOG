@@ -100,7 +100,10 @@ describe.skipIf(!adminUrl)('durable outbox worker on synthetic MySQL 8', () => {
     await migrator.initialize();
     await runAuditMigrations(migrator);
     const outboxTable = `${identifier(database)}.${identifier(AUDIT_TABLES.outbox)}`;
-    await admin.query(`GRANT SELECT, INSERT ON ${outboxTable} TO '${runtimeUser}'@'%'`);
+    await admin.query(`GRANT SELECT ON ${outboxTable} TO '${runtimeUser}'@'%'`);
+    await admin.query(
+      `GRANT EXECUTE ON PROCEDURE ${identifier(database)}.\`opslog_enqueue_tenant_outbox\` TO '${runtimeUser}'@'%'`,
+    );
     await admin.query(`GRANT SELECT ON ${outboxTable} TO '${workerUser}'@'%'`);
     await admin.query(
       `GRANT UPDATE (status, attempts, available_at, lease_until, fencing, worker_id, last_error, handler_completed) ON ${outboxTable} TO '${workerUser}'@'%'`,
