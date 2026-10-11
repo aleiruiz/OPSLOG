@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { adminUrl, startFleetDatabase, type FleetDatabase } from './mysql.js';
 import { startFleetWorld, type FleetWorld } from './world.js';
@@ -6,6 +7,109 @@ const suite = adminUrl ? describe : describe.skip;
 const IMPORTS = '/api/imports';
 const VEHICLES = '/api/vehicles';
 const pad = (value: number) => String(value).padStart(4, '0');
+
+const crcTable = Array.from({ length: 256 }, (_, n) => {
+  let value = n;
+  for (let bit = 0; bit < 8; bit += 1) value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+  return value >>> 0;
+});
+
+function xlsxArchive(files: Readonly<Record<string, string>>): Buffer {
+  const localParts: Buffer[] = [];
+  const directoryParts: Buffer[] = [];
+  let offset = 0;
+  for (const [name, text] of Object.entries(files)) {
+    const filename = Buffer.from(name);
+    const data = Buffer.from(text);
+    let crc = 0xffffffff;
+    for (const byte of data) crc = crcTable[(crc ^ byte) & 0xff]! ^ (crc >>> 8);
+    crc = (crc ^ 0xffffffff) >>> 0;
+    const local = Buffer.alloc(30 + filename.length);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(filename.length, 26);
+    filename.copy(local, 30);
+    localParts.push(local, data);
+    const record = Buffer.alloc(46 + filename.length);
+    record.writeUInt32LE(0x02014b50, 0);
+    record.writeUInt16LE(20, 4);
+    record.writeUInt16LE(20, 6);
+    record.writeUInt32LE(crc, 16);
+    record.writeUInt32LE(data.length, 20);
+    record.writeUInt32LE(data.length, 24);
+    record.writeUInt16LE(filename.length, 28);
+    record.writeUInt32LE(offset, 42);
+    filename.copy(record, 46);
+    directoryParts.push(record);
+    offset += local.length + data.length;
+  }
+  const directory = Buffer.concat(directoryParts);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(directoryParts.length, 8);
+  end.writeUInt16LE(directoryParts.length, 10);
+  end.writeUInt32LE(directory.length, 12);
+  end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...localParts, directory, end]);
+}
+
+const xlsxPackage = (worksheet: string) => ({
+  '[Content_Types].xml':
+    '<Types><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/></Types>',
+  '_rels/.rels':
+    '<Relationships><Relationship Id="rId0" Type="x/officeDocument" Target="xl/workbook.xml"/></Relationships>',
+  'xl/workbook.xml':
+    '<workbook xmlns:r="r"><sheets><sheet name="Import" sheetId="1" r:id="rId1"/></sheets></workbook>',
+  'xl/_rels/workbook.xml.rels':
+    '<Relationships><Relationship Id="rId1" Type="x/worksheet" Target="worksheets/sheet1.xml"/></Relationships>',
+  'xl/worksheets/sheet1.xml': worksheet,
+});
+
+const xlsxCell = (column: number, row: number, value: string): string =>
+  `<c r="${String.fromCharCode(65 + column)}${row}" t="inlineStr"><is><t>${value}</t></is></c>`;
+
+function vehicleXlsx(areaId: string, invalidFormula = false, tag = 'XLS'): string {
+  const headers = [
+    'economicNumber',
+    'plate',
+    'make',
+    'model',
+    'year',
+    'areaId',
+    'odometerKm',
+    'vin',
+    'registeredOn',
+  ];
+  const rows = Array.from({ length: invalidFormula ? 1 : 300 }, (_, index) => {
+    const n = index + 1;
+    const values = [
+      `${tag}-NEW-${pad(n)}`,
+      `${tag}${pad(n)}`,
+      'Toyota',
+      'Hilux',
+      '2022',
+      areaId,
+      '120',
+      '',
+      n > 294 ? '2026-02-31' : '',
+    ];
+    const cells = values.map((value, column) => xlsxCell(column, n + 1, value)).join('');
+    const cellsAfterFormula = values
+      .slice(1)
+      .map((value, column) => xlsxCell(column + 1, n + 1, value))
+      .join('');
+    return invalidFormula && n === 1
+      ? `<row r="${n + 1}"><c r="A${n + 1}"><f>1+1</f><v>2</v></c>${cellsAfterFormula}</row>`
+      : `<row r="${n + 1}">${cells}</row>`;
+  });
+  const header = `<row r="1">${headers.map((value, column) => xlsxCell(column, 1, value)).join('')}</row>`;
+  return xlsxArchive(
+    xlsxPackage(`<worksheet><sheetData>${header}${rows.join('')}</sheetData></worksheet>`),
+  ).toString('base64');
+}
 
 suite('integrated CSV import on real MySQL', () => {
   let database: FleetDatabase;
@@ -250,4 +354,228 @@ suite('integrated CSV import on real MySQL', () => {
     expect(Number(after[0]?.count) - Number(before[0]?.count)).toBe(1);
     expect((await fleet.adminB.get(`${IMPORTS}/${committed.json.job.id}`)).status).toBe(404);
   }, 60_000);
+});
+
+suite('integrated XLSX import on real MySQL', () => {
+  let database: FleetDatabase;
+  let fleet: FleetWorld;
+
+  beforeAll(async () => {
+    database = await startFleetDatabase();
+    fleet = await startFleetWorld(database);
+  }, 120_000);
+
+  afterAll(async () => {
+    fleet?.world.dispose();
+    await database?.close();
+  }, 60_000);
+
+  it('previews 300 XLSX rows without writes, commits 288 once, and records value-free durable history', async () => {
+    const areaId = await fleet.area(fleet.adminA, 'Importación XLSX');
+    for (let n = 1; n <= 6; n += 1) {
+      const existing = await fleet.adminA.post(VEHICLES, {
+        json: {
+          economicNumber: `BASE-XLS-${pad(n)}`,
+          plate: `XLS${pad(n)}`,
+          vin: null,
+          make: 'Toyota',
+          model: 'Hilux',
+          year: 2022,
+          areaId,
+          odometerKm: 5,
+        },
+      });
+      expect(existing.status, existing.text).toBe(201);
+    }
+
+    const xlsxBase64 = vehicleXlsx(areaId);
+    const before = (await fleet.adminA.get(`${VEHICLES}?includeArchived=true&limit=100`)).json
+      .total;
+    const preview = await fleet.adminA.post(IMPORTS, {
+      json: { entity: 'vehicle', mode: 'dry_run', xlsxBase64 },
+    });
+    expect(preview.status, preview.text).toBe(201);
+    expect(preview.json.job).toMatchObject({
+      status: 'validated',
+      mode: 'dry_run',
+      totalRows: 300,
+      validRows: 288,
+      invalidRows: 12,
+      importedRows: 0,
+    });
+    expect((await fleet.adminA.get(`${VEHICLES}?includeArchived=true&limit=100`)).json.total).toBe(
+      before,
+    );
+    const previewId = preview.json.job.id as string;
+    const errors = await fleet.adminA.get(`${IMPORTS}/${previewId}/rows?outcome=invalid&limit=25`);
+    expect(errors.status, errors.text).toBe(200);
+    expect(errors.json.total).toBe(12);
+    expect(errors.json.items).toHaveLength(12);
+    expect(errors.text).not.toMatch(/Toyota|Hilux|XLS-NEW|2026-02-31/);
+
+    const request = {
+      entity: 'vehicle',
+      mode: 'commit_valid',
+      idempotencyKey: 'flt-xlsx-300-commit-01',
+      dryRunJobId: previewId,
+      xlsxBase64,
+    };
+    const committed = await fleet.adminA.post(IMPORTS, { json: request });
+    expect(committed.status, committed.text).toBe(201);
+    expect(committed.json.job).toMatchObject({
+      status: 'imported',
+      validRows: 288,
+      invalidRows: 12,
+      importedRows: 288,
+    });
+    const afterCommit = (await fleet.adminA.get(`${VEHICLES}?includeArchived=true&limit=100`)).json
+      .total as number;
+    expect(afterCommit).toBe(Number(before) + 288);
+    const replay = await fleet.adminA.post(IMPORTS, { json: request });
+    expect(replay.json).toMatchObject({ replayed: true, job: { id: committed.json.job.id } });
+    expect((await fleet.adminA.get(`${VEHICLES}?includeArchived=true&limit=100`)).json.total).toBe(
+      afterCommit,
+    );
+
+    const otherTenant = await fleet.adminB.get(`${IMPORTS}/${committed.json.job.id}`);
+    expect(otherTenant.status).toBe(404);
+    const forbidden = await fleet.viewerA.post(IMPORTS, {
+      json: { entity: 'vehicle', mode: 'dry_run', xlsxBase64 },
+    });
+    expect(forbidden.status).toBe(403);
+
+    const formula = await fleet.adminA.post(IMPORTS, {
+      json: { entity: 'vehicle', mode: 'dry_run', xlsxBase64: vehicleXlsx(areaId, true) },
+    });
+    expect(formula.status).toBe(400);
+    const oversized = await fleet.adminA.post(IMPORTS, {
+      json: {
+        entity: 'vehicle',
+        mode: 'dry_run',
+        xlsxBase64: Buffer.alloc(400_001).toString('base64'),
+      },
+    });
+    expect(oversized.status).toBe(400);
+    expect((await fleet.adminA.get(`${VEHICLES}?includeArchived=true&limit=100`)).json.total).toBe(
+      afterCommit,
+    );
+
+    const storedJob = await database.rows<{ company_id: string; total_rows: number }>(
+      'SELECT company_id, total_rows FROM opslog_import_jobs WHERE id = ?',
+      [committed.json.job.id],
+    );
+    expect(storedJob).toEqual([{ company_id: fleet.tenantA, total_rows: 300 }]);
+    const storedRows = await database.rows<{ code: string | null; column_names: string | null }>(
+      'SELECT code, column_names FROM opslog_import_job_rows WHERE company_id = ? AND job_id = ?',
+      [fleet.tenantA, committed.json.job.id],
+    );
+    expect(storedRows).toHaveLength(300);
+    expect(JSON.stringify(storedRows)).not.toMatch(/Toyota|Hilux|XLS-NEW|2026-02-31/);
+    const history = await database.rows<{ kind: string; accepted_rows: number | null }>(
+      'SELECT kind, accepted_rows FROM opslog_import_job_events WHERE company_id = ? AND job_id = ? ORDER BY seq',
+      [fleet.tenantA, committed.json.job.id],
+    );
+    expect(history).toEqual([
+      { kind: 'started', accepted_rows: null },
+      { kind: 'imported', accepted_rows: 288 },
+    ]);
+  }, 120_000);
+
+  it('submits one XLSX commit job for simultaneous requests with the same idempotency key', async () => {
+    const areaId = await fleet.area(fleet.adminA, 'Importación XLSX concurrente');
+    for (let n = 1; n <= 6; n += 1) {
+      const existing = await fleet.adminA.post(VEHICLES, {
+        json: {
+          economicNumber: `BASE-RACE-${pad(n)}`,
+          plate: `RACE${pad(n)}`,
+          vin: null,
+          make: 'Toyota',
+          model: 'Hilux',
+          year: 2022,
+          areaId,
+          odometerKm: 5,
+        },
+      });
+      expect(existing.status, existing.text).toBe(201);
+    }
+
+    const xlsxBase64 = vehicleXlsx(areaId, false, 'RACE');
+    const preview = await fleet.adminA.post(IMPORTS, {
+      json: { entity: 'vehicle', mode: 'dry_run', xlsxBase64 },
+    });
+    expect(preview.status, preview.text).toBe(201);
+    expect(preview.json.job).toMatchObject({
+      status: 'validated',
+      totalRows: 300,
+      validRows: 288,
+      invalidRows: 12,
+      importedRows: 0,
+    });
+    const before = (await fleet.adminA.get(`${VEHICLES}?includeArchived=true&limit=100`)).json
+      .total as number;
+    const request = {
+      entity: 'vehicle',
+      mode: 'commit_valid',
+      idempotencyKey: 'flt-xlsx-race-300-commit-01',
+      dryRunJobId: preview.json.job.id,
+      xlsxBase64,
+    };
+
+    // Separate authenticated browser sessions start both requests in the same turn.
+    const simultaneous = await Promise.all([
+      fleet.adminA.post(IMPORTS, { json: request }),
+      fleet.adminA2.post(IMPORTS, { json: request }),
+    ]);
+    const completed = simultaneous.filter(
+      (reply) => reply.status === 201 && reply.json.replayed === false,
+    );
+    expect(completed).toHaveLength(1);
+    const completedReply = completed[0]!;
+    expect(completedReply.json.job).toMatchObject({
+      status: 'imported',
+      totalRows: 300,
+      validRows: 288,
+      invalidRows: 12,
+      importedRows: 288,
+    });
+    const completedJobId = completedReply.json.job.id as string;
+    const competingReply = simultaneous.find((reply) => reply !== completedReply)!;
+    if (competingReply.status === 409) {
+      expect(competingReply.json.code).toBe('conflict');
+      expect(competingReply.text).not.toMatch(/Toyota|Hilux|RACE-NEW|2026-02-31/);
+      const retry = await fleet.adminA.post(IMPORTS, { json: request });
+      expect(retry.status, retry.text).toBe(201);
+      expect(retry.json).toMatchObject({
+        replayed: true,
+        job: { id: completedJobId, status: 'imported', importedRows: 288 },
+      });
+    } else {
+      expect(competingReply.status, competingReply.text).toBe(201);
+      expect(competingReply.json).toMatchObject({
+        replayed: true,
+        job: { id: completedJobId, status: 'imported', importedRows: 288 },
+      });
+    }
+
+    const after = (await fleet.adminA.get(`${VEHICLES}?includeArchived=true&limit=100`)).json
+      .total as number;
+    expect(after).toBe(before + 288);
+    const matchingJobs = await database.rows<{
+      id: string;
+      status: string;
+      total_rows: number;
+      imported_rows: number;
+    }>(
+      'SELECT id, status, total_rows, imported_rows FROM opslog_import_jobs WHERE company_id = ? AND idempotency_key = ?',
+      [fleet.tenantA, request.idempotencyKey],
+    );
+    expect(matchingJobs).toEqual([
+      {
+        id: completedJobId,
+        status: 'imported',
+        total_rows: 300,
+        imported_rows: 288,
+      },
+    ]);
+  }, 120_000);
 });
