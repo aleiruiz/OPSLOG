@@ -46,7 +46,9 @@ describe('home alerts summary', () => {
     one.unmount();
     await renderApp({ api: createMockApi({ documents: [], policies: [] }) });
     expect(
-      await screen.findByText('Ningún documento, seguro ni licencia vence en los próximos 30 días.'),
+      await screen.findByText(
+        'Ningún documento, seguro ni licencia vence en los próximos 30 días.',
+      ),
     ).toBeInTheDocument();
   });
 
