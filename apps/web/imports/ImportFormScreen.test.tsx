@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createMockApi } from '../app/mockApi';
 import { click, deferred, fireEvent, renderApp, screen, waitFor } from '../app/test/utils';
 import { describeFailure } from './ImportFormScreen';
@@ -69,7 +69,7 @@ describe('new import form', () => {
   it('reads a CSV file chosen from disk', async () => {
     await open();
     await screen.findByRole('form', { name: 'Nueva importación' });
-    const input = exact('Cargar archivo CSV') as HTMLInputElement;
+    const input = exact('Cargar archivo CSV o Excel') as HTMLInputElement;
     fireEvent.change(input, {
       target: { files: [new File([file(good(1))], 'vehiculos.csv', { type: 'text/csv' })] },
     });
@@ -83,8 +83,70 @@ describe('new import form', () => {
     expect(await screen.findByText(/demasiado grande/)).toBeInTheDocument();
   });
 
+  it('reads XLSX as bounded base64 and submits it through the same validation flow', async () => {
+    const api = createMockApi();
+    let submitted: unknown;
+    api.imports.submit = async (input) => {
+      submitted = input;
+      return {
+        ok: false,
+        error: {
+          status: 400,
+          code: 'bad_request',
+          message: 'invalid',
+          requestId: 'test',
+          correlationId: 'test',
+        },
+      };
+    };
+    await open({ api });
+    await screen.findByRole('form', { name: 'Nueva importación' });
+    const input = exact('Cargar archivo CSV o Excel') as HTMLInputElement;
+    fireEvent.change(input, {
+      target: {
+        files: [
+          new File([new Uint8Array([80, 75, 3, 4])], 'vehiculos.xlsx', {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          }),
+        ],
+      },
+    });
+    await screen.findByText('Archivo cargado: vehiculos.xlsx');
+    click('Validar archivo');
+    await screen.findByText('El servidor rechazó el archivo');
+    expect(submitted).toMatchObject({ entity: 'vehicle', mode: 'dry_run', xlsxBase64: 'UEsDBA==' });
+    expect(submitted).not.toHaveProperty('csv');
+  });
+
+  it('clears a selected workbook when its entity changes, avoiding a stale binary submission', async () => {
+    const api = createMockApi();
+    const submit = vi.spyOn(api.imports, 'submit');
+    await open({ api });
+    await screen.findByRole('form', { name: 'Nueva importación' });
+    fireEvent.change(exact('Cargar archivo CSV o Excel'), {
+      target: {
+        files: [
+          new File([new Uint8Array([80, 75, 3, 4])], 'vehiculos.xlsx', {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          }),
+        ],
+      },
+    });
+    await screen.findByText('Archivo cargado: vehiculos.xlsx');
+    fireEvent.change(screen.getByLabelText(/Registros a importar/), {
+      target: { value: 'employee' },
+    });
+    expect(screen.queryByText('Archivo cargado: vehiculos.xlsx')).toBeNull();
+    click('Validar archivo');
+    expect(
+      await screen.findByText('Pega las filas o carga un archivo CSV o Excel.'),
+    ).toBeInTheDocument();
+    expect(submit).not.toHaveBeenCalled();
+  });
+
   it('validates without creating anything, then imports with a key and the validation id', async () => {
     const { api } = await fill(file(good(1), good(2), 'ECO-X,,Nissan,NP300,2022,area-norte,100'));
+    expect(screen.getByText(/desde archivos CSV o Excel \(\.xlsx\)/)).toBeInTheDocument();
     const before = (await api.vehicles.list({ limit: 100 })).ok ? 1 : 0;
     expect(before).toBe(1);
     await validate();

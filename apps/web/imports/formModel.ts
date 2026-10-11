@@ -11,11 +11,12 @@ import {
   templateOf,
 } from './rules';
 
-/** What the person picks and pastes. The file is read into `csv` in the browser: nothing is uploaded as a file. */
+/** CSV text stays editable; XLSX files are carried as canonical base64 for bounded server-side parsing. */
 export interface ImportFormValues {
   entity: ImportEntity;
   mode: ImportMode;
   csv: string;
+  xlsxBase64?: string;
 }
 
 export type FieldKey = keyof ImportFormValues;
@@ -23,7 +24,12 @@ export type FieldErrors = Partial<Record<FieldKey, string>>;
 
 export const fieldOrder: readonly FieldKey[] = ['entity', 'mode', 'csv'];
 
-export const emptyValues: ImportFormValues = { entity: 'vehicle', mode: 'dry_run', csv: '' };
+export const emptyValues: ImportFormValues = {
+  entity: 'vehicle',
+  mode: 'dry_run',
+  csv: '',
+  xlsxBase64: '',
+};
 
 /** What a CSV text says about itself, without sending it anywhere. */
 export interface CsvInspection {
@@ -87,8 +93,13 @@ export function validate(values: ImportFormValues, context: Context): FieldError
   if (!isEntity(values.entity)) errors.entity = 'Elige qué quieres importar.';
   if (!isMode(values.mode)) errors.mode = 'Elige qué hacer con el archivo.';
   if (errors.entity) return errors;
-  if (!values.csv.trim()) {
-    errors.csv = 'Pega las filas o carga un archivo CSV.';
+  if (!values.csv.trim() && !values.xlsxBase64) {
+    errors.csv = 'Pega las filas o carga un archivo CSV o Excel.';
+    return errors;
+  }
+  if (values.xlsxBase64) {
+    if (values.xlsxBase64.length > 534_000)
+      errors.csv = 'El archivo Excel supera el límite de tamaño. Divídelo en varios archivos.';
     return errors;
   }
   if (values.csv.length > MAX_CSV_LENGTH) {
@@ -129,7 +140,7 @@ export function toInput(
   return {
     entity: values.entity,
     mode: values.mode,
-    csv: values.csv,
+    ...(values.xlsxBase64 ? { xlsxBase64: values.xlsxBase64 } : { csv: values.csv }),
     ...(values.mode === 'dry_run' || options.idempotencyKey === undefined
       ? {}
       : { idempotencyKey: options.idempotencyKey }),
@@ -141,8 +152,15 @@ export function toInput(
 
 /** Whether two forms ask the server for the same thing: the key of an attempt is reused only while this holds. */
 export const signatureOf = (values: ImportFormValues, dryRunJobId?: string): string =>
-  JSON.stringify([values.entity, values.mode, values.csv, dryRunJobId ?? null]);
+  JSON.stringify([
+    values.entity,
+    values.mode,
+    values.csv,
+    values.xlsxBase64 ?? '',
+    dryRunJobId ?? null,
+  ]);
 
 /** What a validation is bound to: the entity and the exact text. Editing either makes the validation stale. */
-export const fileSignatureOf = (values: Pick<ImportFormValues, 'entity' | 'csv'>): string =>
-  `${values.entity}\n${values.csv}`;
+export const fileSignatureOf = (
+  values: Pick<ImportFormValues, 'entity' | 'csv' | 'xlsxBase64'>,
+): string => `${values.entity}\n${(values.xlsxBase64 ?? '') || values.csv}`;

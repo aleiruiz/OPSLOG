@@ -58,7 +58,8 @@ export const BFF_IMPORT_MAX_BODY_BYTES = 600_000;
 
 /**
  * One import request: the rows as objects (cells are text or numbers, empty or `null` means absent)
- * or the same table as one CSV text with a header line; exactly one of `rows` and `csv`. A commit
+ * or the same table as one CSV or XLSX document; exactly one input format. XLSX is parsed by the
+ * BFF under bounded ZIP/XML limits and passed through the same row validation as CSV. A commit
  * needs the `idempotencyKey` (8 to 64 characters): the same key with the same request returns the
  * stored job instead of importing again. `dryRunJobId` makes a commit check that the rows are the
  * ones a finished dry run validated. Employee rows with personal-data columns also need `view_pii`.
@@ -70,6 +71,8 @@ export interface BffImportInput {
   readonly dryRunJobId?: string;
   readonly rows?: readonly Readonly<Record<string, string | number | null>>[];
   readonly csv?: string;
+  /** Canonical base64 bytes of a bounded .xlsx file (maximum 400 KB before base64 encoding). */
+  readonly xlsxBase64?: string;
 }
 
 /** An import job: counts and states only, never a submitted value. The company is implicit. */

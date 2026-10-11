@@ -110,8 +110,8 @@ export function AlertListView({
         title="Alertas"
         description={
           ready
-            ? `Documentos de vehículo y seguros que vencen en los próximos ${plural(ready.windowDays)} o que ya vencieron, al ${formatDate(ready.asOf)}.`
-            : 'Documentos de vehículo y seguros por vencer o vencidos.'
+            ? `Documentos de vehículo, seguros y licencias que vencen en los próximos ${plural(ready.windowDays)} o que ya vencieron, al ${formatDate(ready.asOf)}.`
+            : 'Documentos de vehículo, seguros y licencias por vencer o vencidos.'
         }
         actions={
           <RouterButton to={alertSettingsPath} variant="outlined">
@@ -180,7 +180,7 @@ export function AlertListView({
               <UiState
                 kind="empty"
                 title="Sin vencimientos pendientes"
-                description={`Ningún documento ni seguro vence en los próximos ${plural(page.windowDays)} y no hay vencidos.`}
+                description={`Ningún documento, seguro ni licencia vence en los próximos ${plural(page.windowDays)} y no hay vencidos.`}
               />
             );
           const rows: Row[] = page.items.map((alert) => ({ ...alert, id: alert.key }));
@@ -210,16 +210,19 @@ export function AlertListView({
                     },
                     {
                       key: 'vehicleId',
-                      label: 'Vehículo',
-                      render: (_, row) => (
-                        <RouterLink
-                          to={`/flota/vehiculos/${encodeURIComponent(row.vehicleId)}`}
-                          label={`Vehículo ${names.get(row.vehicleId) ?? row.vehicleId}`}
-                          sx={linkSx}
-                        >
-                          {names.get(row.vehicleId) ?? 'Vehículo'}
-                        </RouterLink>
-                      ),
+                      label: 'Vehículo o conductor',
+                      render: (_, row) =>
+                        row.vehicleId === null ? (
+                          <Typography variant="body2">Conductor</Typography>
+                        ) : (
+                          <RouterLink
+                            to={`/flota/vehiculos/${encodeURIComponent(row.vehicleId)}`}
+                            label={`Vehículo ${names.get(row.vehicleId) ?? row.vehicleId}`}
+                            sx={linkSx}
+                          >
+                            {names.get(row.vehicleId) ?? 'Vehículo'}
+                          </RouterLink>
+                        ),
                     },
                     {
                       key: 'dueOn',

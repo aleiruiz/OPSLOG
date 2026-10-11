@@ -20,7 +20,11 @@ const NOW = new Date('2026-10-06T23:59:59.000Z');
 const TODAY = '2026-10-06';
 const A = 'tenant-a';
 
-const candidate = (subjectId: string, dueOn: string, vehicleId = 'veh-1'): AlertCandidate => ({
+const candidate = (
+  subjectId: string,
+  dueOn: string,
+  vehicleId: string | null = 'veh-1',
+): AlertCandidate => ({
   subjectId,
   vehicleId,
   typeCode: 'registration_card',
@@ -58,9 +62,10 @@ const build = (
 ) => {
   const docs = source(documents);
   const pols = source(policies);
+  const licenses = source({});
   const reads: string[] = [];
   const service = new AlertService(
-    { vehicle_document: docs.port, insurance_policy: pols.port },
+    { vehicle_document: docs.port, insurance_policy: pols.port, employee_license: licenses.port },
     {
       expiryWindowDays: async (tenantId) => {
         reads.push(tenantId);
@@ -134,6 +139,18 @@ describe('constants and helpers', () => {
     const before = alertOf('vehicle_document', candidate('d1', '2026-10-10'), TODAY, 30);
     const after = alertOf('vehicle_document', candidate('d1', '2026-10-20'), TODAY, 30);
     expect(before?.key).not.toBe(after?.key);
+  });
+
+  it('supports a license alert without a vehicle association', () => {
+    expect(
+      alertOf('employee_license', candidate('employee-1', '2026-10-05', null), TODAY, 30),
+    ).toMatchObject({
+      source: 'employee_license',
+      subjectId: 'employee-1',
+      vehicleId: null,
+      typeCode: 'registration_card',
+      severity: 'expired',
+    });
   });
 });
 
@@ -241,6 +258,7 @@ describe('AlertService.list', () => {
           due: async () => ({ items: [candidate('d-stray', '2027-06-01')], total: 1 }),
         },
         insurance_policy: { due: async () => ({ items: [], total: 0 }) },
+        employee_license: { due: async () => ({ items: [], total: 0 }) },
       },
       { expiryWindowDays: async () => 30 },
       { now: () => NOW },
@@ -275,11 +293,12 @@ describe('AlertService.list', () => {
       {
         vehicle_document: { due: async () => ({ items: [], total: 0 }) },
         insurance_policy: { due: async () => ({ items: [], total: 0 }) },
+        employee_license: { due: async () => ({ items: [], total: 0 }) },
       },
       { expiryWindowDays: async () => 30 },
     );
     expect((await service.list(A)).asOf).toBe(new Date().toISOString().slice(0, 10));
     const kinds: AlertSourceKind[] = [...ALERT_SOURCES];
-    expect(kinds).toHaveLength(2);
+    expect(kinds).toHaveLength(3);
   });
 });

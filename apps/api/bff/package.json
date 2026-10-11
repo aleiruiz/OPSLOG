@@ -1,5 +1,13 @@
 {
   "name": "@opslog/api-bff",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "sax": "1.6.1",
+    "yauzl": "3.4.0"
+  },
+  "devDependencies": {
+    "@types/sax": "^1.2.7",
+    "@types/yauzl": "^3.4.0"
+  }
 }

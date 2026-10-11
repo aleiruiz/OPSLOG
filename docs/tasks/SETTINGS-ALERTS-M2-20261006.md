@@ -139,6 +139,10 @@ Integración en MySQL 8 real (`OPSLOG_TEST_MYSQL_ADMIN_URL`; local: MySQL 8.0.46
 | Errores saneados                                                                 | `errors.test.ts`, `store.test.ts`, `mysql.integration.test.ts`, plataforma (500 sin filtración), BFF                            |
 | Contrato y cliente tipado                                                        | `packages/contracts/src/client.test.ts`, `web-client.test.ts` (recorre las 3 rutas), prueba de deriva de rutas                  |
 
+## Addendum autorizado — alerta de licencia, 2026-10-11
+
+El owner autorizó incluir alertas derivadas de licencias de conducir vencidas en el centro existente. El origen consulta solo conductores activos y no archivados; la proyección contiene el id interno del empleado, `driver_license`, fecha de vencimiento y severidad. Nunca incluye nombre, número/licencia cifrada, identificación, teléfono ni correo. La ruta requiere el permiso existente `view`; la ficha de empleado ya expone su fecha de vencimiento a ese permiso. El test de plataforma verifica aislamiento entre tenants y ausencia de esos datos sintéticos. La alerta informa y no bloquea aptitud/asignación ni cambia estado del vehículo. La expiración de seguro continúa siendo alerta derivada sin cambios de estado/asignación.
+
 ## Archivos tocados
 
 - Nuevos: `packages/domain/settings/**`, `packages/domain/alerts/**`, `packages/persistence/settings/**`, `apps/api/composition/src/settings.ts`, `alerts.ts`, `apps/api/bff/src/alerts.test.ts`, `tests/integration/platform/alerts.test.ts`, `mysql-alerts.test.ts`, este documento.

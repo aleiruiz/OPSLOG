@@ -91,7 +91,7 @@ test.describe('imports: history, permissions and accessibility', () => {
     await goTo(page, '/flota/importaciones/nueva');
     await expect(page.getByRole('heading', { name: 'Nueva importación', level: 1 })).toBeVisible();
     await page.getByRole('button', { name: 'Validar archivo' }).click();
-    await expect(page.getByText('Pega las filas o carga un archivo CSV.')).toBeVisible();
+    await expect(page.getByText('Pega las filas o carga un archivo CSV o Excel.')).toBeVisible();
     await expectNoViolations(page);
   });
 

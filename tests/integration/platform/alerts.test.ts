@@ -129,6 +129,63 @@ const auditOf = (w: World, tenantId: string) =>
 const ids = (items: readonly AlertView[]): string[] => items.map((alert) => alert.subjectId);
 
 describe('alerts derived through the platform', () => {
+  it('derives expired driver-license alerts with only the internal id and date, isolated by tenant', async () => {
+    world = createWorld();
+    const f = await fixture(world);
+    const areaA = ok(
+      await world.platform.areas.create(f.roles.admin.token, corr(), { name: 'Conductores' }),
+    );
+    const areaB = ok(
+      await world.platform.areas.create(f.adminB.token, corr(), { name: 'Conductores' }),
+    );
+    const secretName = 'Nombre Confidencial Synthetic';
+    const secretLicense = 'TEST-LICENSE-000000';
+    const createDriver = (session: Session, areaId: string, employeeNumber: string) =>
+      world.platform.employees.create(session.token, corr(), {
+        kind: 'driver',
+        firstName: secretName,
+        lastName: 'Apellido Synthetic',
+        areaId,
+        employeeNumber,
+        position: 'Conductor',
+        hireDate: '2024-03-01',
+        idType: 'ine',
+        nationalId: 'TEST-ID-00000000',
+        phone: '+52 55 9000 1122',
+        email: 'private.synthetic@example.invalid',
+        licenseType: 'c',
+        licenseNumber: secretLicense,
+        licenseExpiresOn: '2026-10-05',
+      });
+    const driverA = ok(await createDriver(f.roles.admin, areaA.id, 'DRIVER-A-001'));
+    const driverB = ok(await createDriver(f.adminB, areaB.id, 'DRIVER-B-001'));
+
+    const visible = ok(await world.platform.alerts.list(f.roles.viewer.token, corr(), {}));
+    const alert = visible.items.find((item) => item.subjectId === driverA.id);
+    expect(alert).toMatchObject({
+      source: 'employee_license',
+      subjectId: driverA.id,
+      vehicleId: null,
+      typeCode: 'driver_license',
+      dueOn: '2026-10-05',
+      severity: 'expired',
+    });
+    const serialized = JSON.stringify(visible);
+    expect(serialized).not.toContain(secretName);
+    expect(serialized).not.toContain(secretLicense);
+    expect(serialized).not.toContain('TEST-ID-00000000');
+    expect(serialized).not.toContain('private.synthetic@example.invalid');
+
+    const tenantB = ok(await world.platform.alerts.list(f.adminB.token, corr(), {}));
+    expect(tenantB.items.some((item) => item.subjectId === driverA.id)).toBe(false);
+    expect(tenantB.items.some((item) => item.subjectId === driverB.id)).toBe(true);
+    expect(
+      ok(
+        await world.platform.alerts.list(f.roles.viewer.token, corr(), { vehicleId: f.vehicle }),
+      ).items.some((item) => item.source === 'employee_license'),
+    ).toBe(false);
+  });
+
   it('derives alerts from the documents and policies stores as of the UTC date of the clock', async () => {
     world = createWorld();
     const { platform } = world;
@@ -362,6 +419,7 @@ describe('role matrix', () => {
         {
           vehicle_document: { due: async () => ({ items: [], total: 0 }) },
           insurance_policy: { due: async () => ({ items: [], total: 0 }) },
+          employee_license: { due: async () => ({ items: [], total: 0 }) },
         },
         { expiryWindowDays: async () => 30 },
       ),

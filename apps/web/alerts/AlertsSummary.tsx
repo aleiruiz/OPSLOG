@@ -50,7 +50,7 @@ export function AlertsSummaryView({
         <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
           {state.data.expired === 0 && state.data.expiring === 0 ? (
             <Typography variant="body2">
-              {`Ningún documento ni seguro vence en los próximos ${plural(state.data.windowDays, 'día', 'días')}.`}
+              {`Ningún documento, seguro ni licencia vence en los próximos ${plural(state.data.windowDays, 'día', 'días')}.`}
             </Typography>
           ) : (
             <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>

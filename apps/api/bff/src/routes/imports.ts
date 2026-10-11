@@ -11,6 +11,7 @@ import {
   type Page,
 } from '../../../../../packages/contracts/src/index.js';
 import type { ImportJobView, SessionDetails } from '../../../composition/src/index.js';
+import { decodeXlsxBase64, InvalidXlsx, parseXlsx } from '../imports-xlsx.js';
 import {
   route,
   ID,
@@ -136,14 +137,37 @@ export const IMPORT_ROUTES: readonly Route[] = [
   route('imports.create', async (ctx) => {
     const input = body(
       ctx,
-      ['entity', 'mode', 'idempotencyKey', 'dryRunJobId', 'rows', 'csv'],
+      ['entity', 'mode', 'idempotencyKey', 'dryRunJobId', 'rows', 'csv', 'xlsxBase64'],
       ['entity', 'mode'],
     );
     if (!input) return bad(ctx);
+    let submission: Record<string, unknown> = input;
+    if (Object.hasOwn(input, 'xlsxBase64')) {
+      if (
+        Object.hasOwn(input, 'rows') ||
+        Object.hasOwn(input, 'csv') ||
+        (input['entity'] !== 'vehicle' && input['entity'] !== 'employee')
+      )
+        return bad(ctx);
+      try {
+        submission = {
+          entity: input['entity'],
+          mode: input['mode'],
+          ...(input['idempotencyKey'] === undefined
+            ? {}
+            : { idempotencyKey: input['idempotencyKey'] }),
+          ...(input['dryRunJobId'] === undefined ? {} : { dryRunJobId: input['dryRunJobId'] }),
+          rows: await parseXlsx(decodeXlsxBase64(input['xlsxBase64']), input['entity']),
+        };
+      } catch (error) {
+        if (!(error instanceof InvalidXlsx)) throw error;
+        return bad(ctx);
+      }
+    }
     return reply(
       ctx,
       'imports.create',
-      await ctx.platform.imports.submit(ctx.token as string, ctx.correlationId, input),
+      await ctx.platform.imports.submit(ctx.token as string, ctx.correlationId, submission),
       (view) => ({ job: importBody(view.job), replayed: view.replayed }),
     );
   }),
