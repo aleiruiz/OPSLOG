@@ -795,6 +795,23 @@ describe.skipIf(!adminUrl)('tenant-local audit persistence against MySQL 8', () 
       ).rejects.toBeDefined();
     }
     await expect(
+      runtimeA.query('CALL opslog_enqueue_tenant_outbox(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+        a.tenantId,
+        'forged-outbox-schedule',
+        'synthetic.forbidden',
+        JSON.stringify({ value: true }),
+        new Date().toISOString().slice(0, 23).replace('T', ' '),
+        'forged-key-schedule',
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        '9999-12-31 23:59:59.999',
+      ]),
+    ).rejects.toBeDefined();
+    await expect(
       runtimeA.query(`SELECT event_id FROM ${identifier(AUDIT_TABLES.local)}`),
     ).rejects.toBeDefined();
     await expect(

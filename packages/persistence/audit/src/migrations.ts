@@ -212,8 +212,7 @@ export class CreateTenantOutbox2026100900010 implements MigrationInterface {
       IN p_tenant_id VARCHAR(128), IN p_event_id VARCHAR(128), IN p_type VARCHAR(128),
       IN p_payload JSON, IN p_occurred_at DATETIME(3), IN p_idempotency_key VARCHAR(128),
       IN p_correlation_id VARCHAR(128), IN p_actor_subject VARCHAR(128), IN p_actor_kind VARCHAR(16),
-      IN p_required_permission VARCHAR(64), IN p_entity_id VARCHAR(128), IN p_schema_version INT,
-      IN p_available_at DATETIME(3)
+      IN p_required_permission VARCHAR(64), IN p_entity_id VARCHAR(128), IN p_schema_version INT
     ) SQL SECURITY DEFINER
     BEGIN
       INSERT INTO \`${AUDIT_TABLES.outbox}\` (
@@ -223,7 +222,7 @@ export class CreateTenantOutbox2026100900010 implements MigrationInterface {
       ) VALUES (
         p_tenant_id, p_event_id, p_type, p_payload, p_occurred_at, p_idempotency_key,
         p_correlation_id, p_actor_subject, p_actor_kind, p_required_permission, p_entity_id,
-        p_schema_version, p_available_at
+        p_schema_version, UTC_TIMESTAMP(3)
       );
     END`);
   }

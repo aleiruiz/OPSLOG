@@ -263,24 +263,20 @@ export class MySqlTenantOutboxStore implements DurableOutboxAdapter {
       return;
     }
     try {
-      await manager.query(
-        'CALL opslog_enqueue_tenant_outbox(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [
-          record.tenantId,
-          record.eventId,
-          record.type,
-          JSON.stringify(record.payload),
-          row.occurredAt,
-          record.idempotencyKey,
-          row.correlationId,
-          row.actorSubject,
-          row.actorKind,
-          row.requiredPermission,
-          row.entityId,
-          row.schemaVersion,
-          row.availableAt,
-        ],
-      );
+      await manager.query('CALL opslog_enqueue_tenant_outbox(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+        record.tenantId,
+        record.eventId,
+        record.type,
+        JSON.stringify(record.payload),
+        row.occurredAt,
+        record.idempotencyKey,
+        row.correlationId,
+        row.actorSubject,
+        row.actorKind,
+        row.requiredPermission,
+        row.entityId,
+        row.schemaVersion,
+      ]);
     } catch (error) {
       if (!isDuplicate(error)) throw error;
       // A duplicate-key insert is a current read, but a normal follow-up SELECT can

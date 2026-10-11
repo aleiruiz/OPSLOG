@@ -102,6 +102,8 @@ describe('audit persistence schema', () => {
     expect(queries[0]).toContain('CREATE PROCEDURE opslog_enqueue_tenant_outbox');
     expect(queries[0]).toContain('SQL SECURITY DEFINER');
     expect(queries[0]).toContain('schema_version, available_at');
+    expect(queries[0]).toContain('p_schema_version, UTC_TIMESTAMP(3)');
+    expect(queries[0]).not.toContain('p_available_at');
     expect(queries[0]).not.toContain('status, attempts');
     await expect(migration.down()).rejects.toThrow(/cannot be rolled back destructively/);
   });
