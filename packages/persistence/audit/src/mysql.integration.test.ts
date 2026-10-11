@@ -17,6 +17,7 @@ import {
   MySqlAuditApiStore,
   MySqlAuditRelay,
   MySqlTenantOutboxStore,
+  TenantOutboxEntity,
   relayPendingAuditEvent,
   runAuditMigrations,
   type AuditDatabaseConfig,
@@ -358,6 +359,61 @@ describe.skipIf(!adminUrl)('tenant-local audit persistence against MySQL 8', () 
     expect(local).toEqual([{ event_id: eventId }]);
     expect(delivery).toEqual([{ event_id: eventId }]);
     expect(outboxRows).toEqual([{ event_id: eventId }]);
+  });
+
+  it('deduplicates concurrent identical enqueue under MySQL REPEATABLE READ', async () => {
+    const eventId = 'repeatable-read-concurrent-event';
+    const first = runtimeA.createQueryRunner();
+    const second = runtimeA.createQueryRunner();
+    await Promise.all([first.connect(), second.connect()]);
+    await Promise.all([
+      first.startTransaction('REPEATABLE READ'),
+      second.startTransaction('REPEATABLE READ'),
+    ]);
+    try {
+      // Establish the second transaction's consistent-read snapshot before the first commits.
+      expect(
+        await second.manager.getRepository(TenantOutboxEntity).findOne({
+          where: { tenantId: a.tenantId, eventId },
+        }),
+      ).toBeNull();
+
+      const enqueueIdentical = (manager: typeof first.manager) =>
+        outbox.transaction(manager, (tx) =>
+          tx.enqueue({
+            eventId,
+            tenantId: a.tenantId,
+            type: 'synthetic.concurrent',
+            payload: { value: 'same-event' },
+            occurredAt: new Date(outboxNow).toISOString(),
+            idempotencyKey: eventId,
+            correlationId: 'repeatable-read-correlation',
+            actorRef: { subject: 'user-synthetic-actor', kind: 'user' },
+            requiredPermission: 'create',
+            entityId: 'opaque-vehicle-1',
+            schemaVersion: 1,
+          }),
+        );
+
+      await enqueueIdentical(first.manager);
+      await first.commitTransaction();
+      await expect(enqueueIdentical(second.manager)).resolves.toMatchObject({
+        eventId,
+        tenantId: a.tenantId,
+      });
+      await second.commitTransaction();
+    } catch (error) {
+      if (first.isTransactionActive) await first.rollbackTransaction();
+      if (second.isTransactionActive) await second.rollbackTransaction();
+      throw error;
+    } finally {
+      await Promise.all([first.release(), second.release()]);
+    }
+    expect(await outbox.get(a.tenantId, eventId)).toMatchObject({
+      eventId,
+      tenantId: a.tenantId,
+      type: 'synthetic.concurrent',
+    });
   });
 
   it('rolls business, history, local audit, and delivery back when API outbox enqueue conflicts', async () => {

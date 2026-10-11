@@ -266,8 +266,12 @@ export class MySqlTenantOutboxStore implements DurableOutboxAdapter {
       await repository.insert(row);
     } catch (error) {
       if (!isDuplicate(error)) throw error;
+      // A duplicate-key insert is a current read, but a normal follow-up SELECT can
+      // remain on the transaction's older REPEATABLE READ snapshot. Locking reads
+      // use the current committed version so identical concurrent retries reconcile.
       const raced = await repository.findOne({
         where: { tenantId: record.tenantId, eventId: record.eventId },
+        lock: { mode: 'pessimistic_read' },
       });
       if (!raced || !sameImmutableEnvelope(storedEnvelope(raced), record))
         throw new OutboxConflictError();
