@@ -19,6 +19,44 @@ suite('integrated vehicle lifecycle on real MySQL', () => {
     await database?.close();
   }, 60_000);
 
+  it('derives tenant-scoped driver-license alerts within the configured 30-day window', async () => {
+    const areaA = await fleet.area(fleet.adminA, 'Licencias A');
+    const areaB = await fleet.area(fleet.adminB, 'Licencias B');
+    const expiringDriver = await fleet.driver(fleet.adminA, areaA, 'LIC-30D', '2026-11-05');
+    const outsideWindowDriver = await fleet.driver(fleet.adminA, areaA, 'LIC-31D', '2026-11-06');
+    const tenantBDriver = await fleet.driver(fleet.adminB, areaB, 'LIC-B-30D', '2026-11-05');
+
+    const alertsA = await fleet.adminA.get('/api/alerts');
+    expect(alertsA.status, alertsA.text).toBe(200);
+    expect(alertsA.json).toMatchObject({ asOf: '2026-10-06', windowDays: 30 });
+    const licensesA = alertsA.json.items.filter(
+      (item: { source: string }) => item.source === 'employee_license',
+    );
+    expect(licensesA).toContainEqual(
+      expect.objectContaining({
+        source: 'employee_license',
+        subjectId: expiringDriver,
+        typeCode: 'driver_license',
+        dueOn: '2026-11-05',
+        severity: 'expiring',
+        daysToExpiry: 30,
+      }),
+    );
+    const licenseIdsA = licensesA.map((item: { subjectId: string }) => item.subjectId);
+    expect(licenseIdsA).not.toContain(outsideWindowDriver);
+    expect(licenseIdsA).not.toContain(tenantBDriver);
+    expect(alertsA.text).not.toMatch(
+      /Ana|Perez|SYNTH-ID-\d+|\+52 555 100 \d{4}|driver-\d+@synthetic\.example|LIC-\d+/,
+    );
+
+    const alertsB = await fleet.adminB.get('/api/alerts');
+    expect(alertsB.status, alertsB.text).toBe(200);
+    const licenseIdsB = alertsB.json.items
+      .filter((item: { source: string }) => item.source === 'employee_license')
+      .map((item: { subjectId: string }) => item.subjectId);
+    expect(licenseIdsB).toContain(tenantBDriver);
+    expect(licenseIdsB).not.toContain(expiringDriver);
+  });
   it('creates a vehicle, document and expired policy, renews it, and derives the next alert window', async () => {
     const areaId = await fleet.area(fleet.adminA, 'Operaciones Norte');
     const vehicleId = await fleet.vehicle(fleet.adminA, areaId, 'LIFE01');
