@@ -53,10 +53,20 @@ async function fixture() {
   };
 }
 
+/** Close and reopen need an Idempotency-Key: every call of these helpers is a new submit. */
+let submits = 0;
+const keyed = (json: Record<string, unknown>): Record<string, string> =>
+  json['command'] === 'close' || json['command'] === 'reopen'
+    ? { 'idempotency-key': `submit-${(submits += 1)}-bff-test` }
+    : {};
+
 describe('work order contract', () => {
   it('declares work order routes as session reads or CSRF-protected writes', () => {
     const routes = Object.entries(BFF_ROUTES).filter(([id]) => id.startsWith('workOrders.'));
     expect(routes).toHaveLength(12);
+    expect(BFF_ROUTES['workOrders.transition'].idempotency).toEqual({
+      requiredFor: ['close', 'reopen'],
+    });
     for (const [id, definition] of routes)
       expect(definition.kind, id).toBe(definition.method === 'GET' ? 'session' : 'session-csrf');
   });
@@ -73,7 +83,7 @@ describe('work orders over HTTP', () => {
     expect(created.json).not.toHaveProperty('tenantId');
     const id = created.json.id as string;
     const transition = (browser: typeof adminA, json: Record<string, unknown>) =>
-      browser.post(`/api/v1/work-orders/${id}/transitions`, { json });
+      browser.post(`/api/v1/work-orders/${id}/transitions`, { json, headers: keyed(json) });
 
     const missing = await transition(editorA, { command: 'assign', version: 1 });
     expect(missing.status).toBe(422);
@@ -182,7 +192,7 @@ describe('work orders over HTTP', () => {
     });
     const id = created.json.id as string;
     const t = (b: typeof f.adminA, json: Record<string, unknown>) =>
-      b.post(`/api/v1/work-orders/${id}/transitions`, { json });
+      b.post(`/api/v1/work-orders/${id}/transitions`, { json, headers: keyed(json) });
     const assigned = await t(f.editorA, {
       command: 'assign',
       version: 1,
@@ -283,5 +293,97 @@ describe('work orders over HTTP', () => {
     expect(approved.status, approved.text).toBe(200);
     const closed = await t(f.adminA, { ...close, version: approved.json.version });
     expect(closed.status, closed.text).toBe(200);
+  });
+
+  describe('Idempotency-Key (G3 H2)', () => {
+    async function completedOrder() {
+      const f = await fixture();
+      const { id, t, version } = await inProgress(f);
+      const completed = await t(f.mechA, {
+        command: 'complete',
+        version,
+        actualDate: '2026-10-06',
+        actualKm: 5100,
+      });
+      const send = (
+        browser: typeof f.adminA,
+        json: Record<string, unknown>,
+        key?: string,
+        name = 'idempotency-key',
+      ) =>
+        browser.post(`/api/v1/work-orders/${id}/transitions`, {
+          json,
+          headers: key === undefined ? {} : { [name]: key },
+        });
+      return { f, id, send, version: completed.json.version as number };
+    }
+    const close = (version: number, extra: object = {}) => ({
+      command: 'close',
+      version,
+      vehicleStatus: 'active',
+      ...extra,
+    });
+
+    it('requires a well-formed key to close and reopen, and accepts it optionally elsewhere', async () => {
+      const { f, id, send, version } = await completedOrder();
+      const missing = await send(f.adminA, close(version));
+      expect(missing.status).toBe(400);
+      expect(missing.json).toMatchObject({ code: 'idempotency_key_required', status: 400 });
+      expect((await send(f.adminA, { command: 'reopen', version, reason: 'x' })).json.code).toBe(
+        'idempotency_key_required',
+      );
+      for (const bad of ['corta', 'con espacios aqui!', 'x'.repeat(129)])
+        expect((await send(f.adminA, close(version), bad)).json.code, bad).toBe('bad_request');
+      // Nothing happened to the order.
+      expect((await f.adminA.get(`/api/v1/work-orders/${id}`)).json.version).toBe(version);
+      // A key in the body is not a key: the body is strict.
+      expect(
+        (await send(f.adminA, { ...close(version), idempotencyKey: 'body-key-0001' })).status,
+      ).toBe(400);
+      // The other commands take the header or leave it out.
+      const approved = await send(
+        f.adminA,
+        { command: 'approve_close', version },
+        'approve-key-001',
+      );
+      expect(approved.status).toBe(409); // no approval threshold configured: not applicable
+    });
+
+    it('replays the first result for the same key and payload, even after the order moved on', async () => {
+      const { f, id, send, version } = await completedOrder();
+      const first = await send(f.adminA, close(version), 'close-key-0001');
+      expect(first.status, first.text).toBe(200);
+      const again = await send(f.adminA, close(version), 'close-key-0001');
+      expect(again.status).toBe(200);
+      expect(again.json).toEqual(first.json);
+      const history = await f.adminA.get(`/api/v1/work-orders/${id}/history`);
+      expect(
+        history.json.filter((entry: { command: string }) => entry.command === 'close'),
+      ).toHaveLength(1);
+      const reopened = await send(
+        f.adminA,
+        { command: 'reopen', version: first.json.version, reason: 'Falta factura' },
+        'reopen-key-001',
+      );
+      expect(reopened.json.status).toBe('in_progress');
+      const replay = await send(f.adminA, close(version), 'close-key-0001');
+      expect(replay.status).toBe(200);
+      expect(replay.json).toEqual(first.json);
+      expect((await f.adminA.get(`/api/v1/work-orders/${id}`)).json.status).toBe('in_progress');
+    });
+
+    it('answers 409 idempotency_conflict for the same key with another payload and never leaks to other callers', async () => {
+      const { f, send, version } = await completedOrder();
+      const first = await send(f.adminA, close(version), 'close-key-0001');
+      const conflict = await send(f.adminA, close(version, { comment: 'otro' }), 'close-key-0001');
+      expect(conflict.status).toBe(409);
+      expect(conflict.json).toMatchObject({ code: 'idempotency_conflict', status: 409 });
+      // Another actor's identical key is not a replay of this one.
+      const editor = await send(f.editorA, close(version), 'close-key-0001');
+      expect(editor.status).toBe(403);
+      expect(editor.text).not.toContain(first.json.closedAt);
+      // Another tenant cannot reach the order, with or without the key.
+      expect((await send(f.adminB, close(version), 'close-key-0001')).status).toBe(404);
+    });
   });
 });

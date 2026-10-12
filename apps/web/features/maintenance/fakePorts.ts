@@ -6,6 +6,7 @@ import type {
   BffMaintenanceWorkshop,
   BffWorkOrder,
   BffWorkOrderTransition,
+  BffWorkOrderTransitionInput,
 } from '@opslog/contracts';
 import type { MaintenancePorts, Result } from './ports';
 import { NEXT, baseOrder, missingFor } from './fakeOrder';
@@ -57,7 +58,18 @@ export function createFakeMaintenancePorts(options: FakeMaintenanceOptions = {})
   const plans = [...(options.plans ?? [])];
   const workshops = [...(options.workshops ?? [])];
   const mechanics = [...(options.mechanics ?? [])];
-  const state = { approvalRequired: false, calls: [] as string[] };
+  const state = {
+    approvalRequired: false,
+    calls: [] as string[],
+    /** Idempotency-Key of every transition request, in order. */
+    keys: [] as string[],
+    /** The next N transition responses are lost on the way back (the command is still applied). */
+    lostResponses: 0,
+  };
+  const replays = new Map<
+    string,
+    { readonly payload: string; readonly result: Result<BffWorkOrder> }
+  >();
   const viewCosts = () =>
     typeof options.viewCosts === 'function' ? options.viewCosts() : Boolean(options.viewCosts);
   const scope = () =>
@@ -103,6 +115,78 @@ export function createFakeMaintenancePorts(options: FakeMaintenanceOptions = {})
       return sanitize(order);
     },
   });
+  const applyTransition = async (
+    id: string,
+    input: BffWorkOrderTransitionInput,
+  ): Promise<Result<BffWorkOrder>> => {
+    state.calls.push(`transition:${input.command}`);
+    const order = find(id);
+    if (!order) return fail(404, 'not_found');
+    if (order.version !== input.version) return fail(409, 'stale_version');
+    const missing = missingFor(order, input, state.approvalRequired || fakeFiles.thresholdSet(), {
+      required: fakeFiles.required(),
+      ...fakeFiles.counted(order.id),
+    });
+    if (missing.length) return fail(422, 'missing_requirements', missing);
+    const status = NEXT[input.command] as BffWorkOrder['status'];
+    const next: BffWorkOrder = {
+      ...order,
+      status,
+      version: order.version + 1,
+      ...(input.command === 'assign'
+        ? {
+            responsibleId: input.responsibleId ?? null,
+            workshopId: input.workshopId ?? null,
+            mechanicId: input.mechanicId ?? null,
+            scheduledDate: input.scheduledDate ?? null,
+          }
+        : {}),
+      ...(input.command === 'start'
+        ? {
+            requiresWorkshop: input.requiresWorkshop ?? order.workshopId !== null,
+            startedAt: at,
+          }
+        : {}),
+      ...(input.command === 'complete'
+        ? {
+            actualDate: input.actualDate ?? null,
+            actualKm: input.actualKm ?? null,
+            completedAt: at,
+          }
+        : {}),
+      ...(input.command === 'approve_close'
+        ? { closeApproval: { approvedBy: 'user-admin', approvedAt: at } }
+        : {}),
+      ...(input.command === 'close'
+        ? {
+            closedAt: at,
+            closedBy: 'user-admin',
+            vehicleStatusDecision: input.vehicleStatus ?? null,
+          }
+        : {}),
+      ...(input.command === 'cancel' ? { cancelReason: input.reason ?? null } : {}),
+      ...(input.command === 'reopen'
+        ? {
+            closedAt: null,
+            closedBy: null,
+            closeApproval: null,
+            reopenCount: order.reopenCount + 1,
+          }
+        : {}),
+    };
+    const proposal = next.requiresWorkshop && status === 'in_progress';
+    return save(
+      {
+        ...next,
+        vehicleProposal: proposal
+          ? { suggestedStatus: 'in_maintenance', eligibilityBlocked: true }
+          : null,
+      },
+      input.command,
+      order.status,
+      input.reason ?? input.comment ?? null,
+    );
+  };
   const ports: MaintenancePorts = {
     settings: fakeFiles.settings,
     orders: {
@@ -138,76 +222,21 @@ export function createFakeMaintenancePorts(options: FakeMaintenanceOptions = {})
         });
         return save(order, 'create', null, null);
       },
-      transition: async (id, input) => {
-        state.calls.push(`transition:${input.command}`);
-        const order = find(id);
-        if (!order) return fail(404, 'not_found');
-        if (order.version !== input.version) return fail(409, 'stale_version');
-        const missing = missingFor(
-          order,
-          input,
-          state.approvalRequired || fakeFiles.thresholdSet(),
-          { required: fakeFiles.required(), ...fakeFiles.counted(order.id) },
-        );
-        if (missing.length) return fail(422, 'missing_requirements', missing);
-        const status = NEXT[input.command] as BffWorkOrder['status'];
-        const next: BffWorkOrder = {
-          ...order,
-          status,
-          version: order.version + 1,
-          ...(input.command === 'assign'
-            ? {
-                responsibleId: input.responsibleId ?? null,
-                workshopId: input.workshopId ?? null,
-                mechanicId: input.mechanicId ?? null,
-                scheduledDate: input.scheduledDate ?? null,
-              }
-            : {}),
-          ...(input.command === 'start'
-            ? {
-                requiresWorkshop: input.requiresWorkshop ?? order.workshopId !== null,
-                startedAt: at,
-              }
-            : {}),
-          ...(input.command === 'complete'
-            ? {
-                actualDate: input.actualDate ?? null,
-                actualKm: input.actualKm ?? null,
-                completedAt: at,
-              }
-            : {}),
-          ...(input.command === 'approve_close'
-            ? { closeApproval: { approvedBy: 'user-admin', approvedAt: at } }
-            : {}),
-          ...(input.command === 'close'
-            ? {
-                closedAt: at,
-                closedBy: 'user-admin',
-                vehicleStatusDecision: input.vehicleStatus ?? null,
-              }
-            : {}),
-          ...(input.command === 'cancel' ? { cancelReason: input.reason ?? null } : {}),
-          ...(input.command === 'reopen'
-            ? {
-                closedAt: null,
-                closedBy: null,
-                closeApproval: null,
-                reopenCount: order.reopenCount + 1,
-              }
-            : {}),
-        };
-        const proposal = next.requiresWorkshop && status === 'in_progress';
-        return save(
-          {
-            ...next,
-            vehicleProposal: proposal
-              ? { suggestedStatus: 'in_maintenance', eligibilityBlocked: true }
-              : null,
-          },
-          input.command,
-          order.status,
-          input.reason ?? input.comment ?? null,
-        );
+      transition: async (id, input, key) => {
+        state.keys.push(key);
+        const payload = JSON.stringify([id, input]);
+        const seen = replays.get(key);
+        if (seen)
+          return seen.payload === payload
+            ? structuredClone(seen.result)
+            : fail(409, 'idempotency_conflict');
+        const result = await applyTransition(id, input);
+        if (result.ok) replays.set(key, { payload, result });
+        if (result.ok && state.lostResponses > 0) {
+          state.lostResponses -= 1;
+          return fail(500, 'network_error');
+        }
+        return result;
       },
       recordWork: async (id, body) => {
         const order = find(id);

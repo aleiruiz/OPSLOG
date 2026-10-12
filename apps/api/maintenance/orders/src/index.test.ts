@@ -14,6 +14,8 @@ const sessions: Record<string, { subject: string; permissions: Permission[] }> =
   },
   editor: { subject: 'editor', permissions: ['view', 'create', 'edit'] },
   mech: { subject: 'mech', permissions: ['view'] },
+  // Can reopen but never sees amounts; `reopener2` is the same person after being granted view_costs.
+  reopener: { subject: 'reopener', permissions: ['view', 'reopen'] },
 };
 
 function api() {
@@ -309,5 +311,93 @@ describe('work order API', () => {
     });
     linked = false;
     expect(((await workOrders.list('mech', 'c3')).value ?? []).length).toBe(1);
+  });
+
+  it('replays an idempotent transition filtered for the caller, not for whoever sent the first one', async () => {
+    const { workOrders, h } = api();
+    const created = await workOrders.createCorrective('admin', 'i0', {
+      vehicleId: 'vehicle-1',
+      description: 'Frenos',
+    });
+    const id = created.value?.id as string;
+    const assigned = await workOrders.transition('admin', 'i1', 'assign', id, {
+      version: 1,
+      responsibleId: 'fleet',
+      workshopId: 'workshop-1',
+      mechanicId: 'mechanic-1',
+      scheduledDate: '2026-10-13',
+    });
+    const started = await workOrders.transition('mech', 'i2', 'start', id, {
+      version: assigned.value?.version,
+    });
+    const worked = await workOrders.command('mech', 'i3', 'updateWork', id, {
+      version: started.value?.version,
+      tasks: [{ description: 'Balatas' }],
+    });
+    const costed = await workOrders.command('admin', 'i4', 'updateCosts', id, {
+      version: worked.value?.version,
+      costs: [{ category: 'labor', amount: { amountMinor: '5000', currency: 'MXN' } }],
+    });
+    const completed = await workOrders.transition('mech', 'i5', 'complete', id, {
+      version: costed.value?.version,
+      actualDate: '2026-10-12',
+      actualKm: 1500,
+    });
+    const close = { version: completed.value?.version, vehicleStatus: 'active' };
+    // Both commands need the key; the API answers before touching the order.
+    expect((await workOrders.transition('admin', 'i6', 'close', id, close)).error).toMatchObject({
+      code: 'idempotency_key_required',
+      status: 400,
+    });
+    const closed = await workOrders.transition('admin', 'i7', 'close', id, close, 'close-key-0001');
+    expect(closed.value?.costs).toHaveLength(1);
+    const replay = await workOrders.transition('admin', 'i8', 'close', id, close, 'close-key-0001');
+    expect(replay).toEqual(closed);
+    expect(
+      (
+        await workOrders.transition(
+          'admin',
+          'i9',
+          'close',
+          id,
+          { ...close, comment: 'x' },
+          'close-key-0001',
+        )
+      ).error,
+    ).toMatchObject({ code: 'idempotency_conflict', status: 409 });
+
+    // Reopen by a caller without view_costs: the stored result keeps the amounts, the view hides them.
+    const reopen = { version: closed.value?.version, reason: 'Falta factura' };
+    const first = await workOrders.transition(
+      'reopener',
+      'j1',
+      'reopen',
+      id,
+      reopen,
+      'reopen-key-001',
+    );
+    expect(first.ok).toBe(true);
+    expect(JSON.stringify(first.value)).not.toMatch(/MXN|"unitCost"|"costs"/);
+    sessions['reopener']!.permissions = ['view', 'reopen', 'view_costs'];
+    const promoted = await workOrders.transition(
+      'reopener',
+      'j2',
+      'reopen',
+      id,
+      reopen,
+      'reopen-key-001',
+    );
+    expect(promoted.value?.costs).toHaveLength(1);
+    expect({ ...promoted.value, costs: undefined }).toEqual({ ...first.value, costs: undefined });
+    sessions['reopener']!.permissions = ['view', 'reopen'];
+    expect(
+      JSON.stringify(
+        (await workOrders.transition('reopener', 'j3', 'reopen', id, reopen, 'reopen-key-001'))
+          .value,
+      ),
+    ).not.toMatch(/MXN|"costs"/);
+    expect(
+      h.store.events.filter((e) => e.event.type === 'maintenance.status_changed'),
+    ).toHaveLength(5);
   });
 });

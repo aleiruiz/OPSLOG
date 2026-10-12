@@ -63,9 +63,11 @@ suite('work orders through composed HTTP, worker and MySQL', () => {
     ).toBe(409);
     expect((await fleet.adminB.get(`/api/v1/work-orders/${scheduledOrderId}`)).status).toBe(404);
 
+    const closeKey = 'close-wo-http-0001';
     const step = async (json: Record<string, unknown>) => {
       const reply = await fleet.adminA.post(`/api/v1/work-orders/${scheduledOrderId}/transitions`, {
         json,
+        headers: json['command'] === 'close' ? { 'idempotency-key': closeKey } : {},
       });
       expect(reply.status, reply.text).toBe(200);
       return reply.json;
@@ -99,6 +101,18 @@ suite('work orders through composed HTTP, worker and MySQL', () => {
     });
     order = await step({ command: 'close', version: order.version, vehicleStatus: 'active' });
     expect(order).toMatchObject({ status: 'closed', vehicleStatusDecision: 'active' });
+    // A network retry of the close (same key, same body) gets the stored result, not a stale_version.
+    expect(
+      await step({ command: 'close', version: order.version - 1, vehicleStatus: 'active' }),
+    ).toEqual(order);
+    const withoutKey = await fleet.adminA.post(
+      `/api/v1/work-orders/${scheduledOrderId}/transitions`,
+      {
+        json: { command: 'reopen', version: order.version, reason: 'sin clave' },
+      },
+    );
+    expect(withoutKey.status).toBe(400);
+    expect(withoutKey.json.code).toBe('idempotency_key_required');
 
     const closures = await database.rows<{ event_id: string }>(
       `SELECT event_id FROM ${AUDIT_TABLES.outbox} WHERE tenant_id = ? AND type = 'maintenance.order.preventive_closed' AND entity_id = ?`,

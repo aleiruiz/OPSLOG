@@ -6,7 +6,9 @@ export type WorkOrderErrorCode =
   | 'invalid_transition'
   | 'missing_requirements'
   | 'invalid_association'
-  | 'duplicate';
+  | 'duplicate'
+  | 'idempotency_conflict'
+  | 'idempotency_key_required';
 
 export class WorkOrderError extends Error {
   public constructor(

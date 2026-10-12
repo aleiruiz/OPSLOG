@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { DataSource } from 'typeorm';
 import {
   WorkOrderService,
@@ -314,5 +314,258 @@ suite('work orders on disposable MySQL 8.4', () => {
     expect((await plansA.listScheduledOrders(tenantA, planId)).map((o) => o.status)).toEqual([
       'completed',
     ]);
+  });
+
+  describe('Idempotency-Key registry (G3 H2)', () => {
+    const clock = { now: new Date('2026-10-12T12:00:00.000Z') };
+    const ADMIN_2: WorkOrderActor = { ...ADMIN, id: 'user-admin2', subject: 'admin2' };
+    const clocked = (source: DataSource) =>
+      new WorkOrderService(new TypeOrmWorkOrderStore(source), refs(), { now: () => clock.now });
+    let KEY = 'close-key-0001';
+    // A key names one command of one order: every test works with its own.
+    beforeEach(() => {
+      KEY = `close-${randomUUID()}`;
+    });
+    const keyRows = (tenantId: string, orderId: string) =>
+      db.rows<{ actor_id: string; command: string; status: string; response: { version: number } }>(
+        `SELECT actor_id, command, status, response FROM ${WORK_ORDER_TABLES.idempotency} WHERE company_id=? AND order_id=?`,
+        [tenantId, orderId],
+      );
+    async function ready(tenantId: string, source = sourceA, actor = ADMIN) {
+      const svc = clocked(source);
+      const created = await svc.createCorrective(tenantId, actor, {
+        vehicleId: 'synthetic-vehicle',
+        description: 'Idempotencia',
+      });
+      const done = await toCompleted(svc, tenantId, created.id, created.version);
+      return { svc, id: created.id, done };
+    }
+    // `restricted`: other synthetic orders of the same vehicle are still open in the workshop.
+    const closePayload = (version: number, extra: object = {}) => ({
+      version,
+      vehicleStatus: 'restricted',
+      ...extra,
+    });
+    const outboxVersions = async (tenantId: string, orderId: string) =>
+      (
+        await db.rows<{ payload: { version: number } }>(
+          `SELECT payload FROM ${AUDIT_TABLES.outbox} WHERE tenant_id=? AND entity_id=? AND type='maintenance.status_changed'`,
+          [tenantId, orderId],
+        )
+      )
+        .map((row) => row.payload.version)
+        .sort((a, b) => a - b);
+
+    it('stores the key with the mutation, replays a stable result and rejects a different payload', async () => {
+      const { svc, id, done } = await ready(tenantA);
+      const first = await svc.execute(tenantA, ADMIN, 'close', id, closePayload(done.version), KEY);
+      const [row] = await keyRows(tenantA, id);
+      expect(row).toMatchObject({ actor_id: ADMIN.id, command: 'close', status: 'completed' });
+      expect(row?.response.version).toBe(first.version);
+      // A new service instance (another node, after a restart) replays the same body.
+      const again = await clocked(sourceA2).execute(
+        tenantA,
+        ADMIN,
+        'close',
+        id,
+        closePayload(done.version),
+        KEY,
+      );
+      expect(again).toEqual(first);
+      await expect(
+        svc.execute(
+          tenantA,
+          ADMIN,
+          'close',
+          id,
+          closePayload(done.version, { comment: 'otro' }),
+          KEY,
+        ),
+      ).rejects.toMatchObject({ code: 'idempotency_conflict' });
+      // The order moves on; the old key still replays and nothing is re-executed.
+      const reopened = await svc.execute(
+        tenantA,
+        ADMIN,
+        'reopen',
+        id,
+        { version: first.version, reason: 'Revisión' },
+        'reopen-key-001',
+      );
+      expect(reopened.status).toBe('in_progress');
+      expect(
+        await svc.execute(tenantA, ADMIN, 'close', id, closePayload(done.version), KEY),
+      ).toEqual(first);
+      expect((await new TypeOrmWorkOrderStore(sourceA).get(tenantA, id))?.status).toBe(
+        'in_progress',
+      );
+      const commands = await db.rows<{ command: string }>(
+        `SELECT command FROM ${WORK_ORDER_TABLES.transitions} WHERE company_id=? AND order_id=? AND command IN ('close','reopen')`,
+        [tenantA, id],
+      );
+      expect(commands.map((c) => c.command)).toEqual(['close', 'reopen']);
+      expect(await keyRows(tenantA, id)).toHaveLength(2);
+    });
+
+    it('yields exactly one effect, one audit row and one outbox row for concurrent duplicates', async () => {
+      const { id, done } = await ready(tenantA);
+      const nodes = [sourceA, sourceA2, sourceA, sourceA2, sourceA, sourceA2].map(clocked);
+      const results = await Promise.allSettled(
+        nodes.map((node) =>
+          node.execute(tenantA, ADMIN, 'close', id, closePayload(done.version), KEY),
+        ),
+      );
+      expect(results.every((result) => result.status === 'fulfilled')).toBe(true);
+      const versions = results.map((result) =>
+        result.status === 'fulfilled' ? result.value.version : -1,
+      );
+      expect(new Set(versions)).toEqual(new Set([done.version + 1]));
+      expect(await keyRows(tenantA, id)).toHaveLength(1);
+      const closes = await db.rows<{ count: number }>(
+        `SELECT COUNT(*) AS count FROM ${WORK_ORDER_TABLES.transitions} WHERE company_id=? AND order_id=? AND command='close'`,
+        [tenantA, id],
+      );
+      expect(Number(closes[0]?.count)).toBe(1);
+      const [audit] = await db.rows<{ count: number }>(
+        `SELECT COUNT(*) AS count FROM ${AUDIT_TABLES.local} WHERE tenant_id=? AND entity_id=? AND action='maintenance.work_order.close'`,
+        [tenantA, id],
+      );
+      expect(Number(audit?.count)).toBe(1);
+      expect((await outboxVersions(tenantA, id)).filter((v) => v === done.version + 1)).toEqual([
+        done.version + 1,
+      ]);
+    });
+
+    it('lets concurrent commands that share a key but not a payload resolve to one winner and conflicts', async () => {
+      const { id, done } = await ready(tenantA);
+      const results = await Promise.allSettled([
+        clocked(sourceA).execute(tenantA, ADMIN, 'close', id, closePayload(done.version), KEY),
+        clocked(sourceA2).execute(
+          tenantA,
+          ADMIN,
+          'close',
+          id,
+          closePayload(done.version, { comment: 'otro' }),
+          KEY,
+        ),
+      ]);
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      expect(results.find((r) => r.status === 'rejected')).toMatchObject({
+        reason: { code: 'idempotency_conflict' },
+      });
+      expect(await keyRows(tenantA, id)).toHaveLength(1);
+    });
+
+    it('treats an expired key as new and replaces the record in the same transaction', async () => {
+      clock.now = new Date('2026-10-12T12:00:00.000Z');
+      const { svc, id, done } = await ready(tenantA);
+      const first = await svc.execute(tenantA, ADMIN, 'close', id, closePayload(done.version), KEY);
+      const reopened = await svc.reopen(tenantA, ADMIN, id, {
+        version: first.version,
+        reason: 'Revisión',
+      });
+      const recompleted = await svc.complete(tenantA, ADMIN, id, {
+        version: reopened.version,
+        actualDate: '2026-10-11',
+        actualKm: 10500,
+      });
+      // Still within 24 h: the stored result is replayed although the order is open again.
+      clock.now = new Date('2026-10-13T11:59:00.000Z');
+      expect(
+        (await svc.execute(tenantA, ADMIN, 'close', id, closePayload(done.version), KEY)).version,
+      ).toBe(first.version);
+      clock.now = new Date('2026-10-13T12:00:01.000Z');
+      const second = await svc.execute(
+        tenantA,
+        ADMIN,
+        'close',
+        id,
+        closePayload(recompleted.version, { comment: 'segundo cierre' }),
+        KEY,
+      );
+      expect(second.version).toBe(recompleted.version + 1);
+      const rows = await keyRows(tenantA, id);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.response.version).toBe(second.version);
+      clock.now = new Date('2026-10-12T12:00:00.000Z');
+    });
+
+    it('isolates keys per actor and per tenant database', async () => {
+      const a = await ready(tenantA);
+      const b = await ready(tenantB, sourceB);
+      const other = await ready(tenantA, sourceA, ADMIN_2);
+      // The same key text for another actor (own order), and for the same actor id in tenant B.
+      const [forA, forB, forOther] = await Promise.all([
+        a.svc.execute(tenantA, ADMIN, 'close', a.id, closePayload(a.done.version), KEY),
+        b.svc.execute(tenantB, ADMIN, 'close', b.id, closePayload(b.done.version), KEY),
+        other.svc.execute(
+          tenantA,
+          ADMIN_2,
+          'close',
+          other.id,
+          closePayload(other.done.version),
+          KEY,
+        ),
+      ]);
+      expect(forA.id).not.toBe(forB.id);
+      expect(forOther.id).not.toBe(forA.id);
+      const store = (source: DataSource) => new TypeOrmWorkOrderStore(source);
+      expect((await store(sourceA).idempotency(tenantA, ADMIN.id, 'close', KEY))?.orderId).toBe(
+        a.id,
+      );
+      expect((await store(sourceA).idempotency(tenantA, ADMIN_2.id, 'close', KEY))?.orderId).toBe(
+        other.id,
+      );
+      expect((await store(sourceB).idempotency(tenantB, ADMIN.id, 'close', KEY))?.orderId).toBe(
+        b.id,
+      );
+      // Wrong tenant key or wrong database finds nothing.
+      expect(await store(sourceA).idempotency(tenantB, ADMIN.id, 'close', KEY)).toBeNull();
+      expect(await store(sourceB).idempotency(tenantA, ADMIN.id, 'close', KEY)).toBeNull();
+      // Tenant A's key does not replay tenant B's order, nor the reverse.
+      await expect(
+        a.svc.execute(tenantA, ADMIN, 'close', b.id, closePayload(b.done.version), KEY),
+      ).rejects.toMatchObject({ code: 'idempotency_conflict' });
+      expect(
+        await db.rowsB(`SELECT 1 FROM ${WORK_ORDER_TABLES.idempotency} WHERE company_id=?`, [
+          tenantA,
+        ]),
+      ).toHaveLength(0);
+    });
+
+    it('leaves no key behind when the mutation rolls back, so the retry runs', async () => {
+      const { svc, id, done } = await ready(tenantA);
+      await db.rows(
+        `REVOKE EXECUTE ON PROCEDURE \`${db.databaseName}\`.\`opslog_enqueue_tenant_outbox\` FROM '${db.runtimeUserA}'@'%'`,
+      );
+      try {
+        await expect(
+          svc.execute(tenantA, ADMIN, 'close', id, closePayload(done.version), KEY),
+        ).rejects.toBeDefined();
+      } finally {
+        await db.rows(
+          `GRANT EXECUTE ON PROCEDURE \`${db.databaseName}\`.\`opslog_enqueue_tenant_outbox\` TO '${db.runtimeUserA}'@'%'`,
+        );
+      }
+      expect(await keyRows(tenantA, id)).toHaveLength(0);
+      expect((await new TypeOrmWorkOrderStore(sourceA).get(tenantA, id))?.status).toBe('completed');
+      const retried = await svc.execute(
+        tenantA,
+        ADMIN,
+        'close',
+        id,
+        closePayload(done.version),
+        KEY,
+      );
+      expect(retried.status).toBe('closed');
+      expect(await keyRows(tenantA, id)).toHaveLength(1);
+    });
+
+    it('never lets the runtime account rewrite a recorded key', async () => {
+      const { svc, id, done } = await ready(tenantA);
+      await svc.execute(tenantA, ADMIN, 'close', id, closePayload(done.version), KEY);
+      await expect(
+        sourceA.query(`UPDATE ${WORK_ORDER_TABLES.idempotency} SET payload_hash = REPEAT('0', 64)`),
+      ).rejects.toBeDefined();
+    });
   });
 });

@@ -16,6 +16,11 @@ export type BffWorkOrderCommand =
   | 'close'
   | 'cancel'
   | 'reopen';
+/** Commands whose financial effect cannot be retried without an `Idempotency-Key` (SPECS:195). */
+export const BFF_IDEMPOTENCY_REQUIRED_COMMANDS: readonly BffWorkOrderCommand[] = [
+  'close',
+  'reopen',
+];
 /** Exact amount in the minor unit as a decimal string, with its ISO 4217 currency. */
 export interface BffMoney {
   readonly amountMinor: string;
@@ -198,6 +203,12 @@ export interface WorkOrderRouteTypes {
   'workOrders.transition': {
     params: { orderId: string };
     body: BffWorkOrderTransitionInput;
+    /**
+     * Sent as the `Idempotency-Key` header, never in the body. Required for `close` and `reopen`, optional
+     * for the other commands. The same key with the same body replays the first result (200); with
+     * another body it answers 409 `idempotency_conflict`.
+     */
+    idempotencyKey?: string;
     response: BffWorkOrder;
   };
   'workOrders.work': {
@@ -259,6 +270,7 @@ export const WORK_ORDER_ROUTES = {
     path: [...orders, ':orderId', 'transitions'],
     kind: 'session-csrf',
     status: 200,
+    idempotency: { requiredFor: BFF_IDEMPOTENCY_REQUIRED_COMMANDS },
   },
   'workOrders.work': {
     method: 'PUT',

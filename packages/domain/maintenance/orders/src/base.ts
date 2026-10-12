@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { WorkOrderError } from './errors.js';
+import { IDEMPOTENCY_TTL_MS, type IdempotencyClaim } from './idempotency.js';
 import { opaqueId, version } from './rules.js';
 import {
   WORK_ORDER_CREATED_EVENT,
@@ -25,6 +26,8 @@ import {
 export interface WorkOrderServiceOptions {
   readonly now?: () => Date;
   readonly newId?: () => string;
+  /** How long a recorded Idempotency-Key stays valid (default 24 h). */
+  readonly idempotencyTtlMs?: number;
 }
 
 const BEFORE_FIELDS = [
@@ -45,6 +48,7 @@ const BEFORE_FIELDS = [
 export abstract class WorkOrderServiceBase {
   protected readonly now: () => Date;
   protected readonly newId: () => string;
+  protected readonly idempotencyTtlMs: number;
   public constructor(
     protected readonly store: WorkOrderStore,
     protected readonly refs: WorkOrderReferences,
@@ -52,6 +56,7 @@ export abstract class WorkOrderServiceBase {
   ) {
     this.now = options.now ?? (() => new Date());
     this.newId = options.newId ?? randomUUID;
+    this.idempotencyTtlMs = options.idempotencyTtlMs ?? IDEMPOTENCY_TTL_MS;
   }
 
   protected blank(
@@ -190,6 +195,7 @@ export abstract class WorkOrderServiceBase {
     changes: Partial<WorkOrder>,
     comment: string | null,
     extra: readonly WorkOrderEvent[] = [],
+    idempotency?: IdempotencyClaim,
   ): Promise<WorkOrder> {
     const to = targetOf(command, order);
     const next: WorkOrder = {
@@ -206,6 +212,7 @@ export abstract class WorkOrderServiceBase {
       transition: this.timeline(next, command, order, actor, comment, order),
       auditAction: `maintenance.work_order.${command}`,
       events: [this.event(WORK_ORDER_STATUS_CHANGED_EVENT, next), ...extra],
+      ...(idempotency ? { idempotency } : {}),
     });
     if (!applied) throw new WorkOrderError('stale_version');
     return next;

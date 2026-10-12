@@ -109,6 +109,7 @@ const grants = {
     { table: WORK_ORDER_TABLES.costs, privileges: ['SELECT', 'INSERT', 'DELETE'] },
     { table: WORK_ORDER_TABLES.transitions, privileges: ['SELECT', 'INSERT'] },
     { table: WORK_ORDER_TABLES.files, privileges: ['SELECT', 'INSERT', 'DELETE'] },
+    { table: WORK_ORDER_TABLES.idempotency, privileges: ['SELECT', 'INSERT', 'DELETE'] },
   ],
 } satisfies Record<string, readonly Grant[]>;
 

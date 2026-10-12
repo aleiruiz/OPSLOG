@@ -77,6 +77,8 @@ export function failure(
     last_admin: 'last_admin',
     duplicate: 'duplicate',
     stale_version: 'stale_version',
+    idempotency_conflict: 'idempotency_conflict',
+    idempotency_key_required: 'idempotency_key_required',
     invalid_transition: 'invalid_transition',
     invalid_association: 'conflict',
     immutable: 'immutable',

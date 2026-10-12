@@ -1,6 +1,8 @@
 import { validateWorkOrderEvent } from './events.js';
+import type { IdempotencyRecord } from './idempotency.js';
 import type {
   WorkOrderAttachment,
+  WorkOrderCommand,
   WorkOrder,
   WorkOrderEvent,
   WorkOrderMutation,
@@ -16,6 +18,7 @@ export class InMemoryWorkOrderStore implements WorkOrderStore {
   private readonly orders = new Map<string, WorkOrder>();
   private readonly transitions = new Map<string, WorkOrderTransition[]>();
   private readonly files = new Map<string, WorkOrderAttachment[]>();
+  private readonly keys = new Map<string, IdempotencyRecord>();
   public readonly events: { readonly tenantId: string; readonly event: WorkOrderEvent }[] = [];
   public readonly audit: { readonly tenantId: string; readonly action: string }[] = [];
 
@@ -25,6 +28,15 @@ export class InMemoryWorkOrderStore implements WorkOrderStore {
     const current = this.orders.get(k);
     if (mutation.expectedVersion === null ? current : current?.version !== mutation.expectedVersion)
       return false;
+    const claim = mutation.idempotency;
+    const claimKey = claim
+      ? JSON.stringify([mutation.order.tenantId, claim.actorId, claim.command, claim.key])
+      : null;
+    // A live key is taken (a concurrent duplicate or a retry): nothing is written.
+    if (claim && claimKey) {
+      const taken = this.keys.get(claimKey);
+      if (taken && taken.expiresAt > claim.createdAt) return false;
+    }
     const change = mutation.file;
     const linked = this.files.get(k) ?? [];
     if (change?.op === 'attach') {
@@ -48,6 +60,13 @@ export class InMemoryWorkOrderStore implements WorkOrderStore {
       history.push(structuredClone(mutation.transition));
       this.transitions.set(k, history);
     }
+    if (claim && claimKey)
+      this.keys.set(claimKey, {
+        ...claim,
+        tenantId: mutation.order.tenantId,
+        status: 'completed',
+        response: structuredClone(mutation.order),
+      });
     this.audit.push({ tenantId: mutation.order.tenantId, action: mutation.auditAction });
     for (const event of events) this.events.push({ tenantId: mutation.order.tenantId, event });
     return true;
@@ -72,6 +91,15 @@ export class InMemoryWorkOrderStore implements WorkOrderStore {
   }
   public async history(tenantId: string, id: string): Promise<readonly WorkOrderTransition[]> {
     return structuredClone(this.transitions.get(key(tenantId, id)) ?? []);
+  }
+  public async idempotency(
+    tenantId: string,
+    actorId: string,
+    command: WorkOrderCommand,
+    key: string,
+  ): Promise<IdempotencyRecord | null> {
+    const record = this.keys.get(JSON.stringify([tenantId, actorId, command, key]));
+    return record ? structuredClone(record) : null;
   }
   public async attachments(
     tenantId: string,

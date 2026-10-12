@@ -30,7 +30,14 @@ import type { BffRouteDefinition } from './bff/shared.js';
  * when the BFF and this module disagree.
  */
 
-export { CSRF_HEADER, BFF_ERRORS, isBffErrorBody } from './bff/shared.js';
+export {
+  CSRF_HEADER,
+  IDEMPOTENCY_KEY_HEADER,
+  IDEMPOTENCY_KEY_PATTERN,
+  BFF_ERRORS,
+  isBffErrorBody,
+  isIdempotencyKey,
+} from './bff/shared.js';
 export type {
   BffMethod,
   BffRouteKind,
@@ -206,6 +213,7 @@ export type {
   BffWorkOrderFileUpload,
 } from './bff/work-orders.js';
 export {
+  BFF_IDEMPOTENCY_REQUIRED_COMMANDS,
   BFF_WORK_ORDER_FILE_KINDS,
   BFF_WORK_ORDER_FILE_MAX_BYTES,
   BFF_WORK_ORDER_FILE_MAX_BODY_BYTES,

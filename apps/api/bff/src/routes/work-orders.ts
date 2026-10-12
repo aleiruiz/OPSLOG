@@ -1,24 +1,28 @@
-import type {
-  BffRouteId,
+import {
+  BFF_IDEMPOTENCY_REQUIRED_COMMANDS,
+  IDEMPOTENCY_KEY_HEADER,
+  isIdempotencyKey,
+  type BffRouteId,
+  type BffWorkOrderCommand,
   BffWorkOrder,
   BffWorkOrderFile,
   BffWorkOrderFileContent,
   BffWorkOrderTransition,
 } from '../../../../../packages/contracts/src/index.js';
 import type { WorkOrderApiResponse } from '../../../maintenance/orders/src/index.js';
-import type { BffResponse } from '../http.js';
+import { errorResponse, singleHeader, type BffResponse } from '../http.js';
 import type { Route, RouteContext } from './shared.js';
 import { ID, bad, body, failure, route, success } from './shared.js';
 
-const COMMANDS = {
-  assign: 'assign',
-  start: 'start',
-  complete: 'complete',
-  approve_close: 'approveClose',
-  close: 'close',
-  cancel: 'cancel',
-  reopen: 'reopen',
-} as const;
+const COMMANDS: readonly BffWorkOrderCommand[] = [
+  'assign',
+  'start',
+  'complete',
+  'approve_close',
+  'close',
+  'cancel',
+  'reopen',
+];
 const TRANSITION_FIELDS = [
   'command',
   'version',
@@ -153,18 +157,26 @@ export const WORK_ORDER_ROUTES: readonly Route[] = [
     'workOrders.transition',
     async (ctx) => {
       const input = body(ctx, TRANSITION_FIELDS, ['command', 'version']);
-      const command = input?.['command'];
-      if (!input || typeof command !== 'string' || !Object.hasOwn(COMMANDS, command))
+      const command = input?.['command'] as BffWorkOrderCommand | undefined;
+      if (!input || typeof command !== 'string' || !COMMANDS.includes(command)) return bad(ctx);
+      // The key comes from the header only; a repeated or malformed header is a bad request.
+      const key = singleHeader(ctx.headers, IDEMPOTENCY_KEY_HEADER);
+      if (ctx.headers[IDEMPOTENCY_KEY_HEADER] !== undefined && !isIdempotencyKey(key))
         return bad(ctx);
-      const fields = Object.fromEntries(Object.entries(input).filter(([key]) => key !== 'command'));
+      if (key === undefined && BFF_IDEMPOTENCY_REQUIRED_COMMANDS.includes(command))
+        return errorResponse('idempotency_key_required', ctx.correlationId);
+      const fields = Object.fromEntries(
+        Object.entries(input).filter(([name]) => name !== 'command'),
+      );
       return answer(
         ctx,
-        api(ctx).command(
+        api(ctx).transition(
           ctx.token as string,
           ctx.correlationId,
-          COMMANDS[command as keyof typeof COMMANDS],
+          command,
           orderId(ctx),
           fields,
+          key,
         ),
         'workOrders.transition',
       );
