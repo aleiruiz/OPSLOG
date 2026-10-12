@@ -78,7 +78,13 @@ describe('imports through the platform', () => {
     // Sealed at rest: ciphertext and blind indexes only.
     const raw = JSON.stringify(stored);
     for (const fragment of PII_FRAGMENTS) expect(raw).not.toContain(fragment);
-    expect(raw).not.toContain('9000');
+    // '9000' can occur by chance in random values (ids, blind indexes, envelopes), so it is
+    // looked for only in what is left once those are removed.
+    const fixed = raw
+      .replace(/pii1\.[A-Za-z0-9+/=._-]+/g, '')
+      .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, '')
+      .replace(/[0-9a-f]{32,}/g, '');
+    expect(fixed).not.toContain('9000');
     // The job surfaces and the audit trail carry no value.
     const surfaces = JSON.stringify([
       done,
