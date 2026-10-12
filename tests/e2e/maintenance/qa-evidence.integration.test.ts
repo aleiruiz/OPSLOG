@@ -70,14 +70,14 @@ suite('work order evidence and invoices on MySQL 8.4', () => {
       mechanicId: 'mechanic-a',
       scheduledDate: '2026-10-12',
     });
-    order = await service.start(t, ACTORS.mechanic, order.id, { version: order.version });
-    return service.updateWork(t, ACTORS.mechanic, order.id, {
+    order = await service.start(t, world.mechanic, order.id, { version: order.version });
+    return service.updateWork(t, world.mechanic, order.id, {
       version: order.version,
       tasks: [{ description: 'Reparación' }],
     });
   }
   const complete = (service: WorkOrderService, order: WorkOrder) =>
-    service.complete(world.tenantA, ACTORS.mechanic, order.id, {
+    service.complete(world.tenantA, world.mechanic, order.id, {
       version: order.version,
       actualDate: '2026-10-12',
       actualKm: 1200,
@@ -92,20 +92,14 @@ suite('work order evidence and invoices on MySQL 8.4', () => {
     // An upload intent is not linkable; a queued (quarantined) file links but does not count yet.
     expect(
       await code(
-        attach(
-          service,
-          ACTORS.mechanic,
-          order,
-          'evidence',
-          file(ACTORS.mechanic, 'pending_upload'),
-        ),
+        attach(service, world.mechanic, order, 'evidence', file(world.mechanic, 'pending_upload')),
       ),
     ).toBe('invalid_association');
-    const queuedId = file(ACTORS.mechanic, 'pending_scan');
-    const queued = await attach(service, ACTORS.mechanic, order, 'evidence', queuedId);
+    const queuedId = file(world.mechanic, 'pending_scan');
+    const queued = await attach(service, world.mechanic, order, 'evidence', queuedId);
     expect(await code(complete(service, queued))).toBe('missing_requirements:evidence,invoice');
 
-    world.registerFile(t, queuedId, ACTORS.mechanic, { status: 'clean' });
+    world.registerFile(t, queuedId, world.mechanic, { status: 'clean' });
     expect(await code(complete(service, queued))).toBe('missing_requirements:invoice');
     const invoiced = await attach(service, ACTORS.admin, queued, 'invoice', file(ACTORS.admin));
     const done = await complete(service, invoiced);
@@ -175,14 +169,8 @@ suite('work order evidence and invoices on MySQL 8.4', () => {
     const service = world.service();
     const t = world.tenantA;
     const order = await inProgress(service, 'Permisos');
-    const evidence = await attach(
-      service,
-      ACTORS.mechanic,
-      order,
-      'evidence',
-      file(ACTORS.mechanic),
-    );
-    for (const actor of [ACTORS.mechanic, ACTORS.editor, ACTORS.viewer])
+    const evidence = await attach(service, world.mechanic, order, 'evidence', file(world.mechanic));
+    for (const actor of [world.mechanic, ACTORS.editor, ACTORS.viewer])
       expect(await code(attach(service, actor, evidence, 'invoice', file(actor)))).toBe(
         'forbidden',
       );
@@ -190,14 +178,14 @@ suite('work order evidence and invoices on MySQL 8.4', () => {
     expect(
       await code(attach(service, ACTORS.viewer, evidence, 'evidence', file(ACTORS.viewer))),
     ).toBe('forbidden');
-    const other = { ...ACTORS.mechanic, id: 'user-mech2', mechanicIds: ['mechanic-z'] };
+    const other = { ...world.mechanic, id: 'user-mech2', mechanicIds: ['mechanic-z'] };
     expect(await code(attach(service, other, evidence, 'evidence', file(other)))).toBe('not_found');
     const invoiced = await attach(service, ACTORS.admin, evidence, 'invoice', file(ACTORS.admin));
     expect((await service.listFiles(t, ACTORS.admin, order.id)).map((v) => v.kind).sort()).toEqual([
       'evidence',
       'invoice',
     ]);
-    for (const actor of [ACTORS.mechanic, ACTORS.editor])
+    for (const actor of [world.mechanic, ACTORS.editor])
       expect((await service.listFiles(t, actor, order.id)).map((v) => v.kind)).toEqual([
         'evidence',
       ]);
@@ -209,19 +197,19 @@ suite('work order evidence and invoices on MySQL 8.4', () => {
     );
     expect(
       await code(
-        service.detachFile(t, ACTORS.mechanic, order.id, {
+        service.detachFile(t, world.mechanic, order.id, {
           version: invoiced.version,
           attachmentId: invoice?.id,
         }),
       ),
     ).toBe('forbidden');
     // The assigned mechanic may take back their own evidence while the work is in progress.
-    const mine = (await service.listFiles(t, ACTORS.mechanic, order.id)).find(
+    const mine = (await service.listFiles(t, world.mechanic, order.id)).find(
       (view) => view.kind === 'evidence',
     );
     expect(
       await code(
-        service.detachFile(t, ACTORS.mechanic, order.id, {
+        service.detachFile(t, world.mechanic, order.id, {
           version: invoiced.version,
           attachmentId: mine?.id,
         }),
@@ -234,8 +222,8 @@ suite('work order evidence and invoices on MySQL 8.4', () => {
     const serviceB = world.service({ side: 'b' });
     const t = world.tenantA;
     const order = await inProgress(service, 'Aislamiento');
-    const fileId = file(ACTORS.mechanic);
-    const linked = await attach(service, ACTORS.mechanic, order, 'evidence', fileId);
+    const fileId = file(world.mechanic);
+    const linked = await attach(service, world.mechanic, order, 'evidence', fileId);
 
     // Tenant B neither sees the order nor can use tenant A's file id.
     expect(await code(serviceB.listFiles(world.tenantB, ACTORS.admin, order.id))).toBe('not_found');
@@ -256,18 +244,18 @@ suite('work order evidence and invoices on MySQL 8.4', () => {
 
     // The same file cannot be linked to a second order of the tenant (unique key), nor to this one twice.
     const second = await inProgress(service, 'Segunda orden');
-    expect(await code(attach(service, ACTORS.mechanic, second, 'evidence', fileId))).toBe(
+    expect(await code(attach(service, world.mechanic, second, 'evidence', fileId))).toBe(
       'duplicate',
     );
-    expect(await code(attach(service, ACTORS.mechanic, linked, 'evidence', fileId))).toBe(
+    expect(await code(attach(service, world.mechanic, linked, 'evidence', fileId))).toBe(
       'duplicate',
     );
     // A file uploaded by someone else, or unknown, looks the same.
     world.registerFile(t, 'qa-foreign', ACTORS.admin);
-    expect(await code(attach(service, ACTORS.mechanic, second, 'evidence', 'qa-foreign'))).toBe(
+    expect(await code(attach(service, world.mechanic, second, 'evidence', 'qa-foreign'))).toBe(
       'not_found',
     );
-    expect(await code(attach(service, ACTORS.mechanic, second, 'evidence', 'qa-unknown'))).toBe(
+    expect(await code(attach(service, world.mechanic, second, 'evidence', 'qa-unknown'))).toBe(
       'not_found',
     );
   });
@@ -277,8 +265,8 @@ suite('work order evidence and invoices on MySQL 8.4', () => {
     const a2 = world.service({ side: 'a2' });
     const order = await inProgress(a, 'Concurrencia');
     const results = await Promise.all([
-      code(attach(a, ACTORS.mechanic, order, 'evidence', file(ACTORS.mechanic))),
-      code(attach(a2, ACTORS.mechanic, order, 'evidence', file(ACTORS.mechanic))),
+      code(attach(a, world.mechanic, order, 'evidence', file(world.mechanic))),
+      code(attach(a2, world.mechanic, order, 'evidence', file(world.mechanic))),
     ]);
     expect(results.sort()).toEqual(['ok', 'stale_version']);
     expect(await a.listFiles(world.tenantA, ACTORS.admin, order.id)).toHaveLength(1);
@@ -290,10 +278,10 @@ suite('work order evidence and invoices on MySQL 8.4', () => {
     const order = await inProgress(service, 'Inmutable');
     const withEvidence = await attach(
       service,
-      ACTORS.mechanic,
+      world.mechanic,
       order,
       'evidence',
-      file(ACTORS.mechanic),
+      file(world.mechanic),
     );
     const done = await complete(service, withEvidence);
     const closed = await service.close(t, ACTORS.admin, order.id, {

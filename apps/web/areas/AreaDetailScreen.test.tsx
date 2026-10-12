@@ -396,7 +396,8 @@ describe('area detail: activate', () => {
     );
     fireEvent.click(within(dialog).getByRole('button', { name: 'Activar área' }));
     expect(await screen.findByText('Área activada.')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Editar' })).toBeInTheDocument();
+    // The dialog's exit transition keeps the page aria-hidden for a moment; wait it out.
+    expect(await screen.findByRole('link', { name: 'Editar' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Desactivar' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Área inactiva' })).toBeNull();
     // The sub-area table of the parent is not affected; this area is back in the tree.

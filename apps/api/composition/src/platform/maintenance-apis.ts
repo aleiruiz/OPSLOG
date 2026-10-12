@@ -19,6 +19,7 @@ import {
   type VehicleService,
 } from '../../../../../packages/domain/vehicles/src/index.js';
 import { MaintenanceApi } from '../../../maintenance/plans/src/index.js';
+import { createMechanicScope } from './mechanic-scope.js';
 import type { SettingsService } from '../../../../../packages/domain/settings/src/index.js';
 import type { PlatformKernel } from './kernel.js';
 import type { PlatformAdapters } from './types.js';
@@ -70,6 +71,7 @@ export function buildMaintenanceApis(
           async (tenantId) => (await settings.get(tenantId)).timeZone,
         )
       : undefined;
+  const mechanicScope = createMechanicScope(mechanicStore);
   const planService = new MaintenancePlanService(planStore, {
     now: kernel.now,
     ...(scheduleReader ? { scheduleReader } : {}),
@@ -109,6 +111,14 @@ export function buildMaintenanceApis(
       mechanics: mechanicService,
       authorize: (token, correlationId, required) =>
         kernel.authorize(token, correlationId, required),
+      scope: async (context) => {
+        const permissions = await kernel.access.resolvePermissions(context);
+        return {
+          scoped:
+            !permissions.includes('edit') &&
+            (await mechanicScope.mechanicLinked(context.tenantId, context.actor.subject)),
+        };
+      },
     }),
     ...(maintenancePlanWorker ? { maintenancePlanWorker } : {}),
   };

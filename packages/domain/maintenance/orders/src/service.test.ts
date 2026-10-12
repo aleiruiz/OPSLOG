@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { WorkOrderError } from './errors.js';
 import { validateWorkOrderEvent } from './events.js';
 import { transitionView, workOrderView } from './views.js';
-import { TRANSITIONS } from './workflow.js';
+import { TRANSITIONS, isMechanicScoped } from './workflow.js';
 import {
   ADMIN,
   EDITOR,
@@ -804,6 +804,18 @@ describe('work order workflow', () => {
     expect(hidden.before?.['tasks']).toEqual(costed.tasks);
     expect(transitionView(reopen as NonNullable<typeof reopen>, true).before?.['costs']).toEqual(
       costed.costs,
+    );
+  });
+});
+
+describe('mechanic scope (SPECS D9) fails closed', () => {
+  it('keeps a linked member scoped with an empty set when no mechanic is active', () => {
+    const base = { id: 'u', subject: 'u', permissions: ['view'], mechanicIds: [] as string[] };
+    expect(isMechanicScoped({ ...base, mechanicLinked: true })).toBe(true);
+    expect(isMechanicScoped({ ...base, mechanicIds: ['m'] })).toBe(true);
+    expect(isMechanicScoped(base)).toBe(false);
+    expect(isMechanicScoped({ ...base, permissions: ['view', 'edit'], mechanicLinked: true })).toBe(
+      false,
     );
   });
 });

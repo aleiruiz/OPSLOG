@@ -37,7 +37,7 @@ suite('work order idempotency acceptance on MySQL 8.4', () => {
     tenantId = world.tenantA,
     mechanicId = 'mechanic-a',
   ): Promise<WorkOrder> {
-    const mechanic = { ...ACTORS.mechanic, mechanicIds: [mechanicId] };
+    const mechanic = { ...world.mechanic, mechanicIds: [mechanicId] };
     let order = await service.createCorrective(tenantId, ACTORS.editor, {
       vehicleId: VEHICLE,
       description: 'Idempotencia sintética',

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { MAINTENANCE_ENTITIES, MAINTENANCE_TABLES } from './entities.js';
 import {
   AddOccurrenceLifecycle2026101300010,
+  BackfillOccurrenceLifecycle2026101300020,
   CreateMaintenancePlans2026101200010,
 } from './migrations.js';
 
@@ -80,5 +81,26 @@ describe('maintenance persistence schema', () => {
     expect(statements[0]).toContain('closure_plan_version');
     expect(statements[0]).toContain('adopted_at');
     expect(statements[1]).toContain('DROP COLUMN applied_version');
+  });
+
+  it('backfills lifecycle columns, touching work orders only when their table exists', async () => {
+    const run = async (workOrders: boolean) => {
+      const statements: string[] = [];
+      const runner = {
+        query: async (sql: string) => {
+          statements.push(sql);
+          return sql.includes('information_schema') ? [{ total: workOrders ? 1 : 0 }] : [];
+        },
+      };
+      await new BackfillOccurrenceLifecycle2026101300020().up(runner as never);
+      return statements.filter((sql) => !sql.includes('information_schema'));
+    };
+    const withOrders = await run(true);
+    expect(withOrders).toHaveLength(2);
+    expect(withOrders[0]).toContain('SET o.adopted_at = w.created_at WHERE o.adopted_at IS NULL');
+    expect(withOrders[1]).toContain('closure_plan_version IS NULL');
+    const without = await run(false);
+    expect(without).toHaveLength(1);
+    expect(without[0]).not.toContain('work_orders');
   });
 });

@@ -46,6 +46,8 @@ export interface WorkOrderApiDeps {
     correlationId: string,
   ) => Promise<{ readonly context: TenantContext; readonly permissions: readonly Permission[] }>;
   readonly mechanicIdsOfMember: (tenantId: string, memberId: string) => Promise<readonly string[]>;
+  /** Whether the member has any mechanic record, active or not (stable source of D9 scope). */
+  readonly mechanicLinked?: (tenantId: string, memberId: string) => Promise<boolean>;
   /** The files module: stores an upload for the actor, and reads a released file for the caller's session. */
   readonly files: {
     readonly ingest: (
@@ -170,11 +172,15 @@ export class WorkOrderApi {
         context.tenantId,
         context.actor.subject,
       );
+      const mechanicLinked =
+        mechanicIds.length > 0 ||
+        (await this.deps.mechanicLinked?.(context.tenantId, context.actor.subject)) === true;
       const actor: WorkOrderActor = {
         id: `user-${context.actor.subject}`,
         subject: context.actor.subject,
         permissions,
         mechanicIds,
+        mechanicLinked,
       };
       return {
         ok: true,

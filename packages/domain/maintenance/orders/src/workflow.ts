@@ -46,14 +46,23 @@ export interface WorkOrderActor {
   readonly subject: string;
   readonly permissions: readonly string[];
   readonly mechanicIds: readonly string[];
+  /**
+   * True when the member has (or ever had) a mechanic record linked, active or not. Mechanic scope
+   * derives from this stable fact, so deactivating the link narrows access to nothing instead of
+   * widening it to every order (SPECS D9, fail closed).
+   */
+  readonly mechanicLinked?: boolean;
 }
 
 export const can = (actor: WorkOrderActor, permission: string): boolean =>
   actor.permissions.includes(permission);
 
-/** A member linked to a mechanic and without fleet edit rights only reaches orders assigned to them. */
+/**
+ * A member linked to a mechanic (active or not) and without fleet edit rights only reaches orders
+ * assigned to their active mechanics; with no active link the scope is empty, never "everything".
+ */
 export const isMechanicScoped = (actor: WorkOrderActor): boolean =>
-  !can(actor, 'edit') && actor.mechanicIds.length > 0;
+  !can(actor, 'edit') && (actor.mechanicLinked === true || actor.mechanicIds.length > 0);
 
 export const isAssignedMechanic = (actor: WorkOrderActor, order: WorkOrder): boolean =>
   order.mechanicId !== null && actor.mechanicIds.includes(order.mechanicId);

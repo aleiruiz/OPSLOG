@@ -172,10 +172,31 @@ async function rollback(
     },
     lock: { mode: 'pessimistic_write' },
   });
-  for (const successor of successors.filter((item) => item.sequence > occurrence.sequence)) {
-    await repo.update({ tenantId: successor.tenantId, id: successor.id }, { state: 'cancelled' });
-    await setOrderStatus(manager, successor, 'cancelled');
-  }
+  for (const successor of successors.filter((item) => item.sequence > occurrence.sequence))
+    await supersede(manager, successor, `by|${occurrence.id}|${at.toISOString()}`, at);
+}
+
+/** Cancels an unadopted scheduled occurrence replaced by a newer state of the plan, with its own audit row. */
+async function supersede(
+  manager: EntityManager,
+  successor: MaintenanceOccurrenceEntity,
+  cause: string,
+  at: Date,
+): Promise<void> {
+  await manager
+    .getRepository(MaintenanceOccurrenceEntity)
+    .update({ tenantId: successor.tenantId, id: successor.id }, { state: 'cancelled' });
+  await setOrderStatus(manager, successor, 'cancelled');
+  await appendMaintenanceAudit(manager, {
+    tenantId: successor.tenantId,
+    entityType: 'maintenance_plan',
+    entityId: successor.planId,
+    actorId: ACTOR,
+    actorKind: 'system',
+    action: 'maintenance.occurrence.superseded',
+    occurredAt: at.toISOString(),
+    revision: `${successor.id}|${cause}`,
+  });
 }
 
 const CLEARED = { completedAt: null, actualDate: null, actualKm: null, closurePlanVersion: null };
@@ -313,13 +334,37 @@ export async function applyCancel(
   await audit(manager, event, 'maintenance.occurrence.cancelled', at);
 }
 
+/**
+ * Marks the occurrence adopted by a work order. When a rollback (reopen or supersede, applied
+ * version 0) cancelled it before this event arrived, the real work order exists, so the occurrence
+ * and its plan-side order are restored and any newer unadopted duplicate generated meanwhile is
+ * superseded; a duplicate that was itself adopted is left alone (both are real work).
+ */
 export async function applyAdopted(
   manager: EntityManager,
   event: PreventiveOrderLifecycleEvent,
 ): Promise<void> {
   const { occurrence } = await lock(manager, event);
-  if (occurrence.adoptedAt !== null) return;
-  await manager
-    .getRepository(MaintenanceOccurrenceEntity)
-    .update({ tenantId: event.tenantId, id: occurrence.id }, { adoptedAt: new Date() });
+  const repo = manager.getRepository(MaintenanceOccurrenceEntity);
+  const rolledBack = occurrence.state === 'cancelled' && occurrence.appliedVersion === 0;
+  if (occurrence.adoptedAt !== null && !rolledBack) return;
+  const at = new Date();
+  await repo.update(
+    { tenantId: event.tenantId, id: occurrence.id },
+    rolledBack ? { state: 'scheduled', adoptedAt: at } : { adoptedAt: at },
+  );
+  if (!rolledBack) return;
+  await setOrderStatus(manager, occurrence, 'scheduled');
+  await audit(manager, event, 'maintenance.occurrence.restored', at);
+  const duplicates = await repo.find({
+    where: {
+      tenantId: event.tenantId,
+      planId: event.planId,
+      state: 'scheduled',
+      adoptedAt: IsNull(),
+    },
+    lock: { mode: 'pessimistic_write' },
+  });
+  for (const duplicate of duplicates.filter((item) => item.sequence > occurrence.sequence))
+    await supersede(manager, duplicate, `adopted|${occurrence.id}`, at);
 }

@@ -1,7 +1,7 @@
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 import { MAINTENANCE_TABLES as T } from './entities.js';
 
-export const MAINTENANCE_MIGRATION_VERSION = '2026101300010';
+export const MAINTENANCE_MIGRATION_VERSION = '2026101300020';
 export const MAINTENANCE_MIGRATIONS_TABLE = 'opslog_maintenance_migrations';
 
 /** ORM migration for maintenance plans, immutable snapshots, catalogs, occurrences, orders and alerts. */
@@ -103,5 +103,43 @@ export class AddOccurrenceLifecycle2026101300010 implements MigrationInterface {
     await queryRunner.query(
       `ALTER TABLE \`${T.occurrences}\` DROP COLUMN adopted_at, DROP COLUMN closure_plan_version, DROP COLUMN applied_version`,
     );
+  }
+}
+
+/** Work orders live in the same tenant database but are created by their own migration. */
+async function hasWorkOrders(queryRunner: QueryRunner): Promise<boolean> {
+  const rows = (await queryRunner.query(
+    `SELECT COUNT(*) AS total FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'opslog_maintenance_work_orders'`,
+  )) as { total: number | string }[];
+  return Number(rows[0]?.total ?? 0) > 0;
+}
+
+/**
+ * G3 follow-up: fills the lifecycle columns for rows that existed before AddOccurrenceLifecycle.
+ * - adopted_at: the creation time of the work order that already adopted the occurrence (only when
+ *   the work orders table exists in this database; otherwise the occurrence stays unmarked).
+ * - closure_plan_version: the plan version written by the closure, found as the first version whose
+ *   timestamp equals the completion and whose snapshot carries the same service date and km;
+ *   left null when no such version exists (the closure then never rolls the baseline back).
+ * Both only touch rows that are still null, so re-running or running over new rows is harmless.
+ */
+export class BackfillOccurrenceLifecycle2026101300020 implements MigrationInterface {
+  public name = 'BackfillOccurrenceLifecycle2026101300020';
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    if (await hasWorkOrders(queryRunner))
+      await queryRunner.query(
+        `UPDATE \`${T.occurrences}\` o JOIN \`opslog_maintenance_work_orders\` w ON w.company_id = o.company_id AND w.occurrence_id = o.id SET o.adopted_at = w.created_at WHERE o.adopted_at IS NULL`,
+      );
+    await queryRunner.query(
+      `UPDATE \`${T.occurrences}\` o SET o.closure_plan_version = (
+        SELECT MIN(v.version) FROM \`${T.versions}\` v
+        WHERE v.company_id = o.company_id AND v.plan_id = o.plan_id AND v.version > 1 AND v.created_at = o.completed_at
+          AND JSON_UNQUOTE(JSON_EXTRACT(v.snapshot, '$.lastServiceDate')) COLLATE utf8mb4_0900_bin = o.actual_date
+          AND CAST(JSON_UNQUOTE(JSON_EXTRACT(v.snapshot, '$.lastServiceKm')) AS UNSIGNED) = o.actual_km
+      ) WHERE o.state IN ('completed','closed') AND o.closure_plan_version IS NULL AND o.completed_at IS NOT NULL AND o.actual_date IS NOT NULL AND o.actual_km IS NOT NULL`,
+    );
+  }
+  public async down(): Promise<void> {
+    // A backfill is not reverted: the columns are dropped by AddOccurrenceLifecycle's own down().
   }
 }

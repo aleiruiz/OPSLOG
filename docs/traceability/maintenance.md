@@ -16,7 +16,7 @@ Consolidación de MNT-INTEGRATE-M3-20261012 para la cadena requisito → contrat
 
 | Requisito | Fuente → disposición | Contrato / implementación | Pruebas | Evidencia |
 | FR-095 talleres y mecánicos | Sin etiqueta → adoptado | `maintenance.workshops.*`, `maintenance.mechanics.*`; `packages/domain/maintenance/{workshops,mechanics}`; `CatalogScreen` | `apps/api/bff/src/maintenance.test.ts`; `screens.test.tsx` › workshops and mechanics; `e2e/maintenance-real.spec.ts` (alta de taller por navegador) | CI del SHA candidato |
-| FR-096 mecánico ligado a usuario | DECISION REQUIRED → D9 | `mechanicIdsOfMember`, `isMechanicScoped`; externo sin cuenta | `qa-orders.integration.test.ts` › D9; `work-orders.test.ts`; `shell.test.tsx` (Mis órdenes del mecánico) | idem |
+| FR-096 mecánico ligado a usuario (G3 M3, L1, L2) | DECISION REQUIRED → D9 | `createMechanicScope` (`apps/api/composition/src/platform/mechanic-scope.ts`): `mechanicIdsOfMember` (activos) y `mechanicLinked` (cualquier registro, activo o no); `isMechanicScoped`; `MaintenanceApi` `scope` + `mechanic-scope.ts`; externo sin cuenta | `qa-orders.integration.test.ts` › D9 (vínculo real sobre MySQL, listas no vacías, API) y › D9 falla cerrado (mecánico desactivado); `service.test.ts` › mechanic scope; `apps/api/maintenance/{orders,plans}/src/index.test.ts`; `e2e/maintenance-real.spec.ts` (login de mecánico: «Mis órdenes», iniciar/terminar, sin costos) | idem |
 | FR-100/101 planes y generación | PROPOSED → plan por vehículo, fecha y/o km; orden solo en el primer objetivo real | `TypeOrmMaintenancePlanStore.scan`; `PlansScreen` / `PlanForm` | `qa-alerts.integration.test.ts`; `plan-http.integration.test.ts`; `e2e/maintenance-real.spec.ts` (plan → orden generada) | idem |
 | FR-102 correctivas | Sin etiqueta → manual; origen incidente diferido | `workOrders.create`; `CorrectiveOrderForm` | `qa-orders.integration.test.ts`; `screens.test.tsx` | idem |
 | FR-103 workflow | PROPOSED → SPECS §6.1 adoptado | `TRANSITIONS`; `POST /api/v1/work-orders/{id}/transitions`; `availableCommands` | `qa-orders.integration.test.ts`; `WorkOrderDetail.test.tsx`; `e2e/maintenance-real.spec.ts` (asignar → iniciar → terminar → cerrar) | idem |
@@ -47,7 +47,20 @@ Consolidación de MNT-INTEGRATE-M3-20261012 para la cadena requisito → contrat
 - Reabrir una orden cerrada restaura la línea base del plan anterior a ese cierre (snapshot de `plan_versions`) solo si el plan no cambió desde el cierre; si hubo una edición posterior del plan, se respeta y no se sobrescribe. La validación al re-completar compara con esa línea base previa, por lo que un km mal capturado se puede corregir hacia abajo.
 - La sucesora generada por un cierre invalidado se reemplaza (`cancelled`, historial conservado) si sigue solo programada; si ya fue adoptada se conserva con sus objetivos originales y no se genera otra. Las ocurrencias nunca se borran.
 - Un cierre cuya línea base queda por detrás del plan (edición del plan entre completar y cerrar) completa la ocurrencia sin retroceder la línea base (L3).
-- Limitación documentada: la marca de adopción llega por evento asíncrono; si una reapertura se procesa antes que el evento de adopción de la sucesora, esa sucesora se reemplaza y su cierre posterior aún se aplica al plan (el trabajo realizado prevalece).
+- Limitación documentada (resuelta): ver «Limitaciones y flujos de rollback» más abajo.
+
+## Alcance D9 del mecánico (G3 M3/L1/L2)
+
+- El alcance sale de un hecho estable: el miembro tiene (o tuvo) un registro de mecánico interno ligado, activo o no (`mechanicLinked`; los registros no se borran y `memberId` es inmutable). Sin `edit` de flota, ese miembro queda acotado a las órdenes de sus mecánicos **activos**; si no tiene ninguno activo ve cero órdenes (falla cerrado), nunca todas. No existe aún una plantilla de rol de mecánico; cuando exista, el rol deberá marcar el alcance sin depender del vínculo.
+- Lectura del catálogo para un usuario acotado: planes, esquema, órdenes programadas: ninguno (lista vacía / 404). Mecánicos: solo sus propios registros. Talleres: solo los de sus mecánicos y sin el campo de contacto. Sus órdenes se leen por la API de órdenes, que ya filtra por asignación.
+- La prueba QA resuelve el actor con la misma composición (`createMechanicScope`) sobre la tabla real de mecánicos en MySQL; ya no hay `mechanicIds` fijos en el actor del mecánico.
+
+## Limitaciones y flujos de rollback del ciclo de vida
+
+- Si el evento `preventive_adopted` llega después de la reapertura del predecesor (applied_version 0), la sucesora cancelada solo por el rollback se restaura (`scheduled` + `adopted_at`, orden del lado del plan restaurada, auditoría `restored`) y se cancela con auditoría `superseded` cualquier duplicado más nuevo aún programado y sin adoptar. Un duplicado ya adoptado se conserva (ambos son trabajo real). Cubre también la ventana entre la verificación de `adoptPreventive` y el rollback.
+- Cada sucesora reemplazada por rollback o por restauración tiene su propia fila de auditoría `maintenance.occurrence.superseded`. Una reapertura entregada antes del primer cierre solo fija `applied_version`; el cierre tardío se ignora.
+- Cualquier edición del plan posterior a un cierre (versión distinta de `closure_plan_version`) impide restaurar la línea base al reabrir: se respeta la edición. Solución operativa: corregir manualmente la línea base del plan (fecha/km del último servicio) antes de re-cerrar.
+- Migración `BackfillOccurrenceLifecycle2026101300020`: rellena `adopted_at` (fecha de creación de la orden de trabajo de esa ocurrencia, si la tabla existe en la misma base) y `closure_plan_version` (primera versión del plan con la marca de tiempo del término y la misma fecha y km de servicio); lo no derivable queda en NULL. Requiere `UPDATE` para la cuenta que migra.
 
 ## Idempotency-Key en los comandos de la orden (G3 H2)
 

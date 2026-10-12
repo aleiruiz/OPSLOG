@@ -183,6 +183,111 @@ test('a role without view_costs sees the closed order without any amount', async
   expect(raw.body).not.toMatch(/150050|MXN|"costs"/);
 });
 
+test('an internal mechanic sees only their assigned order, works it and never sees costs (D9, FR-096)', async ({
+  page,
+  browser,
+}) => {
+  const mechanicMember = await a.member('viewer', 'e2e-mech-a');
+  await signIn(page, a, 'e2e-admin-a');
+  const me = (await page.evaluate(async () => (await fetch('/api/auth/session')).json())) as {
+    user: { id: string };
+  };
+
+  // The administrator registers the internal mechanic (linked to the member) through the catalog.
+  await page.getByRole('tab', { name: 'Talleres y mecánicos' }).click();
+  const mechanicForm = page.getByRole('form', { name: 'Nuevo mecánico' });
+  await mechanicForm.getByLabel(/Nombre del mecánico/).fill('Mecánico E2E');
+  await mechanicForm.getByLabel('Vínculo', { exact: true }).click();
+  await page.getByRole('option', { name: 'Interno (usuario de la empresa)' }).click();
+  await mechanicForm.getByLabel('Usuario de la empresa', { exact: true }).click();
+  // Options are named by role and ordinal ("Consulta 2"), so the member is picked by its id.
+  await page.locator(`li[role="option"][data-value="${mechanicMember}"]`).click();
+  await mechanicForm.getByRole('button', { name: 'Agregar mecánico' }).click();
+  await expect(page.getByRole('table', { name: '1 mecánicos' })).toBeVisible();
+
+  // Two corrective orders; only the first is assigned to the mechanic.
+  const create = async (description: string) => {
+    await page.getByRole('tab', { name: 'Órdenes', exact: true }).click();
+    await page.getByRole('button', { name: 'Nueva orden correctiva' }).click();
+    const form = page.getByRole('form', { name: 'Nueva orden correctiva' });
+    await form.getByLabel(/^Vehículo/).selectOption(vehicleId);
+    await form.getByLabel(/Descripción de la falla/).fill(description);
+    await form.getByRole('button', { name: 'Registrar orden' }).click();
+    await expect(page.getByLabel('Estado: Programada')).toBeVisible();
+  };
+  await create('Falla del mecánico E2E');
+  await page.getByRole('button', { name: 'Asignar' }).click();
+  await page.getByLabel('Persona responsable').selectOption(me.user.id);
+  await pick(page, 'Mecánico', 'Mecánico E2E (interno)');
+  await page.getByLabel('Fecha programada').fill(day(0));
+  await submit(page, 'Asignar');
+  await expect(page.getByLabel('Estado: Asignada')).toBeVisible();
+  await page.getByRole('button', { name: 'Volver a órdenes' }).click();
+  await create('Falla sin asignar E2E');
+
+  // The mechanic signs in: the server returns exactly the assigned order.
+  const mechanicContext = await browser.newContext();
+  const mechanicPage = await mechanicContext.newPage();
+  try {
+    await signIn(mechanicPage, a, 'e2e-mech-a');
+    await expect(mechanicPage.getByText('Falla del mecánico E2E')).toBeVisible();
+    await expect(mechanicPage.getByText('Falla sin asignar E2E')).toHaveCount(0);
+    await mechanicPage.getByRole('tab', { name: 'Mis órdenes' }).click();
+    await expect(
+      mechanicPage.getByRole('heading', { name: 'Mis órdenes', level: 1 }),
+    ).toBeVisible();
+    await expect(
+      mechanicPage.getByRole('heading', { name: 'Falla del mecánico E2E', level: 2 }),
+    ).toBeVisible();
+    await expect(mechanicPage.getByRole('button', { name: /^Abrir (para|orden)/ })).toHaveCount(1);
+    await expectNoViolations(mechanicPage);
+
+    const unassigned = (
+      await a.database.rows<{ id: string }>(
+        `SELECT id FROM opslog_maintenance_work_orders WHERE company_id = ? AND description = ?`,
+        [a.tenantId, 'Falla sin asignar E2E'],
+      )
+    )[0]?.id as string;
+    const api = await mechanicPage.evaluate(async (foreign) => {
+      const json = async (path: string) => {
+        const response = await fetch(path);
+        return { status: response.status, body: (await response.text()) as string };
+      };
+      return {
+        orders: await json('/api/v1/work-orders'),
+        foreign: await json(`/api/v1/work-orders/${foreign}`),
+        plans: await json('/api/v1/maintenance/plans'),
+        mechanics: await json('/api/v1/maintenance/mechanics'),
+      };
+    }, unassigned);
+    expect((JSON.parse(api.orders.body) as unknown[]).length).toBe(1);
+    expect(api.foreign.status).toBe(404);
+    expect(JSON.parse(api.plans.body)).toEqual([]);
+    const mechanics = JSON.parse(api.mechanics.body) as { memberId: string }[];
+    expect(mechanics.map((m) => m.memberId)).toEqual([mechanicMember]);
+
+    // The mechanic starts, records the work and completes it; costs and closing are not offered.
+    await mechanicPage.getByRole('button', { name: /Abrir para iniciar trabajo/i }).click();
+    await mechanicPage.getByRole('button', { name: 'Iniciar trabajo' }).click();
+    await submit(mechanicPage, 'Iniciar trabajo');
+    await expect(mechanicPage.getByLabel('Estado: En proceso')).toBeVisible();
+    await mechanicPage.getByRole('button', { name: 'Registrar trabajo' }).click();
+    await mechanicPage.getByLabel('Trabajos realizados').fill('Diagnóstico del tablero');
+    await submit(mechanicPage, 'Registrar trabajo', 'Guardar trabajo');
+    await expect(mechanicPage.getByRole('status')).toHaveText('Trabajo guardado.');
+    await mechanicPage.getByRole('button', { name: 'Registrar término' }).click();
+    await mechanicPage.getByLabel('Fecha real del servicio').fill(day(0));
+    await mechanicPage.getByLabel('Kilometraje del servicio').fill('160');
+    await submit(mechanicPage, 'Registrar término');
+    await expect(mechanicPage.getByLabel('Estado: Terminada')).toBeVisible();
+    await expect(mechanicPage.getByRole('button', { name: 'Registrar costos' })).toHaveCount(0);
+    await expect(mechanicPage.getByRole('button', { name: 'Cerrar orden' })).toHaveCount(0);
+    expect(await mechanicPage.content()).not.toMatch(/MXN|unitCost|amountMinor/);
+  } finally {
+    await mechanicContext.close();
+  }
+});
+
 test('evidence requirement: configure, block, upload, complete and close with an assigned mechanic (G3 H3, MNT-QA-M3:89)', async ({
   page,
 }) => {
