@@ -78,8 +78,9 @@ export abstract class IdempotentCommands extends WorkOrderFilesBase {
     try {
       return await this[method](tenantId, actor, id, input, claim);
     } catch (error) {
-      // A concurrent duplicate lost the race: its result is now stored, so it replays that one.
-      if (error instanceof WorkOrderError && error.code === 'stale_version') {
+      // A concurrent duplicate lost the race: its result is now stored, so it replays that one. The
+      // loser may fail on the version, or on the state the winner left (closed, already approved).
+      if (error instanceof WorkOrderError && !error.code.startsWith('idempotency_')) {
         const winner = await replay();
         if (winner) return winner;
       }

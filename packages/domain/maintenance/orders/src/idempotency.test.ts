@@ -296,4 +296,37 @@ describe('Idempotency-Key on work order commands', () => {
         .status,
     ).toBe('closed');
   });
+
+  it('replays the winner when the duplicate looked up the key just before the winner committed', async () => {
+    const { h, order } = await completed();
+    const lookup = h.store.idempotency.bind(h.store);
+    let raced = false;
+    let winner: unknown;
+    h.store.idempotency = async (...args) => {
+      if (!raced) {
+        raced = true;
+        // The duplicate finds no key; the winner then commits before the duplicate reads the order.
+        winner = await h.service.execute(
+          TENANT,
+          ADMIN,
+          'close',
+          order.id,
+          closing(order.version),
+          KEY,
+        );
+        return null;
+      }
+      return lookup(...args);
+    };
+    const loser = await h.service.execute(
+      TENANT,
+      ADMIN,
+      'close',
+      order.id,
+      closing(order.version),
+      KEY,
+    );
+    expect(loser).toEqual(winner);
+    expect(loser.status).toBe('closed');
+  });
 });
