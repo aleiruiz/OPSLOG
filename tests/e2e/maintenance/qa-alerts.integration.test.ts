@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AUDIT_TABLES } from '../../../packages/persistence/audit/src/index.js';
 import { MAINTENANCE_TABLES } from '../../../packages/persistence/maintenance/plans/src/index.js';
 import type { MaintenancePlan } from '../../../packages/domain/maintenance/plans/src/index.js';
-import { adminUrl, at, startMaintenanceWorld, type MaintenanceWorld } from './world.js';
+import { adminUrl, at, startMaintenanceWorld, type MaintenanceWorld } from './qa-world.js';
 
 const suite = adminUrl ? describe : describe.skip;
 const ALLOWED_ALERT_PAYLOAD = ['alertId', 'eventType', 'occurrenceId', 'planId', 'schemaVersion'];

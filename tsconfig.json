@@ -60,7 +60,6 @@
     { "path": "./tests/integration/platform" },
     { "path": "./tests/e2e/fleet" },
     { "path": "./tests/fixtures/maintenance" },
-    { "path": "./tests/e2e/maintenance" },
-    { "path": "./tests/integration/maintenance" }
+    { "path": "./tests/e2e/maintenance" }
   ]
 }

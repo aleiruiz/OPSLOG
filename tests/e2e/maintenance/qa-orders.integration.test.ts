@@ -14,7 +14,7 @@ import {
   at,
   startMaintenanceWorld,
   type MaintenanceWorld,
-} from './world.js';
+} from './qa-world.js';
 
 const suite = adminUrl ? describe : describe.skip;
 const code = async (work: Promise<unknown>) =>
