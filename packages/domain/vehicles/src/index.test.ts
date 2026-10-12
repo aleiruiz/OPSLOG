@@ -304,6 +304,7 @@ describe('pure state changes', () => {
   it('patches under the expected version and bumps it', () => {
     const next = applyPatch(base(), { make: 'Ford' }, 1, later);
     expect(next).toMatchObject({ make: 'Ford', version: 2, updatedAt: later.toISOString() });
+    expect(next.odometerUpdatedAt).toBe(base().odometerUpdatedAt);
     expect(code(() => applyPatch(base(), { make: 'Ford' }, 2, later))).toBe('stale_version');
   });
   it('changes status only along allowed transitions, with the reason, and bumps the version', () => {
@@ -335,7 +336,11 @@ describe('pure state changes', () => {
   });
   it('lets the odometer grow or stay, never decrease (BR-015)', () => {
     const vehicle = base();
-    expect(applyOdometer(vehicle, 1500, 1, later)).toMatchObject({ odometerKm: 1500, version: 2 });
+    expect(applyOdometer(vehicle, 1500, 1, later)).toMatchObject({
+      odometerKm: 1500,
+      version: 2,
+      odometerUpdatedAt: later.toISOString(),
+    });
     expect(applyOdometer(vehicle, 1000, 1, later)).toBe(vehicle);
     expect(code(() => applyOdometer(vehicle, 999, 1, later))).toBe('odometer_decrease');
     expect(code(() => applyOdometer(vehicle, 2000, 4, later))).toBe('stale_version');

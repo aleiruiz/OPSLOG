@@ -11,6 +11,7 @@
     "../files/src/**/*.ts",
     "../../worker/composition/src/**/*.ts",
     "../../worker/base/src/**/*.ts",
+    "../../worker/maintenance-plans/src/**/*.ts",
     "../../../packages/domain/identity/src/**/*.ts",
     "../../../packages/domain/files/src/**/*.ts",
     "../../../packages/domain/vehicles/src/**/*.ts",
@@ -22,6 +23,9 @@
     "../../../packages/domain/settings/src/**/*.ts",
     "../../../packages/domain/alerts/src/**/*.ts",
     "../../../packages/domain/employees/src/**/*.ts",
+    "../../../packages/domain/maintenance/plans/src/**/*.ts",
+    "../../../packages/domain/maintenance/workshops/src/**/*.ts",
+    "../../../packages/domain/maintenance/mechanics/src/**/*.ts",
     "../../../packages/platform/pii/src/**/*.ts",
     "../../../packages/platform/auth/src/**/*.ts",
     "../../../packages/platform/audit/src/**/*.ts",
@@ -41,6 +45,14 @@
     { "path": "../../../packages/persistence/settings" },
     { "path": "../../../packages/persistence/imports" },
     { "path": "../../../packages/persistence/files" },
-    { "path": "../../../packages/persistence/audit" }
+    { "path": "../../../packages/persistence/audit" },
+    { "path": "../../../packages/domain/maintenance/plans" },
+    { "path": "../../../packages/domain/maintenance/workshops" },
+    { "path": "../../../packages/domain/maintenance/mechanics" },
+    { "path": "../../../packages/persistence/maintenance/plans" },
+    { "path": "../../../packages/persistence/maintenance/workshops" },
+    { "path": "../../../packages/persistence/maintenance/mechanics" },
+    { "path": "../maintenance/plans" },
+    { "path": "../../worker/maintenance-plans" }
   ]
 }

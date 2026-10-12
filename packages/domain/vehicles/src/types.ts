@@ -60,6 +60,8 @@ export interface Vehicle {
   /** Reason of the last status change (BR-004). */
   readonly statusReason: string;
   readonly odometerKm: number;
+  /** Timestamp of the latest known odometer reading; null for legacy rows with no reading timestamp. */
+  readonly odometerUpdatedAt: string | null;
   /** Fecha de alta, `YYYY-MM-DD`. */
   readonly registeredOn: string;
   /** Optimistic concurrency token: starts at 1, +1 on every change. */

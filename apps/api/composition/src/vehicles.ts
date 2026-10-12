@@ -83,6 +83,7 @@ export interface VehicleView {
   readonly status: Vehicle['status'];
   readonly statusReason: string;
   readonly odometerKm: number;
+  readonly odometerUpdatedAt: string | null;
   readonly registeredOn: string;
   readonly version: number;
   readonly createdAt: string;
@@ -117,6 +118,7 @@ const view = (vehicle: Vehicle): VehicleView => ({
   status: vehicle.status,
   statusReason: vehicle.statusReason,
   odometerKm: vehicle.odometerKm,
+  odometerUpdatedAt: vehicle.odometerUpdatedAt,
   registeredOn: vehicle.registeredOn,
   version: vehicle.version,
   createdAt: vehicle.createdAt,

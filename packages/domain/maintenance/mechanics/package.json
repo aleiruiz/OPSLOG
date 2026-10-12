@@ -1,0 +1,8 @@
+{
+  "name": "@opslog/domain-maintenance-mechanics",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:unit": "vitest run"
+  }
+}

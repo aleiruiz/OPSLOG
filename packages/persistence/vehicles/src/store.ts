@@ -52,6 +52,7 @@ const toVehicle = (row: VehicleEntity): Vehicle => {
     status: row.status,
     statusReason: row.statusReason,
     odometerKm: row.odometerKm,
+    odometerUpdatedAt: row.odometerUpdatedAt?.toISOString() ?? null,
     registeredOn: row.registeredOn,
     version: row.version,
     createdAt: row.createdAt.toISOString(),
@@ -93,6 +94,8 @@ const mutableColumns = (vehicle: Vehicle) => ({
   status: vehicle.status,
   statusReason: vehicle.statusReason,
   odometerKm: vehicle.odometerKm,
+  odometerUpdatedAt:
+    vehicle.odometerUpdatedAt === null ? null : new Date(vehicle.odometerUpdatedAt),
   version: vehicle.version,
   updatedAt: new Date(vehicle.updatedAt),
   archivedAt: vehicle.archivedAt === null ? null : new Date(vehicle.archivedAt),

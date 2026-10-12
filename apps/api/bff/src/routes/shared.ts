@@ -78,6 +78,7 @@ export function failure(
     duplicate: 'duplicate',
     stale_version: 'stale_version',
     invalid_transition: 'invalid_transition',
+    invalid_association: 'conflict',
     immutable: 'immutable',
     odometer_decrease: 'odometer_decrease',
     invalid_area: 'invalid_area',

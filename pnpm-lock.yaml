@@ -99,6 +99,8 @@ importers:
 
   apps/api/files: {}
 
+  apps/api/maintenance/plans: {}
+
   apps/api/tenants:
     dependencies:
       '@opslog/domain-tenants':
@@ -157,6 +159,8 @@ importers:
 
   apps/worker/composition: {}
 
+  apps/worker/maintenance-plans: {}
+
   packages/contracts:
     devDependencies:
       vitest:
@@ -180,6 +184,12 @@ importers:
   packages/domain/imports: {}
 
   packages/domain/insurance: {}
+
+  packages/domain/maintenance/mechanics: {}
+
+  packages/domain/maintenance/plans: {}
+
+  packages/domain/maintenance/workshops: {}
 
   packages/domain/settings: {}
 
@@ -349,6 +359,22 @@ importers:
       vitest:
         specifier: 3.2.6
         version: 3.2.6(@types/node@22.15.21)(jsdom@26.0.0(supports-color@7.2.0))(supports-color@7.2.0)
+
+  packages/persistence/maintenance/mechanics: {}
+
+  packages/persistence/maintenance/plans:
+    dependencies:
+      mysql2:
+        specifier: 3.22.0
+        version: 3.22.0(@types/node@22.15.21)
+      reflect-metadata:
+        specifier: 0.2.2
+        version: 0.2.2
+      typeorm:
+        specifier: 1.1.1
+        version: 1.1.1(babel-plugin-macros@3.1.0)(mysql2@3.22.0(@types/node@22.15.21))(supports-color@7.2.0)
+
+  packages/persistence/maintenance/workshops: {}
 
   packages/persistence/settings:
     dependencies:
@@ -1326,14 +1352,14 @@ packages:
   '@types/react@19.1.2':
     resolution: {integrity: sha512-oxLPMytKchWGbnQM9O7D67uPa9paTNxO7jVoNMXgkkErULBPhPARCfkKL9ytcIJJRGjbsVwW4ugJzyFFvm/Tiw==}
 
+  '@types/resolve@1.20.6':
+    resolution: {integrity: sha512-A4STmOXPhMUtHH+S6ymgE2GiBSMqf4oTvcQZMcHzokuTLVYzXTB8ttjcgxOVaAp2lGwEdzZ0J+cRbbeevQj1UQ==}
+
   '@types/sax@1.2.7':
     resolution: {integrity: sha512-rO73L89PJxeYM3s3pPPjiPgVVcymqU490g0YO5n5By0k2Erzj6tay/4lr1CHAAU4JyOWd1rpQ8bCf6cZfHU96A==}
 
   '@types/yauzl@3.4.0':
     resolution: {integrity: sha512-NRPn5w6h8dhcnmx3YIRQcqMywY/+nND/uOkJessedcrowO3C0AssHp3tMJpxKAwOhFOo0OV1y9VtsC5hbKKBAw==}
-
-  '@types/resolve@1.20.6':
-    resolution: {integrity: sha512-A4STmOXPhMUtHH+S6ymgE2GiBSMqf4oTvcQZMcHzokuTLVYzXTB8ttjcgxOVaAp2lGwEdzZ0J+cRbbeevQj1UQ==}
 
   '@typescript-eslint/eslint-plugin@8.71.0':
     resolution: {integrity: sha512-pqcS9c1HxZTHt7End4nXqd0s5lJrrFzrgCkKFJrsbUnaL6M3+6oBFZaslg6Gjsl3argl2DDRFROnXARaZ2e4Nw==}
@@ -2480,12 +2506,12 @@ packages:
   pathe@2.0.3:
     resolution: {integrity: sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==}
 
-  pend@1.2.0:
-    resolution: {integrity: sha512-F3asv42UuXchdzt+xXqfW1OGlVBe+mxa2mqI0pg5yAHZPvFmY3Y6drSf/GQ1A86WgWEN9Kzh/WrgKa6iGcHXLg==}
-
   pathval@2.0.1:
     resolution: {integrity: sha512-//nshmD55c46FuFw26xV/xFAaB5HF9Xdap7HJBBnrKdAd6/GxDBaNA1870O79+9ueg61cZLSVc+OaFlfmObYVQ==}
     engines: {node: '>= 14.16'}
+
+  pend@1.2.0:
+    resolution: {integrity: sha512-F3asv42UuXchdzt+xXqfW1OGlVBe+mxa2mqI0pg5yAHZPvFmY3Y6drSf/GQ1A86WgWEN9Kzh/WrgKa6iGcHXLg==}
 
   picocolors@1.1.1:
     resolution: {integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==}
@@ -3940,6 +3966,8 @@ snapshots:
     dependencies:
       csstype: 3.2.3
 
+  '@types/resolve@1.20.6': {}
+
   '@types/sax@1.2.7':
     dependencies:
       '@types/node': 22.15.21
@@ -3947,8 +3975,6 @@ snapshots:
   '@types/yauzl@3.4.0':
     dependencies:
       '@types/node': 22.15.21
-
-  '@types/resolve@1.20.6': {}
 
   '@typescript-eslint/eslint-plugin@8.71.0(@typescript-eslint/parser@8.71.0(eslint@9.26.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@5.8.3))(eslint@9.26.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@5.8.3)':
     dependencies:
@@ -5153,6 +5179,8 @@ snapshots:
 
   pathval@2.0.1: {}
 
+  pend@1.2.0: {}
+
   picocolors@1.1.1: {}
 
   picomatch@4.0.7: {}
@@ -5332,8 +5360,6 @@ snapshots:
       call-bound: 1.0.4
       es-errors: 1.3.0
       is-regex: 1.2.1
-
-  pend@1.2.0: {}
 
   safer-buffer@2.1.2: {}
 

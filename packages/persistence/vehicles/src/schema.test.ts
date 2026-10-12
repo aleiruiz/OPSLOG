@@ -1,10 +1,17 @@
 import 'reflect-metadata';
 import { describe, expect, it, vi } from 'vitest';
-import { DataSource, type EntityMetadata, type QueryRunner, type Table } from 'typeorm';
+import {
+  DataSource,
+  type EntityMetadata,
+  type QueryRunner,
+  type Table,
+  type TableColumn,
+} from 'typeorm';
 import { BINARY_COLLATION, VEHICLE_ENTITIES, VEHICLE_TABLES, VehicleEntity } from './entities.js';
 import { AUDIT_ENTITIES } from '../../audit/src/entities.js';
 import {
   CreateVehicles2026100600030,
+  AddVehicleOdometerTimestamp2026101200020,
   VEHICLES_MIGRATIONS_TABLE,
   VEHICLES_MIGRATION_VERSION,
   VEHICLE_CHECKS,
@@ -22,6 +29,8 @@ function recordingRunner() {
   const tables: Table[] = [];
   const statements: string[] = [];
   const dropped: string[] = [];
+  const added: TableColumn[] = [];
+  const droppedColumns: string[] = [];
   const runner = {
     createTable: async (table: Table) => {
       tables.push(table);
@@ -29,12 +38,19 @@ function recordingRunner() {
     dropTable: async (name: string) => {
       dropped.push(name);
     },
+    addColumn: async (tableName: string, column: TableColumn) => {
+      added.push(column);
+      tables.find((table) => table.name === tableName)?.addColumn(column);
+    },
+    dropColumn: async (_table: string, column: string) => {
+      droppedColumns.push(column);
+    },
     query: async (sql: string) => {
       statements.push(sql);
       return [];
     },
   } as unknown as QueryRunner;
-  return { runner, tables, statements, dropped };
+  return { runner, tables, statements, dropped, added, droppedColumns };
 }
 
 async function metadata(): Promise<EntityMetadata[]> {
@@ -49,9 +65,21 @@ async function metadata(): Promise<EntityMetadata[]> {
 }
 
 describe('migration and entity metadata agree', () => {
+  it('adds an unknown legacy odometer timestamp as NULL and can roll it back', async () => {
+    const { runner, added, droppedColumns } = recordingRunner();
+    const migration = new AddVehicleOdometerTimestamp2026101200020();
+    await migration.up(runner);
+    expect(added).toMatchObject([
+      { name: 'odometer_updated_at', type: 'datetime', precision: 6, isNullable: true },
+    ]);
+    await new AddVehicleOdometerTimestamp2026101200020().down(runner);
+    expect(droppedColumns).toEqual(['odometer_updated_at']);
+  });
+
   it('creates exactly the entity tables in dependency order and drops them in reverse', async () => {
     const { runner, tables, dropped } = recordingRunner();
     await migration.up(runner);
+    await new AddVehicleOdometerTimestamp2026101200020().up(runner);
     expect(tables.map((table) => table.name)).toEqual([
       VEHICLE_TABLES.vehicles,
       VEHICLE_TABLES.statusHistory,
@@ -66,6 +94,7 @@ describe('migration and entity metadata agree', () => {
   it('declares every column of every entity with the same type, size, nullability and collation', async () => {
     const { runner, tables } = recordingRunner();
     await migration.up(runner);
+    await new AddVehicleOdometerTimestamp2026101200020().up(runner);
     const entities = await metadata();
     expect(entities.map((entity) => entity.tableName).sort()).toEqual(
       tables.map((table) => table.name).sort(),
@@ -262,7 +291,8 @@ describe('DataSource factories', () => {
       logging: false,
       migrationsTableName: VEHICLES_MIGRATIONS_TABLE,
     });
-    expect(dataSource.options.migrations).toEqual([CreateVehicles2026100600030]);
+    expect(dataSource.options.migrations).toHaveLength(2);
+    expect(dataSource.options.migrations).toContain(CreateVehicles2026100600030);
     const custom = createVehiclesMigrationDataSource({
       ...base,
       username: 'schema_owner',

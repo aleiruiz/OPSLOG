@@ -584,6 +584,7 @@ describe('typed views', () => {
         'status',
         'statusReason',
         'odometerKm',
+        'odometerUpdatedAt',
         'registeredOn',
         'version',
         'createdAt',

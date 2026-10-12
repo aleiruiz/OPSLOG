@@ -8,6 +8,12 @@
     { "path": "./packages/persistence/identity" },
     { "path": "./packages/domain/vehicles" },
     { "path": "./packages/persistence/vehicles" },
+    { "path": "./packages/domain/maintenance/plans" },
+    { "path": "./packages/domain/maintenance/workshops" },
+    { "path": "./packages/domain/maintenance/mechanics" },
+    { "path": "./packages/persistence/maintenance/plans" },
+    { "path": "./packages/persistence/maintenance/workshops" },
+    { "path": "./packages/persistence/maintenance/mechanics" },
     { "path": "./packages/domain/areas" },
     { "path": "./packages/persistence/areas" },
     { "path": "./packages/domain/employees" },
@@ -45,8 +51,12 @@
     { "path": "./infra/runtime" },
     { "path": "./apps/worker/composition" },
     { "path": "./apps/api/composition" },
+    { "path": "./apps/api/maintenance/plans" },
+    { "path": "./apps/worker/maintenance-plans" },
     { "path": "./apps/api/bff" },
     { "path": "./tests/integration/platform" },
-    { "path": "./tests/e2e/fleet" }
+    { "path": "./tests/e2e/fleet" },
+    { "path": "./tests/fixtures/maintenance" },
+    { "path": "./tests/e2e/maintenance" }
   ]
 }

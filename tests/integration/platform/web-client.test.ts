@@ -444,6 +444,98 @@ describe('typed client against the real BFF', () => {
     });
     expect(await documents.get('desconocido')).toMatchObject({ ok: false, error: { status: 404 } });
 
+    // Maintenance plans, workshops and mechanics through their BFF contract routes.
+    const workshop = await client.call('maintenance.workshops.create', {
+      body: { name: 'Taller Alfa', specialties: ['motor'], contact: '555-0100' },
+    });
+    if (!workshop.ok) throw new Error('maintenance workshop create failed');
+    expect(await client.call('maintenance.workshops.list')).toMatchObject({
+      ok: true,
+      value: [expect.objectContaining({ id: workshop.value.id, active: true })],
+    });
+    expect(
+      await client.call('maintenance.workshops.get', { params: { workshopId: workshop.value.id } }),
+    ).toMatchObject({ ok: true, value: { id: workshop.value.id } });
+    expect(
+      await client.call('maintenance.workshops.update', {
+        params: { workshopId: workshop.value.id },
+        body: { name: 'Taller Alfa actualizado', specialties: ['motor', 'frenos'] },
+      }),
+    ).toMatchObject({ ok: true, value: { name: 'Taller Alfa actualizado' } });
+
+    const mechanic = await client.call('maintenance.mechanics.create', {
+      body: {
+        name: 'Mecánico externo',
+        specialties: ['motor'],
+        kind: 'external',
+        workshopId: workshop.value.id,
+      },
+    });
+    if (!mechanic.ok) throw new Error('maintenance mechanic create failed');
+    expect(await client.call('maintenance.mechanics.list')).toMatchObject({
+      ok: true,
+      value: [expect.objectContaining({ id: mechanic.value.id, active: true })],
+    });
+    expect(
+      await client.call('maintenance.mechanics.get', { params: { mechanicId: mechanic.value.id } }),
+    ).toMatchObject({ ok: true, value: { id: mechanic.value.id } });
+    expect(
+      await client.call('maintenance.mechanics.update', {
+        params: { mechanicId: mechanic.value.id },
+        body: { name: 'Mecánico externo actualizado', specialties: ['motor'], kind: 'external' },
+      }),
+    ).toMatchObject({ ok: true, value: { name: 'Mecánico externo actualizado' } });
+
+    const plan = await client.call('maintenance.plans.create', {
+      body: {
+        vehicleId: truck.value.id,
+        intervalDays: 90,
+        lastServiceDate: '2026-01-01',
+      },
+    });
+    if (!plan.ok) throw new Error(`maintenance plan create failed: ${JSON.stringify(plan)}`);
+    expect(await client.call('maintenance.plans.list')).toMatchObject({
+      ok: true,
+      value: [expect.objectContaining({ id: plan.value.id, state: 'active' })],
+    });
+    expect(
+      await client.call('maintenance.plans.get', { params: { planId: plan.value.id } }),
+    ).toMatchObject({ ok: true, value: { id: plan.value.id } });
+    expect(
+      await client.call('maintenance.plans.schedule', { params: { planId: plan.value.id } }),
+    ).toMatchObject({ ok: true, value: { planId: plan.value.id } });
+    expect(
+      await client.call('maintenance.plans.orders', { params: { planId: plan.value.id } }),
+    ).toMatchObject({ ok: true, value: [] });
+    expect(
+      await client.call('maintenance.plans.update', {
+        params: { planId: plan.value.id },
+        body: { version: 1, intervalDays: 120 },
+      }),
+    ).toMatchObject({ ok: true, value: { intervalDays: 120, version: 2 } });
+    expect(
+      await client.call('maintenance.plans.pause', {
+        params: { planId: plan.value.id },
+        body: { version: 2 },
+      }),
+    ).toMatchObject({ ok: true, value: { state: 'paused', version: 3 } });
+    expect(
+      await client.call('maintenance.plans.resume', {
+        params: { planId: plan.value.id },
+        body: { version: 3 },
+      }),
+    ).toMatchObject({ ok: true, value: { state: 'active', version: 4 } });
+    expect(
+      await client.call('maintenance.mechanics.deactivate', {
+        params: { mechanicId: mechanic.value.id },
+      }),
+    ).toMatchObject({ ok: true, value: { active: false } });
+    expect(
+      await client.call('maintenance.workshops.deactivate', {
+        params: { workshopId: workshop.value.id },
+      }),
+    ).toMatchObject({ ok: true, value: { active: false } });
+
     // Insurance policies through the typed client.
     const insurance = createInsuranceClient(client);
     const policy = await insurance.create({

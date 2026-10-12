@@ -1,0 +1,9 @@
+{
+  "name": "@opslog/persistence-maintenance-mechanics",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:unit": "vitest run",
+    "typecheck": "tsc -b"
+  }
+}

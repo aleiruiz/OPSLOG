@@ -16,6 +16,11 @@ import {
   FILES_RUNTIME_ACCOUNT,
 } from '../../../packages/persistence/files/src/index.js';
 import {
+  MAINTENANCE_TABLES,
+  MAINTENANCE_MIGRATIONS_TABLE,
+  MAINTENANCE_RUNTIME_ACCOUNT,
+} from '../../../packages/persistence/maintenance/plans/src/index.js';
+import {
   createFleetMigrationModules,
   openFleetRuntimeStores,
   runFleetAuditMigrations,
@@ -86,6 +91,15 @@ const grants = {
     { table: FILE_TABLES.history, privileges: ['SELECT', 'INSERT'] },
     { table: FILE_TABLES.saga, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
   ],
+  maintenance: [
+    { table: MAINTENANCE_TABLES.plans, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
+    { table: MAINTENANCE_TABLES.versions, privileges: ['SELECT', 'INSERT'] },
+    { table: MAINTENANCE_TABLES.occurrences, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
+    { table: MAINTENANCE_TABLES.orders, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
+    { table: MAINTENANCE_TABLES.alerts, privileges: ['SELECT', 'INSERT'] },
+    { table: MAINTENANCE_TABLES.workshops, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
+    { table: MAINTENANCE_TABLES.mechanics, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
+  ],
 } satisfies Record<string, readonly Grant[]>;
 
 type Module = keyof typeof grants;
@@ -100,6 +114,7 @@ const modules: readonly Module[] = [
   'settings',
   'imports',
   'files',
+  'maintenance',
 ];
 
 export interface FleetTenantDatabase {
@@ -152,10 +167,16 @@ async function startTenantDatabase(label: string): Promise<FleetTenantDatabase> 
     username: `opslog_files_migrator_${auditSuffix}`,
     password: randomBytes(24).toString('base64url'),
   };
+  const maintenanceMigrator = {
+    username: `opslog_migrator_${auditSuffix}`,
+    password: randomBytes(24).toString('base64url'),
+  };
   if (!FILES_MIGRATOR_ACCOUNT.test(filesMigrator.username))
     throw new Error('synthetic Fleet files migrator account name is invalid');
   if (!FILES_RUNTIME_ACCOUNT.test(runtime.files.username))
     throw new Error('synthetic Fleet files runtime account name is invalid');
+  if (!MAINTENANCE_RUNTIME_ACCOUNT.test(runtime.maintenance.username))
+    throw new Error('synthetic Fleet maintenance runtime account name is invalid');
   const accounts = { ...runtime, auditRuntime, auditRelay } as Accounts;
   const users: string[] = [];
   const connection = await mysql.createConnection({ ...admin, database: 'mysql' });
@@ -172,6 +193,7 @@ async function startTenantDatabase(label: string): Promise<FleetTenantDatabase> 
       password: admin.password,
       auditMigrator,
       filesMigrator,
+      maintenanceMigrator,
     };
     await connection.query(`CREATE USER '${filesMigrator.username}'@'%' IDENTIFIED BY ?`, [
       filesMigrator.password,
@@ -180,9 +202,19 @@ async function startTenantDatabase(label: string): Promise<FleetTenantDatabase> 
     await connection.query(
       `GRANT CREATE, ALTER, DROP, INDEX, SELECT, INSERT, REFERENCES ON ${identifier(databaseName)}.* TO '${filesMigrator.username}'@'%'`,
     );
+    await connection.query(`CREATE USER '${maintenanceMigrator.username}'@'%' IDENTIFIED BY ?`, [
+      maintenanceMigrator.password,
+    ]);
+    users.push(maintenanceMigrator.username);
+    await connection.query(
+      `GRANT CREATE, ALTER, DROP, INDEX, SELECT, INSERT, REFERENCES ON ${identifier(databaseName)}.* TO '${maintenanceMigrator.username}'@'%'`,
+    );
     const appliedMigrations = await runFleetMigrations(migrationCredentials);
     await connection.query(
       `GRANT DELETE ON ${identifier(databaseName)}.${identifier(FILES_MIGRATIONS_TABLE)} TO '${filesMigrator.username}'@'%'`,
+    );
+    await connection.query(
+      `GRANT DELETE ON ${identifier(databaseName)}.${identifier(MAINTENANCE_MIGRATIONS_TABLE)} TO '${maintenanceMigrator.username}'@'%'`,
     );
     const idempotentMigrations = await runFleetMigrations(migrationCredentials);
     if (idempotentMigrations.join(',') !== appliedMigrations.join(','))
@@ -226,6 +258,13 @@ async function startTenantDatabase(label: string): Promise<FleetTenantDatabase> 
         `GRANT EXECUTE ON PROCEDURE ${identifier(databaseName)}.\`opslog_append_local_audit_and_delivery\` TO '${account.username}'@'%'`,
       );
     }
+    // The maintenance worker commits alert/scan events through the durable tenant outbox.
+    await connection.query(
+      `GRANT SELECT ON ${identifier(databaseName)}.${identifier(AUDIT_TABLES.outbox)} TO '${runtime.maintenance.username}'@'%'`,
+    );
+    await connection.query(
+      `GRANT EXECUTE ON PROCEDURE ${identifier(databaseName)}.\`opslog_enqueue_tenant_outbox\` TO '${runtime.maintenance.username}'@'%'`,
+    );
 
     for (const account of [auditRuntime, auditRelay]) {
       await connection.query(`CREATE USER '${account.username}'@'%' IDENTIFIED BY ?`, [
@@ -254,6 +293,16 @@ async function startTenantDatabase(label: string): Promise<FleetTenantDatabase> 
     );
     await connection.query(
       `GRANT UPDATE ON ${table(AUDIT_TABLES.delivery)} TO '${auditRelay.username}'@'%'`,
+    );
+    // Durable outbox: the audit runtime enqueues/reads, the relay claims and settles deliveries.
+    await connection.query(
+      `GRANT SELECT ON ${table(AUDIT_TABLES.outbox)} TO '${auditRuntime.username}'@'%'`,
+    );
+    await connection.query(
+      `GRANT EXECUTE ON PROCEDURE ${identifier(databaseName)}.\`opslog_enqueue_tenant_outbox\` TO '${auditRuntime.username}'@'%'`,
+    );
+    await connection.query(
+      `GRANT SELECT, UPDATE (status, attempts, available_at, lease_until, fencing, worker_id, last_error, handler_completed) ON ${table(AUDIT_TABLES.outbox)} TO '${auditRelay.username}'@'%'`,
     );
 
     stores = await openFleetRuntimeStores({
