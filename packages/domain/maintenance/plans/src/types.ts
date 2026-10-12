@@ -35,7 +35,7 @@ export interface PlanOccurrence {
   readonly orderId: string;
   readonly workshopId: string | null;
   readonly mechanicId: string | null;
-  readonly state: 'scheduled' | 'completed' | 'closed';
+  readonly state: 'scheduled' | 'completed' | 'closed' | 'cancelled';
 }
 
 export interface ScheduledMaintenanceOrder {
@@ -44,7 +44,7 @@ export interface ScheduledMaintenanceOrder {
   readonly occurrenceId: string;
   readonly planId: string;
   readonly vehicleId: string;
-  readonly status: 'scheduled' | 'completed' | 'closed';
+  readonly status: 'scheduled' | 'completed' | 'closed' | 'cancelled';
   readonly kind: 'preventive';
   readonly snapshot: Readonly<Record<string, unknown>>;
   readonly createdAt: string;
@@ -108,6 +108,35 @@ export interface PlanScanStore {
     odometer: OdometerReading,
   ): Promise<readonly PlanEvaluation[]>;
   closePreventive(event: PreventiveOrderClosedEvent): Promise<void>;
+  /** Invalidates the closure of a reopened order and restores the pre-closure plan baseline. */
+  reopenPreventive(event: PreventiveOrderLifecycleEvent): Promise<void>;
+  /** Marks a cancelled order's occurrence cancelled (history kept) so the next scan reschedules it. */
+  cancelPreventive(event: PreventiveOrderLifecycleEvent): Promise<void>;
+  /** Records that the scheduled order was adopted into a work order. */
+  adoptPreventive(event: PreventiveOrderLifecycleEvent): Promise<void>;
+  /**
+   * Plan service baseline excluding the closure of the occurrence while that closure is still
+   * applied (the plan's current baseline otherwise); null when the plan is unknown. Used to
+   * validate the re-completion of a reopened order.
+   */
+  baselineBeforeClosure(
+    tenantId: string,
+    planId: string,
+    occurrenceId: string,
+  ): Promise<{
+    readonly lastServiceDate: string | null;
+    readonly lastServiceKm: number | null;
+  } | null>;
+}
+
+/** Ids and the order version the transition produced; the version orders events per occurrence. */
+export interface PreventiveOrderLifecycleEvent {
+  readonly tenantId: string;
+  readonly planId: string;
+  readonly occurrenceId: string;
+  readonly orderId: string;
+  readonly eventId: string;
+  readonly version: number;
 }
 
 export interface PreventiveOrderClosedEvent {
@@ -120,6 +149,8 @@ export interface PreventiveOrderClosedEvent {
   readonly completedAt: string;
   readonly actualDate: string;
   readonly actualKm: number;
+  /** Order version after the close; absent only on events queued before versioning. */
+  readonly version?: number;
 }
 
 export interface VehicleMaintenanceReader {

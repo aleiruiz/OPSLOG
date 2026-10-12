@@ -131,7 +131,9 @@ export async function startMaintenanceWorld(tag: string): Promise<MaintenanceWor
           }
         : null;
     },
-    planBaseline: async (tenantId, planId) => {
+    planBaseline: async (tenantId, planId, occurrenceId) => {
+      if (occurrenceId !== null)
+        return tenantPlans.baselineBeforeClosure(tenantId, planId, occurrenceId);
       const plan = await tenantPlans.get(tenantId, planId);
       return plan
         ? {

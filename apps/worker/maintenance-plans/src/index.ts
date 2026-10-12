@@ -2,10 +2,14 @@ import type { Handler } from '../../base/src/index.js';
 import type {
   MaintenancePlanWorker,
   PreventiveOrderClosedEvent,
+  PreventiveOrderLifecycleEvent,
 } from '../../../../packages/domain/maintenance/plans/src/index.js';
 
 export const MAINTENANCE_PLAN_SCAN_EVENT = 'maintenance.plan.scan';
 export const PREVENTIVE_ORDER_CLOSED_EVENT = 'maintenance.order.preventive_closed';
+export const PREVENTIVE_ORDER_REOPENED_EVENT = 'maintenance.order.preventive_reopened';
+export const PREVENTIVE_ORDER_CANCELLED_EVENT = 'maintenance.order.preventive_cancelled';
+export const PREVENTIVE_ORDER_ADOPTED_EVENT = 'maintenance.order.preventive_adopted';
 
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value))
@@ -42,6 +46,7 @@ export function registerMaintenancePlanHandlers(
       'completedAt',
       'actualDate',
       'actualKm',
+      'version',
     ]);
     if (
       typeof job['planId'] !== 'string' ||
@@ -50,7 +55,8 @@ export function registerMaintenancePlanHandlers(
       (job['kind'] !== 'preventive' && job['kind'] !== 'corrective') ||
       typeof job['completedAt'] !== 'string' ||
       typeof job['actualDate'] !== 'string' ||
-      !Number.isInteger(job['actualKm'])
+      !Number.isInteger(job['actualKm']) ||
+      (job['version'] !== undefined && !Number.isInteger(job['version']))
     )
       throw new Error('invalid maintenance closure event');
     const closure: PreventiveOrderClosedEvent = {
@@ -63,7 +69,33 @@ export function registerMaintenancePlanHandlers(
       completedAt: job['completedAt'],
       actualDate: job['actualDate'],
       actualKm: job['actualKm'] as number,
+      ...(job['version'] === undefined ? {} : { version: job['version'] as number }),
     };
     await plans.consumeClosure(closure);
   });
+  const lifecycle: readonly [string, (event: PreventiveOrderLifecycleEvent) => Promise<void>][] = [
+    [PREVENTIVE_ORDER_REOPENED_EVENT, (event) => plans.consumeReopened(event)],
+    [PREVENTIVE_ORDER_CANCELLED_EVENT, (event) => plans.consumeCancelled(event)],
+    [PREVENTIVE_ORDER_ADOPTED_EVENT, (event) => plans.consumeAdopted(event)],
+  ];
+  for (const [type, consume] of lifecycle)
+    worker.register(type, async (payload, event) => {
+      const job = record(payload);
+      onlyKeys(job, ['planId', 'occurrenceId', 'orderId', 'version']);
+      if (
+        typeof job['planId'] !== 'string' ||
+        typeof job['occurrenceId'] !== 'string' ||
+        typeof job['orderId'] !== 'string' ||
+        !Number.isInteger(job['version'])
+      )
+        throw new Error('invalid maintenance lifecycle event');
+      await consume({
+        tenantId: event.tenantId,
+        planId: job['planId'],
+        occurrenceId: job['occurrenceId'],
+        orderId: job['orderId'],
+        eventId: event.eventId,
+        version: job['version'] as number,
+      });
+    });
 }

@@ -11,13 +11,37 @@ import {
 } from './rules.js';
 import { parseCosts, parseWork } from './work.js';
 import { WorkOrderServiceBase } from './base.js';
-import { PREVENTIVE_ORDER_CLOSED_EVENT, type WorkOrder, type WorkOrderEvent } from './types.js';
+import {
+  PREVENTIVE_ORDER_ADOPTED_EVENT,
+  PREVENTIVE_ORDER_CANCELLED_EVENT,
+  PREVENTIVE_ORDER_CLOSED_EVENT,
+  PREVENTIVE_ORDER_REOPENED_EVENT,
+  type WorkOrder,
+  type WorkOrderEvent,
+} from './types.js';
 import { missing, requireCommand, type WorkOrderActor } from './workflow.js';
 
 export type { WorkOrderServiceOptions } from './base.js';
 
 /** Workflow of SPECS §6.1 for preventive (MNT-PLANS) and corrective orders. */
 export class WorkOrderService extends WorkOrderServiceBase {
+  /** Plans-side lifecycle port: ids and the order version the transition will have (never free text). */
+  private planEvent(type: string, order: WorkOrder, version: number): readonly WorkOrderEvent[] {
+    return order.kind === 'preventive' && order.planId && order.occurrenceId
+      ? [
+          {
+            type,
+            payload: {
+              planId: order.planId,
+              occurrenceId: order.occurrenceId,
+              orderId: order.id,
+              version,
+            },
+          },
+        ]
+      : [];
+  }
+
   public async createCorrective(
     tenantId: string,
     actor: WorkOrderActor,
@@ -66,7 +90,11 @@ export class WorkOrderService extends WorkOrderServiceBase {
       workshopId: scheduled.workshopId,
       mechanicId: scheduled.mechanicId,
     });
-    return this.insert(actor, order);
+    return this.insert(
+      actor,
+      order,
+      this.planEvent(PREVENTIVE_ORDER_ADOPTED_EVENT, order, order.version),
+    );
   }
 
   public async assign(
@@ -157,9 +185,10 @@ export class WorkOrderService extends WorkOrderServiceBase {
     const today = this.now().toISOString().slice(0, 10);
     if ((actualDate as string) > today) throw new WorkOrderError('invalid_input');
     if (order.kind === 'preventive' && order.planId) {
-      const baseline = await this.refs.planBaseline(tenantId, order.planId);
+      const baseline = await this.refs.planBaseline(tenantId, order.planId, order.occurrenceId);
       if (!baseline) throw new WorkOrderError('not_found');
-      // A closure before the plan's last service would move the next target backwards.
+      // A closure before the plan's last service would move the next target backwards. The baseline
+      // excludes this order's own earlier closure, so a reopened order can be corrected downwards.
       if (baseline.lastServiceDate !== null && (actualDate as string) < baseline.lastServiceDate)
         throw new WorkOrderError('invalid_input');
       if (baseline.lastServiceKm !== null && (actualKm as number) < baseline.lastServiceKm)
@@ -227,6 +256,7 @@ export class WorkOrderService extends WorkOrderServiceBase {
                 completedAt: order.completedAt as string,
                 actualDate: order.actualDate as string,
                 actualKm: order.actualKm as number,
+                version: order.version + 1,
               },
             },
           ]
@@ -251,7 +281,14 @@ export class WorkOrderService extends WorkOrderServiceBase {
     const order = await this.prepare(tenantId, actor, id, 'cancel', data['version']);
     const reason = data['reason'] === undefined ? null : text(data['reason'], 1000);
     missing({ reason: reason !== null });
-    return this.transition(order, actor, 'cancel', { cancelReason: reason }, reason);
+    return this.transition(
+      order,
+      actor,
+      'cancel',
+      { cancelReason: reason },
+      reason,
+      this.planEvent(PREVENTIVE_ORDER_CANCELLED_EVENT, order, order.version + 1),
+    );
   }
 
   public async reopen(
@@ -272,7 +309,14 @@ export class WorkOrderService extends WorkOrderServiceBase {
       completedAt: null,
       reopenCount: order.reopenCount + 1,
     };
-    return this.transition(order, actor, 'reopen', cleared, reason);
+    return this.transition(
+      order,
+      actor,
+      'reopen',
+      cleared,
+      reason,
+      this.planEvent(PREVENTIVE_ORDER_REOPENED_EVENT, order, order.version + 1),
+    );
   }
 
   public async updateWork(

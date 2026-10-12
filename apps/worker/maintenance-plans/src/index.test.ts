@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   MAINTENANCE_PLAN_SCAN_EVENT,
+  PREVENTIVE_ORDER_ADOPTED_EVENT,
+  PREVENTIVE_ORDER_CANCELLED_EVENT,
   PREVENTIVE_ORDER_CLOSED_EVENT,
+  PREVENTIVE_ORDER_REOPENED_EVENT,
   registerMaintenancePlanHandlers,
 } from './index.js';
 
@@ -69,5 +72,47 @@ describe('maintenance plan outbox handlers', () => {
     expect(plans.consumeClosure).toHaveBeenCalledWith(
       expect.objectContaining({ tenantId: 'tenant-a', eventId: 'e', kind: 'corrective' }),
     );
+  });
+  it('routes reopen, cancel and adopt events to the domain with the envelope tenant and order version', async () => {
+    const handlers = new Map<
+      string,
+      (
+        payload: unknown,
+        event: { tenantId: string; eventId: string; type: string },
+      ) => void | Promise<void>
+    >();
+    const plans = {
+      consumeReopened: vi.fn(async () => undefined),
+      consumeCancelled: vi.fn(async () => undefined),
+      consumeAdopted: vi.fn(async () => undefined),
+    };
+    registerMaintenancePlanHandlers(
+      { register: (type, handler) => handlers.set(type, handler) },
+      plans as never,
+    );
+    const payload = { planId: 'p', occurrenceId: 'o', orderId: 'x', version: 7 };
+    const routes = [
+      [PREVENTIVE_ORDER_REOPENED_EVENT, plans.consumeReopened],
+      [PREVENTIVE_ORDER_CANCELLED_EVENT, plans.consumeCancelled],
+      [PREVENTIVE_ORDER_ADOPTED_EVENT, plans.consumeAdopted],
+    ] as const;
+    for (const [type, consume] of routes) {
+      const handler = handlers.get(type)!;
+      await handler(payload, { tenantId: 'tenant-a', eventId: 'e', type });
+      expect(consume).toHaveBeenCalledWith({
+        tenantId: 'tenant-a',
+        eventId: 'e',
+        planId: 'p',
+        occurrenceId: 'o',
+        orderId: 'x',
+        version: 7,
+      });
+      await expect(
+        handler({ ...payload, tenantId: 'tenant-b' }, { tenantId: 'tenant-a', eventId: 'e', type }),
+      ).rejects.toThrow('invalid maintenance job');
+      await expect(
+        handler({ ...payload, version: 'x' }, { tenantId: 'tenant-a', eventId: 'e', type }),
+      ).rejects.toThrow('invalid maintenance lifecycle event');
+    }
   });
 });

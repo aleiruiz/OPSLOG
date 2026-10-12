@@ -164,6 +164,7 @@ import type {
   PlanEvaluation,
   PlanScanStore,
   PreventiveOrderClosedEvent,
+  PreventiveOrderLifecycleEvent,
   VehicleMaintenanceReader,
 } from './types.js';
 
@@ -183,6 +184,15 @@ export class MaintenancePlanWorker {
   }
   public consumeClosure(event: PreventiveOrderClosedEvent): Promise<void> {
     return this.scans.closePreventive(event);
+  }
+  public consumeReopened(event: PreventiveOrderLifecycleEvent): Promise<void> {
+    return this.scans.reopenPreventive(event);
+  }
+  public consumeCancelled(event: PreventiveOrderLifecycleEvent): Promise<void> {
+    return this.scans.cancelPreventive(event);
+  }
+  public consumeAdopted(event: PreventiveOrderLifecycleEvent): Promise<void> {
+    return this.scans.adoptPreventive(event);
   }
 }
 
