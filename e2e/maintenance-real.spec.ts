@@ -200,7 +200,8 @@ test('an internal mechanic sees only their assigned order, works it and never se
   await mechanicForm.getByLabel('Vínculo', { exact: true }).click();
   await page.getByRole('option', { name: 'Interno (usuario de la empresa)' }).click();
   await mechanicForm.getByLabel('Usuario de la empresa', { exact: true }).click();
-  await page.getByRole('option', { name: new RegExp(mechanicMember) }).click();
+  // Options are named by role and ordinal ("Consulta 2"), so the member is picked by its id.
+  await page.locator(`li[role="option"][data-value="${mechanicMember}"]`).click();
   await mechanicForm.getByRole('button', { name: 'Agregar mecánico' }).click();
   await expect(page.getByRole('table', { name: '1 mecánicos' })).toBeVisible();
 
@@ -209,14 +210,14 @@ test('an internal mechanic sees only their assigned order, works it and never se
     await page.getByRole('tab', { name: 'Órdenes', exact: true }).click();
     await page.getByRole('button', { name: 'Nueva orden correctiva' }).click();
     const form = page.getByRole('form', { name: 'Nueva orden correctiva' });
-    await form.getByLabel(/^Vehículo/).fill(vehicleId);
+    await form.getByLabel(/^Vehículo/).selectOption(vehicleId);
     await form.getByLabel(/Descripción de la falla/).fill(description);
     await form.getByRole('button', { name: 'Registrar orden' }).click();
     await expect(page.getByLabel('Estado: Programada')).toBeVisible();
   };
   await create('Falla del mecánico E2E');
   await page.getByRole('button', { name: 'Asignar' }).click();
-  await page.getByLabel('Persona responsable (usuario)').fill(me.user.id);
+  await page.getByLabel('Persona responsable').selectOption(me.user.id);
   await pick(page, 'Mecánico', 'Mecánico E2E (interno)');
   await page.getByLabel('Fecha programada').fill(day(0));
   await submit(page, 'Asignar');
