@@ -14,9 +14,9 @@ import type { MaintenancePorts, Result } from './ports';
  * only. It mimics the server's answers (sanitized costs, 409, 422 lists); it is not a rule source.
  */
 export interface FakeMaintenanceOptions {
-  readonly viewCosts?: boolean;
+  readonly viewCosts?: boolean | (() => boolean);
   /** When set, the caller only sees orders assigned to these mechanics (server-side scope). */
-  readonly scopedTo?: readonly string[];
+  readonly scopedTo?: readonly string[] | (() => readonly string[] | undefined);
   readonly orders?: readonly BffWorkOrder[];
   readonly plans?: readonly BffMaintenancePlan[];
   readonly workshops?: readonly BffMaintenanceWorkshop[];
@@ -126,10 +126,15 @@ export function createFakeMaintenancePorts(options: FakeMaintenanceOptions = {})
   const workshops = [...(options.workshops ?? [])];
   const mechanics = [...(options.mechanics ?? [])];
   const state = { approvalRequired: false, calls: [] as string[] };
+  const viewCosts = () =>
+    typeof options.viewCosts === 'function' ? options.viewCosts() : Boolean(options.viewCosts);
+  const scope = () =>
+    typeof options.scopedTo === 'function' ? options.scopedTo() : options.scopedTo;
   const visible = (order: BffWorkOrder) =>
-    !options.scopedTo || (order.mechanicId !== null && options.scopedTo.includes(order.mechanicId));
+    !scope() ||
+    (order.mechanicId !== null && (scope() as readonly string[]).includes(order.mechanicId));
   const sanitize = (order: BffWorkOrder): BffWorkOrder => {
-    if (options.viewCosts) return order;
+    if (viewCosts()) return order;
     return { ...omit(order, 'costs'), parts: order.parts.map((part) => omit(part, 'unitCost')) };
   };
   const find = (id: string) => {
@@ -264,7 +269,7 @@ export function createFakeMaintenancePorts(options: FakeMaintenanceOptions = {})
       recordCosts: async (id, body) => {
         const order = find(id);
         if (!order) return fail(404, 'not_found');
-        if (!options.viewCosts) return fail(403, 'forbidden');
+        if (!viewCosts()) return fail(403, 'forbidden');
         if (order.version !== body.version) return fail(409, 'stale_version');
         const costs = (body.costs ?? []).map((c, i) => ({
           id: c.id ?? `cost-${order.version}-${i}`,

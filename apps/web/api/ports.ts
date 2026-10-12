@@ -13,6 +13,7 @@ import {
   type BffSession,
 } from '@opslog/contracts';
 import type { ApiPorts, OidcPort, Result, SessionInfo } from '../app/types';
+import { createMaintenancePorts } from '../features/maintenance/ports';
 
 function mapResult<T, U>(result: Result<T>, map: (value: T) => U): Result<U> {
   return result.ok ? { ok: true, value: map(result.value) } : result;
@@ -45,6 +46,7 @@ export function createHttpApi(
   const alerts = createAlertsClient(client);
   return {
     oidc,
+    maintenance: createMaintenancePorts(client),
     auth: {
       getSession: async () => mapResult(await call('auth.session'), toSession),
       login: async (body) => mapResult(await call('auth.login', { body }), toSession),

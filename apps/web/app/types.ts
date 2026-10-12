@@ -1,3 +1,4 @@
+import type { MaintenancePorts } from '../features/maintenance/ports';
 import type {
   AlertsClient,
   AssignmentsClient,
@@ -376,5 +377,7 @@ export interface ApiPorts {
   readonly alerts: AlertsPort;
   readonly assignments: AssignmentsPort;
   readonly imports: ImportsPort;
+  /** Maintenance plans, work orders, workshops and mechanics (MNT-PLANS/MNT-ORDERS routes). */
+  readonly maintenance: MaintenancePorts;
   readonly oidc: OidcPort;
 }

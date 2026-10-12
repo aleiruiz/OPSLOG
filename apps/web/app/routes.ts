@@ -43,7 +43,8 @@ export interface RouteDefinition {
     | 'employeeDetail'
     | 'employeeEdit'
     | 'alerts'
-    | 'alertSettings';
+    | 'alertSettings'
+    | 'maintenance';
   readonly pattern: string;
   readonly title: string;
   readonly access: RouteAccess;
@@ -261,6 +262,15 @@ export const routes: readonly RouteDefinition[] = [
     title: 'Alertas',
     access: { permission: 'view' },
     nav: { group: 'Flota', label: 'Alertas' },
+  },
+  // Maintenance (MNT-UI, composed by MNT-INTEGRATE): plans, work orders, my orders and the workshop
+  // catalog live behind one entry; commands are authorized by the BFF.
+  {
+    id: 'maintenance',
+    pattern: '/flota/mantenimiento',
+    title: 'Mantenimiento',
+    access: { permission: 'view' },
+    nav: { group: 'Flota', label: 'Mantenimiento' },
   },
   {
     id: 'imports',

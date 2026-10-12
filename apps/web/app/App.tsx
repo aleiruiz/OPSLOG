@@ -40,6 +40,7 @@ import { VehicleCreateScreen, VehicleEditScreen } from '../vehicles/VehicleFormS
 import { VehiclesScreen } from '../vehicles/VehiclesScreen';
 import { AppShell } from './AppShell';
 import { HomeScreen } from './HomeScreen';
+import { MaintenanceScreen } from '../features/maintenance/MaintenanceScreen';
 import { RouterProvider, useRouter } from './router';
 import { isAllowed, loginPath, resolveRoute } from './routes';
 import type { ApiPorts } from './types';
@@ -265,6 +266,9 @@ function Routes() {
         break;
       case 'alertSettings':
         screen = <AlertSettingsScreen />;
+        break;
+      case 'maintenance':
+        screen = <MaintenanceScreen />;
         break;
       case 'invitation':
         screen = (

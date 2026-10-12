@@ -110,3 +110,31 @@ test.describe('maintenance: plans and catalog', () => {
     await expectNoViolations(page);
   });
 });
+
+test.describe('maintenance in the web shell (mock API)', () => {
+  async function signIn(page: Page, subject: string) {
+    await page.goto('/web/flota/mantenimiento');
+    await expect(page.getByRole('heading', { name: 'Iniciar sesión', level: 1 })).toBeVisible();
+    await page.getByRole('textbox', { name: /Cuenta de prueba/ }).fill(subject);
+    await page.keyboard.press('Enter');
+  }
+
+  test('the navigation entry opens maintenance and the order sheet passes axe', async ({
+    page,
+  }) => {
+    await signIn(page, 'cuenta-admin');
+    await expect(page.getByRole('link', { name: 'Mantenimiento' })).toBeVisible();
+    await expect(page.getByRole('table', { name: '3 órdenes' })).toBeVisible();
+    await expectNoViolations(page);
+    await page.getByRole('button', { name: 'Servicio de 10 000 km' }).click();
+    await expect(page.getByText('Mano de obra: 1,250.00 MXN')).toBeVisible();
+    await expectNoViolations(page);
+  });
+
+  test('a role without view_costs never receives amounts', async ({ page }) => {
+    await signIn(page, 'cuenta-despacho');
+    await page.getByRole('button', { name: 'Servicio de 10 000 km' }).click();
+    await expect(page.getByText('Filtro de aceite · 1')).toBeVisible();
+    expect(await page.content()).not.toMatch(/1,250|450\.50|MXN/);
+  });
+});
