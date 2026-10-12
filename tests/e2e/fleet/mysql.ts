@@ -218,6 +218,11 @@ async function startTenantDatabase(label: string): Promise<FleetTenantDatabase> 
     await connection.query(
       `GRANT CREATE, ALTER, DROP, INDEX, SELECT, INSERT, REFERENCES ON ${identifier(databaseName)}.* TO '${maintenanceMigrator.username}'@'%'`,
     );
+    // BackfillOccurrenceLifecycle2026101300020 updates legacy occurrence rows, so the schema owner
+    // needs UPDATE (tables do not exist yet to grant per table).
+    await connection.query(
+      `GRANT UPDATE ON ${identifier(databaseName)}.* TO '${maintenanceMigrator.username}'@'%'`,
+    );
     const appliedMigrations = await runFleetMigrations(migrationCredentials);
     await connection.query(
       `GRANT DELETE ON ${identifier(databaseName)}.${identifier(FILES_MIGRATIONS_TABLE)} TO '${filesMigrator.username}'@'%'`,
