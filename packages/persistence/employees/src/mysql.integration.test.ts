@@ -293,16 +293,16 @@ suite('persistent employee store on MySQL', () => {
         [tenant, created.id],
       );
       const dump = JSON.stringify(raw);
-      for (const secret of [
-        'SYNTH-4455',
-        '4455',
-        '5590001111',
-        '9000',
-        'plain.value',
-        'LIC-778899',
-        '778899',
-      ])
+      for (const secret of ['SYNTH-4455', '5590001111', 'plain.value', 'LIC-778899'])
         expect(dump).not.toContain(secret);
+      // Short fragments can occur by chance in random values (ids, blind indexes, envelopes,
+      // timestamps), so they are looked for only in what is left once those are removed.
+      const fixed = dump
+        .replace(/pii1\.[A-Za-z0-9+/=._-]+/g, '')
+        .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, '')
+        .replace(/[0-9a-f]{32,}/g, '')
+        .replace(/\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d+)?Z?/g, '');
+      for (const fragment of ['4455', '9000', '778899']) expect(fixed).not.toContain(fragment);
       expect(raw[0]).toMatchObject({
         national_id_enc: expect.stringMatching(/^pii1\./),
         national_id_idx: expect.stringMatching(/^[0-9a-f]{64}$/),
