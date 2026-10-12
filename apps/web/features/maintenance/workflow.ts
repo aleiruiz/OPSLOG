@@ -15,12 +15,12 @@ export const isAssignedTo = (viewer: MaintenanceViewer, order: BffWorkOrder): bo
 /**
  * Commands to offer for SPECS §6.1, mirroring the server's matrix. The server stays the authority:
  * a refused command comes back as an error or as missing requirements, never as a local rule.
- * `approve_close` is offered only once the server reported the D20 approval as missing.
+ * `approve_close` is offered to an approver while a completed order has no approval; when the
+ * tenant has no D20 threshold the server refuses it and the screen shows that refusal.
  */
 export function availableCommands(
   order: BffWorkOrder,
   viewer: MaintenanceViewer,
-  missing: readonly string[] = [],
 ): BffWorkOrderCommand[] {
   const fleet = has(viewer, 'edit');
   const assigned = isAssignedTo(viewer, order);
@@ -36,8 +36,7 @@ export function availableCommands(
       if (fleet || assigned) commands.push('complete');
       break;
     case 'completed':
-      if (has(viewer, 'approve') && missing.includes('closeApproval') && !order.closeApproval)
-        commands.push('approve_close');
+      if (has(viewer, 'approve') && !order.closeApproval) commands.push('approve_close');
       if (fleet && has(viewer, 'view_costs')) commands.push('close');
       break;
     case 'closed':

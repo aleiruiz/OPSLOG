@@ -43,11 +43,16 @@ describe('maintenance model', () => {
       [],
     );
     expect(availableCommands(at('completed'), editor)).toEqual([]);
-    expect(availableCommands(at('completed'), fleet)).toEqual(['close']);
-    expect(availableCommands(at('completed'), fleet, ['closeApproval'])).toEqual([
-      'approve_close',
-      'close',
-    ]);
+    expect(availableCommands(at('completed'), fleet)).toEqual(['approve_close', 'close']);
+    expect(
+      availableCommands(
+        at('completed', { closeApproval: { approvedBy: 'u', approvedAt: 'x' } }),
+        fleet,
+      ),
+    ).toEqual(['close']);
+    expect(
+      availableCommands(at('completed'), { permissions: ['view', 'approve'], mechanicIds: [] }),
+    ).toEqual(['approve_close']);
     expect(availableCommands(at('closed'), fleet)).toEqual(['reopen']);
     expect(availableCommands(at('closed'), editor)).toEqual([]);
     expect(availableCommands(at('cancelled'), fleet)).toEqual([]);

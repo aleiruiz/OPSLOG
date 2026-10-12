@@ -324,4 +324,31 @@ describe('maintenance area', () => {
     await screen.findByRole('table');
     expect(document.body.textContent).not.toMatch(/presupuesto|pendiente de aprobación/i);
   });
+
+  it('reports a failed mechanic lookup on my orders instead of an empty list', async () => {
+    const fake = createFakeMaintenancePorts({ orders });
+    let failures = 1;
+    const list = fake.ports.mechanics.list;
+    fake.ports.mechanics.list = async () =>
+      failures-- > 0
+        ? {
+            ok: false,
+            error: { status: 500, code: 'internal_error', message: 'x', correlationId: 'c' },
+          }
+        : list();
+    renderView(
+      <MaintenanceArea
+        ports={fake.ports}
+        permissions={VIEWER}
+        userId="u-ana"
+        initialView="mine"
+        onExpired={vi.fn()}
+      />,
+    );
+    expect(
+      await screen.findByText('No pudimos identificar tus órdenes asignadas.'),
+    ).toBeInTheDocument();
+    press('Reintentar');
+    expect(await screen.findByRole('heading', { name: 'Mis órdenes' })).toBeInTheDocument();
+  });
 });

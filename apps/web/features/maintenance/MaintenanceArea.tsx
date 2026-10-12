@@ -2,6 +2,7 @@ import React from 'react';
 import Box from '@mui/material/Box';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
+import { UiState } from '@opslog/ui';
 import type { BffMaintenanceMechanic, BffMaintenanceWorkshop } from '@opslog/contracts';
 import { CatalogScreen, type MemberOption } from './CatalogScreen';
 import { MyOrdersScreen } from './MyOrdersScreen';
@@ -42,6 +43,8 @@ export function MaintenanceArea({
   const [orderId, setOrderId] = React.useState<string | null>(null);
   const [workshops, setWorkshops] = React.useState<readonly BffMaintenanceWorkshop[]>([]);
   const [mechanics, setMechanics] = React.useState<readonly BffMaintenanceMechanic[]>([]);
+  const [mechanicsFailed, setMechanicsFailed] = React.useState(false);
+  const [attempt, setAttempt] = React.useState(0);
   React.useEffect(() => {
     let current = true;
     // Names for display and the caller's own mechanic records; the server keeps the authority.
@@ -49,11 +52,13 @@ export function MaintenanceArea({
       if (!current) return;
       if (w.ok) setWorkshops(w.value);
       if (m.ok) setMechanics(m.value);
+      else if (m.error.status === 401) onExpired();
+      setMechanicsFailed(!m.ok);
     });
     return () => {
       current = false;
     };
-  }, [ports, view]);
+  }, [ports, view, attempt]);
   const viewer: MaintenanceViewer = {
     permissions,
     mechanicIds: mechanics.filter((m) => m.active && m.memberId === userId).map((m) => m.id),
@@ -87,6 +92,14 @@ export function MaintenanceArea({
         />
       ) : view === 'orders' ? (
         <WorkOrdersScreen ports={ports} viewer={viewer} onOpen={setOrderId} onExpired={onExpired} />
+      ) : view === 'mine' && mechanicsFailed ? (
+        // Without the caller's mechanic records an empty list would be misleading.
+        <UiState
+          kind="error"
+          description="No pudimos identificar tus órdenes asignadas."
+          actionLabel="Reintentar"
+          onAction={() => setAttempt((value) => value + 1)}
+        />
       ) : view === 'mine' ? (
         <MyOrdersScreen ports={ports} viewer={viewer} onOpen={setOrderId} onExpired={onExpired} />
       ) : view === 'plans' ? (

@@ -130,7 +130,7 @@ export function WorkOrderDetail({
               : 'No pudimos guardar el cambio. Intenta nuevamente.',
       });
   };
-  const commands = availableCommands(order, viewer, missing);
+  const commands = availableCommands(order, viewer);
   const viewCosts = order.costs !== undefined;
   const detail = (label: string, value: string) => (
     <Box component="div">
@@ -161,6 +161,7 @@ export function WorkOrderDetail({
               color="inherit"
               onClick={() => {
                 setStale(false);
+                setMissing([]);
                 reload();
               }}
             >

@@ -163,7 +163,6 @@ describe('work order detail', () => {
     fake.state.approvalRequired = true;
     view(ADMIN, fake);
     await screen.findByLabelText('Estado: Terminada');
-    expect(screen.queryByRole('button', { name: 'Aprobar cierre' })).toBeNull();
     press('Cerrar orden');
     fireEvent.mouseDown(screen.getByLabelText('Estado del vehículo al cerrar'));
     fireEvent.click(await screen.findByRole('option', { name: 'Activo' }));
@@ -224,5 +223,50 @@ describe('work order detail', () => {
     });
     const { onExpired } = view(ADMIN, expired);
     await waitFor(() => expect(onExpired).toHaveBeenCalled());
+  });
+
+  it('lets a supervisor with only approve record the D20 approval from their own session', async () => {
+    const fake = createFakeMaintenancePorts({
+      orders: [
+        baseOrder({
+          status: 'completed',
+          version: 5,
+          tasks: [{ id: 't1', description: 'Servicio' }],
+        }),
+      ],
+    });
+    fake.state.approvalRequired = true;
+    view(['view', 'approve'], fake);
+    await screen.findByLabelText('Estado: Terminada');
+    expect(screen.queryByRole('button', { name: 'Cerrar orden' })).toBeNull();
+    press('Aprobar cierre');
+    fireEvent.click(
+      within(screen.getByRole('form', { name: 'Aprobar cierre' })).getByRole('button', {
+        name: 'Aprobar cierre',
+      }),
+    );
+    await screen.findByText('Aprobar cierre: listo.');
+    expect(screen.queryByRole('button', { name: 'Aprobar cierre' })).toBeNull();
+  });
+
+  it('shows the server refusal when the tenant requires no approval', async () => {
+    const fake = createFakeMaintenancePorts({
+      orders: [baseOrder({ status: 'completed', version: 5 })],
+    });
+    fake.ports.orders.transition = async () => ({
+      ok: false,
+      error: { status: 409, code: 'invalid_transition', message: 'x', correlationId: 'c' },
+    });
+    view(['view', 'approve'], fake);
+    await screen.findByLabelText('Estado: Terminada');
+    press('Aprobar cierre');
+    fireEvent.click(
+      within(screen.getByRole('form', { name: 'Aprobar cierre' })).getByRole('button', {
+        name: 'Aprobar cierre',
+      }),
+    );
+    expect(
+      await screen.findByText('La orden no admite esta acción en su estado actual.'),
+    ).toBeInTheDocument();
   });
 });
