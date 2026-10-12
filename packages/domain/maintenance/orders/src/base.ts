@@ -35,6 +35,9 @@ const BEFORE_FIELDS = [
   'completedAt',
   'actualDate',
   'actualKm',
+  'tasks',
+  'parts',
+  'costs',
 ] as const;
 
 /** Shared reads and the atomic write path (CAS, timeline, audit, outbox) of the work order service. */
@@ -141,6 +144,8 @@ export abstract class WorkOrderServiceBase {
     const next: WorkOrder = {
       ...order,
       ...changes,
+      // A D20 approval covers the facts it saw: any later edit of a completed order needs a new one.
+      ...(order.status === 'completed' ? { closeApproval: null } : {}),
       version: order.version + 1,
       updatedAt: this.now().toISOString(),
       updatedBy: actor.id,

@@ -283,6 +283,12 @@ suite('work orders on disposable MySQL 8.4', () => {
       version: recompleted.version,
       vehicleStatus: 'active',
     });
+    const [reopenRow] = await db.rows<{ before_snapshot: { costs: unknown[]; tasks: unknown[] } }>(
+      `SELECT before_snapshot FROM ${WORK_ORDER_TABLES.transitions} WHERE company_id=? AND order_id=? AND command='reopen'`,
+      [tenantA, adopted.id],
+    );
+    expect(reopenRow?.before_snapshot.costs).toEqual(done.costs);
+    expect(reopenRow?.before_snapshot.tasks).toEqual(done.tasks);
     const closures = await db.rows<{ event_id: string; payload: Record<string, string | number> }>(
       `SELECT event_id, payload FROM ${AUDIT_TABLES.outbox} WHERE tenant_id=? AND type='maintenance.order.preventive_closed' AND entity_id=?`,
       [tenantA, adopted.id],

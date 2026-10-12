@@ -159,8 +159,10 @@ export class WorkOrderApi {
     correlationId: string,
     id: string,
   ): Promise<WorkOrderApiResponse<readonly WorkOrderTransitionView[]>> {
-    return this.run(token, correlationId, async (tenantId, actor) =>
-      (await this.deps.orders.history(tenantId, actor, id)).map(transitionView),
+    return this.run(token, correlationId, async (tenantId, actor, viewCosts) =>
+      (await this.deps.orders.history(tenantId, actor, id)).map((entry) =>
+        transitionView(entry, viewCosts),
+      ),
     );
   }
   public createCorrective(

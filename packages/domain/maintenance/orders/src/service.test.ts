@@ -676,7 +676,7 @@ describe('work order workflow', () => {
   it('publishes timeline entries without the tenant and rejects invalid kilometers', async () => {
     const { h, order } = await assigned();
     const [created] = await h.service.history(TENANT, FLEET, order.id);
-    expect(created && transitionView(created)).not.toHaveProperty('tenantId');
+    expect(created && transitionView(created, true)).not.toHaveProperty('tenantId');
     const started = await h.service.start(TENANT, FLEET, order.id, { version: 2 });
     const worked = await h.service.updateWork(TENANT, FLEET, order.id, {
       version: started.version,
@@ -692,5 +692,66 @@ describe('work order workflow', () => {
           }),
         ),
       ).toBe('invalid_input');
+  });
+
+  it('voids the D20 approval when a completed order is edited and re-checks tasks at close', async () => {
+    const { h, order } = await completed();
+    h.refs.approval = true;
+    const approved = await h.service.approveClose(TENANT, ADMIN, order.id, {
+      version: order.version,
+    });
+    const emptied = await h.service.updateWork(TENANT, ADMIN, order.id, {
+      version: approved.version,
+      tasks: [],
+    });
+    expect(emptied.closeApproval).toBeNull();
+    expect(
+      await code(
+        h.service.close(TENANT, ADMIN, order.id, {
+          version: emptied.version,
+          vehicleStatus: 'active',
+        }),
+      ),
+    ).toBe('missing_requirements:tasks,closeApproval');
+    const costed = await h.service.updateCosts(TENANT, ADMIN, order.id, {
+      version: emptied.version,
+      costs: [{ category: 'labor', amount: { amountMinor: '999999999', currency: 'MXN' } }],
+    });
+    expect(costed.closeApproval).toBeNull();
+  });
+
+  it('keeps the closed tasks, parts and costs in the timeline after reopen, redacted without view_costs', async () => {
+    const { h, order } = await completed();
+    const costed = await h.service.updateCosts(TENANT, ADMIN, order.id, {
+      version: order.version,
+      costs: [{ category: 'labor', amount: { amountMinor: '100000', currency: 'MXN' } }],
+      partCosts: [
+        { partId: order.parts[0]?.id, unitCost: { amountMinor: '2500', currency: 'MXN' } },
+      ],
+    });
+    const closed = await h.service.close(TENANT, ADMIN, order.id, {
+      version: costed.version,
+      vehicleStatus: 'active',
+    });
+    const reopened = await h.service.reopen(TENANT, ADMIN, order.id, {
+      version: closed.version,
+      reason: 'Factura incorrecta',
+    });
+    await h.service.updateCosts(TENANT, ADMIN, order.id, { version: reopened.version, costs: [] });
+    const reopen = (await h.service.history(TENANT, ADMIN, order.id)).find(
+      (t) => t.command === 'reopen',
+    );
+    expect(reopen?.before).toMatchObject({
+      status: 'closed',
+      tasks: costed.tasks,
+      costs: costed.costs,
+      parts: costed.parts,
+    });
+    const hidden = transitionView(reopen as NonNullable<typeof reopen>, false);
+    expect(JSON.stringify(hidden)).not.toMatch(/100000|2500|MXN|unitCost|"costs"/);
+    expect(hidden.before?.['tasks']).toEqual(costed.tasks);
+    expect(transitionView(reopen as NonNullable<typeof reopen>, true).before?.['costs']).toEqual(
+      costed.costs,
+    );
   });
 });

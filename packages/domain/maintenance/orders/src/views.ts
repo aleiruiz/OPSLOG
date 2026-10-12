@@ -39,6 +39,22 @@ export function workOrderView(order: WorkOrder, viewCosts: boolean): WorkOrderVi
   };
 }
 
-export function transitionView(value: WorkOrderTransition): WorkOrderTransitionView {
-  return without(value, ['tenantId']);
+/** The timeline keeps the facts before each command; amounts follow the same `view_costs` rule. */
+export function transitionView(
+  value: WorkOrderTransition,
+  viewCosts: boolean,
+): WorkOrderTransitionView {
+  const view = without(value, ['tenantId']);
+  if (viewCosts || !value.before) return view;
+  const before = without(value.before, ['costs']);
+  const parts = value.before['parts'];
+  return {
+    ...view,
+    before: {
+      ...before,
+      ...(Array.isArray(parts)
+        ? { parts: parts.map((part: Record<string, unknown>) => without(part, ['unitCost'])) }
+        : {}),
+    },
+  };
 }

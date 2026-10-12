@@ -202,6 +202,7 @@ export class WorkOrderService extends WorkOrderServiceBase {
     const comment = optionalText(data['comment'], 1000);
     const approvalRequired = await this.refs.closeApprovalRequired(tenantId);
     missing({
+      tasks: order.tasks.length > 0,
       vehicleStatus: vehicleStatus !== null,
       closeApproval: !approvalRequired || order.closeApproval !== null,
     });
