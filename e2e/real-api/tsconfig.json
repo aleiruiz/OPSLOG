@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "rootDir": "..",
+    "outDir": "../../dist/e2e/real-api",
+    "types": ["node", "@playwright/test"]
+  },
+  "include": ["./**/*.ts", "../maintenance-real.spec.ts"],
+  "references": [
+    { "path": "../../apps/api/composition" },
+    { "path": "../../apps/api/bff" },
+    { "path": "../../tests/e2e/fleet" },
+    { "path": "../../tests/fixtures/maintenance" },
+    { "path": "../../packages/persistence/audit" },
+    { "path": "../../packages/persistence/maintenance/plans" }
+  ]
+}

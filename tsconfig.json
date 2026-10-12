@@ -35,6 +35,7 @@
     { "path": "./packages/ui" },
     { "path": "./apps/api/tenants" },
     { "path": "./e2e" },
+    { "path": "./e2e/real-api" },
     { "path": "./infra/queues" },
     { "path": "./packages/platform/audit" },
     { "path": "./packages/persistence/audit" },
