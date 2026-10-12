@@ -113,7 +113,7 @@ describe('maintenance model', () => {
     await ports.orders.history('o');
     await ports.orders.createCorrective({ vehicleId: 'v', description: 'd' });
     await ports.orders.adoptPreventive({ planId: 'p', scheduledOrderId: 's' });
-    await ports.orders.transition('o', { command: 'start', version: 2 });
+    await ports.orders.transition('o', { command: 'start', version: 2 }, 'key-12345678');
     await ports.orders.recordWork('o', { version: 3 });
     await ports.orders.recordCosts('o', { version: 4 });
     await ports.plans.list();
@@ -151,5 +151,7 @@ describe('maintenance model', () => {
       'maintenance.mechanics.deactivate',
     ]);
     expect(seen[5]).toContain('"orderId":"o"');
+    // The key rides next to params and body so the client sends it as the Idempotency-Key header.
+    expect(seen[5]).toContain('"idempotencyKey":"key-12345678"');
   });
 });

@@ -11,6 +11,7 @@ import type {
   BffWorkOrderCommand,
 } from '@opslog/contracts';
 import { CommandForm } from './CommandForm';
+import { SubmitKeys, submitTransition } from './idempotency';
 import { EvidencePanel } from './EvidencePanel';
 import { memberLabel, useDirectory, vehicleLabel } from './directory';
 import {
@@ -72,6 +73,7 @@ export function WorkOrderDetail({
   const [stale, setStale] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [order, setOrder] = React.useState<BffWorkOrder | null>(null);
+  const keys = React.useRef(new SubmitKeys());
   React.useEffect(() => {
     if (state.status === 'ready') setOrder(state.data);
   }, [state]);
@@ -319,7 +321,7 @@ export function WorkOrderDetail({
               onSubmit={(fields) =>
                 run(
                   () =>
-                    ports.orders.transition(order.id, {
+                    submitTransition(ports, keys.current, order.id, {
                       command: editing,
                       version: order.version,
                       ...fields,

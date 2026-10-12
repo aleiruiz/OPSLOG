@@ -45,7 +45,12 @@ export interface MaintenancePorts {
       planId: string;
       scheduledOrderId: string;
     }): Promise<Result<BffWorkOrder>>;
-    transition(id: string, body: BffWorkOrderTransitionInput): Promise<Result<BffWorkOrder>>;
+    /** `idempotencyKey` travels as the Idempotency-Key header (required to close and reopen). */
+    transition(
+      id: string,
+      body: BffWorkOrderTransitionInput,
+      idempotencyKey: string,
+    ): Promise<Result<BffWorkOrder>>;
     recordWork(id: string, body: BffWorkOrderWorkInput): Promise<Result<BffWorkOrder>>;
     recordCosts(id: string, body: BffWorkOrderCostsInput): Promise<Result<BffWorkOrder>>;
     /** Evidence and invoices of the order (G3 H3); the server decides what each caller sees. */
@@ -93,7 +98,8 @@ export function createMaintenancePorts(client: BffClient): MaintenancePorts {
       history: (orderId) => call('workOrders.history', { params: { orderId } }),
       createCorrective: (body) => call('workOrders.create', { body }),
       adoptPreventive: (body) => call('workOrders.adopt', { body }),
-      transition: (orderId, body) => call('workOrders.transition', { params: { orderId }, body }),
+      transition: (orderId, body, idempotencyKey) =>
+        call('workOrders.transition', { params: { orderId }, body, idempotencyKey }),
       recordWork: (orderId, body) => call('workOrders.work', { params: { orderId }, body }),
       recordCosts: (orderId, body) => call('workOrders.costs', { params: { orderId }, body }),
       files: {

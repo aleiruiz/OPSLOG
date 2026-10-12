@@ -9,6 +9,7 @@ import {
   type WorkOrder,
   type WorkOrderAttachmentView,
   type WorkOrderActor,
+  type WorkOrderCommand,
   type WorkOrderService,
   type WorkOrderTransitionView,
   type WorkOrderView,
@@ -22,6 +23,8 @@ export type WorkOrderApiErrorCode =
   | 'stale_version'
   | 'invalid_transition'
   | 'duplicate'
+  | 'idempotency_conflict'
+  | 'idempotency_key_required'
   | 'invalid_association'
   | 'missing_requirements'
   | 'internal_error';
@@ -84,6 +87,8 @@ const STATUS: Readonly<Record<WorkOrderApiErrorCode, number>> = {
   stale_version: 409,
   invalid_transition: 409,
   duplicate: 409,
+  idempotency_conflict: 409,
+  idempotency_key_required: 400,
   invalid_association: 409,
   missing_requirements: 422,
   internal_error: 500,
@@ -336,6 +341,22 @@ export class WorkOrderApi {
   ): Promise<WorkOrderApiResponse<WorkOrderView>> {
     return this.view(token, correlationId, (tenantId, actor) =>
       this.deps.orders[command](tenantId, actor, id, input),
+    );
+  }
+  /**
+   * A status command under the caller's Idempotency-Key. A repeated key with the same payload returns
+   * the stored result; costs are filtered for this caller, never copied from the first response.
+   */
+  public transition(
+    token: string,
+    correlationId: string,
+    command: WorkOrderCommand,
+    id: string,
+    input: unknown,
+    idempotencyKey?: string,
+  ): Promise<WorkOrderApiResponse<WorkOrderView>> {
+    return this.view(token, correlationId, (tenantId, actor) =>
+      this.deps.orders.execute(tenantId, actor, command, id, input, idempotencyKey),
     );
   }
 }

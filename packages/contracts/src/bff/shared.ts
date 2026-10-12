@@ -1,5 +1,11 @@
 export const CSRF_HEADER = 'x-csrf-token';
 
+/** Request header of idempotent commands (SPECS:195): 8-128 characters of [A-Za-z0-9_-]. */
+export const IDEMPOTENCY_KEY_HEADER = 'idempotency-key';
+export const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9_-]{8,128}$/;
+export const isIdempotencyKey = (value: unknown): value is string =>
+  typeof value === 'string' && IDEMPOTENCY_KEY_PATTERN.test(value);
+
 export type BffMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
 
 /** How a route is protected. `session-csrf` also requires the session-bound token on state changes. */
@@ -8,6 +14,7 @@ export type BffRouteKind = 'public' | 'pre-session' | 'session' | 'session-csrf'
 /** Uniform error bodies: fixed texts, never anything from the request, a stack or a store. */
 export const BFF_ERRORS = {
   bad_request: { status: 400, message: 'Invalid request' },
+  idempotency_key_required: { status: 400, message: 'Invalid request' },
   unauthorized: { status: 401, message: 'Authentication required' },
   forbidden: { status: 403, message: 'Permission denied' },
   csrf_failed: { status: 403, message: 'Request rejected' },
@@ -17,6 +24,7 @@ export const BFF_ERRORS = {
   last_admin: { status: 409, message: 'Conflict' },
   duplicate: { status: 409, message: 'Conflict' },
   stale_version: { status: 409, message: 'Conflict' },
+  idempotency_conflict: { status: 409, message: 'Conflict' },
   invalid_transition: { status: 409, message: 'Conflict' },
   immutable: { status: 409, message: 'Conflict' },
   area_in_use: { status: 409, message: 'Conflict' },
@@ -81,4 +89,9 @@ export interface BffRouteDefinition {
   readonly status: 200 | 201 | 204;
   /** Largest request body, when the route needs more than the handler's default (bulk import). */
   readonly maxBodyBytes?: number;
+  /**
+   * The route accepts the `Idempotency-Key` header. It is optional except for the body `command`s
+   * listed in `requiredFor`, which answer 400 `idempotency_key_required` without it.
+   */
+  readonly idempotency?: { readonly requiredFor: readonly string[] };
 }

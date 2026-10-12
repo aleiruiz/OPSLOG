@@ -5,6 +5,7 @@ import { createWorkOrderDataSource, createWorkOrderMigrationDataSource } from '.
 import { WORK_ORDER_ENTITIES, WORK_ORDER_TABLES } from './entities.js';
 import {
   CreateMaintenanceWorkOrderFiles2026101300020,
+  CreateMaintenanceWorkOrderIdempotency2026101400010,
   CreateMaintenanceWorkOrders2026101200030,
 } from './migrations.js';
 import { TypeOrmWorkOrderStore } from './store.js';
@@ -12,6 +13,8 @@ import {
   childRows,
   fileFrom,
   fileRow,
+  idempotencyFrom,
+  idempotencyRow,
   orderFrom,
   orderRow,
   transitionFrom,
@@ -30,7 +33,7 @@ describe('work order schema', () => {
     } as unknown as QueryRunner;
     const migration = new CreateMaintenanceWorkOrders2026101200030();
     await migration.up(runner);
-    expect(statements).toHaveLength(Object.keys(WORK_ORDER_TABLES).length - 1);
+    expect(statements).toHaveLength(Object.keys(WORK_ORDER_TABLES).length - 2);
     for (const sql of statements) {
       expect(sql).toMatch(/PRIMARY KEY \(company_id,/);
       expect(sql).toContain('ENGINE=InnoDB');
@@ -65,6 +68,43 @@ describe('work order schema', () => {
     expect(statements[0]).not.toMatch(/sha256|storage/i);
     await migration.down(runner);
     expect(statements.at(-1)).toBe(`DROP ${WORK_ORDER_TABLES.files}`);
+  });
+
+  it('creates the idempotency registry keyed by tenant, actor, command and key, and reverts it', async () => {
+    const statements: string[] = [];
+    const runner = {
+      query: async (sql: string) => void statements.push(sql),
+      dropTable: async (name: string) => void statements.push(`DROP ${name}`),
+    } as unknown as QueryRunner;
+    const migration = new CreateMaintenanceWorkOrderIdempotency2026101400010();
+    await migration.up(runner);
+    expect(statements).toHaveLength(1);
+    expect(statements[0]).toContain('PRIMARY KEY (company_id,actor_id,command,idempotency_key)');
+    expect(statements[0]).toContain('payload_hash CHAR(64)');
+    expect(statements[0]).toContain('response JSON NOT NULL');
+    expect(statements[0]).toContain('expires_at DATETIME(6) NOT NULL');
+    expect(statements[0]).toContain("CHECK (status = 'completed')");
+    await migration.down(runner);
+    expect(statements.at(-1)).toBe(`DROP ${WORK_ORDER_TABLES.idempotency}`);
+  });
+
+  it('maps idempotency records without loss, from a JSON value or from text', () => {
+    const order = { id: 'order-1', tenantId: TENANT, version: 7, status: 'closed' };
+    const claim = {
+      actorId: 'user-admin',
+      command: 'close' as const,
+      key: 'close-key-0001',
+      orderId: 'order-1',
+      payloadHash: 'a'.repeat(64),
+      createdAt: '2026-10-12T12:00:00.123Z',
+      expiresAt: '2026-10-13T12:00:00.123Z',
+    };
+    const row = idempotencyRow(TENANT, claim, order as never);
+    const record = { ...claim, tenantId: TENANT, status: 'completed', response: order };
+    expect(idempotencyFrom(row)).toEqual(record);
+    expect(
+      idempotencyFrom({ ...row, response: JSON.stringify(order) as unknown as object }),
+    ).toEqual(record);
   });
 
   it('maps evidence links without loss', () => {

@@ -1,4 +1,6 @@
 import type {
+  IdempotencyClaim,
+  IdempotencyRecord,
   WorkOrderAttachment,
   WorkOrder,
   WorkOrderCost,
@@ -7,6 +9,7 @@ import type {
   WorkOrderTransition,
 } from '../../../../domain/maintenance/orders/src/index.js';
 import type {
+  WorkOrderIdempotencyEntity,
   WorkOrderFileEntity,
   WorkOrderCostEntity,
   WorkOrderEntity,
@@ -211,5 +214,42 @@ export function fileFrom(row: WorkOrderFileEntity): WorkOrderAttachment {
     sizeBytes: Number(row.sizeBytes),
     attachedBy: row.attachedBy,
     attachedAt: row.attachedAt.toISOString(),
+  };
+}
+
+export function idempotencyRow(
+  tenantId: string,
+  claim: IdempotencyClaim,
+  response: WorkOrder,
+): WorkOrderIdempotencyEntity {
+  return {
+    tenantId,
+    actorId: claim.actorId,
+    command: claim.command,
+    key: claim.key,
+    orderId: claim.orderId,
+    payloadHash: claim.payloadHash,
+    status: 'completed',
+    response,
+    createdAt: new Date(claim.createdAt),
+    expiresAt: new Date(claim.expiresAt),
+  };
+}
+
+export function idempotencyFrom(row: WorkOrderIdempotencyEntity): IdempotencyRecord {
+  return {
+    tenantId: row.tenantId,
+    actorId: row.actorId,
+    command: row.command as IdempotencyRecord['command'],
+    key: row.key,
+    orderId: row.orderId,
+    payloadHash: row.payloadHash,
+    status: 'completed',
+    // mysql2 parses JSON columns; the guard keeps a driver that returns text working.
+    response: (typeof row.response === 'string'
+      ? JSON.parse(row.response)
+      : row.response) as IdempotencyRecord['response'],
+    createdAt: row.createdAt.toISOString(),
+    expiresAt: row.expiresAt.toISOString(),
   };
 }

@@ -7,6 +7,7 @@ export const WORK_ORDER_TABLES = {
   costs: 'opslog_maintenance_work_order_costs',
   transitions: 'opslog_maintenance_work_order_transitions',
   files: 'opslog_maintenance_work_order_files',
+  idempotency: 'opslog_maintenance_work_order_idempotency',
 } as const;
 
 const bin = 'utf8mb4_0900_bin';
@@ -100,6 +101,18 @@ export class WorkOrderFileEntity {
   sizeBytes!: string | number;
   attachedBy!: string;
   attachedAt!: Date;
+}
+export class WorkOrderIdempotencyEntity {
+  tenantId!: string;
+  actorId!: string;
+  command!: string;
+  key!: string;
+  orderId!: string;
+  payloadHash!: string;
+  status!: string;
+  response!: object;
+  createdAt!: Date;
+  expiresAt!: Date;
 }
 export class WorkOrderTransitionEntity {
   tenantId!: string;
@@ -229,6 +242,25 @@ export const WorkOrderFileSchema = new EntitySchema<WorkOrderFileEntity>({
   },
 });
 
+/** Idempotency-Key registry (SPECS:195): one row per tenant, actor, command and key. */
+export const WorkOrderIdempotencySchema = new EntitySchema<WorkOrderIdempotencyEntity>({
+  name: 'WorkOrderIdempotencyEntity',
+  target: WorkOrderIdempotencyEntity,
+  tableName: WORK_ORDER_TABLES.idempotency,
+  columns: {
+    ...key,
+    actorId: { ...text('actor_id', 72), primary: true },
+    command: { ...text('command', 32), primary: true },
+    key: { ...text('idempotency_key', 128), primary: true },
+    orderId: text('order_id', 64),
+    payloadHash: { name: 'payload_hash', type: 'char', length: 64, collation: bin },
+    status: text('status', 16),
+    response: { name: 'response', type: 'json' },
+    createdAt: instant('created_at'),
+    expiresAt: instant('expires_at'),
+  },
+});
+
 export const WORK_ORDER_ENTITIES = [
   WorkOrderSchema,
   WorkOrderTaskSchema,
@@ -236,4 +268,5 @@ export const WORK_ORDER_ENTITIES = [
   WorkOrderCostSchema,
   WorkOrderTransitionSchema,
   WorkOrderFileSchema,
+  WorkOrderIdempotencySchema,
 ] as const;
