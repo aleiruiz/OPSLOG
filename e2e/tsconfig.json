@@ -53,5 +53,13 @@
     "../apps/web/**/*.test.tsx",
     "../apps/web/app/test/**",
     "../apps/web/features/**/testing.tsx"
+  ],
+  "references": [
+    { "path": "../apps/api/composition" },
+    { "path": "../apps/api/bff" },
+    { "path": "../tests/e2e/fleet" },
+    { "path": "../tests/fixtures/maintenance" },
+    { "path": "../packages/persistence/audit" },
+    { "path": "../packages/persistence/maintenance/plans" }
   ]
 }

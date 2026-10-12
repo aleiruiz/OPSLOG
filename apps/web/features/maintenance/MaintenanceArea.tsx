@@ -108,6 +108,7 @@ export function MaintenanceArea({
           viewer={viewer}
           workshops={workshops}
           mechanics={mechanics}
+          onOpenOrder={setOrderId}
           onExpired={onExpired}
         />
       ) : (

@@ -9,12 +9,15 @@ const uiRoot = fileURLToPath(new URL('../packages/ui', import.meta.url));
 const reactRoot = dirname(require.resolve('react/package.json', { paths: [uiRoot] }));
 const reactDomRoot = dirname(require.resolve('react-dom/package.json', { paths: [uiRoot] }));
 
-// The shell uses History API routes under /web; serve web.html for every one of them (SPA fallback).
+// The shell uses History API routes under /web (mock API) and /real (real API harness); serve the
+// matching page for every one of them (SPA fallback).
 const webShellFallback = {
   name: 'web-shell-fallback',
   configureServer(server) {
     server.middlewares.use((request, _response, next) => {
       if (request.url?.startsWith('/web/') || request.url === '/web') request.url = '/web.html';
+      else if (request.url?.startsWith('/real/') || request.url === '/real')
+        request.url = '/real.html';
       next();
     });
   },

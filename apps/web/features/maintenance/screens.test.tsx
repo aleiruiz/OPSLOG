@@ -351,4 +351,81 @@ describe('maintenance area', () => {
     press('Reintentar');
     expect(await screen.findByRole('heading', { name: 'Mis órdenes' })).toBeInTheDocument();
   });
+
+  it('opens the work order of a generated preventive order from its plan, once', async () => {
+    const plan = {
+      id: 'plan-1',
+      vehicleId: 'veh-001',
+      state: 'active' as const,
+      intervalDays: 30,
+      lastServiceDate: '2026-09-11',
+      defaultWorkshopId: null,
+      defaultMechanicId: null,
+      version: 1,
+      createdAt: '',
+      updatedAt: '',
+    };
+    const fake = createFakeMaintenancePorts({ orders: [], plans: [plan], generated: ['plan-1'] });
+    renderView(
+      <MaintenanceArea
+        ports={fake.ports}
+        permissions={EDITOR}
+        userId="u-fleet"
+        initialView="plans"
+        onExpired={vi.fn()}
+      />,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'veh-001' }));
+    expect(await screen.findByText(/Orden generada por fecha/)).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Abrir orden de trabajo' }));
+    expect(await screen.findByLabelText('Estado: Programada')).toBeInTheDocument();
+    expect(screen.getByText('Plan preventivo plan-1')).toBeInTheDocument();
+    press('Volver a órdenes');
+    fireEvent.click(screen.getByRole('tab', { name: 'Planes' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'veh-001' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Abrir orden de trabajo' }));
+    expect(await screen.findByLabelText('Estado: Programada')).toBeInTheDocument();
+    const missing = createFakeMaintenancePorts({
+      orders: [],
+      plans: [{ ...plan, id: 'plan-2' }],
+      generated: ['plan-2'],
+    });
+    missing.ports.orders.adoptPreventive = async () => ({
+      ok: false,
+      error: { status: 500, code: 'internal_error', message: 'x', correlationId: 'c' },
+    });
+  });
+
+  it('reports a failed opening of a generated order', async () => {
+    const plan = {
+      id: 'plan-2',
+      vehicleId: 'veh-002',
+      state: 'active' as const,
+      intervalDays: 30,
+      lastServiceDate: '2026-09-11',
+      defaultWorkshopId: null,
+      defaultMechanicId: null,
+      version: 1,
+      createdAt: '',
+      updatedAt: '',
+    };
+    const fake = createFakeMaintenancePorts({ orders: [], plans: [plan], generated: ['plan-2'] });
+    fake.ports.orders.adoptPreventive = async () => ({
+      ok: false,
+      error: { status: 500, code: 'internal_error', message: 'x', correlationId: 'c' },
+    });
+    renderView(
+      <PlansScreen
+        ports={fake.ports}
+        viewer={{ permissions: EDITOR, mechanicIds: [] }}
+        onOpenOrder={vi.fn()}
+        onExpired={vi.fn()}
+      />,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'veh-002' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Abrir orden de trabajo' }));
+    expect(
+      await screen.findByText('No pudimos abrir la orden. Intenta nuevamente.'),
+    ).toBeInTheDocument();
+  });
 });
