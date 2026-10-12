@@ -726,3 +726,26 @@ describe('alerts client', () => {
     ]);
   });
 });
+
+describe('work order requirement errors', () => {
+  it('passes the structured missing requirements of a 422 through to the caller', async () => {
+    const { fetch } = transport(() => ({
+      status: 422,
+      body: {
+        ...errorBody('missing_requirements', 422),
+        missingRequirements: ['responsibleId', 'scheduledDate'],
+      },
+    }));
+    const client = createBffClient({ fetch });
+    expect(await client.call('workOrders.get', { params: { orderId: 'o1' } })).toEqual({
+      ok: false,
+      error: {
+        code: 'missing_requirements',
+        status: 422,
+        message: 'x',
+        correlationId: 'corr-server',
+        missingRequirements: ['responsibleId', 'scheduledDate'],
+      },
+    });
+  });
+});

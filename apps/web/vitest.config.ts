@@ -28,6 +28,7 @@ export default defineConfig({
       'employees/**/*.test.{ts,tsx}',
       'settings/**/*.test.{ts,tsx}',
       'vehicles/**/*.test.{ts,tsx}',
+      'features/**/*.test.{ts,tsx}',
     ],
     coverage: {
       provider: 'v8',
@@ -44,6 +45,7 @@ export default defineConfig({
         'employees/**/*.{ts,tsx}',
         'settings/**/*.{ts,tsx}',
         'vehicles/**/*.{ts,tsx}',
+        'features/**/*.{ts,tsx}',
       ],
       exclude: ['**/*.test.*', '**/*.stories.tsx', 'app/test/**', 'app/main.tsx', 'app/types.ts'],
     },

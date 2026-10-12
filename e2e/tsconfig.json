@@ -41,7 +41,9 @@
     "../apps/web/assignments/**/*.ts",
     "../apps/web/assignments/**/*.tsx",
     "../apps/web/imports/**/*.ts",
-    "../apps/web/imports/**/*.tsx"
+    "../apps/web/imports/**/*.tsx",
+    "../apps/web/features/**/*.ts",
+    "../apps/web/features/**/*.tsx"
   ],
   "exclude": [
     "../packages/ui/src/**/*.stories.tsx",
@@ -49,6 +51,7 @@
     "../packages/contracts/src/*.test.ts",
     "../apps/web/**/*.test.ts",
     "../apps/web/**/*.test.tsx",
-    "../apps/web/app/test/**"
+    "../apps/web/app/test/**",
+    "../apps/web/features/**/testing.tsx"
   ]
 }

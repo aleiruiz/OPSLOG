@@ -1,0 +1,95 @@
+import type {
+  ApiError,
+  BffClient,
+  BffMaintenanceMechanic,
+  BffMaintenanceMechanicInput,
+  BffMaintenancePlan,
+  BffMaintenancePlanInput,
+  BffMaintenancePlanPatch,
+  BffMaintenancePlanSchedule,
+  BffMaintenanceWorkshop,
+  BffMaintenanceWorkshopInput,
+  BffWorkOrder,
+  BffWorkOrderCostsInput,
+  BffWorkOrderTransition,
+  BffWorkOrderTransitionInput,
+  BffWorkOrderWorkInput,
+} from '@opslog/contracts';
+
+export type Result<T> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly error: ApiError };
+
+/**
+ * What the maintenance screens need from the BFF, one method per accepted contract route
+ * (MNT-PLANS and MNT-ORDERS). Authorization stays on the server; these ports only carry requests.
+ */
+export interface MaintenancePorts {
+  readonly orders: {
+    list(): Promise<Result<readonly BffWorkOrder[]>>;
+    get(id: string): Promise<Result<BffWorkOrder>>;
+    history(id: string): Promise<Result<readonly BffWorkOrderTransition[]>>;
+    createCorrective(body: {
+      vehicleId: string;
+      description: string;
+    }): Promise<Result<BffWorkOrder>>;
+    adoptPreventive(body: {
+      planId: string;
+      scheduledOrderId: string;
+    }): Promise<Result<BffWorkOrder>>;
+    transition(id: string, body: BffWorkOrderTransitionInput): Promise<Result<BffWorkOrder>>;
+    recordWork(id: string, body: BffWorkOrderWorkInput): Promise<Result<BffWorkOrder>>;
+    recordCosts(id: string, body: BffWorkOrderCostsInput): Promise<Result<BffWorkOrder>>;
+  };
+  readonly plans: {
+    list(): Promise<Result<readonly BffMaintenancePlan[]>>;
+    create(body: BffMaintenancePlanInput): Promise<Result<BffMaintenancePlan>>;
+    update(id: string, body: BffMaintenancePlanPatch): Promise<Result<BffMaintenancePlan>>;
+    schedule(id: string): Promise<Result<BffMaintenancePlanSchedule>>;
+  };
+  readonly workshops: {
+    list(): Promise<Result<readonly BffMaintenanceWorkshop[]>>;
+    create(body: BffMaintenanceWorkshopInput): Promise<Result<BffMaintenanceWorkshop>>;
+    deactivate(id: string): Promise<Result<BffMaintenanceWorkshop>>;
+  };
+  readonly mechanics: {
+    list(): Promise<Result<readonly BffMaintenanceMechanic[]>>;
+    create(body: BffMaintenanceMechanicInput): Promise<Result<BffMaintenanceMechanic>>;
+    deactivate(id: string): Promise<Result<BffMaintenanceMechanic>>;
+  };
+}
+
+/** The ports over the typed BFF client; method, path and CSRF come from the contract module. */
+export function createMaintenancePorts(client: BffClient): MaintenancePorts {
+  const { call } = client;
+  return {
+    orders: {
+      list: () => call('workOrders.list'),
+      get: (orderId) => call('workOrders.get', { params: { orderId } }),
+      history: (orderId) => call('workOrders.history', { params: { orderId } }),
+      createCorrective: (body) => call('workOrders.create', { body }),
+      adoptPreventive: (body) => call('workOrders.adopt', { body }),
+      transition: (orderId, body) => call('workOrders.transition', { params: { orderId }, body }),
+      recordWork: (orderId, body) => call('workOrders.work', { params: { orderId }, body }),
+      recordCosts: (orderId, body) => call('workOrders.costs', { params: { orderId }, body }),
+    },
+    plans: {
+      list: () => call('maintenance.plans.list'),
+      create: (body) => call('maintenance.plans.create', { body }),
+      update: (planId, body) => call('maintenance.plans.update', { params: { planId }, body }),
+      schedule: (planId) => call('maintenance.plans.schedule', { params: { planId } }),
+    },
+    workshops: {
+      list: () => call('maintenance.workshops.list'),
+      create: (body) => call('maintenance.workshops.create', { body }),
+      deactivate: (workshopId) =>
+        call('maintenance.workshops.deactivate', { params: { workshopId } }),
+    },
+    mechanics: {
+      list: () => call('maintenance.mechanics.list'),
+      create: (body) => call('maintenance.mechanics.create', { body }),
+      deactivate: (mechanicId) =>
+        call('maintenance.mechanics.deactivate', { params: { mechanicId } }),
+    },
+  };
+}

@@ -39,6 +39,8 @@
     "settings/**/*.tsx",
     "vehicles/**/*.ts",
     "vehicles/**/*.tsx",
+    "features/**/*.ts",
+    "features/**/*.tsx",
     "vitest.config.ts",
     "../../packages/ui/src/**/*.ts",
     "../../packages/ui/src/**/*.tsx",
