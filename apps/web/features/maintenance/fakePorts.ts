@@ -1,5 +1,6 @@
 import type {
   ApiError,
+  BffMaintenanceAlert,
   BffMaintenanceMechanic,
   BffMaintenancePlan,
   BffMaintenanceWorkshop,
@@ -10,6 +11,7 @@ import type {
 import type { MaintenancePorts, Result } from './ports';
 import { NEXT, baseOrder, missingFor } from './fakeOrder';
 import { createFakeFiles } from './fakeFiles';
+import { createFakeAlertPort } from './fakeAlerts';
 
 export { baseOrder };
 
@@ -25,6 +27,7 @@ export interface FakeMaintenanceOptions {
   readonly plans?: readonly BffMaintenancePlan[];
   readonly workshops?: readonly BffMaintenanceWorkshop[];
   readonly mechanics?: readonly BffMaintenanceMechanic[];
+  readonly alerts?: readonly BffMaintenanceAlert[];
   readonly failLists?: boolean;
   /** Plans whose schedule reports a generated, not yet opened preventive order. */
   readonly generated?: readonly string[];
@@ -338,6 +341,7 @@ export function createFakeMaintenancePorts(options: FakeMaintenanceOptions = {})
             )
           : fail(404, 'not_found'),
     },
+    alerts: createFakeAlertPort(options.alerts ?? [], () => Boolean(options.failLists)),
     workshops: {
       list: async () => ok(workshops),
       create: async (body) => {
@@ -388,10 +392,10 @@ export function createFakeMaintenancePorts(options: FakeMaintenanceOptions = {})
     state,
     /** The scan finished: pending files now count. */
     releaseFiles: fakeFiles.release,
-    /** Simulates another person changing the order (next write gets 409). */
-    bump(id: string) {
+    /** Simulates another person changing the order (next write gets 409), optionally with new content. */
+    bump(id: string, change: Partial<Pick<BffWorkOrder, 'tasks' | 'parts'>> = {}) {
       const order = orders.get(id);
-      if (order) orders.set(id, { ...order, version: order.version + 1 });
+      if (order) orders.set(id, { ...order, ...change, version: order.version + 1 });
     },
   };
 }

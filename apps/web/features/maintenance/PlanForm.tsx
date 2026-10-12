@@ -3,13 +3,16 @@ import Alert from '@mui/material/Alert';
 import Card from '@mui/material/Card';
 import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
 import { Button, Field, FormSection } from '@opslog/ui';
 import type {
   BffMaintenanceMechanic,
   BffMaintenancePlan,
   BffMaintenanceWorkshop,
 } from '@opslog/contracts';
+import { useDirectory, vehicleLabel } from './directory';
 import type { MaintenancePorts } from './ports';
+import { VehiclePicker } from './VehiclePicker';
 
 /** Create or edit a vehicle plan by date and/or km; editing never rewrites generated orders. */
 export function PlanForm({
@@ -29,6 +32,7 @@ export function PlanForm({
   onCancel: () => void;
   onExpired: () => void;
 }) {
+  const directory = useDirectory();
   const [values, setValues] = React.useState<Record<string, string>>({
     vehicleId: plan?.vehicleId ?? '',
     intervalDays: plan?.intervalDays ? String(plan.intervalDays) : '',
@@ -46,6 +50,10 @@ export function PlanForm({
   const text = (name: string) => (values[name]?.trim() ? { [name]: values[name]?.trim() } : {});
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!plan && !values['vehicleId']?.trim()) {
+      setError('Elige el vehículo del plan.');
+      return;
+    }
     if (!values['intervalDays']?.trim() && !values['intervalKm']?.trim()) {
       setError('Indica un intervalo por días, por kilometraje o ambos.');
       return;
@@ -92,13 +100,13 @@ export function PlanForm({
             {error}
           </Alert>
         )}
-        {!plan && (
-          <Field
+        {plan ? (
+          <Typography>Vehículo: {vehicleLabel(directory, plan.vehicleId)}</Typography>
+        ) : (
+          <VehiclePicker
             id="mnt-plan-vehicle"
-            label="Vehículo"
-            required
-            value={values['vehicleId']}
-            onChange={set('vehicleId')}
+            value={values['vehicleId'] ?? ''}
+            onChange={(next) => setValues({ ...values, vehicleId: next })}
           />
         )}
         <Stack direction={{ xs: 'column', sm: 'row' }} gap={2}>

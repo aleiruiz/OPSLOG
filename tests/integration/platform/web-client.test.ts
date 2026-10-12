@@ -508,6 +508,11 @@ describe('typed client against the real BFF', () => {
       await client.call('maintenance.plans.orders', { params: { planId: plan.value.id } }),
     ).toMatchObject({ ok: true, value: [] });
     expect(
+      await client.call('maintenance.alerts.list', {
+        query: { planId: plan.value.id, limit: 25 },
+      }),
+    ).toMatchObject({ ok: true, value: { items: [], total: 0, nextCursor: null } });
+    expect(
       await client.call('maintenance.plans.update', {
         params: { planId: plan.value.id },
         body: { version: 1, intervalDays: 120 },
@@ -571,6 +576,19 @@ describe('typed client against the real BFF', () => {
     expect(
       await client.call('workOrders.files.list', { params: { orderId: order.value.id } }),
     ).toEqual({ ok: true, value: [] });
+    // A rejected file (bytes that are not the declared type) is the caller's 400, and links nothing.
+    expect(
+      await client.call('workOrders.files.upload', {
+        params: { orderId: order.value.id },
+        body: {
+          version: 3,
+          kind: 'evidence',
+          name: 'frenos.png',
+          contentType: 'image/png',
+          contentBase64: Buffer.from('%PDF-1.4 evidencia').toString('base64'),
+        },
+      }),
+    ).toMatchObject({ ok: false, error: { status: 400 } });
     const attached = await client.call('workOrders.files.upload', {
       params: { orderId: order.value.id },
       body: {

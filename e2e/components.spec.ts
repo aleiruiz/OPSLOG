@@ -143,16 +143,42 @@ test.describe('OPSLOG UI components in a real browser', () => {
   });
 });
 
+// One axe pass over all the stories grew past its 120 s budget under load, so the scan is split into
+// fixed groups of consecutive stories (each its own test, run in parallel) plus one test for the page
+// itself. Together they cover every story and every page-level rule the single pass covered.
+const STORY_COUNT = 357; // Foundations: StatusBadge, UiState, the base components and each feature's stories.
+const STORY_GROUPS = 8;
+const STORIES_PER_GROUP = Math.ceil(STORY_COUNT / STORY_GROUPS);
+const WCAG = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
+
 test.describe('OPSLOG stories render and pass accessibility checks', () => {
-  test('renders every story and has no WCAG 2.1 A/AA violations', async ({ page }) => {
-    test.setTimeout(120_000); // one axe pass over every story page: grows with the catalogue
+  // The first load compiles the whole catalogue on a cold dev server, while the groups start together.
+  test.describe.configure({ timeout: 120_000 });
+  test.beforeEach(async ({ page }) => {
     await page.goto('/stories.html');
     await expect(page.getByRole('heading', { name: 'Stories OPSLOG' })).toBeVisible();
-    // Foundations: StatusBadge, UiState and the base components each contribute stories.
-    expect(await page.locator('main > section').count()).toBe(357);
+    expect(await page.locator('main > section').count()).toBe(STORY_COUNT);
+  });
+
+  test('the stories page itself has no WCAG 2.1 A/AA violations', async ({ page }) => {
     const results = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .withTags(WCAG)
+      .exclude('main > section')
       .analyze();
     expect(results.violations).toEqual([]);
   });
+
+  for (let group = 0; group < STORY_GROUPS; group += 1) {
+    const first = group * STORIES_PER_GROUP + 1;
+    const last = Math.min(STORY_COUNT, first + STORIES_PER_GROUP - 1);
+    test(`stories ${first}-${last} render and have no WCAG 2.1 A/AA violations`, async ({
+      page,
+    }) => {
+      let builder = new AxeBuilder({ page }).withTags(WCAG);
+      for (let index = first; index <= last; index += 1)
+        builder = builder.include(`main > section:nth-of-type(${index})`);
+      const results = await builder.analyze();
+      expect(results.violations).toEqual([]);
+    });
+  }
 });

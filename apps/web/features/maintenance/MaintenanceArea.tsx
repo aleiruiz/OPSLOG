@@ -6,6 +6,12 @@ import { UiState } from '@opslog/ui';
 import type { BffMaintenanceMechanic, BffMaintenanceWorkshop } from '@opslog/contracts';
 import { CatalogScreen, type MemberOption } from './CatalogScreen';
 import { MaintenanceSettingsScreen } from './MaintenanceSettingsScreen';
+import {
+  DirectoryProvider,
+  memberOptions,
+  type DirectoryOption,
+  type MaintenanceDirectory,
+} from './directory';
 import { MyOrdersScreen } from './MyOrdersScreen';
 import { PlansScreen } from './PlansScreen';
 import type { MaintenancePorts } from './ports';
@@ -31,18 +37,34 @@ export function MaintenanceArea({
   permissions,
   userId,
   members = [],
+  membersTruncated = false,
+  vehicles = null,
+  vehiclesTruncated = false,
+  onRetryVehicles,
   initialView = 'orders',
+  orderId: routedOrderId = null,
+  onOrderChange,
   onExpired,
 }: {
   ports: MaintenancePorts;
   permissions: readonly string[];
   userId: string;
   members?: readonly MemberOption[];
+  membersTruncated?: boolean;
+  /** The company's vehicles by label; `null` when they could not be loaded. */
+  vehicles?: readonly DirectoryOption[] | null;
+  vehiclesTruncated?: boolean;
+  onRetryVehicles?: () => void;
   initialView?: MaintenanceView;
+  /** With `onOrderChange` the open order lives in the address (deep link, browser back). */
+  orderId?: string | null;
+  onOrderChange?: (orderId: string | null) => void;
   onExpired: () => void;
 }) {
   const [view, setView] = React.useState<MaintenanceView>(initialView);
-  const [orderId, setOrderId] = React.useState<string | null>(null);
+  const [localOrderId, setLocalOrderId] = React.useState<string | null>(null);
+  const orderId = onOrderChange ? routedOrderId : localOrderId;
+  const setOrderId = onOrderChange ?? setLocalOrderId;
   const [workshops, setWorkshops] = React.useState<readonly BffMaintenanceWorkshop[]>([]);
   const [mechanics, setMechanics] = React.useState<readonly BffMaintenanceMechanic[]>([]);
   const [mechanicsFailed, setMechanicsFailed] = React.useState(false);
@@ -65,61 +87,78 @@ export function MaintenanceArea({
     permissions,
     mechanicIds: mechanics.filter((m) => m.active && m.memberId === userId).map((m) => m.id),
   };
+  const directory = React.useMemo<MaintenanceDirectory>(
+    () => ({
+      vehicles,
+      vehiclesTruncated,
+      members: memberOptions(members, mechanics, userId),
+      membersTruncated,
+      ...(onRetryVehicles ? { reloadVehicles: onRetryVehicles } : {}),
+    }),
+    [vehicles, vehiclesTruncated, members, mechanics, userId, membersTruncated, onRetryVehicles],
+  );
   return (
-    <Box component="section" aria-label="Mantenimiento">
-      <Tabs
-        value={view}
-        onChange={(_event, next: MaintenanceView) => {
-          setView(next);
-          setOrderId(null);
-        }}
-        aria-label="Secciones de mantenimiento"
-        variant="scrollable"
-        scrollButtons="auto"
-        sx={{ mb: 2 }}
-      >
-        {VIEWS.filter((item) => !item.permission || permissions.includes(item.permission)).map(
-          (item) => (
-            <Tab key={item.id} value={item.id} label={item.label} />
-          ),
+    <DirectoryProvider value={directory}>
+      <Box component="section" aria-label="Mantenimiento">
+        <Tabs
+          value={view}
+          onChange={(_event, next: MaintenanceView) => {
+            setView(next);
+            setOrderId(null);
+          }}
+          aria-label="Secciones de mantenimiento"
+          variant="scrollable"
+          scrollButtons="auto"
+          sx={{ mb: 2 }}
+        >
+          {VIEWS.filter((item) => !item.permission || permissions.includes(item.permission)).map(
+            (item) => (
+              <Tab key={item.id} value={item.id} label={item.label} />
+            ),
+          )}
+        </Tabs>
+        {orderId ? (
+          <WorkOrderDetail
+            ports={ports}
+            viewer={viewer}
+            orderId={orderId}
+            workshops={workshops}
+            mechanics={mechanics}
+            onBack={() => setOrderId(null)}
+            onExpired={onExpired}
+          />
+        ) : view === 'orders' ? (
+          <WorkOrdersScreen
+            ports={ports}
+            viewer={viewer}
+            onOpen={setOrderId}
+            onExpired={onExpired}
+          />
+        ) : view === 'mine' && mechanicsFailed ? (
+          // Without the caller's mechanic records an empty list would be misleading.
+          <UiState
+            kind="error"
+            description="No pudimos identificar tus órdenes asignadas."
+            actionLabel="Reintentar"
+            onAction={() => setAttempt((value) => value + 1)}
+          />
+        ) : view === 'mine' ? (
+          <MyOrdersScreen ports={ports} viewer={viewer} onOpen={setOrderId} onExpired={onExpired} />
+        ) : view === 'plans' ? (
+          <PlansScreen
+            ports={ports}
+            viewer={viewer}
+            workshops={workshops}
+            mechanics={mechanics}
+            onOpenOrder={setOrderId}
+            onExpired={onExpired}
+          />
+        ) : view === 'settings' ? (
+          <MaintenanceSettingsScreen ports={ports} onExpired={onExpired} />
+        ) : (
+          <CatalogScreen ports={ports} viewer={viewer} members={members} onExpired={onExpired} />
         )}
-      </Tabs>
-      {orderId ? (
-        <WorkOrderDetail
-          ports={ports}
-          viewer={viewer}
-          orderId={orderId}
-          workshops={workshops}
-          mechanics={mechanics}
-          onBack={() => setOrderId(null)}
-          onExpired={onExpired}
-        />
-      ) : view === 'orders' ? (
-        <WorkOrdersScreen ports={ports} viewer={viewer} onOpen={setOrderId} onExpired={onExpired} />
-      ) : view === 'mine' && mechanicsFailed ? (
-        // Without the caller's mechanic records an empty list would be misleading.
-        <UiState
-          kind="error"
-          description="No pudimos identificar tus órdenes asignadas."
-          actionLabel="Reintentar"
-          onAction={() => setAttempt((value) => value + 1)}
-        />
-      ) : view === 'mine' ? (
-        <MyOrdersScreen ports={ports} viewer={viewer} onOpen={setOrderId} onExpired={onExpired} />
-      ) : view === 'plans' ? (
-        <PlansScreen
-          ports={ports}
-          viewer={viewer}
-          workshops={workshops}
-          mechanics={mechanics}
-          onOpenOrder={setOrderId}
-          onExpired={onExpired}
-        />
-      ) : view === 'settings' ? (
-        <MaintenanceSettingsScreen ports={ports} onExpired={onExpired} />
-      ) : (
-        <CatalogScreen ports={ports} viewer={viewer} members={members} onExpired={onExpired} />
-      )}
-    </Box>
+      </Box>
+    </DirectoryProvider>
   );
 }

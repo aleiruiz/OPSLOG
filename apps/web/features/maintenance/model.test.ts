@@ -123,6 +123,8 @@ describe('maintenance model', () => {
     await ports.workshops.list();
     await ports.workshops.create({ name: 'T', specialties: [] });
     await ports.workshops.deactivate('w');
+    await ports.alerts.list();
+    await ports.alerts.list({ planId: 'p', limit: 50 });
     await ports.mechanics.list();
     await ports.mechanics.create({ name: 'M', specialties: [], kind: 'external' });
     await ports.mechanics.deactivate('m');
@@ -142,6 +144,8 @@ describe('maintenance model', () => {
       'maintenance.workshops.list',
       'maintenance.workshops.create',
       'maintenance.workshops.deactivate',
+      'maintenance.alerts.list',
+      'maintenance.alerts.list',
       'maintenance.mechanics.list',
       'maintenance.mechanics.create',
       'maintenance.mechanics.deactivate',

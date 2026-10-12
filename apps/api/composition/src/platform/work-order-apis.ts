@@ -15,7 +15,11 @@ import {
   VehicleError,
   type VehicleService,
 } from '../../../../../packages/domain/vehicles/src/index.js';
-import type { FileRecordStore } from '../../../../../packages/domain/files/src/index.js';
+import {
+  FileError,
+  type FileErrorCode,
+  type FileRecordStore,
+} from '../../../../../packages/domain/files/src/index.js';
 import type { SettingsService } from '../../../../../packages/domain/settings/src/index.js';
 import type { FilePipeline } from '../../../../../packages/platform/files/src/index.js';
 import type { FilesApi } from '../../../files/src/index.js';
@@ -45,6 +49,13 @@ const fileFailure = (code: string | undefined): WorkOrderError =>
         ? 'invalid_transition'
         : 'invalid_input',
   );
+
+const UPLOAD_REJECTIONS: ReadonlySet<FileErrorCode> = new Set<FileErrorCode>([
+  'invalid_input',
+  'unsupported_type',
+  'type_mismatch',
+  'too_large',
+]);
 
 /** The files module as the work orders use it: uploads go through its pipeline, downloads through its grants. */
 export interface WorkOrderFileSupport {
@@ -152,11 +163,18 @@ export function buildWorkOrderApi(
       // The actor was authorized for this exact order change before any byte is stored; the file
       // is owned by that actor and only a later link makes it evidence.
       ingest: async (tenantId, actorId, correlationId, input) => {
-        const record = await files.pipeline.ingestOriginal(
-          { tenantId, actorId, actorKind: 'user', correlationId },
-          { name: input.name, declaredType: input.contentType, bytes: input.bytes },
-        );
-        return { id: record.id };
+        try {
+          const record = await files.pipeline.ingestOriginal(
+            { tenantId, actorId, actorKind: 'user', correlationId },
+            { name: input.name, declaredType: input.contentType, bytes: input.bytes },
+          );
+          return { id: record.id };
+        } catch (error) {
+          // A rejected upload (type, content or size) is the caller's input, not a server fault.
+          if (error instanceof FileError && UPLOAD_REJECTIONS.has(error.code))
+            throw new WorkOrderError('invalid_input');
+          throw error;
+        }
       },
       read: async (token, correlationId, fileId) => {
         const grant = await files.files.createDownloadGrant(token, correlationId, fileId);
