@@ -52,7 +52,9 @@ export function MaintenanceAlertsPanel({
   const [loadingMore, setLoadingMore] = React.useState(false);
   const [failed, setFailed] = React.useState(false);
   const generation = React.useRef(0);
-  React.useEffect(() => {
+  // A layout effect: the reset must land before the page can be clicked, or a "load more"
+  // started right after the first page arrives is discarded as stale.
+  React.useLayoutEffect(() => {
     generation.current += 1;
     setExtra(null);
     setFailed(false);
