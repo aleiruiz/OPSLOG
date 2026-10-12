@@ -87,3 +87,8 @@ No hay hallazgos High ni Medium.
 2. Registrar N1 y los seguimientos Low como deuda diferible, a criterio del propietario.
 
 Este informe no declara G3 aprobado. La aceptación de G3, y por tanto el inicio de M4, sigue siendo decisión registrada del propietario.
+
+## Decisión del propietario
+
+- 2026-10-12, 23:38 UTC: Alei Ruiz aceptó G3 sobre `9cbc133` en el hilo del proyecto («Si, lo apruebo.»). La decisión está transcrita y no se puede verificar desde el repositorio.
+- N1 y los seguimientos Low e Info de este informe quedan como deuda diferible.
