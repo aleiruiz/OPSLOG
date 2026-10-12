@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AUDIT_TABLES } from '../../../packages/persistence/audit/src/index.js';
 import { MAINTENANCE_TABLES } from '../../../packages/persistence/maintenance/plans/src/index.js';
+import { BackfillOccurrenceLifecycle2026101300020 } from '../../../packages/persistence/maintenance/plans/src/migrations.js';
 import type { WorkOrder } from '../../../packages/domain/maintenance/orders/src/index.js';
 import type { MaintenancePlan } from '../../../packages/domain/maintenance/plans/src/index.js';
 import { ACTORS, adminUrl, at, startMaintenanceWorld, type MaintenanceWorld } from './qa-world.js';
@@ -338,5 +339,205 @@ suite('plan lifecycle (cancel, reopen, late close) on MySQL 8.4', () => {
     await relay({ again: true });
     expect((await planOf(plan.id)).version).toBe(version);
     expect(t).toBeTruthy();
+  });
+
+  const auditActions = async (planId: string) =>
+    Object.fromEntries(
+      (
+        await world.db.rows<{ action: string; total: number }>(
+          `SELECT action, COUNT(*) AS total FROM ${AUDIT_TABLES.local} WHERE tenant_id=? AND entity_id=? GROUP BY action`,
+          [world.tenantA, planId],
+        )
+      ).map((r) => [r.action, Number(r.total)]),
+    );
+
+  it('follow-up: a superseded successor gets its own audit row', async () => {
+    const plan = await newPlan({ intervalDays: 30, lastServiceDate: '2026-09-01' });
+    await scan(world.plansA, plan.id, '2026-10-12T00:00:00Z');
+    const closed = await closedFirstService(plan.id);
+    await relay();
+    await scan(world.plansA, plan.id, '2026-11-20T00:00:00Z');
+    expect(await occurrences(plan.id)).toHaveLength(2);
+    await reopen(closed);
+    await relay();
+    expect((await occurrences(plan.id)).map((r) => [r.sequence, r.state])).toEqual([
+      [1, 'scheduled'],
+      [2, 'cancelled'],
+    ]);
+    expect(await auditActions(plan.id)).toMatchObject({
+      'maintenance.occurrence.superseded': 1,
+      'maintenance.occurrence.reopened': 1,
+    });
+    await relay({ again: true });
+    expect((await auditActions(plan.id))['maintenance.occurrence.superseded']).toBe(1);
+  });
+
+  it('follow-up: a reopen delivered before the first close leaves the plan untouched and ignores the stale close', async () => {
+    const plan = await newPlan({
+      intervalDays: 30,
+      lastServiceDate: '2026-09-01',
+      lastServiceKm: 0,
+    });
+    await scan(world.plansA, plan.id, '2026-10-12T00:00:00Z');
+    const closed = await closedFirstService(plan.id);
+    await reopen(closed);
+    // Newest first: the reopen reaches the plan before any close was ever applied.
+    await relay({ reverse: true });
+    await relay({ again: true });
+    expect(await planOf(plan.id)).toMatchObject({
+      version: 1,
+      lastServiceDate: '2026-09-01',
+      lastServiceKm: 0,
+    });
+    expect((await occurrences(plan.id)).map((r) => [r.sequence, r.state, r.order_status])).toEqual([
+      [1, 'scheduled', 'scheduled'],
+    ]);
+    await scan(world.plansA, plan.id, '2026-12-30T00:00:00Z');
+    expect(await occurrences(plan.id)).toHaveLength(1);
+    expect(await auditActions(plan.id)).not.toHaveProperty('maintenance.plan.advanced');
+  });
+
+  it('race: an adoption event arriving after the predecessor reopen restores the adopted successor and supersedes the duplicate', async () => {
+    const plan = await newPlan({
+      intervalDays: 30,
+      lastServiceDate: '2026-09-01',
+      lastServiceKm: 0,
+    });
+    await scan(world.plansA, plan.id, '2026-10-12T00:00:00Z');
+    const closed = await closedFirstService(plan.id);
+    await relay();
+    await scan(world.plansA, plan.id, '2026-11-20T00:00:00Z');
+    const successor = await adopt(plan.id);
+    const isSuccessorAdoption = (row: OutboxRow) =>
+      row.type === `${PREFIX}adopted` && row.payload['orderId'] === successor.id;
+    // The reopen is processed before the successor's adoption event: the successor is replaced.
+    const reopened = await reopen(closed);
+    await relay({ skip: isSuccessorAdoption });
+    expect((await occurrences(plan.id)).map((r) => [r.sequence, r.state, r.order_status])).toEqual([
+      [1, 'scheduled', 'scheduled'],
+      [2, 'cancelled', 'cancelled'],
+    ]);
+    // The predecessor is closed again and the scan generates a duplicate for the same service.
+    await close(await complete(reopened, '2026-10-10', 40));
+    await relay({ skip: isSuccessorAdoption });
+    await scan(world.plansA, plan.id, '2026-11-20T00:00:00Z');
+    expect((await occurrences(plan.id)).map((r) => [r.sequence, r.state])).toEqual([
+      [1, 'completed'],
+      [2, 'cancelled'],
+      [3, 'scheduled'],
+    ]);
+    // The late adoption event restores the real successor and cancels the duplicate with history.
+    await relay();
+    await relay({ again: true });
+    const rows = await occurrences(plan.id);
+    expect(rows.map((r) => [r.sequence, r.state, r.order_status])).toEqual([
+      [1, 'completed', 'completed'],
+      [2, 'scheduled', 'scheduled'],
+      [3, 'cancelled', 'cancelled'],
+    ]);
+    expect(rows[1]?.adopted_at).not.toBeNull();
+    expect(await auditActions(plan.id)).toMatchObject({
+      'maintenance.occurrence.restored': 1,
+      'maintenance.occurrence.superseded': 2,
+    });
+    // No further duplicate: the restored adopted occurrence blocks the plan again.
+    await scan(world.plansA, plan.id, '2027-01-30T00:00:00Z');
+    await scan(world.plansA2, plan.id, '2027-01-30T00:00:00Z');
+    expect(await occurrences(plan.id)).toHaveLength(3);
+  });
+
+  it('race: the order adopted between the scheduled check and the rollback is restored when its event arrives', async () => {
+    const plan = await newPlan({ intervalDays: 30, lastServiceDate: '2026-09-01' });
+    await scan(world.plansA, plan.id, '2026-10-12T00:00:00Z');
+    const closed = await closedFirstService(plan.id);
+    await relay();
+    await scan(world.plansA, plan.id, '2026-11-20T00:00:00Z');
+    // adoptPreventive read the order as scheduled and committed its work order, but the rollback
+    // superseded the plan-side order first; the adoption event then reaches the plans consumer.
+    const scheduled = (await world.plansA.listScheduledOrders(world.tenantA, plan.id)).find(
+      (o) => o.status === 'scheduled',
+    );
+    expect(scheduled).toBeTruthy();
+    await reopen(closed);
+    await relay();
+    expect(
+      (await world.plansA.listScheduledOrders(world.tenantA, plan.id)).some(
+        (o) => o.id === scheduled?.id && o.status === 'scheduled',
+      ),
+    ).toBe(false);
+    await world.plansA.adoptPreventive({
+      tenantId: world.tenantA,
+      eventId: 'forced-adoption',
+      planId: plan.id,
+      occurrenceId: String(scheduled?.occurrenceId),
+      orderId: String(scheduled?.id),
+      version: 1,
+    });
+    const rows = await occurrences(plan.id);
+    expect(rows.map((r) => [r.sequence, r.state, r.order_status])).toEqual([
+      [1, 'scheduled', 'scheduled'],
+      [2, 'scheduled', 'scheduled'],
+    ]);
+    expect(rows[1]?.adopted_at).not.toBeNull();
+  });
+
+  it('follow-up: the backfill migration restores adopted_at and closure_plan_version of legacy rows', async () => {
+    const t = world.tenantA;
+    const plan = await newPlan({
+      intervalDays: 30,
+      lastServiceDate: '2026-09-01',
+      lastServiceKm: 0,
+    });
+    await scan(world.plansA, plan.id, '2026-10-12T00:00:00Z');
+    await closedFirstService(plan.id);
+    await relay();
+    await scan(world.plansA, plan.id, '2026-11-20T00:00:00Z');
+    const successor = await adopt(plan.id);
+    await relay();
+    await scan(world.plansA, plan.id, '2026-12-30T00:00:00Z');
+    const other = await newPlan({ intervalDays: 30, lastServiceDate: '2026-09-01' });
+    await scan(world.plansA, other.id, '2026-10-12T00:00:00Z');
+    await closedFirstService(other.id);
+    await relay();
+    const snapshot = (id: string) =>
+      world.db.rows<{
+        sequence: number;
+        adopted_at: Date | null;
+        closure_plan_version: number | null;
+      }>(
+        `SELECT sequence, adopted_at, closure_plan_version FROM ${MAINTENANCE_TABLES.occurrences} WHERE company_id=? AND plan_id=? ORDER BY sequence`,
+        [t, id],
+      );
+    const expected = await snapshot(plan.id);
+    expect(expected[0]?.closure_plan_version).toBe(2);
+    expect(expected[0]?.adopted_at).not.toBeNull();
+    expect(expected[1]?.adopted_at).not.toBeNull();
+    const [orderRow] = await world.db.rows<{ created_at: Date }>(
+      `SELECT created_at FROM opslog_maintenance_work_orders WHERE company_id=? AND id=?`,
+      [t, successor.id],
+    );
+    // Legacy state: rows written before the lifecycle columns existed carry NULLs. One closure of
+    // the other plan is also made underivable (its recorded actual km no longer matches any version).
+    await world.db.rows(
+      `UPDATE ${MAINTENANCE_TABLES.occurrences} SET adopted_at=NULL, closure_plan_version=NULL WHERE company_id=? AND plan_id IN (?, ?)`,
+      [t, plan.id, other.id],
+    );
+    await world.db.rows(
+      `UPDATE ${MAINTENANCE_TABLES.occurrences} SET actual_km=actual_km+7 WHERE company_id=? AND plan_id=?`,
+      [t, other.id],
+    );
+    const migration = new BackfillOccurrenceLifecycle2026101300020();
+    const runner = { query: (sql: string) => world.db.rows(sql) };
+    await migration.up(runner as never);
+    await migration.up(runner as never);
+    const restored = await snapshot(plan.id);
+    expect(restored[0]?.closure_plan_version).toBe(2);
+    expect(restored[0]?.adopted_at).not.toBeNull();
+    expect(restored[1]?.adopted_at?.getTime()).toBe(orderRow?.created_at.getTime());
+    expect(restored[1]?.closure_plan_version).toBeNull();
+    expect(restored).toHaveLength(2);
+    const underivable = await snapshot(other.id);
+    expect(underivable[0]?.closure_plan_version).toBeNull();
+    expect(underivable[0]?.adopted_at).not.toBeNull();
   });
 });

@@ -4,6 +4,7 @@ import { AUDIT_ENTITIES } from '../../../audit/src/index.js';
 import { MAINTENANCE_ENTITIES } from './entities.js';
 import {
   AddOccurrenceLifecycle2026101300010,
+  BackfillOccurrenceLifecycle2026101300020,
   CreateMaintenancePlans2026101200010,
   MAINTENANCE_MIGRATIONS_TABLE,
 } from './migrations.js';
@@ -24,7 +25,11 @@ export const MAINTENANCE_RUNTIME_ACCOUNT = /^opslog_maintenance_[a-z0-9_]+$/i;
 const common = {
   type: 'mysql',
   entities: [...MAINTENANCE_ENTITIES, ...AUDIT_ENTITIES],
-  migrations: [CreateMaintenancePlans2026101200010, AddOccurrenceLifecycle2026101300010],
+  migrations: [
+    CreateMaintenancePlans2026101200010,
+    AddOccurrenceLifecycle2026101300010,
+    BackfillOccurrenceLifecycle2026101300020,
+  ],
   migrationsTableName: MAINTENANCE_MIGRATIONS_TABLE,
   synchronize: false,
   migrationsRun: false,
