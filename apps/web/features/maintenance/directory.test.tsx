@@ -237,6 +237,25 @@ describe('pickers instead of technical ids', () => {
     expect(submit).toHaveBeenCalledWith(expect.objectContaining({ responsibleId: 'u-fleet' }));
   });
 
+  it('names a saved responsible outside the member list instead of announcing none', () => {
+    renderView(
+      <CommandForm
+        command="assign"
+        order={{ ...baseOrder(), responsibleId: 'u-gone' }}
+        workshops={[]}
+        mechanics={[]}
+        busy={false}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+    const select = screen.getByLabelText('Persona responsable') as HTMLSelectElement;
+    expect(select.value).toBe('u-gone');
+    expect(select.selectedOptions[0]?.textContent).toBe(
+      'Responsable actual (Otra persona de la empresa)',
+    );
+  });
+
   it('shows vehicle names, not ids, in the order list, its filter and Mis órdenes', async () => {
     const orders = [
       baseOrder({ id: 'wo-1', vehicleId: 'veh-001', status: 'assigned', mechanicId: 'mec-1' }),

@@ -19,20 +19,22 @@ export async function listPlanAlerts(
 ): Promise<PlanAlertPage> {
   const plans = dataSource.getRepository(MaintenancePlanEntity);
   // Alerts carry the plan, not the vehicle: resolve the vehicle's plans first (a handful per vehicle).
-  const rows = await plans.find({
-    where: {
-      tenantId,
-      ...(query.planId === undefined ? {} : { id: query.planId }),
-      ...(query.vehicleId === undefined ? {} : { vehicleId: query.vehicleId }),
-    },
-    select: { id: true, vehicleId: true },
-  });
-  if (rows.length === 0 && (query.planId !== undefined || query.vehicleId !== undefined))
-    return { items: [], total: 0 };
+  const filtered = query.planId !== undefined || query.vehicleId !== undefined;
+  // Unfiltered pages resolve only the plans of the alerts they return (below).
+  const rows = filtered
+    ? await plans.find({
+        where: {
+          tenantId,
+          ...(query.planId === undefined ? {} : { id: query.planId }),
+          ...(query.vehicleId === undefined ? {} : { vehicleId: query.vehicleId }),
+        },
+        select: { id: true, vehicleId: true },
+      })
+    : [];
+  if (rows.length === 0 && filtered) return { items: [], total: 0 };
   const vehicleOf = new Map<string, string>();
   const where: FindOptionsWhere<MaintenancePlanAlertEntity> = { tenantId };
-  if (query.planId !== undefined || query.vehicleId !== undefined)
-    where.planId = In(rows.map((row) => row.id));
+  if (filtered) where.planId = In(rows.map((row) => row.id));
   const [found, total] = await dataSource.getRepository(MaintenanceAlertSchema).findAndCount({
     where,
     order: { occurredAt: 'DESC', id: 'DESC' },

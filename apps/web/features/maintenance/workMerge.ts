@@ -45,12 +45,14 @@ export const taskLines = (tasks: string): string[] =>
  */
 export function rebaseDraft(base: WorkSnapshot, server: WorkSnapshot, draft: WorkDraft): Rebased {
   const changes: string[] = [];
-  const lines = new Set(taskLines(draft.tasks));
+  const lineList = taskLines(draft.tasks);
+  const lines = new Set(lineList);
   const baseTasks = new Set(base.tasks.map((task) => task.description));
   const serverTasks = server.tasks;
   const serverNames = new Set(serverTasks.map((task) => task.description));
   const removedByUser = new Set([...baseTasks].filter((description) => !lines.has(description)));
-  const addedByUser = [...lines].filter((description) => !baseTasks.has(description));
+  // A list, not a set: lines the person typed twice stay twice, as they would on a plain save.
+  const addedByUser = lineList.filter((description) => !baseTasks.has(description));
   for (const task of serverTasks)
     if (!baseTasks.has(task.description))
       changes.push(`Otra persona agregó el trabajo «${task.description}».`);
@@ -80,7 +82,11 @@ export function rebaseDraft(base: WorkSnapshot, server: WorkSnapshot, draft: Wor
       changes.push(`Otra persona agregó la refacción «${current.name}».`);
       parts.push({ ...current });
     } else if (mine === undefined) {
-      // The person removed it: their removal stands.
+      // The person removed it: their removal stands, but say so when someone else changed it.
+      if (differs(current, original))
+        changes.push(
+          `Otra persona cambió la refacción «${current.name}», que quitaste; se mantiene quitada.`,
+        );
     } else if (differs(mine, original)) {
       if (differs(current, original))
         changes.push(
@@ -106,8 +112,12 @@ export function rebaseDraft(base: WorkSnapshot, server: WorkSnapshot, draft: Wor
         `Otra persona quitó la refacción «${original.name}»; ya no está en tu borrador.`,
       );
   }
+  // A new row is dropped only when someone else concurrently added the same part (not a base part).
   for (const mine of draft.parts)
-    if (mine.id === undefined && !server.parts.some((part) => !differs(part, mine)))
+    if (
+      mine.id === undefined &&
+      !server.parts.some((part) => !baseParts.has(part.id) && !differs(part, mine))
+    )
       parts.push(mine);
   return { draft: { tasks: tasks.join('\n'), parts }, changes };
 }

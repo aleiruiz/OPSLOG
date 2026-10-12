@@ -12,7 +12,7 @@ import type {
   BffWorkOrderCommand,
   BffWorkOrderTransitionInput,
 } from '@opslog/contracts';
-import { OptionPicker, useDirectory } from './directory';
+import { OptionPicker, UNKNOWN_MEMBER, useDirectory } from './directory';
 import { COMMAND_LABELS, VEHICLE_STATUS_LABELS } from './labels';
 
 type Fields = Omit<BffWorkOrderTransitionInput, 'command' | 'version'>;
@@ -70,6 +70,7 @@ export function CommandForm({
           id="mnt-cmd-responsible"
           label="Persona responsable"
           placeholder="Sin responsable"
+          currentLabel={`Responsable actual (${UNKNOWN_MEMBER})`}
           options={directory.members}
           value={value('responsibleId')}
           onChange={(next) => setValues({ ...values, responsibleId: next })}

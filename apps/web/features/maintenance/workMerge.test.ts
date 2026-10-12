@@ -122,4 +122,34 @@ describe('rebaseDraft', () => {
     const { draft: merged } = rebaseDraft(base, snapshot([], [['p9', 'Filtro', '1']]), draft);
     expect(merged.parts).toEqual([{ id: 'p9', name: 'Filtro', quantity: '1' }]);
   });
+
+  it('keeps a new row equal to a part that was already there, and duplicate task lines', () => {
+    const base = snapshot(['A'], [['p1', 'Filtro', '1']]);
+    const draft = {
+      tasks: 'A\nB\nB',
+      parts: [
+        { id: 'p1', name: 'Filtro', quantity: '1' },
+        { id: undefined, name: 'Filtro', quantity: '1' },
+      ],
+    };
+    const server = snapshot(['A', 'C'], [['p1', 'Filtro', '1']]);
+    const { draft: merged } = rebaseDraft(base, server, draft);
+    expect(merged.parts).toEqual([
+      { id: 'p1', name: 'Filtro', quantity: '1' },
+      { id: undefined, name: 'Filtro', quantity: '1' },
+    ]);
+    expect(taskLines(merged.tasks)).toEqual(['A', 'C', 'B', 'B']);
+  });
+
+  it('reports a part someone else changed after the person removed it', () => {
+    const base = snapshot([], [['p1', 'Filtro', '1']]);
+    const { draft: merged, changes } = rebaseDraft(base, snapshot([], [['p1', 'Filtro', '2']]), {
+      tasks: '',
+      parts: [],
+    });
+    expect(merged.parts).toEqual([]);
+    expect(changes).toEqual([
+      'Otra persona cambió la refacción «Filtro», que quitaste; se mantiene quitada.',
+    ]);
+  });
 });

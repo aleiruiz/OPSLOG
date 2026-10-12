@@ -77,6 +77,7 @@ export function OptionPicker({
   placeholder,
   required = false,
   description,
+  currentLabel = 'Valor actual (fuera de la lista)',
   onChange,
 }: {
   id: string;
@@ -86,6 +87,8 @@ export function OptionPicker({
   placeholder: string;
   required?: boolean;
   description?: string;
+  /** Names a saved value that is not among `options`. */
+  currentLabel?: string;
   onChange: (value: string) => void;
 }) {
   return (
@@ -101,6 +104,11 @@ export function OptionPicker({
       {...(description === undefined ? {} : { description })}
     >
       <option value="">{placeholder}</option>
+      {value !== '' && !options.some((option) => option.id === value) ? (
+        // The saved value is outside the loaded list (no directory access, or a deactivated
+        // member): name it instead of letting the select announce the placeholder.
+        <option value={value}>{currentLabel}</option>
+      ) : null}
       {options.map((option) => (
         <option key={option.id} value={option.id}>
           {option.label}
