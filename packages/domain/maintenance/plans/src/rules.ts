@@ -4,20 +4,19 @@ import type { MaintenancePlan, PlanInput } from './types.js';
 const ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
+export function isValidDateOnly(value: unknown): value is string {
+  if (typeof value !== 'string' || !DATE.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
 export function opaqueId(value: unknown): string {
   if (typeof value !== 'string' || !ID.test(value)) throw new MaintenancePlanError('invalid_input');
   return value;
 }
 
 function date(value: unknown): string {
-  if (
-    typeof value !== 'string' ||
-    !DATE.test(value) ||
-    Number.isNaN(Date.parse(`${value}T00:00:00Z`))
-  )
-    throw new MaintenancePlanError('invalid_input');
-  const parsed = new Date(`${value}T00:00:00Z`);
-  if (parsed.toISOString().slice(0, 10) !== value) throw new MaintenancePlanError('invalid_input');
+  if (!isValidDateOnly(value)) throw new MaintenancePlanError('invalid_input');
   return value;
 }
 

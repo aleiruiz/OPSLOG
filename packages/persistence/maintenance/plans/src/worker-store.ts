@@ -11,6 +11,7 @@ import type {
 import {
   MaintenancePlanError,
   evaluatePlan,
+  isValidDateOnly,
   targets,
 } from '../../../../domain/maintenance/plans/src/index.js';
 import { MAINTENANCE_RUNTIME_ACCOUNT } from './data-source.js';
@@ -224,7 +225,17 @@ export class TypeOrmMaintenancePlanWorkerStore implements PlanScanStore {
       const { targetDate, targetKm } = targets(plan);
       const dateReached = targetDate !== null && now.toISOString().slice(0, 10) >= targetDate;
       const kmReached = odometer.updatedAt !== null && targetKm !== null && odometer.km >= targetKm;
-      const trigger = dateReached ? 'date' : 'odometer';
+      const odometerReachedAt =
+        kmReached && odometer.updatedAt !== null ? Date.parse(odometer.updatedAt) : Number.NaN;
+      const dateTargetAt = targetDate === null ? Number.NaN : Date.parse(`${targetDate}T00:00:00.000Z`);
+      const trigger =
+        dateReached && kmReached
+          ? odometerReachedAt < dateTargetAt
+            ? 'odometer'
+            : 'date'
+          : dateReached
+            ? 'date'
+            : 'odometer';
       let evaluations: readonly PlanEvaluation[];
       if (dateReached || kmReached) {
         const due: PlanEvaluation = {
@@ -307,7 +318,7 @@ export class TypeOrmMaintenancePlanWorkerStore implements PlanScanStore {
   public async closePreventive(event: PreventiveOrderClosedEvent): Promise<void> {
     if (event.kind === 'corrective') return;
     if (
-      !/^\d{4}-\d{2}-\d{2}$/.test(event.actualDate) ||
+      !isValidDateOnly(event.actualDate) ||
       !Number.isInteger(event.actualKm) ||
       event.actualKm < 0 ||
       Number.isNaN(Date.parse(event.completedAt))

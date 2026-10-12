@@ -152,16 +152,75 @@ suite('maintenance persistence on disposable MySQL 8.4', () => {
     });
   });
 
+  it('records the first reached target for a dual date and odometer plan', async () => {
+    const tenant = randomUUID();
+    const value: MaintenancePlan = {
+      ...plan(tenant, randomUUID()),
+      intervalKm: 100,
+      lastServiceKm: 1000,
+      lastServiceDate: '2026-09-12',
+    };
+    await storeA.create(value, 'synthetic-actor');
+
+    const alerts = await storeA.scan(tenant, value.id, new Date('2026-10-12T12:00:00.000Z'), {
+      km: 1200,
+      updatedAt: '2026-10-11T23:00:00.000Z',
+    });
+    expect(alerts.map(({ kind, trigger }) => ({ kind, trigger }))).toEqual([
+      { kind: 'due', trigger: 'odometer' },
+      { kind: 'overdue', trigger: 'odometer' },
+    ]);
+    const [occurrence] = await db.rows<{ trigger_kind: string }>(
+      `SELECT trigger_kind FROM ${MAINTENANCE_TABLES.occurrences} WHERE company_id=? AND plan_id=?`,
+      [tenant, value.id],
+    );
+    expect(occurrence?.trigger_kind).toBe('odometer');
+  });
+
+  it('rejects impossible actual service dates without advancing the occurrence or plan', async () => {
+    const tenant = randomUUID();
+    const value = plan(tenant, randomUUID());
+    await storeA.create(value, 'synthetic-actor');
+    await storeA.scan(tenant, value.id, now, { km: 0, updatedAt: now.toISOString() });
+    const [occurrence] = await db.rows<{ id: string; order_id: string }>(
+      `SELECT id, order_id FROM ${MAINTENANCE_TABLES.occurrences} WHERE company_id=? AND plan_id=?`,
+      [tenant, value.id],
+    );
+
+    await expect(
+      storeA.closePreventive({
+        tenantId: tenant,
+        planId: value.id,
+        occurrenceId: occurrence!.id,
+        orderId: occurrence!.order_id,
+        kind: 'preventive',
+        eventId: randomUUID(),
+        completedAt: '2026-10-12T12:00:00.000Z',
+        actualDate: '2026-02-31',
+        actualKm: 1100,
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_input' });
+    expect(await storeA.get(tenant, value.id)).toMatchObject({
+      version: 1,
+      lastServiceDate: '2026-09-12',
+    });
+    expect(await storeA.readSchedule(tenant, value.id)).toMatchObject({
+      occurrence: { sequence: 1, state: 'scheduled' },
+      order: { status: 'scheduled' },
+    });
+  });
+
   it('rolls back the business transaction when outbox or audit delivery is unavailable', async () => {
     const tenant = randomUUID();
     const value = plan(tenant, randomUUID());
+    await storeA.create(value, 'synthetic-actor');
     await db.admin.query(
       `REVOKE EXECUTE ON PROCEDURE \`${db.databaseName}\`.\`opslog_enqueue_tenant_outbox\` FROM '${db.runtimeUserA}'@'%'`,
     );
     try {
       await expect(
         storeA.scan(tenant, value.id, now, { km: 0, updatedAt: now.toISOString() }),
-      ).rejects.toBeDefined();
+      ).rejects.toThrow(/execute command denied/i);
     } finally {
       await db.admin.query(
         `GRANT EXECUTE ON PROCEDURE \`${db.databaseName}\`.\`opslog_enqueue_tenant_outbox\` TO '${db.runtimeUserA}'@'%'`,
@@ -171,13 +230,26 @@ suite('maintenance persistence on disposable MySQL 8.4', () => {
       `SELECT COUNT(*) AS count FROM ${MAINTENANCE_TABLES.plans} WHERE company_id=? AND id=?`,
       [tenant, value.id],
     );
-    expect(Number(rolledBackScan?.count)).toBe(0);
+    expect(Number(rolledBackScan?.count)).toBe(1);
+    const [rolledBackOccurrences] = await db.rows<{ count: number }>(
+      `SELECT COUNT(*) AS count FROM ${MAINTENANCE_TABLES.occurrences} WHERE company_id=? AND plan_id=?`,
+      [tenant, value.id],
+    );
+    const [rolledBackAlerts] = await db.rows<{ count: number }>(
+      `SELECT COUNT(*) AS count FROM ${MAINTENANCE_TABLES.alerts} WHERE company_id=? AND plan_id=?`,
+      [tenant, value.id],
+    );
+    expect(Number(rolledBackOccurrences?.count)).toBe(0);
+    expect(Number(rolledBackAlerts?.count)).toBe(0);
 
     await db.admin.query(
       `REVOKE EXECUTE ON PROCEDURE \`${db.databaseName}\`.\`opslog_append_local_audit_and_delivery\` FROM '${db.runtimeUserA}'@'%'`,
     );
+    const auditValue = plan(tenant, randomUUID());
     try {
-      await expect(storeA.create(value, 'synthetic-actor')).rejects.toBeDefined();
+      await expect(storeA.create(auditValue, 'synthetic-actor')).rejects.toThrow(
+        'Audit persistence operation failed',
+      );
     } finally {
       await db.admin.query(
         `GRANT EXECUTE ON PROCEDURE \`${db.databaseName}\`.\`opslog_append_local_audit_and_delivery\` TO '${db.runtimeUserA}'@'%'`,
@@ -185,7 +257,7 @@ suite('maintenance persistence on disposable MySQL 8.4', () => {
     }
     const [rolledBackCreate] = await db.rows<{ count: number }>(
       `SELECT COUNT(*) AS count FROM ${MAINTENANCE_TABLES.plans} WHERE company_id=? AND id=?`,
-      [tenant, value.id],
+      [tenant, auditValue.id],
     );
     expect(Number(rolledBackCreate?.count)).toBe(0);
   });

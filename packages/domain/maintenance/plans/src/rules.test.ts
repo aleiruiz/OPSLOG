@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   MaintenancePlanError,
   addCalendarDays,
+  isValidDateOnly,
   makePlan,
   opaqueId,
   parsePlanInput,
@@ -61,6 +62,12 @@ describe('maintenance plan rules', () => {
       /invalid_input/,
     );
     expect(() => parsePlanInput({ ...baseInput, defaultMechanicId: 2 })).toThrow(/invalid_input/);
+  });
+
+  it('shares strict date-only validation with persisted closure events', () => {
+    expect(isValidDateOnly('2024-02-29')).toBe(true);
+    expect(isValidDateOnly('2026-02-31')).toBe(false);
+    expect(isValidDateOnly('2026-2-01')).toBe(false);
   });
 
   it('requires a service baseline for each configured interval', () => {
