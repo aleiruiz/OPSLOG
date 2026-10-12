@@ -22,7 +22,7 @@ const now = new Date('2026-10-12T12:00:00.000Z');
 const ADMIN: WorkOrderActor = {
   id: 'user-admin',
   subject: 'admin',
-  permissions: ['view', 'create', 'edit', 'view_costs', 'approve', 'reopen'],
+  permissions: ['view', 'create', 'edit', 'view_costs', 'incidents:approve', 'reopen'],
   mechanicIds: [],
 };
 
@@ -67,6 +67,9 @@ suite('work orders on disposable MySQL 8.4', () => {
         : null;
     },
     closeApprovalRequired: async () => false,
+    timeZone: async () => 'UTC',
+    fileRequirements: async () => ({ evidence: false, invoice: false }),
+    fileRecord: async () => null,
   });
   const service = (source: DataSource, plans?: TypeOrmMaintenancePlanStore) =>
     new WorkOrderService(new TypeOrmWorkOrderStore(source), refs(plans), { now: () => now });

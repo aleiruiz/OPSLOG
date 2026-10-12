@@ -1,6 +1,8 @@
 import type {
   BffRouteId,
   BffWorkOrder,
+  BffWorkOrderFile,
+  BffWorkOrderFileContent,
   BffWorkOrderTransition,
 } from '../../../../../packages/contracts/src/index.js';
 import type { WorkOrderApiResponse } from '../../../maintenance/orders/src/index.js';
@@ -45,6 +47,63 @@ const orderId = (ctx: RouteContext) => ctx.params['orderId'] as string;
 const api = (ctx: RouteContext) => ctx.platform.workOrders;
 
 export const WORK_ORDER_ROUTES: readonly Route[] = [
+  route(
+    'workOrders.files.list',
+    async (ctx) =>
+      answer<readonly BffWorkOrderFile[]>(
+        ctx,
+        api(ctx).listFiles(ctx.token as string, ctx.correlationId, orderId(ctx)),
+        'workOrders.files.list',
+      ),
+    { orderId: ID },
+  ),
+  route(
+    'workOrders.files.upload',
+    async (ctx) => {
+      const input = body(ctx, ['version', 'kind', 'name', 'contentType', 'contentBase64']);
+      if (!input) return bad(ctx);
+      return answer(
+        ctx,
+        api(ctx).uploadFile(ctx.token as string, ctx.correlationId, orderId(ctx), input),
+        'workOrders.files.upload',
+      );
+    },
+    { orderId: ID },
+  ),
+  route(
+    'workOrders.files.detach',
+    async (ctx) => {
+      const input = body(ctx, ['version']);
+      if (!input) return bad(ctx);
+      return answer(
+        ctx,
+        api(ctx).detachFile(
+          ctx.token as string,
+          ctx.correlationId,
+          orderId(ctx),
+          ctx.params['fileId'] as string,
+          input,
+        ),
+        'workOrders.files.detach',
+      );
+    },
+    { orderId: ID, fileId: ID },
+  ),
+  route(
+    'workOrders.files.content',
+    async (ctx) =>
+      answer<BffWorkOrderFileContent>(
+        ctx,
+        api(ctx).fileContent(
+          ctx.token as string,
+          ctx.correlationId,
+          orderId(ctx),
+          ctx.params['fileId'] as string,
+        ),
+        'workOrders.files.content',
+      ),
+    { orderId: ID, fileId: ID },
+  ),
   route('workOrders.list', async (ctx) =>
     answer<readonly BffWorkOrder[]>(
       ctx,

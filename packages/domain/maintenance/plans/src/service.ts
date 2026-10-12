@@ -205,13 +205,21 @@ export class MaintenancePlanWorker {
     private readonly scans: PlanScanStore,
     private readonly vehicles: VehicleMaintenanceReader,
     private readonly now = () => new Date(),
+    /** Resolves the IANA zone of a tenant (company settings); UTC when not given. */
+    private readonly timeZoneOf: (tenantId: string) => Promise<string> = async () => 'UTC',
   ) {}
   public async scan(tenantId: string, planId: string): Promise<readonly PlanEvaluation[]> {
     const plan = await this.plans.get(opaqueId(tenantId), opaqueId(planId));
     if (!plan) throw new PlanFailure('not_found');
     const vehicle = await this.vehicles.read(tenantId, plan.vehicleId);
     if (!vehicle || vehicle.id !== plan.vehicleId) throw new PlanFailure('not_found');
-    return this.scans.scan(tenantId, planId, this.now(), vehicle.odometer);
+    return this.scans.scan(
+      tenantId,
+      planId,
+      this.now(),
+      vehicle.odometer,
+      await this.timeZoneOf(tenantId),
+    );
   }
   public consumeClosure(event: PreventiveOrderClosedEvent): Promise<void> {
     return this.scans.closePreventive(event);

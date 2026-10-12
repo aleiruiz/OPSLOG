@@ -66,7 +66,7 @@ export function canSee(actor: WorkOrderActor, order: WorkOrder): boolean {
 /** Permission matrix per command; the caller must already see the order. */
 export function requireCommand(
   actor: WorkOrderActor,
-  command: WorkOrderCommand | 'work' | 'costs',
+  command: WorkOrderCommand | 'work' | 'costs' | 'evidence' | 'invoice',
   order: WorkOrder,
 ): void {
   const fleet = can(actor, 'edit');
@@ -77,7 +77,10 @@ export function requireCommand(
     complete: fleet || assigned,
     work: fleet || (assigned && order.status === 'in_progress'),
     costs: fleet && can(actor, 'view_costs'),
-    approve_close: can(actor, 'approve'),
+    // D9: the assigned mechanic adds evidence while the work is in progress. Invoices are cost data.
+    evidence: fleet || (assigned && order.status === 'in_progress'),
+    invoice: fleet && can(actor, 'view_costs'),
+    approve_close: can(actor, 'incidents:approve'),
     close: fleet && can(actor, 'view_costs'),
     cancel: fleet,
     reopen: can(actor, 'reopen'),

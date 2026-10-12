@@ -49,6 +49,35 @@ export interface CloseApproval {
   readonly approvedAt: string;
 }
 
+/** Typed files of a work order (SPECS:44/:348/:227): photos or documents of the work, and the supplier invoice. */
+export const WORK_ORDER_FILE_KINDS = ['evidence', 'invoice'] as const;
+export type WorkOrderFileKind = (typeof WORK_ORDER_FILE_KINDS)[number];
+/** Timeline entries of file changes; they keep the order status and carry only the kind in the name. */
+export const WORK_ORDER_FILE_COMMANDS = [
+  'evidence_attached',
+  'evidence_detached',
+  'invoice_attached',
+  'invoice_detached',
+] as const;
+export type WorkOrderFileCommand = (typeof WORK_ORDER_FILE_COMMANDS)[number];
+
+/** Link between an order and a file of the files module. No bytes, hashes or storage keys live here. */
+export interface WorkOrderAttachment {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly orderId: string;
+  readonly fileId: string;
+  readonly kind: WorkOrderFileKind;
+  readonly displayName: string;
+  readonly contentType: string;
+  readonly sizeBytes: number;
+  readonly attachedBy: string;
+  readonly attachedAt: string;
+}
+export type WorkOrderFileChange =
+  | { readonly op: 'attach'; readonly attachment: WorkOrderAttachment }
+  | { readonly op: 'detach'; readonly attachmentId: string };
+
 export interface WorkOrder {
   readonly id: string;
   readonly tenantId: string;
@@ -90,7 +119,7 @@ export interface WorkOrderTransition {
   readonly tenantId: string;
   readonly orderId: string;
   readonly sequence: number;
-  readonly command: WorkOrderCommand | 'create';
+  readonly command: WorkOrderCommand | WorkOrderFileCommand | 'create';
   readonly from: WorkOrderStatus | null;
   readonly to: WorkOrderStatus;
   readonly actorId: string;
@@ -122,6 +151,8 @@ export interface WorkOrderMutation {
   readonly transition: WorkOrderTransition | null;
   readonly auditAction: string;
   readonly events: readonly WorkOrderEvent[];
+  /** A file link added or removed in the same transaction (the order version still moves on). */
+  readonly file?: WorkOrderFileChange;
 }
 
 export interface WorkOrderStore {
@@ -133,6 +164,8 @@ export interface WorkOrderStore {
     filter?: { readonly mechanicIds?: readonly string[] },
   ): Promise<readonly WorkOrder[]>;
   history(tenantId: string, id: string): Promise<readonly WorkOrderTransition[]>;
+  /** Files linked to the order, oldest first. */
+  attachments(tenantId: string, orderId: string): Promise<readonly WorkOrderAttachment[]>;
   /** Open orders of the vehicle that hold it in a workshop (eligibility blocks of this module). */
   openWorkshopOrders(tenantId: string, vehicleId: string): Promise<readonly WorkOrder[]>;
 }
@@ -182,4 +215,27 @@ export interface WorkOrderReferences {
   ): Promise<PlanServiceBaseline | null>;
   /** SPECS D20: true only when the tenant configured a costly-closure threshold. */
   closeApprovalRequired(tenantId: string): Promise<boolean>;
+  /** IANA zone of the tenant: "today" and calendar dates of the order are computed in it (SPECS:184). */
+  timeZone(tenantId: string): Promise<string>;
+  /** Evidence and invoice the tenant requires before completing and closing (default: none). */
+  fileRequirements(tenantId: string): Promise<WorkOrderFileRequirements>;
+  /** The record of a file of the files module, tenant-scoped; null when it is unknown for the tenant. */
+  fileRecord(tenantId: string, fileId: string): Promise<WorkOrderFileRecord | null>;
+}
+
+export interface WorkOrderFileRequirements {
+  readonly evidence: boolean;
+  readonly invoice: boolean;
+}
+export type WorkOrderFileStatus = 'pending_upload' | 'pending_scan' | 'clean' | 'rejected';
+/** What this module needs to know of a file: only a `clean` one is persisted, released evidence. */
+export interface WorkOrderFileRecord {
+  readonly id: string;
+  readonly status: WorkOrderFileStatus;
+  readonly kind: 'original' | 'derivative';
+  readonly sensitivity: 'standard' | 'pii';
+  readonly createdBy: string;
+  readonly displayName: string;
+  readonly contentType: string;
+  readonly sizeBytes: number;
 }

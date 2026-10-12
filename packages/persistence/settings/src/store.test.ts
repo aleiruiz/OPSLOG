@@ -20,6 +20,9 @@ const settings = (tenant: string, over: Partial<CompanySettings> = {}): CompanyS
   tenantId: tenant,
   expiryWindowDays: 15,
   recipientRoles: ['admin', 'editor'],
+  maintenanceEvidence: 'none',
+  closeCostThreshold: null,
+  timeZone: 'UTC',
   version: 1,
   updatedBy: ACTOR,
   updatedAt: NOW.toISOString(),
@@ -139,6 +142,46 @@ describe('rows that do not satisfy the domain', () => {
       expect(await rejection(store.find(A))).toMatchObject({ code: 'integrity' });
     },
   );
+});
+
+describe('maintenance settings columns', () => {
+  it('round-trips the evidence requirement, the D20 threshold and the zone', async () => {
+    const { db, store } = setup();
+    const configured = settings(A, {
+      maintenanceEvidence: 'evidence_invoice',
+      closeCostThreshold: { amountMinor: '500000', currency: 'MXN' },
+      timeZone: 'America/Mexico_City',
+    });
+    expect(await store.insert(configured)).toBe(true);
+    expect(db.committed()[0]).toMatchObject({
+      maintenanceEvidence: 'evidence_invoice',
+      closeThresholdMinor: '500000',
+      closeThresholdCurrency: 'MXN',
+      timeZone: 'America/Mexico_City',
+    });
+    expect(await store.find(A)).toEqual(configured);
+    const cleared = settings(A, { ...configured, version: 2, closeCostThreshold: null });
+    expect(await store.replace(cleared, 1)).toBe(true);
+    expect((await store.find(A))?.closeCostThreshold).toBeNull();
+  });
+
+  it.each([
+    { maintenanceEvidence: 'invoice' },
+    { timeZone: 'Mars/Olympus' },
+    { closeThresholdMinor: '10', closeThresholdCurrency: null },
+    { closeThresholdMinor: null, closeThresholdCurrency: 'MXN' },
+  ])('rejects stored %j as an integrity error', async (broken) => {
+    const { db, store } = setup();
+    db.seed({
+      ...settings(A),
+      closeThresholdMinor: null,
+      closeThresholdCurrency: null,
+      recipientRoles: 'admin',
+      updatedAt: NOW,
+      ...broken,
+    });
+    expect(await rejection(store.find(A))).toMatchObject({ code: 'integrity' });
+  });
 });
 
 describe('failures are sanitized', () => {

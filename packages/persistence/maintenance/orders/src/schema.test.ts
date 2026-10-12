@@ -3,9 +3,20 @@ import { describe, expect, it } from 'vitest';
 import type { QueryRunner } from 'typeorm';
 import { createWorkOrderDataSource, createWorkOrderMigrationDataSource } from './data-source.js';
 import { WORK_ORDER_ENTITIES, WORK_ORDER_TABLES } from './entities.js';
-import { CreateMaintenanceWorkOrders2026101200030 } from './migrations.js';
+import {
+  CreateMaintenanceWorkOrderFiles2026101300020,
+  CreateMaintenanceWorkOrders2026101200030,
+} from './migrations.js';
 import { TypeOrmWorkOrderStore } from './store.js';
-import { childRows, orderFrom, orderRow, transitionFrom, transitionRow } from './mapping.js';
+import {
+  childRows,
+  fileFrom,
+  fileRow,
+  orderFrom,
+  orderRow,
+  transitionFrom,
+  transitionRow,
+} from './mapping.js';
 import { harness, FLEET, TENANT } from '../../../../domain/maintenance/orders/src/test-support.js';
 
 const endpoint = { host: '127.0.0.1', port: 3306, database: 'opslog_t_x', password: 'x' };
@@ -19,7 +30,7 @@ describe('work order schema', () => {
     } as unknown as QueryRunner;
     const migration = new CreateMaintenanceWorkOrders2026101200030();
     await migration.up(runner);
-    expect(statements).toHaveLength(Object.keys(WORK_ORDER_TABLES).length);
+    expect(statements).toHaveLength(Object.keys(WORK_ORDER_TABLES).length - 1);
     for (const sql of statements) {
       expect(sql).toMatch(/PRIMARY KEY \(company_id,/);
       expect(sql).toContain('ENGINE=InnoDB');
@@ -36,7 +47,40 @@ describe('work order schema', () => {
       `DROP ${WORK_ORDER_TABLES.tasks}`,
       `DROP ${WORK_ORDER_TABLES.orders}`,
     ]);
-    expect(WORK_ORDER_ENTITIES).toHaveLength(5);
+    expect(WORK_ORDER_ENTITIES).toHaveLength(Object.keys(WORK_ORDER_TABLES).length);
+  });
+
+  it('creates the evidence links keyed by tenant, unique per file, and reverts them', async () => {
+    const statements: string[] = [];
+    const runner = {
+      query: async (sql: string) => void statements.push(sql),
+      dropTable: async (name: string) => void statements.push(`DROP ${name}`),
+    } as unknown as QueryRunner;
+    const migration = new CreateMaintenanceWorkOrderFiles2026101300020();
+    await migration.up(runner);
+    expect(statements).toHaveLength(1);
+    expect(statements[0]).toContain('PRIMARY KEY (company_id,order_id,id)');
+    expect(statements[0]).toContain('UNIQUE KEY uq_work_order_file (company_id,file_id)');
+    expect(statements[0]).toContain("CHECK (kind IN ('evidence','invoice'))");
+    expect(statements[0]).not.toMatch(/sha256|storage/i);
+    await migration.down(runner);
+    expect(statements.at(-1)).toBe(`DROP ${WORK_ORDER_TABLES.files}`);
+  });
+
+  it('maps evidence links without loss', () => {
+    const link = {
+      id: 'link-1',
+      tenantId: TENANT,
+      orderId: 'order-1',
+      fileId: 'file-1',
+      kind: 'invoice' as const,
+      displayName: 'factura.pdf',
+      contentType: 'application/pdf',
+      sizeBytes: 2048,
+      attachedBy: 'user-fleet',
+      attachedAt: '2026-10-13T10:00:00.123Z',
+    };
+    expect(fileFrom({ ...fileRow(link), sizeBytes: '2048' })).toEqual(link);
   });
 
   it('only runs with the restricted maintenance account and never synchronizes', () => {

@@ -53,6 +53,7 @@ export const WORK_ORDER_GRANTS: readonly { table: string; privileges: string }[]
   { table: WORK_ORDER_TABLES.parts, privileges: 'SELECT, INSERT, DELETE' },
   { table: WORK_ORDER_TABLES.costs, privileges: 'SELECT, INSERT, DELETE' },
   { table: WORK_ORDER_TABLES.transitions, privileges: 'SELECT, INSERT' },
+  { table: WORK_ORDER_TABLES.files, privileges: 'SELECT, INSERT, DELETE' },
   { table: AUDIT_TABLES.outbox, privileges: 'SELECT' },
 ];
 

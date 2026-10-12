@@ -184,8 +184,14 @@ export function createMockMaintenancePorts(session: {
         guard(call as (...args: unknown[]) => Promise<Result<unknown>>),
       ]),
     ) as unknown as G;
+  const omitFiles = (group: MaintenancePorts['orders']) =>
+    Object.fromEntries(Object.entries(group).filter(([name]) => name !== 'files')) as Omit<
+      MaintenancePorts['orders'],
+      'files'
+    >;
   return {
-    orders: wrap(fake.ports.orders),
+    orders: { ...wrap(omitFiles(fake.ports.orders)), files: wrap(fake.ports.orders.files) },
+    settings: wrap(fake.ports.settings),
     plans: wrap(fake.ports.plans),
     alerts: wrap(fake.ports.alerts),
     workshops: wrap(fake.ports.workshops),

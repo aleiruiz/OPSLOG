@@ -30,6 +30,37 @@ export const DEFAULT_EXPIRY_WINDOW_DAYS = EXPIRING_WINDOW_DAYS;
 /** Default recipients: BRD §15.1 names the fleet manager (the editor template) and the administrator. */
 export const DEFAULT_RECIPIENT_ROLES: readonly AlertRecipientRole[] = ['admin', 'editor'];
 
+/**
+ * Maintenance evidence required to complete and close a work order (SPECS:227): nothing, at least
+ * one persisted evidence file, or evidence plus an invoice. The default is nothing.
+ */
+export const MAINTENANCE_EVIDENCE_REQUIREMENTS = ['none', 'evidence', 'evidence_invoice'] as const;
+export type MaintenanceEvidenceRequirement = (typeof MAINTENANCE_EVIDENCE_REQUIREMENTS)[number];
+export const isMaintenanceEvidenceRequirement = (
+  value: unknown,
+): value is MaintenanceEvidenceRequirement =>
+  typeof value === 'string' &&
+  (MAINTENANCE_EVIDENCE_REQUIREMENTS as readonly string[]).includes(value);
+
+/** SPECS D20 costly-closure threshold: exact minor units plus ISO 4217 code. Never defaulted. */
+export interface CloseCostThreshold {
+  readonly amountMinor: string;
+  readonly currency: string;
+}
+
+export const DEFAULT_TIME_ZONE = 'UTC';
+const ZONE_NAME = /^[A-Za-z][A-Za-z0-9_+-]*(?:\/[A-Za-z0-9_+-]+){0,2}$/;
+/** An IANA zone known to the runtime's `Intl`; the name only selects a calendar, it is never trusted further. */
+export function isValidTimeZone(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length > 64 || !ZONE_NAME.test(value)) return false;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export type SettingsErrorCode = 'invalid_input' | 'stale_version';
 
 export class SettingsError extends Error {
@@ -46,6 +77,12 @@ export interface CompanySettings {
   readonly expiryWindowDays: number;
   /** Roles addressed by the alerts, in canonical order, without repeats. */
   readonly recipientRoles: readonly AlertRecipientRole[];
+  /** Evidence/invoice that completing and closing a maintenance order requires. */
+  readonly maintenanceEvidence: MaintenanceEvidenceRequirement;
+  /** D20: when set, every closure needs a prior supervisor approval; `null` means no approval is asked. */
+  readonly closeCostThreshold: CloseCostThreshold | null;
+  /** IANA zone of the tenant: calendar days (due dates, service dates) are computed in it. */
+  readonly timeZone: string;
   /** Optimistic concurrency token: 0 while the company has never saved, then 1, +1 on every change. */
   readonly version: number;
   /** `user-<subject>` of the last writer; `null` for the defaults. */
@@ -73,6 +110,9 @@ export function defaultSettings(tenantId: string): CompanySettings {
     tenantId,
     expiryWindowDays: DEFAULT_EXPIRY_WINDOW_DAYS,
     recipientRoles: DEFAULT_RECIPIENT_ROLES,
+    maintenanceEvidence: 'none',
+    closeCostThreshold: null,
+    timeZone: DEFAULT_TIME_ZONE,
     version: 0,
     updatedBy: null,
     updatedAt: null,
@@ -80,10 +120,37 @@ export function defaultSettings(tenantId: string): CompanySettings {
 }
 
 export const SETTINGS_FIELDS = ['expiryWindowDays', 'recipientRoles'] as const;
+/** Fields added after the first slice: optional on input, a missing one keeps the stored value. */
+export const OPTIONAL_SETTINGS_FIELDS = [
+  'maintenanceEvidence',
+  'closeCostThreshold',
+  'timeZone',
+] as const;
 
 export interface SettingsData {
   readonly expiryWindowDays: number;
   readonly recipientRoles: readonly AlertRecipientRole[];
+  readonly maintenanceEvidence?: MaintenanceEvidenceRequirement;
+  /** `null` clears the threshold; omitted keeps it. */
+  readonly closeCostThreshold?: CloseCostThreshold | null;
+  readonly timeZone?: string;
+}
+
+function parseThreshold(value: unknown): CloseCostThreshold | null {
+  if (value === null) return null;
+  if (typeof value !== 'object' || Array.isArray(value)) return invalid();
+  const fields = value as Readonly<Record<string, unknown>>;
+  const keys = Object.keys(fields);
+  const { amountMinor, currency } = fields;
+  if (
+    keys.length !== 2 ||
+    typeof amountMinor !== 'string' ||
+    !/^[1-9]\d{0,14}$/.test(amountMinor) ||
+    typeof currency !== 'string' ||
+    !/^[A-Z]{3}$/.test(currency)
+  )
+    return invalid();
+  return { amountMinor, currency };
 }
 
 /** Canonical order and no repeats, so equal sets are stored (and compared) identically. */
@@ -99,8 +166,11 @@ export function parseSettings(input: unknown): SettingsData {
   const fields = input as Readonly<Record<string, unknown>>;
   const keys = Object.keys(fields);
   if (
-    keys.length !== SETTINGS_FIELDS.length ||
-    keys.some((key) => !SETTINGS_FIELDS.includes(key as never))
+    SETTINGS_FIELDS.some((key) => !keys.includes(key)) ||
+    keys.some(
+      (key) =>
+        !SETTINGS_FIELDS.includes(key as never) && !OPTIONAL_SETTINGS_FIELDS.includes(key as never),
+    )
   )
     return invalid();
   const days = fields['expiryWindowDays'];
@@ -114,7 +184,19 @@ export function parseSettings(input: unknown): SettingsData {
     new Set(roles).size !== roles.length
   )
     return invalid();
-  return { expiryWindowDays: days, recipientRoles: normalizeRoles(roles) };
+  const evidence = fields['maintenanceEvidence'];
+  const zone = fields['timeZone'];
+  if (evidence !== undefined && !isMaintenanceEvidenceRequirement(evidence)) return invalid();
+  if (zone !== undefined && !isValidTimeZone(zone)) return invalid();
+  return {
+    expiryWindowDays: days,
+    recipientRoles: normalizeRoles(roles),
+    ...(evidence === undefined ? {} : { maintenanceEvidence: evidence }),
+    ...(fields['closeCostThreshold'] === undefined
+      ? {}
+      : { closeCostThreshold: parseThreshold(fields['closeCostThreshold']) }),
+    ...(zone === undefined ? {} : { timeZone: zone }),
+  };
 }
 
 /** An expected version of 0 means "the company has not saved yet". */
@@ -209,9 +291,18 @@ export class SettingsService {
     const now = this.now();
     const data = parseSettings(input);
     const version = parseExpectedVersion(expectedVersion);
+    // A field the caller did not send keeps its stored value (or the default of a company that never saved).
+    const current = version === 0 ? defaultSettings(tenantId) : await this.get(tenantId);
     const next: CompanySettings = {
       tenantId,
-      ...data,
+      expiryWindowDays: data.expiryWindowDays,
+      recipientRoles: data.recipientRoles,
+      maintenanceEvidence: data.maintenanceEvidence ?? current.maintenanceEvidence,
+      closeCostThreshold:
+        data.closeCostThreshold === undefined
+          ? current.closeCostThreshold
+          : data.closeCostThreshold,
+      timeZone: data.timeZone ?? current.timeZone,
       version: version + 1,
       updatedBy: actorId,
       updatedAt: now.toISOString(),

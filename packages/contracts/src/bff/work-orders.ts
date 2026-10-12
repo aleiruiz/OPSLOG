@@ -71,10 +71,53 @@ export interface BffWorkOrder {
   readonly updatedAt: ISODateTime;
   readonly updatedBy: string;
 }
+export type BffWorkOrderFileKind = 'evidence' | 'invoice';
+export const BFF_WORK_ORDER_FILE_KINDS: readonly BffWorkOrderFileKind[] = ['evidence', 'invoice'];
+/** Timeline entries of file changes (the status of the order does not change). */
+export type BffWorkOrderFileCommand =
+  | 'evidence_attached'
+  | 'evidence_detached'
+  | 'invoice_attached'
+  | 'invoice_detached';
+/** `missing` only if the file record is gone; `clean` is the only status that counts as persisted evidence. */
+export type BffWorkOrderFileStatus =
+  | 'pending_upload'
+  | 'pending_scan'
+  | 'clean'
+  | 'rejected'
+  | 'missing';
+/** A file linked to an order. Invoices are listed only for callers with `view_costs`. */
+export interface BffWorkOrderFile {
+  readonly id: string;
+  readonly kind: BffWorkOrderFileKind;
+  readonly displayName: string;
+  readonly contentType: string;
+  readonly sizeBytes: number;
+  readonly fileStatus: BffWorkOrderFileStatus;
+  readonly attachedBy: string;
+  readonly attachedAt: ISODateTime;
+}
+/** Largest file the work order routes accept (the JSON body carries it as base64). */
+export const BFF_WORK_ORDER_FILE_MAX_BYTES = 8 * 1024 * 1024;
+export const BFF_WORK_ORDER_FILE_MAX_BODY_BYTES =
+  Math.ceil((BFF_WORK_ORDER_FILE_MAX_BYTES * 4) / 3) + 4096;
+export interface BffWorkOrderFileUpload {
+  readonly version: number;
+  readonly kind: BffWorkOrderFileKind;
+  readonly name: string;
+  /** The declared type; the server verifies it against the content. */
+  readonly contentType: string;
+  readonly contentBase64: string;
+}
+export interface BffWorkOrderFileContent {
+  readonly displayName: string;
+  readonly contentType: string;
+  readonly contentBase64: string;
+}
 export interface BffWorkOrderTransition {
   readonly orderId: string;
   readonly sequence: number;
-  readonly command: BffWorkOrderCommand | 'create';
+  readonly command: BffWorkOrderCommand | BffWorkOrderFileCommand | 'create';
   readonly from: BffWorkOrderStatus | null;
   readonly to: BffWorkOrderStatus;
   readonly actorId: string;
@@ -123,6 +166,21 @@ export interface BffWorkOrderCostsInput {
 }
 
 export interface WorkOrderRouteTypes {
+  'workOrders.files.list': { params: { orderId: string }; response: readonly BffWorkOrderFile[] };
+  'workOrders.files.upload': {
+    params: { orderId: string };
+    body: BffWorkOrderFileUpload;
+    response: BffWorkOrder;
+  };
+  'workOrders.files.detach': {
+    params: { orderId: string; fileId: string };
+    body: { readonly version: number };
+    response: BffWorkOrder;
+  };
+  'workOrders.files.content': {
+    params: { orderId: string; fileId: string };
+    response: BffWorkOrderFileContent;
+  };
   'workOrders.list': { response: readonly BffWorkOrder[] };
   'workOrders.create': {
     body: { readonly vehicleId: string; readonly description: string };
@@ -156,6 +214,31 @@ export interface WorkOrderRouteTypes {
 
 const orders = ['api', 'v1', 'work-orders'] as const;
 export const WORK_ORDER_ROUTES = {
+  'workOrders.files.list': {
+    method: 'GET',
+    path: [...orders, ':orderId', 'files'],
+    kind: 'session',
+    status: 200,
+  },
+  'workOrders.files.upload': {
+    method: 'POST',
+    path: [...orders, ':orderId', 'files'],
+    kind: 'session-csrf',
+    status: 200,
+    maxBodyBytes: BFF_WORK_ORDER_FILE_MAX_BODY_BYTES,
+  },
+  'workOrders.files.detach': {
+    method: 'POST',
+    path: [...orders, ':orderId', 'files', ':fileId', 'detach'],
+    kind: 'session-csrf',
+    status: 200,
+  },
+  'workOrders.files.content': {
+    method: 'GET',
+    path: [...orders, ':orderId', 'files', ':fileId', 'content'],
+    kind: 'session',
+    status: 200,
+  },
   'workOrders.list': { method: 'GET', path: orders, kind: 'session', status: 200 },
   'workOrders.create': { method: 'POST', path: orders, kind: 'session-csrf', status: 201 },
   'workOrders.adopt': {

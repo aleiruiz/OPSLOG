@@ -11,6 +11,7 @@ import type {
 } from '../../../../domain/maintenance/plans/src/index.js';
 import {
   MaintenancePlanError,
+  calendarDay,
   evaluatePlan,
   targets,
 } from '../../../../domain/maintenance/plans/src/index.js';
@@ -147,7 +148,10 @@ export class TypeOrmMaintenancePlanWorkerStore implements PlanScanStore {
     planId: string,
     now: Date,
     odometer: OdometerReading,
+    timeZone = 'UTC',
   ): Promise<readonly PlanEvaluation[]> {
+    // Calendar days (target dates, "today") are the tenant's, not UTC's (SPECS:184).
+    const today = calendarDay(now, timeZone);
     return this.transaction(async (manager) => {
       const plans = manager.getRepository(MaintenancePlanEntity);
       const row = await plans.findOne({
@@ -169,7 +173,6 @@ export class TypeOrmMaintenancePlanWorkerStore implements PlanScanStore {
       });
       if (latest) {
         const currentTargets = { targetDate: latest.targetDate, targetKm: latest.targetKm };
-        const today = now.toISOString().slice(0, 10);
         const passed =
           latest.trigger === 'date'
             ? currentTargets.targetDate !== null && today > currentTargets.targetDate
@@ -200,7 +203,7 @@ export class TypeOrmMaintenancePlanWorkerStore implements PlanScanStore {
       }
       const sequence = (last?.sequence ?? 0) + 1;
       const { targetDate, targetKm } = targets(plan);
-      const dateReached = targetDate !== null && now.toISOString().slice(0, 10) >= targetDate;
+      const dateReached = targetDate !== null && today >= targetDate;
       const kmReached = odometer.updatedAt !== null && targetKm !== null && odometer.km >= targetKm;
       const odometerReachedAt =
         kmReached && odometer.updatedAt !== null ? Date.parse(odometer.updatedAt) : Number.NaN;
@@ -237,7 +240,7 @@ export class TypeOrmMaintenancePlanWorkerStore implements PlanScanStore {
         };
         const targetPassed =
           trigger === 'date'
-            ? targetDate !== null && now.toISOString().slice(0, 10) > targetDate
+            ? targetDate !== null && today > targetDate
             : targetKm !== null && odometer.km > targetKm;
         const overdue: PlanEvaluation = { ...due, kind: 'overdue' };
         evaluations = targetPassed ? [due, overdue] : [due];
@@ -285,7 +288,7 @@ export class TypeOrmMaintenancePlanWorkerStore implements PlanScanStore {
           await this.persistAlert(manager, tenantId, plan, evaluation, occurrenceId);
       } else {
         // Use the domain evaluator for exact inclusive UTC date/km windows.
-        evaluations = evaluatePlan(plan, { now, odometer, occurrence: sequence });
+        evaluations = evaluatePlan(plan, { now, odometer, occurrence: sequence, timeZone });
         for (const evaluation of evaluations)
           await this.persistAlert(manager, tenantId, plan, evaluation, null);
       }

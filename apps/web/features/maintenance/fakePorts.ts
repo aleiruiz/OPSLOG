@@ -9,6 +9,7 @@ import type {
 } from '@opslog/contracts';
 import type { MaintenancePorts, Result } from './ports';
 import { NEXT, baseOrder, missingFor } from './fakeOrder';
+import { createFakeFiles } from './fakeFiles';
 import { createFakeAlertPort } from './fakeAlerts';
 
 export { baseOrder };
@@ -94,8 +95,18 @@ export function createFakeMaintenancePorts(options: FakeMaintenanceOptions = {})
     history.set(order.id, entries);
     return ok(sanitize(order));
   };
+  const fakeFiles = createFakeFiles({
+    find,
+    viewCosts,
+    commit: (order) => {
+      orders.set(order.id, order);
+      return sanitize(order);
+    },
+  });
   const ports: MaintenancePorts = {
+    settings: fakeFiles.settings,
     orders: {
+      files: fakeFiles.files,
       list: async () =>
         options.failLists
           ? fail(500, 'internal_error')
@@ -132,7 +143,12 @@ export function createFakeMaintenancePorts(options: FakeMaintenanceOptions = {})
         const order = find(id);
         if (!order) return fail(404, 'not_found');
         if (order.version !== input.version) return fail(409, 'stale_version');
-        const missing = missingFor(order, input, state.approvalRequired);
+        const missing = missingFor(
+          order,
+          input,
+          state.approvalRequired || fakeFiles.thresholdSet(),
+          { required: fakeFiles.required(), ...fakeFiles.counted(order.id) },
+        );
         if (missing.length) return fail(422, 'missing_requirements', missing);
         const status = NEXT[input.command] as BffWorkOrder['status'];
         const next: BffWorkOrder = {
@@ -345,6 +361,8 @@ export function createFakeMaintenancePorts(options: FakeMaintenanceOptions = {})
   return {
     ports,
     state,
+    /** The scan finished: pending files now count. */
+    releaseFiles: fakeFiles.release,
     /** Simulates another person changing the order (next write gets 409), optionally with new content. */
     bump(id: string, change: Partial<Pick<BffWorkOrder, 'tasks' | 'parts'>> = {}) {
       const order = orders.get(id);

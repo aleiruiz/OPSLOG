@@ -11,6 +11,7 @@ import type {
   BffWorkOrderCommand,
 } from '@opslog/contracts';
 import { CommandForm } from './CommandForm';
+import { EvidencePanel } from './EvidencePanel';
 import { memberLabel, useDirectory, vehicleLabel } from './directory';
 import {
   COMMAND_LABELS,
@@ -22,6 +23,7 @@ import {
   formatDate,
   formatKm,
   formatMoney,
+  historyTitle,
 } from './labels';
 import type { MaintenancePorts, Result } from './ports';
 import { errorKind, useResult } from './useResult';
@@ -274,6 +276,17 @@ export function WorkOrderDetail({
               )}
             </Box>
           )}
+          <EvidencePanel
+            ports={ports}
+            order={order}
+            viewer={viewer}
+            onOrder={(next) => {
+              setOrder(next);
+              setMissing([]);
+              history.reload();
+            }}
+            onExpired={onExpired}
+          />
           {editing === 'work' && (
             <WorkEditor
               order={order}
@@ -324,10 +337,7 @@ export function WorkOrderDetail({
               <Timeline
                 items={history.state.data.map((entry) => ({
                   id: String(entry.sequence),
-                  title:
-                    entry.command === 'create'
-                      ? 'Orden registrada'
-                      : `${COMMAND_LABELS[entry.command]} → ${STATUS_LABELS[entry.to]}`,
+                  title: historyTitle(entry),
                   date: entry.occurredAt.slice(0, 16).replace('T', ' '),
                   ...(entry.comment ? { description: entry.comment } : {}),
                 }))}

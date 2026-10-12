@@ -147,6 +147,7 @@ export {
   BFF_ALERT_SOURCES,
   BFF_ALERT_SEVERITIES,
   BFF_ALERT_RECIPIENT_ROLES,
+  BFF_MAINTENANCE_EVIDENCE_REQUIREMENTS,
 } from './bff/alerts.js';
 export type {
   BffAlertSource,
@@ -157,6 +158,8 @@ export type {
   BffAlertPage,
   BffAlertSettings,
   BffAlertSettingsInput,
+  BffMaintenanceEvidenceRequirement,
+  BffCloseCostThreshold,
 } from './bff/alerts.js';
 export { BFF_AREA_ACTIONS, BFF_AREA_FIELDS } from './bff/areas.js';
 export type {
@@ -195,6 +198,17 @@ export type {
   BffWorkOrderTransition,
   BffWorkOrderTransitionInput,
   BffWorkOrderWorkInput,
+  BffWorkOrderFile,
+  BffWorkOrderFileCommand,
+  BffWorkOrderFileContent,
+  BffWorkOrderFileKind,
+  BffWorkOrderFileStatus,
+  BffWorkOrderFileUpload,
+} from './bff/work-orders.js';
+export {
+  BFF_WORK_ORDER_FILE_KINDS,
+  BFF_WORK_ORDER_FILE_MAX_BYTES,
+  BFF_WORK_ORDER_FILE_MAX_BODY_BYTES,
 } from './bff/work-orders.js';
 
 /** Request and response types of every route. Keys are route ids. */

@@ -1,6 +1,7 @@
 import type { ApiError } from '@opslog/contracts';
 import {
   BFF_ALERT_RECIPIENT_ROLES,
+  BFF_MAINTENANCE_EVIDENCE_REQUIREMENTS,
   BFF_ALERT_SEVERITIES,
   BFF_ALERT_SOURCES,
 } from '@opslog/contracts';
@@ -67,6 +68,9 @@ export function createMockAlertsStore(options: {
   let stored: AlertSettings = {
     expiryWindowDays: DEFAULT_WINDOW_DAYS,
     recipientRoles: DEFAULT_RECIPIENTS,
+    maintenanceEvidence: 'none',
+    closeCostThreshold: null,
+    timeZone: 'UTC',
     version: 0,
     updatedBy: null,
     updatedAt: null,
@@ -162,9 +166,26 @@ export function createMockAlertsStore(options: {
       const fields = input as unknown as Readonly<Record<string, unknown>>;
       const { version, expiryWindowDays, recipientRoles } = fields;
       const keys = Object.keys(fields);
+      const evidence = fields['maintenanceEvidence'];
+      const threshold = fields['closeCostThreshold'];
+      const zone = fields['timeZone'];
       if (
-        keys.length !== 3 ||
         !['version', 'expiryWindowDays', 'recipientRoles'].every((key) => keys.includes(key)) ||
+        keys.some(
+          (key) =>
+            ![
+              'version',
+              'expiryWindowDays',
+              'recipientRoles',
+              'maintenanceEvidence',
+              'closeCostThreshold',
+              'timeZone',
+            ].includes(key),
+        ) ||
+        (evidence !== undefined &&
+          !BFF_MAINTENANCE_EVIDENCE_REQUIREMENTS.includes(evidence as never)) ||
+        (zone !== undefined && typeof zone !== 'string') ||
+        (threshold !== undefined && threshold !== null && typeof threshold !== 'object') ||
         typeof version !== 'number' ||
         !Number.isInteger(version) ||
         version < 0 ||
@@ -182,6 +203,13 @@ export function createMockAlertsStore(options: {
       stored = {
         expiryWindowDays,
         recipientRoles: canonical(recipientRoles as AlertRecipientRole[]),
+        maintenanceEvidence: (evidence ??
+          stored.maintenanceEvidence) as AlertSettings['maintenanceEvidence'],
+        closeCostThreshold:
+          threshold === undefined
+            ? stored.closeCostThreshold
+            : (threshold as AlertSettings['closeCostThreshold']),
+        timeZone: (zone as string | undefined) ?? stored.timeZone,
         version: stored.version + 1,
         updatedBy: actorId(),
         updatedAt: NOW,

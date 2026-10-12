@@ -19,6 +19,10 @@ export class SettingsEntity {
   tenantId!: string;
   expiryWindowDays!: number;
   recipientRoles!: string;
+  maintenanceEvidence!: string;
+  closeThresholdMinor!: string | null;
+  closeThresholdCurrency!: string | null;
+  timeZone!: string;
   version!: number;
   updatedBy!: string;
   updatedAt!: Date;
@@ -43,6 +47,26 @@ export const SettingsEntitySchema = new EntitySchema<SettingsEntity>({
       length: 80,
       collation: BINARY_COLLATION,
     },
+    maintenanceEvidence: {
+      name: 'maintenance_evidence',
+      type: 'varchar',
+      length: 16,
+      collation: BINARY_COLLATION,
+    },
+    closeThresholdMinor: {
+      name: 'close_threshold_minor',
+      type: 'bigint',
+      unsigned: true,
+      nullable: true,
+    },
+    closeThresholdCurrency: {
+      name: 'close_threshold_currency',
+      type: 'char',
+      length: 3,
+      collation: BINARY_COLLATION,
+      nullable: true,
+    },
+    timeZone: { name: 'time_zone', type: 'varchar', length: 64, collation: BINARY_COLLATION },
     version: { type: 'int', unsigned: true },
     updatedBy: { name: 'updated_by', type: 'varchar', length: 64, collation: BINARY_COLLATION },
     updatedAt: { name: 'updated_at', type: 'datetime', precision: 6 },

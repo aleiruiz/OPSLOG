@@ -183,6 +183,104 @@ test('a role without view_costs sees the closed order without any amount', async
   expect(raw.body).not.toMatch(/150050|MXN|"costs"/);
 });
 
+test('evidence requirement: configure, block, upload, complete and close with an assigned mechanic (G3 H3, MNT-QA-M3:89)', async ({
+  page,
+}) => {
+  const mechanicMember = await a.member('viewer', 'e2e-mechanic-a');
+  await signIn(page, a, 'e2e-admin-a');
+  const me = (await page.evaluate(async () => (await fetch('/api/auth/session')).json())) as {
+    user: { id: string };
+  };
+
+  // The company requires evidence from now on.
+  await page.getByRole('tab', { name: 'Configuración' }).click();
+  await pick(page, 'Archivos requeridos', 'Evidencia del trabajo');
+  await page.getByRole('button', { name: 'Guardar configuración' }).click();
+  await expect(page.getByText('Configuración guardada.')).toBeVisible();
+
+  // A mechanic linked to a company member, then a corrective order assigned to that mechanic.
+  await page.getByRole('tab', { name: 'Talleres y mecánicos' }).click();
+  await page.getByLabel('Nombre del mecánico').fill('Mecánica E2E');
+  await pick(page, 'Vínculo', 'Interno (usuario de la empresa)');
+  await page.getByRole('combobox', { name: 'Usuario de la empresa', exact: true }).click();
+  // Options are named by role and ordinal ("Consulta 2"), so the member is picked by its id.
+  await page.locator(`li[role="option"][data-value="${mechanicMember}"]`).click();
+  await page.getByRole('button', { name: 'Agregar mecánico' }).click();
+  await expect(page.getByRole('cell', { name: 'Mecánica E2E', exact: true })).toBeVisible();
+
+  await page.getByRole('tab', { name: 'Órdenes', exact: true }).click();
+  await page.getByRole('button', { name: 'Nueva orden correctiva' }).click();
+  await page
+    .getByRole('form', { name: 'Nueva orden correctiva' })
+    .getByLabel(/^Vehículo/)
+    .selectOption(vehicleId);
+  await page.getByLabel('Descripción de la falla').fill('Ruido en frenos');
+  await page.getByRole('button', { name: 'Registrar orden' }).click();
+  await expect(page.getByLabel('Estado: Programada')).toBeVisible();
+  await page.getByRole('button', { name: 'Asignar' }).click();
+  await page.getByLabel('Persona responsable').selectOption(me.user.id);
+  await pick(page, 'Mecánico', 'Mecánica E2E (interno)');
+  await page.getByLabel('Fecha programada').fill(day(0));
+  await submit(page, 'Asignar');
+  await expect(page.getByLabel('Estado: Asignada')).toBeVisible();
+
+  // The assigned mechanic starts, records work and uploads the evidence (D9).
+  await page.context().clearCookies();
+  await signIn(page, a, 'e2e-mechanic-a');
+  await page.getByRole('button', { name: /Ruido en frenos/ }).click();
+  await page.getByRole('button', { name: 'Iniciar trabajo' }).click();
+  await submit(page, 'Iniciar trabajo');
+  await expect(page.getByLabel('Estado: En proceso')).toBeVisible();
+  await page.getByRole('button', { name: 'Registrar trabajo' }).click();
+  await page.getByLabel('Trabajos realizados').fill('Cambio de balatas');
+  await submit(page, 'Registrar trabajo', 'Guardar trabajo');
+  await expect(page.getByRole('status')).toHaveText('Trabajo guardado.');
+
+  await page.getByRole('button', { name: 'Registrar término' }).click();
+  await page.getByLabel('Fecha real del servicio').fill(day(0));
+  await page.getByLabel('Kilometraje del servicio').fill('200');
+  await submit(page, 'Registrar término');
+  const blocked = page.getByRole('complementary', { name: 'Falta para continuar' });
+  await expect(
+    blocked.getByText('Sube al menos una evidencia del trabajo (foto o documento).'),
+  ).toBeVisible();
+  await expectNoViolations(page);
+
+  await page.getByLabel('Subir evidencia (foto o PDF)').setInputFiles({
+    name: 'frenos.pdf',
+    mimeType: 'application/pdf',
+    buffer: Buffer.from('%PDF-1.4\n%synthetic evidence\n'),
+  });
+  await expect(page.getByText(/frenos\.pdf · En revisión/)).toBeVisible();
+  // A file still being scanned does not count as evidence.
+  await submit(page, 'Registrar término');
+  await expect(
+    blocked.getByText('Sube al menos una evidencia del trabajo (foto o documento).'),
+  ).toBeVisible();
+  await a.platform.pipeline.processScans();
+  // The order is deep-linked, so the reload reopens its detail.
+  await page.reload();
+  await expect(page.getByText(/frenos\.pdf · Guardado/)).toBeVisible();
+  await expect(page.getByLabel('Subir factura (PDF o imagen)')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Registrar término' }).click();
+  await page.getByLabel('Fecha real del servicio').fill(day(0));
+  await page.getByLabel('Kilometraje del servicio').fill('200');
+  await submit(page, 'Registrar término');
+  await expect(page.getByLabel('Estado: Terminada')).toBeVisible();
+
+  // Fleet closes it; afterwards the evidence is immutable.
+  await page.context().clearCookies();
+  await signIn(page, a, 'e2e-admin-a');
+  await page.getByRole('button', { name: /Ruido en frenos/ }).click();
+  await page.getByRole('button', { name: 'Cerrar orden' }).click();
+  await pick(page, 'Estado del vehículo al cerrar', 'Activo');
+  await submit(page, 'Cerrar orden');
+  await expect(page.getByLabel('Estado: Cerrada')).toBeVisible();
+  await expect(page.getByLabel('Subir evidencia (foto o PDF)')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Quitar frenos.pdf' })).toHaveCount(0);
+  await expectNoViolations(page);
+});
+
 test('tenant B, on its own database, sees nothing of tenant A', async ({ page }) => {
   await signIn(page, b, 'e2e-admin-b');
   await expect(page.getByText('Aún no hay órdenes')).toBeVisible();

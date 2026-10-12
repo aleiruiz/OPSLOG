@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { describe, expect, it, vi } from 'vitest';
-import { DataSource, type QueryRunner, type Table } from 'typeorm';
+import { DataSource, type QueryRunner, type Table, type TableColumn } from 'typeorm';
 import {
   SETTINGS_ENTITIES,
   SETTINGS_TABLES,
@@ -9,6 +9,10 @@ import {
 } from './entities.js';
 import { AUDIT_ENTITIES } from '../../audit/src/entities.js';
 import {
+  AddMaintenanceCompanySettings2026101300010,
+  MAINTENANCE_SETTINGS_CHECKS,
+  MAINTENANCE_SETTINGS_COLUMNS,
+  MAINTENANCE_SETTINGS_MIGRATION_VERSION,
   SETTINGS_CHECKS,
   SETTINGS_MIGRATIONS_TABLE,
   SETTINGS_MIGRATION_VERSION,
@@ -27,7 +31,15 @@ function recordingRunner() {
   const tables: Table[] = [];
   const statements: string[] = [];
   const dropped: string[] = [];
+  const added: TableColumn[] = [];
+  const droppedColumns: string[] = [];
   const runner = {
+    addColumns: async (_table: string, columns: TableColumn[]) => {
+      added.push(...columns);
+    },
+    dropColumns: async (_table: string, columns: string[]) => {
+      droppedColumns.push(...columns);
+    },
     createTable: async (table: Table) => {
       tables.push(table);
     },
@@ -39,7 +51,7 @@ function recordingRunner() {
       return [];
     },
   } as unknown as QueryRunner;
-  return { runner, tables, statements, dropped };
+  return { runner, tables, statements, dropped, added, droppedColumns };
 }
 
 describe('migration and entity metadata agree', () => {
@@ -57,8 +69,10 @@ describe('migration and entity metadata agree', () => {
   });
 
   it('declares every column of the entity with the same type, size, nullability and collation', async () => {
-    const { runner, tables } = recordingRunner();
+    const { runner, tables, added } = recordingRunner();
     await migration.up(runner);
+    await new AddMaintenanceCompanySettings2026101300010().up(runner);
+    tables[0]?.columns.push(...added);
     const dataSource = new DataSource({
       type: 'mysql',
       database: 'synthetic',
@@ -89,7 +103,9 @@ describe('migration and entity metadata agree', () => {
     expect(table.columns.filter((column) => column.isPrimary).map((c) => c.name)).toEqual([
       'company_id',
     ]);
-    expect(table.columns.every((column) => !column.isNullable)).toBe(true);
+    expect(
+      table.columns.filter((column) => column.isNullable).map((column) => column.name),
+    ).toEqual(['close_threshold_minor', 'close_threshold_currency']);
     expect(table.foreignKeys).toEqual([]);
   });
 
@@ -105,6 +121,30 @@ describe('migration and entity metadata agree', () => {
     const text = SETTINGS_CHECKS.map((check) => check.expression).join('\n');
     expect(text).toContain('`expiry_window_days` BETWEEN 1 AND 30');
     expect(text).toContain('pii_reader');
+  });
+});
+
+describe('maintenance settings migration', () => {
+  it('adds the columns and a NULL-safe CHECK, and reverts them', async () => {
+    const maintenance = new AddMaintenanceCompanySettings2026101300010();
+    const { runner, statements, added, droppedColumns } = recordingRunner();
+    await maintenance.up(runner);
+    expect(added.map((column) => column.name)).toEqual(
+      MAINTENANCE_SETTINGS_COLUMNS.map((column) => column.name),
+    );
+    for (const check of MAINTENANCE_SETTINGS_CHECKS) {
+      expect(check.expression).toContain('IS TRUE');
+      expect(statements).toContain(
+        `ALTER TABLE \`${check.table}\` ADD CONSTRAINT \`${check.name}\` CHECK (${check.expression})`,
+      );
+    }
+    await maintenance.down(runner);
+    expect(droppedColumns).toEqual(added.map((column) => column.name));
+    expect(statements.filter((sql) => sql.includes('DROP CHECK'))).toHaveLength(1);
+    expect(maintenance.name.endsWith(MAINTENANCE_SETTINGS_MIGRATION_VERSION)).toBe(true);
+    expect(Number(MAINTENANCE_SETTINGS_MIGRATION_VERSION)).toBeGreaterThan(
+      Number(SETTINGS_MIGRATION_VERSION),
+    );
   });
 });
 
@@ -192,7 +232,10 @@ describe('DataSource factories', () => {
       logging: false,
       migrationsTableName: SETTINGS_MIGRATIONS_TABLE,
     });
-    expect(dataSource.options.migrations).toEqual([CreateCompanySettings2026100600090]);
+    expect(dataSource.options.migrations).toEqual([
+      CreateCompanySettings2026100600090,
+      AddMaintenanceCompanySettings2026101300010,
+    ]);
     const custom = createSettingsMigrationDataSource({
       ...base,
       username: 'schema_owner',

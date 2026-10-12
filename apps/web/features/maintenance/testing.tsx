@@ -52,6 +52,6 @@ export async function violations(container: HTMLElement): Promise<string[]> {
   );
 }
 
-export const ADMIN = ['view', 'create', 'edit', 'view_costs', 'approve', 'reopen'];
+export const ADMIN = ['view', 'create', 'edit', 'view_costs', 'incidents:approve', 'reopen'];
 export const EDITOR = ['view', 'create', 'edit'];
 export const VIEWER = ['view'];

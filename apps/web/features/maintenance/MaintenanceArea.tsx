@@ -5,6 +5,7 @@ import Tabs from '@mui/material/Tabs';
 import { UiState } from '@opslog/ui';
 import type { BffMaintenanceMechanic, BffMaintenanceWorkshop } from '@opslog/contracts';
 import { CatalogScreen, type MemberOption } from './CatalogScreen';
+import { MaintenanceSettingsScreen } from './MaintenanceSettingsScreen';
 import {
   DirectoryProvider,
   memberOptions,
@@ -18,12 +19,13 @@ import { WorkOrderDetail } from './WorkOrderDetail';
 import { WorkOrdersScreen } from './WorkOrdersScreen';
 import type { MaintenanceViewer } from './workflow';
 
-export type MaintenanceView = 'orders' | 'mine' | 'plans' | 'catalog';
-const VIEWS: readonly { id: MaintenanceView; label: string }[] = [
+export type MaintenanceView = 'orders' | 'mine' | 'plans' | 'catalog' | 'settings';
+const VIEWS: readonly { id: MaintenanceView; label: string; permission?: string }[] = [
   { id: 'orders', label: 'Órdenes' },
   { id: 'mine', label: 'Mis órdenes' },
   { id: 'plans', label: 'Planes' },
   { id: 'catalog', label: 'Talleres y mecánicos' },
+  { id: 'settings', label: 'Configuración', permission: 'manage_config' },
 ];
 
 /**
@@ -109,9 +111,11 @@ export function MaintenanceArea({
           scrollButtons="auto"
           sx={{ mb: 2 }}
         >
-          {VIEWS.map((item) => (
-            <Tab key={item.id} value={item.id} label={item.label} />
-          ))}
+          {VIEWS.filter((item) => !item.permission || permissions.includes(item.permission)).map(
+            (item) => (
+              <Tab key={item.id} value={item.id} label={item.label} />
+            ),
+          )}
         </Tabs>
         {orderId ? (
           <WorkOrderDetail
@@ -149,6 +153,8 @@ export function MaintenanceArea({
             onOpenOrder={setOrderId}
             onExpired={onExpired}
           />
+        ) : view === 'settings' ? (
+          <MaintenanceSettingsScreen ports={ports} onExpired={onExpired} />
         ) : (
           <CatalogScreen ports={ports} viewer={viewer} members={members} onExpired={onExpired} />
         )}
