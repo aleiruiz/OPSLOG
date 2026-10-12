@@ -1,6 +1,6 @@
 import { InMemoryWorkOrderStore } from './store.js';
 import { WorkOrderService } from './service.js';
-import type { PlanScheduledOrderRef, WorkOrderReferences } from './types.js';
+import type { PlanScheduledOrderRef, WorkOrderFileRecord, WorkOrderReferences } from './types.js';
 import type { WorkOrderActor } from './workflow.js';
 
 export const TENANT = 'tenant-a';
@@ -13,7 +13,7 @@ export const FLEET: WorkOrderActor = {
 export const ADMIN: WorkOrderActor = {
   id: 'user-admin',
   subject: 'admin',
-  permissions: ['view', 'create', 'edit', 'view_costs', 'approve', 'reopen'],
+  permissions: ['view', 'create', 'edit', 'view_costs', 'incidents:approve', 'reopen'],
   mechanicIds: [],
 };
 export const EDITOR: WorkOrderActor = {
@@ -44,7 +44,13 @@ export const OTHER_MECHANIC: WorkOrderActor = {
 export interface Harness {
   readonly store: InMemoryWorkOrderStore;
   readonly service: WorkOrderService;
-  readonly refs: WorkOrderReferences & { approval: boolean; scheduled: PlanScheduledOrderRef[] };
+  readonly refs: WorkOrderReferences & {
+    approval: boolean;
+    scheduled: PlanScheduledOrderRef[];
+    zone: string;
+    required: { evidence: boolean; invoice: boolean };
+    files: Map<string, WorkOrderFileRecord>;
+  };
   readonly clock: { now: Date };
 }
 
@@ -55,6 +61,9 @@ export function harness(): Harness {
   let sequence = 0;
   const refs = {
     approval: false,
+    zone: 'UTC',
+    required: { evidence: false, invoice: false },
+    files: new Map<string, WorkOrderFileRecord>(),
     scheduled: [] as PlanScheduledOrderRef[],
     vehicleExists: async (tenantId: string, vehicleId: string) =>
       tenantId === TENANT && vehicleId === 'vehicle-1',
@@ -84,6 +93,10 @@ export function harness(): Harness {
         ? { lastServiceDate: '2026-09-01', lastServiceKm: 1000 }
         : null,
     closeApprovalRequired: async () => refs.approval,
+    timeZone: async () => refs.zone,
+    fileRequirements: async () => refs.required,
+    fileRecord: async (tenantId: string, fileId: string) =>
+      tenantId === TENANT ? (refs.files.get(fileId) ?? null) : null,
   };
   const service = new WorkOrderService(store, refs, {
     now: () => clock.now,

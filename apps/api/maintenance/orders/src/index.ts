@@ -7,6 +7,7 @@ import {
   transitionView,
   workOrderView,
   type WorkOrder,
+  type WorkOrderAttachmentView,
   type WorkOrderActor,
   type WorkOrderService,
   type WorkOrderTransitionView,
@@ -44,7 +45,38 @@ export interface WorkOrderApiDeps {
   readonly mechanicIdsOfMember: (tenantId: string, memberId: string) => Promise<readonly string[]>;
   /** Whether the member has any mechanic record, active or not (stable source of D9 scope). */
   readonly mechanicLinked?: (tenantId: string, memberId: string) => Promise<boolean>;
+  /** The files module: stores an upload for the actor, and reads a released file for the caller's session. */
+  readonly files: {
+    readonly ingest: (
+      tenantId: string,
+      actorId: string,
+      correlationId: string,
+      input: { readonly name: string; readonly contentType: string; readonly bytes: Uint8Array },
+    ) => Promise<{ readonly id: string }>;
+    readonly read: (token: string, correlationId: string, fileId: string) => Promise<Uint8Array>;
+  };
 }
+
+/** What the browser may know of a linked file: never the file id, the storage key or the hash. */
+export interface WorkOrderFileSummary {
+  readonly id: string;
+  readonly kind: WorkOrderAttachmentView['kind'];
+  readonly displayName: string;
+  readonly contentType: string;
+  readonly sizeBytes: number;
+  readonly fileStatus: WorkOrderAttachmentView['fileStatus'];
+  readonly attachedBy: string;
+  readonly attachedAt: string;
+}
+export interface WorkOrderFileContent {
+  readonly displayName: string;
+  readonly contentType: string;
+  readonly contentBase64: string;
+}
+
+/** Largest file accepted (mirrors the contract); the decoded size is checked, not the claimed one. */
+export const MAX_FILE_BYTES = 8 * 1024 * 1024;
+const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
 
 const STATUS: Readonly<Record<WorkOrderApiErrorCode, number>> = {
   unauthorized: 401,
@@ -59,6 +91,28 @@ const STATUS: Readonly<Record<WorkOrderApiErrorCode, number>> = {
   internal_error: 500,
 };
 const KNOWN = new Set<string>(Object.keys(STATUS));
+const bad = (): never => {
+  throw new WorkOrderError('invalid_input');
+};
+const summarize = ({
+  id,
+  kind,
+  displayName,
+  contentType,
+  sizeBytes,
+  fileStatus,
+  attachedBy,
+  attachedAt,
+}: WorkOrderAttachmentView): WorkOrderFileSummary => ({
+  id,
+  kind,
+  displayName,
+  contentType,
+  sizeBytes,
+  fileStatus,
+  attachedBy,
+  attachedAt,
+});
 
 function fail(error: unknown): WorkOrderApiResponse<never> {
   const raw =
@@ -188,6 +242,96 @@ export class WorkOrderApi {
     return this.view(token, correlationId, (tenantId, actor) =>
       this.deps.orders.adoptPreventive(tenantId, actor, input),
     );
+  }
+  public listFiles(
+    token: string,
+    correlationId: string,
+    id: string,
+  ): Promise<WorkOrderApiResponse<readonly WorkOrderFileSummary[]>> {
+    return this.run(token, correlationId, async (tenantId, actor) =>
+      (await this.deps.orders.listFiles(tenantId, actor, id)).map(summarize),
+    );
+  }
+  /**
+   * Stores the upload and links it to the order. The caller, the status and the version are checked
+   * before any byte is stored, and the link is made by the same actor that uploaded the file.
+   */
+  public uploadFile(
+    token: string,
+    correlationId: string,
+    id: string,
+    input: unknown,
+  ): Promise<WorkOrderApiResponse<WorkOrderView>> {
+    return this.run(token, correlationId, async (tenantId, actor, viewCosts) => {
+      const data = input as Record<string, unknown> | null;
+      if (
+        typeof data !== 'object' ||
+        data === null ||
+        Array.isArray(data) ||
+        Object.keys(data).some(
+          (key) => !['version', 'kind', 'name', 'contentType', 'contentBase64'].includes(key),
+        )
+      )
+        return bad();
+      const { version, kind, name, contentType, contentBase64 } = data;
+      if (
+        typeof name !== 'string' ||
+        name.length === 0 ||
+        name.length > 200 ||
+        typeof contentType !== 'string' ||
+        typeof contentBase64 !== 'string' ||
+        contentBase64.length === 0 ||
+        contentBase64.length % 4 !== 0 ||
+        !BASE64.test(contentBase64)
+      )
+        return bad();
+      const fileKind = (['evidence', 'invoice'] as const).find((value) => value === kind);
+      if (!fileKind) return bad();
+      const bytes = Buffer.from(contentBase64, 'base64');
+      if (bytes.length === 0 || bytes.length > MAX_FILE_BYTES) return bad();
+      await this.deps.orders.prepareFileChange(tenantId, actor, id, fileKind, version);
+      const stored = await this.deps.files.ingest(tenantId, actor.id, correlationId, {
+        name,
+        contentType,
+        bytes,
+      });
+      const order = await this.deps.orders.attachFile(tenantId, actor, id, {
+        version,
+        kind: fileKind,
+        fileId: stored.id,
+      });
+      return workOrderView(order, viewCosts);
+    });
+  }
+  public detachFile(
+    token: string,
+    correlationId: string,
+    id: string,
+    attachmentId: string,
+    input: unknown,
+  ): Promise<WorkOrderApiResponse<WorkOrderView>> {
+    return this.view(token, correlationId, (tenantId, actor) =>
+      this.deps.orders.detachFile(tenantId, actor, id, {
+        ...(input as Record<string, unknown>),
+        attachmentId,
+      }),
+    );
+  }
+  public fileContent(
+    token: string,
+    correlationId: string,
+    id: string,
+    attachmentId: string,
+  ): Promise<WorkOrderApiResponse<WorkOrderFileContent>> {
+    return this.run(token, correlationId, async (tenantId, actor) => {
+      const link = await this.deps.orders.fileLink(tenantId, actor, id, attachmentId);
+      const bytes = await this.deps.files.read(token, correlationId, link.fileId);
+      return {
+        displayName: link.displayName,
+        contentType: link.contentType,
+        contentBase64: Buffer.from(bytes).toString('base64'),
+      };
+    });
   }
   public command(
     token: string,

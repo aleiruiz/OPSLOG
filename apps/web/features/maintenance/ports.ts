@@ -11,8 +11,13 @@ import type {
   BffMaintenancePlanSchedule,
   BffMaintenanceWorkshop,
   BffMaintenanceWorkshopInput,
+  BffAlertSettings,
+  BffAlertSettingsInput,
   BffWorkOrder,
   BffWorkOrderCostsInput,
+  BffWorkOrderFile,
+  BffWorkOrderFileContent,
+  BffWorkOrderFileUpload,
   BffWorkOrderTransition,
   BffWorkOrderTransitionInput,
   BffWorkOrderWorkInput,
@@ -43,6 +48,18 @@ export interface MaintenancePorts {
     transition(id: string, body: BffWorkOrderTransitionInput): Promise<Result<BffWorkOrder>>;
     recordWork(id: string, body: BffWorkOrderWorkInput): Promise<Result<BffWorkOrder>>;
     recordCosts(id: string, body: BffWorkOrderCostsInput): Promise<Result<BffWorkOrder>>;
+    /** Evidence and invoices of the order (G3 H3); the server decides what each caller sees. */
+    files: {
+      list(id: string): Promise<Result<readonly BffWorkOrderFile[]>>;
+      upload(id: string, body: BffWorkOrderFileUpload): Promise<Result<BffWorkOrder>>;
+      detach(id: string, fileId: string, version: number): Promise<Result<BffWorkOrder>>;
+      content(id: string, fileId: string): Promise<Result<BffWorkOrderFileContent>>;
+    };
+  };
+  /** Company settings that drive maintenance (evidence requirement, D20 threshold, time zone). */
+  readonly settings: {
+    get(): Promise<Result<BffAlertSettings>>;
+    save(body: BffAlertSettingsInput): Promise<Result<BffAlertSettings>>;
   };
   readonly plans: {
     list(): Promise<Result<readonly BffMaintenancePlan[]>>;
@@ -79,6 +96,18 @@ export function createMaintenancePorts(client: BffClient): MaintenancePorts {
       transition: (orderId, body) => call('workOrders.transition', { params: { orderId }, body }),
       recordWork: (orderId, body) => call('workOrders.work', { params: { orderId }, body }),
       recordCosts: (orderId, body) => call('workOrders.costs', { params: { orderId }, body }),
+      files: {
+        list: (orderId) => call('workOrders.files.list', { params: { orderId } }),
+        upload: (orderId, body) => call('workOrders.files.upload', { params: { orderId }, body }),
+        detach: (orderId, fileId, version) =>
+          call('workOrders.files.detach', { params: { orderId, fileId }, body: { version } }),
+        content: (orderId, fileId) =>
+          call('workOrders.files.content', { params: { orderId, fileId } }),
+      },
+    },
+    settings: {
+      get: () => call('alerts.settings.get'),
+      save: (body) => call('alerts.settings.update', { body }),
     },
     plans: {
       list: () => call('maintenance.plans.list'),

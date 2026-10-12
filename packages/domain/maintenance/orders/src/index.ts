@@ -6,5 +6,6 @@ export * from './work.js';
 export * from './events.js';
 export * from './views.js';
 export * from './base.js';
+export * from './files.js';
 export * from './service.js';
 export * from './store.js';

@@ -12,7 +12,7 @@ import {
 
 const as = new URLSearchParams(window.location.search).get('as') ?? 'admin';
 const grants: Record<string, string[]> = {
-  admin: ['view', 'create', 'edit', 'view_costs', 'approve', 'reopen'],
+  admin: ['view', 'create', 'edit', 'view_costs', 'incidents:approve', 'reopen'],
   editor: ['view', 'create', 'edit'],
   mechanic: ['view'],
   viewer: ['view'],

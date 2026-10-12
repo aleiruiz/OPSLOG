@@ -222,7 +222,11 @@ export class Platform {
       ...(adapters.fileSagaJournal ? { journal: adapters.fileSagaJournal } : {}),
       now: this.now,
     });
-    const apis = buildDomainApis(this.kernel, adapters);
+    const apis = buildDomainApis(this.kernel, adapters, {
+      records: this.records,
+      pipeline: this.pipeline,
+      files: this.files,
+    });
     this.vehicles = apis.vehicles;
     this.areas = apis.areas;
     this.employees = apis.employees;

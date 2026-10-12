@@ -41,6 +41,7 @@ async function fixture() {
   });
   expect(mechanic.status, mechanic.text).toBe(201);
   return {
+    world,
     editorIdentity: editor.identityId,
     adminA,
     editorA,
@@ -55,7 +56,7 @@ async function fixture() {
 describe('work order contract', () => {
   it('declares work order routes as session reads or CSRF-protected writes', () => {
     const routes = Object.entries(BFF_ROUTES).filter(([id]) => id.startsWith('workOrders.'));
-    expect(routes).toHaveLength(8);
+    expect(routes).toHaveLength(12);
     for (const [id, definition] of routes)
       expect(definition.kind, id).toBe(definition.method === 'GET' ? 'session' : 'session-csrf');
   });
@@ -166,5 +167,121 @@ describe('work orders over HTTP', () => {
       ).status,
     ).toBe(404);
     expect((await adminA.post('/api/v1/work-orders', { json: { vehicleId } })).status).toBe(400);
+  });
+
+  const settingsBody = (version: number, over: Record<string, unknown>) => ({
+    version,
+    expiryWindowDays: 7,
+    recipientRoles: ['editor', 'admin'],
+    ...over,
+  });
+
+  async function inProgress(f: Awaited<ReturnType<typeof fixture>>) {
+    const created = await f.editorA.post('/api/v1/work-orders', {
+      json: { vehicleId: f.vehicleId, description: 'Frenos' },
+    });
+    const id = created.json.id as string;
+    const t = (b: typeof f.adminA, json: Record<string, unknown>) =>
+      b.post(`/api/v1/work-orders/${id}/transitions`, { json });
+    const assigned = await t(f.editorA, {
+      command: 'assign',
+      version: 1,
+      responsibleId: f.editorIdentity,
+      workshopId: f.workshopId,
+      mechanicId: f.mechanicId,
+      scheduledDate: '2026-10-13',
+    });
+    const started = await t(f.mechA, { command: 'start', version: assigned.json.version });
+    const worked = await f.mechA.put(`/api/v1/work-orders/${id}/work`, {
+      json: { version: started.json.version, tasks: [{ description: 'Cambio de balatas' }] },
+    });
+    return { id, t, version: worked.json.version as number };
+  }
+
+  it('requires persisted evidence and invoice files, scoped by permission and tenant (G3 H3)', async () => {
+    const f = await fixture();
+    expect(
+      (
+        await f.adminA.send('PUT', '/api/alerts/settings', {
+          json: settingsBody(0, { maintenanceEvidence: 'evidence_invoice' }),
+        })
+      ).status,
+    ).toBe(200);
+    const { id, t, version } = await inProgress(f);
+    const complete = { command: 'complete', actualDate: '2026-10-06', actualKm: 5100 };
+    const blocked = await t(f.mechA, { ...complete, version });
+    expect(blocked.status).toBe(422);
+    expect(blocked.json.missingRequirements).toEqual(['evidence', 'invoice']);
+
+    const pdf = Buffer.from('%PDF-1.4 evidencia').toString('base64');
+    const upload = (b: typeof f.adminA, v: number, kind: string) =>
+      b.post(`/api/v1/work-orders/${id}/files`, {
+        json: {
+          version: v,
+          kind,
+          name: `${kind}.pdf`,
+          contentType: 'application/pdf',
+          contentBase64: pdf,
+        },
+      });
+    const evidence = await upload(f.mechA, version, 'evidence');
+    expect(evidence.status, evidence.text).toBe(200);
+    expect(evidence.text).not.toMatch(/tenantId|storageKey/);
+    expect((await upload(f.mechA, evidence.json.version, 'invoice')).status).toBe(403);
+    expect((await upload(f.adminB, evidence.json.version, 'evidence')).status).toBe(404);
+    const invoice = await upload(f.adminA, evidence.json.version, 'invoice');
+    expect(invoice.status, invoice.text).toBe(200);
+
+    // Not yet scanned: the files do not count.
+    const pending = await t(f.mechA, { ...complete, version: invoice.json.version });
+    expect(pending.status).toBe(422);
+    expect(pending.json.missingRequirements).toEqual(['evidence', 'invoice']);
+    await f.world.platform.pipeline.processScans();
+    const completed = await t(f.mechA, { ...complete, version: invoice.json.version });
+    expect(completed.status, completed.text).toBe(200);
+
+    const list = await f.adminA.get(`/api/v1/work-orders/${id}/files`);
+    expect(list.json.map((x: { kind: string }) => x.kind).sort()).toEqual(['evidence', 'invoice']);
+    expect((await f.mechA.get(`/api/v1/work-orders/${id}/files`)).json).toHaveLength(1);
+    const closed = await t(f.adminA, {
+      command: 'close',
+      version: completed.json.version,
+      vehicleStatus: 'active',
+    });
+    expect(closed.status, closed.text).toBe(200);
+    expect((await upload(f.adminA, closed.json.version, 'evidence')).status).toBe(409);
+    const fileId = list.json[0].id as string;
+    expect(
+      (
+        await f.adminA.post(`/api/v1/work-orders/${id}/files/${fileId}/detach`, {
+          json: { version: closed.json.version },
+        })
+      ).status,
+    ).toBe(409);
+  });
+
+  it('requires approval for every close once a cost threshold is configured (G3 D20)', async () => {
+    const f = await fixture();
+    await f.adminA.send('PUT', '/api/alerts/settings', {
+      json: settingsBody(0, { closeCostThreshold: { amountMinor: '500000', currency: 'MXN' } }),
+    });
+    const { t, version } = await inProgress(f);
+    const completed = await t(f.mechA, {
+      command: 'complete',
+      version,
+      actualDate: '2026-10-06',
+      actualKm: 5100,
+    });
+    const close = { command: 'close', vehicleStatus: 'active' };
+    const refused = await t(f.adminA, { ...close, version: completed.json.version });
+    expect(refused.status).toBe(422);
+    expect(refused.json.missingRequirements).toContain('closeApproval');
+    const approved = await t(f.adminA, {
+      command: 'approve_close',
+      version: completed.json.version,
+    });
+    expect(approved.status, approved.text).toBe(200);
+    const closed = await t(f.adminA, { ...close, version: approved.json.version });
+    expect(closed.status, closed.text).toBe(200);
   });
 });

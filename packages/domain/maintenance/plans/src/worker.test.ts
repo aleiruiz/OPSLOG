@@ -41,6 +41,23 @@ describe('MaintenancePlanWorker', () => {
       'plan-a',
       new Date('2026-01-31T00:00:00Z'),
       { km: 123, updatedAt: '2026-01-30T00:00:00Z' },
+      'UTC',
+    );
+    // The scan judges calendar days in the zone of the company (SPECS:184).
+    const zoned = new MaintenancePlanWorker(
+      plans,
+      scans,
+      { read: async () => ({ id: 'vehicle-a', odometer: { km: 1, updatedAt: null } }) },
+      () => new Date('2026-01-31T00:00:00Z'),
+      async (tenantId) => (tenantId === 'tenant-a' ? 'America/Mexico_City' : 'UTC'),
+    );
+    await zoned.scan('tenant-a', 'plan-a');
+    expect(scans.scan).toHaveBeenLastCalledWith(
+      'tenant-a',
+      'plan-a',
+      new Date('2026-01-31T00:00:00Z'),
+      { km: 1, updatedAt: null },
+      'America/Mexico_City',
     );
     const event = {
       tenantId: 'tenant-a',

@@ -1,4 +1,5 @@
 import type {
+  WorkOrderAttachment,
   WorkOrder,
   WorkOrderCost,
   WorkOrderPart,
@@ -6,6 +7,7 @@ import type {
   WorkOrderTransition,
 } from '../../../../domain/maintenance/orders/src/index.js';
 import type {
+  WorkOrderFileEntity,
   WorkOrderCostEntity,
   WorkOrderEntity,
   WorkOrderPartEntity,
@@ -179,5 +181,35 @@ export function transitionFrom(row: WorkOrderTransitionEntity): WorkOrderTransit
     comment: row.comment,
     occurredAt: row.occurredAt.toISOString(),
     before: (row.before as WorkOrderTransition['before']) ?? null,
+  };
+}
+
+export function fileRow(value: WorkOrderAttachment): WorkOrderFileEntity {
+  return {
+    tenantId: value.tenantId,
+    orderId: value.orderId,
+    id: value.id,
+    fileId: value.fileId,
+    kind: value.kind,
+    displayName: value.displayName,
+    contentType: value.contentType,
+    sizeBytes: value.sizeBytes,
+    attachedBy: value.attachedBy,
+    attachedAt: new Date(value.attachedAt),
+  };
+}
+
+export function fileFrom(row: WorkOrderFileEntity): WorkOrderAttachment {
+  return {
+    id: row.id,
+    tenantId: row.tenantId,
+    orderId: row.orderId,
+    fileId: row.fileId,
+    kind: row.kind as WorkOrderAttachment['kind'],
+    displayName: row.displayName,
+    contentType: row.contentType,
+    sizeBytes: Number(row.sizeBytes),
+    attachedBy: row.attachedBy,
+    attachedAt: row.attachedAt.toISOString(),
   };
 }

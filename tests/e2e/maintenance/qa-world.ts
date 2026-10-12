@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import {
   WorkOrderService,
   type WorkOrderActor,
+  type WorkOrderFileRecord,
   type WorkOrderReferences,
 } from '../../../packages/domain/maintenance/orders/src/index.js';
 import type { MaintenancePlan } from '../../../packages/domain/maintenance/plans/src/index.js';
@@ -26,7 +27,7 @@ export const ACTORS = {
   admin: {
     id: 'user-admin',
     subject: 'admin',
-    permissions: ['view', 'create', 'edit', 'view_costs', 'approve', 'reopen'],
+    permissions: ['view', 'create', 'edit', 'view_costs', 'incidents:approve', 'reopen'],
     mechanicIds: [],
   },
   editor: {
@@ -38,7 +39,7 @@ export const ACTORS = {
   supervisor: {
     id: 'user-supervisor',
     subject: 'supervisor',
-    permissions: ['view', 'approve'],
+    permissions: ['view', 'incidents:approve'],
     mechanicIds: [],
   },
   viewer: { id: 'user-viewer', subject: 'viewer', permissions: ['view'], mechanicIds: [] },
@@ -73,7 +74,18 @@ export interface MaintenanceWorld {
     approval?: boolean;
     clock?: () => Date;
     side?: 'a' | 'a2' | 'b';
+    /** Evidence/invoice the company requires (default: none). */
+    required?: { evidence: boolean; invoice: boolean };
+    /** IANA zone of the company (default UTC). */
+    zone?: string;
   }): WorkOrderService;
+  /** Files of the (simulated) files module, per tenant: only `clean` ones count as evidence. */
+  registerFile(
+    tenantId: string,
+    id: string,
+    owner: WorkOrderActor,
+    over?: Partial<WorkOrderFileRecord>,
+  ): void;
   plan(
     store: TypeOrmMaintenancePlanStore,
     tenantId: string,
@@ -119,9 +131,12 @@ export async function startMaintenanceWorld(tag: string): Promise<MaintenanceWor
     `INSERT INTO opslog_maintenance_mechanics (company_id,id,name,specialties,contact,kind,workshop_id,member_id,registered_by,active,created_at,updated_at) VALUES (?, 'mechanic-c', 'Mecánico C sintético', JSON_ARRAY(), NULL, 'internal', 'workshop-1', 'mech-c', 'user-admin', TRUE, NOW(6), NOW(6))`,
     [tenantA],
   );
+  const files = new Map<string, WorkOrderFileRecord>();
   const refs = (
     tenantPlans: TypeOrmMaintenancePlanStore,
     approval: boolean,
+    required: { evidence: boolean; invoice: boolean },
+    zone: string,
   ): WorkOrderReferences => ({
     vehicleExists: async (_tenant, vehicleId) => vehicleId === VEHICLE,
     isTenantMember: async (_tenant, memberId) =>
@@ -161,6 +176,9 @@ export async function startMaintenanceWorld(tag: string): Promise<MaintenanceWor
         : null;
     },
     closeApprovalRequired: async () => approval,
+    timeZone: async () => zone,
+    fileRequirements: async () => required,
+    fileRecord: async (tenantId, fileId) => files.get(`${tenantId}|${fileId}`) ?? null,
   });
   const actorOf: MaintenanceWorld['actorOf'] = async (tenantId, member) => {
     const scope = tenantId === tenantB ? scopeB : scopeA;
@@ -208,13 +226,38 @@ export async function startMaintenanceWorld(tag: string): Promise<MaintenanceWor
         }),
         mechanicIdsOfMember: scope.mechanicIdsOfMember,
         mechanicLinked: scope.mechanicLinked,
+        files: {
+          ingest: async () => {
+            throw new Error('the QA world does not upload files through the API');
+          },
+          read: async () => new Uint8Array(),
+        },
       });
     },
-    service({ approval = false, clock = () => at('2026-10-12T12:00:00.000Z'), side = 'a' } = {}) {
+    registerFile(tenantId, id, owner, over = {}) {
+      files.set(`${tenantId}|${id}`, {
+        id,
+        status: 'clean',
+        kind: 'original',
+        sensitivity: 'standard',
+        createdBy: owner.id,
+        displayName: `${id}.pdf`,
+        contentType: 'application/pdf',
+        sizeBytes: 100,
+        ...over,
+      });
+    },
+    service({
+      approval = false,
+      clock = () => at('2026-10-12T12:00:00.000Z'),
+      side = 'a',
+      required = { evidence: false, invoice: false },
+      zone = 'UTC',
+    } = {}) {
       const source = side === 'a' ? ordersSourceA : side === 'a2' ? ordersSourceA2 : ordersSourceB;
       return new WorkOrderService(
         new TypeOrmWorkOrderStore(source),
-        refs(side === 'b' ? plansB : plansA, approval),
+        refs(side === 'b' ? plansB : plansA, approval, required, zone),
         {
           now: clock,
         },

@@ -14,7 +14,8 @@ export type Permission =
   | 'view_audit'
   | 'approve'
   | 'reopen'
-  | 'incidents:report';
+  | 'incidents:report'
+  | 'incidents:approve';
 export type ActorKind = 'user' | 'api_key' | 'system';
 export interface ActorRef {
   subject: string;

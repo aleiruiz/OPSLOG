@@ -5,6 +5,7 @@ import { appendLocalAuditAndDelivery, MySqlTenantOutboxStore } from '../../../au
 import {
   validateWorkOrderEvent,
   type WorkOrder,
+  type WorkOrderAttachment,
   type WorkOrderMutation,
   type WorkOrderStore,
   type WorkOrderTransition,
@@ -12,12 +13,21 @@ import {
 import { WORK_ORDER_RUNTIME_ACCOUNT } from './data-source.js';
 import {
   WorkOrderCostSchema,
+  WorkOrderFileSchema,
   WorkOrderPartSchema,
   WorkOrderSchema,
   WorkOrderTaskSchema,
   WorkOrderTransitionSchema,
 } from './entities.js';
-import { childRows, orderFrom, orderRow, transitionFrom, transitionRow } from './mapping.js';
+import {
+  childRows,
+  fileFrom,
+  fileRow,
+  orderFrom,
+  orderRow,
+  transitionFrom,
+  transitionRow,
+} from './mapping.js';
 
 const digest = (value: string) => createHash('sha256').update(value).digest('hex').slice(0, 24);
 
@@ -84,6 +94,17 @@ export class TypeOrmWorkOrderStore implements WorkOrderStore {
           await manager.getRepository(WorkOrderPartSchema).insert(children.parts);
         if (children.costs.length)
           await manager.getRepository(WorkOrderCostSchema).insert(children.costs);
+        const change = mutation.file;
+        if (change?.op === 'attach')
+          await manager.getRepository(WorkOrderFileSchema).insert(fileRow(change.attachment));
+        if (change?.op === 'detach') {
+          const removed = await manager.getRepository(WorkOrderFileSchema).delete({
+            tenantId: order.tenantId,
+            orderId: order.id,
+            id: change.attachmentId,
+          });
+          if (removed.affected !== 1) return false;
+        }
         if (mutation.transition)
           await manager
             .getRepository(WorkOrderTransitionSchema)
@@ -121,8 +142,8 @@ export class TypeOrmWorkOrderStore implements WorkOrderStore {
         return true;
       });
     } catch (error) {
-      if (mutation.expectedVersion === null && (error as { code?: string }).code === 'ER_DUP_ENTRY')
-        return false;
+      // A duplicate key is a lost creation race, or a file already linked (the unique link per file).
+      if ((error as { code?: string }).code === 'ER_DUP_ENTRY') return false;
       throw error;
     }
   }
@@ -180,6 +201,16 @@ export class TypeOrmWorkOrderStore implements WorkOrderStore {
       .getRepository(WorkOrderTransitionSchema)
       .find({ where: { tenantId, orderId: id }, order: { sequence: 'ASC' } });
     return rows.map(transitionFrom);
+  }
+
+  public async attachments(
+    tenantId: string,
+    orderId: string,
+  ): Promise<readonly WorkOrderAttachment[]> {
+    const rows = await this.dataSource
+      .getRepository(WorkOrderFileSchema)
+      .find({ where: { tenantId, orderId }, order: { attachedAt: 'ASC', id: 'ASC' } });
+    return rows.map(fileFrom);
   }
 
   public async openWorkshopOrders(

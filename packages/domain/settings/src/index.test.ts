@@ -11,6 +11,8 @@ import {
   isAlertRecipientRole,
   normalizeRoles,
   parseExpectedVersion,
+  isMaintenanceEvidenceRequirement,
+  isValidTimeZone,
   parseSettings,
 } from './index.js';
 import { EXPIRING_WINDOW_DAYS } from '../../documents/src/index.js';
@@ -90,6 +92,76 @@ describe('parseSettings', () => {
   });
 });
 
+describe('maintenance settings (evidence, D20 threshold, time zone)', () => {
+  it('defaults to no evidence, no D20 threshold and UTC', () => {
+    expect(defaultSettings(A)).toMatchObject({
+      maintenanceEvidence: 'none',
+      closeCostThreshold: null,
+      timeZone: 'UTC',
+    });
+  });
+
+  it('parses the optional fields and leaves omitted ones out', () => {
+    expect(parseSettings(valid)).not.toHaveProperty('timeZone');
+    expect(
+      parseSettings({
+        ...valid,
+        maintenanceEvidence: 'evidence_invoice',
+        closeCostThreshold: { amountMinor: '500000', currency: 'MXN' },
+        timeZone: 'America/Mexico_City',
+      }),
+    ).toMatchObject({
+      maintenanceEvidence: 'evidence_invoice',
+      closeCostThreshold: { amountMinor: '500000', currency: 'MXN' },
+      timeZone: 'America/Mexico_City',
+    });
+    expect(parseSettings({ ...valid, closeCostThreshold: null }).closeCostThreshold).toBeNull();
+  });
+
+  it('rejects unknown requirements, malformed thresholds and invalid zones', () => {
+    const bad: unknown[] = [
+      { ...valid, maintenanceEvidence: 'invoice' },
+      { ...valid, maintenanceEvidence: 1 },
+      { ...valid, closeCostThreshold: 5 },
+      { ...valid, closeCostThreshold: [] },
+      { ...valid, closeCostThreshold: { amountMinor: '0', currency: 'MXN' } },
+      { ...valid, closeCostThreshold: { amountMinor: '1.5', currency: 'MXN' } },
+      { ...valid, closeCostThreshold: { amountMinor: '10', currency: 'mxn' } },
+      { ...valid, closeCostThreshold: { amountMinor: '10', currency: 'MXN', extra: 1 } },
+      { ...valid, timeZone: 'Mars/Olympus' },
+      { ...valid, timeZone: '../etc/passwd' },
+      { ...valid, timeZone: '' },
+      { ...valid, timeZone: 7 },
+    ];
+    for (const input of bad) expect(() => parseSettings(input)).toThrow(SettingsError);
+    expect(isValidTimeZone('UTC')).toBe(true);
+    expect(isValidTimeZone('America/Mexico_City')).toBe(true);
+    expect(isValidTimeZone('x'.repeat(65))).toBe(false);
+    expect(isMaintenanceEvidenceRequirement('evidence')).toBe(true);
+    expect(isMaintenanceEvidenceRequirement(undefined)).toBe(false);
+  });
+
+  it('keeps the stored value of a field the caller omits and clears the threshold only with null', async () => {
+    const { service: s } = service();
+    const first = await s.update(A, ACTOR, 0, {
+      ...valid,
+      maintenanceEvidence: 'evidence',
+      closeCostThreshold: { amountMinor: '100', currency: 'MXN' },
+      timeZone: 'America/Mexico_City',
+    });
+    const second = await s.update(A, ACTOR, first.version, { ...valid, expiryWindowDays: 10 });
+    expect(second).toMatchObject({
+      expiryWindowDays: 10,
+      maintenanceEvidence: 'evidence',
+      closeCostThreshold: { amountMinor: '100', currency: 'MXN' },
+      timeZone: 'America/Mexico_City',
+    });
+    const third = await s.update(A, ACTOR, second.version, { ...valid, closeCostThreshold: null });
+    expect(third.closeCostThreshold).toBeNull();
+    expect(third.maintenanceEvidence).toBe('evidence');
+  });
+});
+
 describe('SettingsService', () => {
   it('reads the defaults at version 0 until the company saves', async () => {
     const { service: s } = service();
@@ -105,6 +177,9 @@ describe('SettingsService', () => {
       tenantId: A,
       expiryWindowDays: 15,
       recipientRoles: ['admin', 'editor'],
+      maintenanceEvidence: 'none',
+      closeCostThreshold: null,
+      timeZone: 'UTC',
       version: 1,
       updatedBy: ACTOR,
       updatedAt: NOW.toISOString(),

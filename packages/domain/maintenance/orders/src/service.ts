@@ -1,6 +1,7 @@
 import { WorkOrderError } from './errors.js';
 import {
   closureVehicleStatus,
+  calendarDay,
   dateOnly,
   kilometers,
   opaqueId,
@@ -10,7 +11,7 @@ import {
   text,
 } from './rules.js';
 import { parseCosts, parseWork } from './work.js';
-import { WorkOrderServiceBase } from './base.js';
+import { WorkOrderFilesBase } from './files.js';
 import {
   PREVENTIVE_ORDER_ADOPTED_EVENT,
   PREVENTIVE_ORDER_CANCELLED_EVENT,
@@ -24,7 +25,7 @@ import { missing, requireCommand, type WorkOrderActor } from './workflow.js';
 export type { WorkOrderServiceOptions } from './base.js';
 
 /** Workflow of SPECS §6.1 for preventive (MNT-PLANS) and corrective orders. */
-export class WorkOrderService extends WorkOrderServiceBase {
+export class WorkOrderService extends WorkOrderFilesBase {
   /** Plans-side lifecycle port: ids and the order version the transition will have (never free text). */
   private planEvent(type: string, order: WorkOrder, version: number): readonly WorkOrderEvent[] {
     return order.kind === 'preventive' && order.planId && order.occurrenceId
@@ -181,8 +182,10 @@ export class WorkOrderService extends WorkOrderServiceBase {
       actualDate: actualDate !== null,
       actualKm: actualKm !== null,
       tasks: order.tasks.length > 0,
+      ...(await this.fileRequirements(tenantId, order)),
     });
-    const today = this.now().toISOString().slice(0, 10);
+    // "Not in the future" is judged on the tenant's calendar, not on UTC (SPECS:184).
+    const today = calendarDay(this.now(), await this.refs.timeZone(tenantId));
     if ((actualDate as string) > today) throw new WorkOrderError('invalid_input');
     if (order.kind === 'preventive' && order.planId) {
       const baseline = await this.refs.planBaseline(tenantId, order.planId, order.occurrenceId);
@@ -234,6 +237,7 @@ export class WorkOrderService extends WorkOrderServiceBase {
       tasks: order.tasks.length > 0,
       vehicleStatus: vehicleStatus !== null,
       closeApproval: !approvalRequired || order.closeApproval !== null,
+      ...(await this.fileRequirements(tenantId, order)),
     });
     if (vehicleStatus === 'active') {
       const others = (await this.store.openWorkshopOrders(tenantId, order.vehicleId)).filter(

@@ -15,7 +15,8 @@ export type Permission =
   | 'view_audit'
   | 'approve'
   | 'reopen'
-  | 'incidents:report';
+  | 'incidents:report'
+  | 'incidents:approve';
 
 export interface ActorRef {
   readonly subject: string;

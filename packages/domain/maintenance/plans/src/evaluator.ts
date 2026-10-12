@@ -1,4 +1,4 @@
-import { addCalendarDays, targets } from './rules.js';
+import { addCalendarDays, calendarDay, targets } from './rules.js';
 import type { MaintenancePlan, OdometerReading, PlanEvaluation, Trigger } from './types.js';
 
 export interface PlanScanSnapshot {
@@ -6,6 +6,8 @@ export interface PlanScanSnapshot {
   readonly odometer: OdometerReading;
   readonly occurrence: number;
   readonly orderIncomplete?: boolean;
+  /** IANA zone of the tenant: "today" is its calendar day. UTC when omitted. */
+  readonly timeZone?: string;
 }
 
 /** Pure inclusive threshold calculation. It never creates an order inside the upcoming window. */
@@ -15,7 +17,7 @@ export function evaluatePlan(
 ): readonly PlanEvaluation[] {
   if (plan.state !== 'active') return [];
   const target = targets(plan);
-  const today = snapshot.now.toISOString().slice(0, 10);
+  const today = calendarDay(snapshot.now, snapshot.timeZone);
   const dateReached = target.targetDate !== null && today >= target.targetDate;
   const kmReadingKnown = snapshot.odometer.updatedAt !== null;
   const kmReached =

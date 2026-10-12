@@ -3,7 +3,9 @@ import type {
   BffMoney,
   BffWorkOrderCommand,
   BffWorkOrderCost,
+  BffWorkOrderFileCommand,
   BffWorkOrderStatus,
+  BffWorkOrderTransition,
 } from '@opslog/contracts';
 
 /** Spanish labels for the English snake_case states of SPECS §6.1; always shown as text, not color only. */
@@ -33,6 +35,19 @@ export const COMMAND_LABELS: Readonly<Record<BffWorkOrderCommand, string>> = {
   cancel: 'Cancelar orden',
   reopen: 'Reabrir orden',
 };
+export const FILE_COMMAND_LABELS: Readonly<Record<BffWorkOrderFileCommand, string>> = {
+  evidence_attached: 'Evidencia agregada',
+  evidence_detached: 'Evidencia retirada',
+  invoice_attached: 'Factura agregada',
+  invoice_detached: 'Factura retirada',
+};
+/** Title of a timeline entry: a command with its resulting state, a file change, or the creation. */
+export function historyTitle(entry: BffWorkOrderTransition): string {
+  if (entry.command === 'create') return 'Orden registrada';
+  if (entry.command in FILE_COMMAND_LABELS)
+    return FILE_COMMAND_LABELS[entry.command as BffWorkOrderFileCommand];
+  return `${COMMAND_LABELS[entry.command as BffWorkOrderCommand]} → ${STATUS_LABELS[entry.to]}`;
+}
 /** Stable requirement ids returned by MNT-ORDERS in `missingRequirements`. */
 export const REQUIREMENT_LABELS: Readonly<Record<string, string>> = {
   responsibleId: 'Indica la persona responsable.',
@@ -46,6 +61,8 @@ export const REQUIREMENT_LABELS: Readonly<Record<string, string>> = {
   noOtherOpenWorkshopOrders:
     'El vehículo tiene otra orden abierta en taller: no puede volver a Activo.',
   reason: 'Escribe el motivo.',
+  evidence: 'Sube al menos una evidencia del trabajo (foto o documento).',
+  invoice: 'Sube la factura del trabajo.',
 };
 export const requirementLabel = (id: string): string =>
   REQUIREMENT_LABELS[id] ?? 'Falta un requisito del flujo.';

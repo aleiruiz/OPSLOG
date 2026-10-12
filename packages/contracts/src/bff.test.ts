@@ -5,6 +5,8 @@ import {
   BFF_IMPORT_MAX_ROWS,
   BFF_IMPORT_TEMPLATES,
   BFF_ROUTES,
+  BFF_WORK_ORDER_FILE_MAX_BODY_BYTES,
+  BFF_WORK_ORDER_FILE_MAX_BYTES,
   bffPath,
   bffRouteIds,
   isBffErrorBody,
@@ -29,11 +31,12 @@ describe('BFF contract', () => {
     expect(() => bffPath('drafts.load', { scope: '' })).toThrow();
   });
 
-  it('gives the bulk import route a larger body limit than the default, and nothing else', () => {
+  it('gives the bulk import and work order file routes a larger body limit than the default, and nothing else', () => {
     const limited = Object.entries(BFF_ROUTES).filter(
       ([, definition]) => 'maxBodyBytes' in definition,
     );
-    expect(limited.map(([id]) => id)).toEqual(['imports.create']);
+    expect(limited.map(([id]) => id)).toEqual(['imports.create', 'workOrders.files.upload']);
+    expect(BFF_WORK_ORDER_FILE_MAX_BODY_BYTES).toBeGreaterThan(BFF_WORK_ORDER_FILE_MAX_BYTES);
     expect(BFF_IMPORT_MAX_BODY_BYTES).toBeGreaterThan(16 * 1024);
     expect(BFF_IMPORT_MAX_ROWS).toBe(500);
     expect(BFF_IMPORT_TEMPLATES.vehicle.required).toContain('plate');

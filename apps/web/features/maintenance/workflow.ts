@@ -36,7 +36,7 @@ export function availableCommands(
       if (fleet || assigned) commands.push('complete');
       break;
     case 'completed':
-      if (has(viewer, 'approve') && !order.closeApproval) commands.push('approve_close');
+      if (has(viewer, 'incidents:approve') && !order.closeApproval) commands.push('approve_close');
       if (fleet && has(viewer, 'view_costs')) commands.push('close');
       break;
     case 'closed':
@@ -57,6 +57,14 @@ export const canRecordCosts = (order: BffWorkOrder, viewer: MaintenanceViewer): 
   ['scheduled', 'assigned', 'in_progress', 'completed'].includes(order.status) &&
   has(viewer, 'edit') &&
   has(viewer, 'view_costs');
+
+/** Evidence follows the server rule: fleet editors, or the assigned mechanic while in progress (D9). */
+export const canAttachEvidence = (order: BffWorkOrder, viewer: MaintenanceViewer): boolean =>
+  ['scheduled', 'assigned', 'in_progress', 'completed'].includes(order.status) &&
+  (has(viewer, 'edit') || (isAssignedTo(viewer, order) && order.status === 'in_progress'));
+/** Invoices are cost data: they also need `view_costs`. */
+export const canAttachInvoice = (order: BffWorkOrder, viewer: MaintenanceViewer): boolean =>
+  canAttachEvidence(order, viewer) && has(viewer, 'view_costs');
 
 const NEXT_STEP: Readonly<Record<BffWorkOrder['status'], string>> = {
   scheduled: 'Asigna responsable, taller o mecánico y fecha programada.',

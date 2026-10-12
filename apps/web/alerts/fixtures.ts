@@ -27,6 +27,9 @@ export function makeSettings(overrides: Partial<AlertSettings> = {}): AlertSetti
   return {
     expiryWindowDays: 30,
     recipientRoles: ['admin', 'editor'],
+    maintenanceEvidence: 'none',
+    closeCostThreshold: null,
+    timeZone: 'UTC',
     version: 3,
     updatedBy: 'user-admin',
     updatedAt: '2026-10-01T15:00:00.000Z',
@@ -38,6 +41,9 @@ export function makeSettings(overrides: Partial<AlertSettings> = {}): AlertSetti
 export const unsavedSettings: AlertSettings = {
   expiryWindowDays: 30,
   recipientRoles: ['admin', 'editor'],
+  maintenanceEvidence: 'none',
+  closeCostThreshold: null,
+  timeZone: 'UTC',
   version: 0,
   updatedBy: null,
   updatedAt: null,

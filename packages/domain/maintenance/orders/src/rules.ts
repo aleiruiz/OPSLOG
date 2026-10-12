@@ -85,3 +85,20 @@ export function closureVehicleStatus(value: unknown): string {
     ? (value as string)
     : invalid();
 }
+
+const formatters = new Map<string, Intl.DateTimeFormat>();
+/** Calendar day `YYYY-MM-DD` of an instant in an IANA zone (the tenant's); UTC when no zone is given. */
+export function calendarDay(instant: Date, timeZone = 'UTC'): string {
+  let format = formatters.get(timeZone);
+  if (!format) {
+    format = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    formatters.set(timeZone, format);
+  }
+  const parts = Object.fromEntries(format.formatToParts(instant).map((p) => [p.type, p.value]));
+  return `${parts['year']}-${parts['month']}-${parts['day']}`;
+}

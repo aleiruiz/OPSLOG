@@ -22,6 +22,7 @@ export const ROLE_PERMISSIONS: Readonly<Record<RoleName, readonly Permission[]>>
     'approve',
     'reopen',
     'incidents:report',
+    'incidents:approve',
   ],
   editor: ['view', 'create', 'edit'],
   viewer: ['view'],

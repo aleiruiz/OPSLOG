@@ -10,7 +10,7 @@ const TENANT = 'tenant-a';
 const sessions: Record<string, { subject: string; permissions: Permission[] }> = {
   admin: {
     subject: 'admin',
-    permissions: ['view', 'create', 'edit', 'view_costs', 'approve', 'reopen'],
+    permissions: ['view', 'create', 'edit', 'view_costs', 'incidents:approve', 'reopen'],
   },
   editor: { subject: 'editor', permissions: ['view', 'create', 'edit'] },
   mech: { subject: 'mech', permissions: ['view'] },
@@ -18,6 +18,31 @@ const sessions: Record<string, { subject: string; permissions: Permission[] }> =
 
 function api() {
   const h = harness();
+  const stored: { actorId: string; name: string; bytes: Uint8Array }[] = [];
+  const files = {
+    ingest: async (
+      tenantId: string,
+      actorId: string,
+      _correlationId: string,
+      input: { name: string; contentType: string; bytes: Uint8Array },
+    ) => {
+      const id = `file-${stored.length + 1}`;
+      stored.push({ actorId, name: input.name, bytes: input.bytes });
+      h.refs.files.set(id, {
+        id,
+        status: 'pending_scan',
+        kind: 'original',
+        sensitivity: 'standard',
+        createdBy: actorId,
+        displayName: input.name,
+        contentType: input.contentType,
+        sizeBytes: input.bytes.length,
+      });
+      return { id };
+    },
+    read: async (_token: string, _correlationId: string, fileId: string) =>
+      stored[Number(fileId.slice(5)) - 1]!.bytes,
+  };
   const workOrders = new WorkOrderApi({
     orders: h.service,
     authorize: async (token, correlationId) => {
@@ -34,8 +59,9 @@ function api() {
       };
     },
     mechanicIdsOfMember: async (_tenant, member) => (member === 'mech' ? ['mechanic-1'] : []),
+    files,
   });
-  return { h, workOrders };
+  return { h, workOrders, stored };
 }
 
 describe('work order API', () => {
@@ -122,6 +148,119 @@ describe('work order API', () => {
     expect((await workOrders.get('admin', 'c8', 'bad id!')).error?.status).toBe(400);
   });
 
+  async function started() {
+    const ctx = api();
+    const created = await ctx.workOrders.createCorrective('admin', 'f0', {
+      vehicleId: 'vehicle-1',
+      description: 'Frenos',
+    });
+    const id = created.value?.id as string;
+    const assigned = await ctx.workOrders.command('admin', 'f1', 'assign', id, {
+      version: 1,
+      responsibleId: 'fleet',
+      workshopId: 'workshop-1',
+      mechanicId: 'mechanic-1',
+      scheduledDate: '2026-10-13',
+    });
+    const run = await ctx.workOrders.command('mech', 'f2', 'start', id, {
+      version: assigned.value?.version,
+    });
+    return { ...ctx, id, version: run.value?.version as number };
+  }
+  const upload = (kind: string, bytes = 'JVBERi0xLjQK') => ({
+    kind,
+    name: 'foto.pdf',
+    contentType: 'application/pdf',
+    contentBase64: bytes,
+  });
+
+  it('uploads evidence for the assigned mechanic, lists it and serves it back without file ids', async () => {
+    const { workOrders, stored, id, version } = await started();
+    const uploaded = await workOrders.uploadFile('mech', 'u1', id, {
+      version,
+      ...upload('evidence'),
+    });
+    expect(uploaded.ok).toBe(true);
+    expect(stored).toHaveLength(1);
+    expect(stored[0]).toMatchObject({ actorId: 'user-mech', name: 'foto.pdf' });
+    const listed = await workOrders.listFiles('mech', 'u2', id);
+    expect(listed.value).toEqual([
+      expect.objectContaining({
+        kind: 'evidence',
+        displayName: 'foto.pdf',
+        fileStatus: 'pending_scan',
+      }),
+    ]);
+    expect(JSON.stringify(listed.value)).not.toMatch(/fileId|file-1|sha256|tenant/);
+    const link = listed.value?.[0]?.id as string;
+    const content = await workOrders.fileContent('mech', 'u3', id, link);
+    expect(Buffer.from(content.value?.contentBase64 ?? '', 'base64').toString('latin1')).toBe(
+      '%PDF-1.4\n',
+    );
+    expect((await workOrders.fileContent('editor', 'u4', id, link)).ok).toBe(true);
+    expect((await workOrders.fileContent('nobody', 'u4', id, link)).error?.code).toBe(
+      'unauthorized',
+    );
+    const removed = await workOrders.detachFile('mech', 'u5', id, link, {
+      version: uploaded.value?.version,
+    });
+    expect(removed.ok).toBe(true);
+    expect((await workOrders.listFiles('mech', 'u6', id)).value).toEqual([]);
+  });
+
+  it('checks permission, status and version before storing a single byte', async () => {
+    const { workOrders, stored, id, version } = await started();
+    // Invoices are cost data: the mechanic and the editor are refused, and nothing is stored.
+    for (const session of ['mech', 'editor'])
+      expect(
+        (await workOrders.uploadFile(session, 'p1', id, { version, ...upload('invoice') })).error
+          ?.code,
+      ).toBe('forbidden');
+    expect(
+      (await workOrders.uploadFile('admin', 'p2', id, { version: 1, ...upload('evidence') })).error
+        ?.code,
+    ).toBe('stale_version');
+    expect(stored).toHaveLength(0);
+    // The invoice is invisible to a caller without view_costs, and downloadable only with it.
+    const invoice = await workOrders.uploadFile('admin', 'p3', id, {
+      version,
+      ...upload('invoice'),
+    });
+    expect(invoice.ok).toBe(true);
+    expect((await workOrders.listFiles('mech', 'p4', id)).value).toEqual([]);
+    const adminList = await workOrders.listFiles('admin', 'p5', id);
+    expect(adminList.value?.map((file) => file.kind)).toEqual(['invoice']);
+    expect(
+      (await workOrders.fileContent('mech', 'p6', id, adminList.value?.[0]?.id as string)).error
+        ?.code,
+    ).toBe('not_found');
+  });
+
+  it('rejects malformed uploads with 400 and stores nothing', async () => {
+    const { workOrders, stored, id, version } = await started();
+    const bad: unknown[] = [
+      null,
+      [],
+      { version, ...upload('photo') },
+      { version, ...upload('evidence', '') },
+      { version, ...upload('evidence', 'not base64!') },
+      { version, ...upload('evidence', 'abc') },
+      { version, ...upload('evidence'), extra: 1 },
+      { version, ...upload('evidence'), name: '' },
+      { version, ...upload('evidence'), name: 'x'.repeat(201) },
+      { version, ...upload('evidence'), contentType: 7 },
+      { ...upload('evidence'), version: 'x' },
+    ];
+    for (const input of bad)
+      expect((await workOrders.uploadFile('mech', 'b1', id, input)).error?.status).toBe(400);
+    const tooBig = Buffer.alloc(8 * 1024 * 1024 + 3).toString('base64');
+    expect(
+      (await workOrders.uploadFile('mech', 'b2', id, { version, ...upload('evidence', tooBig) }))
+        .error?.status,
+    ).toBe(400);
+    expect(stored).toHaveLength(0);
+  });
+
   it('never leaks internal errors', async () => {
     const { h, workOrders } = api();
     h.refs.vehicleExists = async () => {
@@ -158,6 +297,10 @@ describe('work order API', () => {
       }),
       mechanicIdsOfMember: async () => [],
       mechanicLinked: async () => linked,
+      files: {
+        ingest: async () => ({ id: 'unused' }),
+        read: async () => new Uint8Array(),
+      },
     });
     expect(await workOrders.list('mech', 'c1')).toMatchObject({ ok: true, value: [] });
     expect(await workOrders.get('mech', 'c2', created.id)).toMatchObject({

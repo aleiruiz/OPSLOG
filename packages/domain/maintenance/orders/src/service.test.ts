@@ -466,6 +466,13 @@ describe('work order workflow', () => {
     expect(
       await code(h.service.approveClose(TENANT, FLEET, order.id, { version: order.version })),
     ).toBe('forbidden');
+    // SPECS:79: only `incidents:approve` approves; the generic `approve` grant does not (G3 M5).
+    const genericApprover = { ...ADMIN, permissions: ['view', 'edit', 'view_costs', 'approve'] };
+    expect(
+      await code(
+        h.service.approveClose(TENANT, genericApprover, order.id, { version: order.version }),
+      ),
+    ).toBe('forbidden');
     const approved = await h.service.approveClose(TENANT, ADMIN, order.id, {
       version: order.version,
     });

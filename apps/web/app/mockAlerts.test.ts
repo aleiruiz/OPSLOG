@@ -171,6 +171,9 @@ describe('alert settings', () => {
       value: {
         expiryWindowDays: 30,
         recipientRoles: DEFAULT_RECIPIENTS,
+        maintenanceEvidence: 'none',
+        closeCostThreshold: null,
+        timeZone: 'UTC',
         version: 0,
         updatedBy: null,
         updatedAt: null,

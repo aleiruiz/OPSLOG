@@ -1,7 +1,9 @@
 import {
   SettingsError,
   type AlertRecipientRole,
+  type CloseCostThreshold,
   type CompanySettings,
+  type MaintenanceEvidenceRequirement,
   type SettingsService,
 } from '../../../../packages/domain/settings/src/index.js';
 import {
@@ -59,6 +61,9 @@ function failure(error: unknown): PlatformResponse<never> {
 export interface CompanySettingsView {
   readonly expiryWindowDays: number;
   readonly recipientRoles: readonly AlertRecipientRole[];
+  readonly maintenanceEvidence: MaintenanceEvidenceRequirement;
+  readonly closeCostThreshold: CloseCostThreshold | null;
+  readonly timeZone: string;
   /** 0 while the company has never saved (the values are then the defaults). */
   readonly version: number;
   readonly updatedBy: string | null;
@@ -100,6 +105,9 @@ export const SETTINGS_PERMISSIONS = {
 const viewOf = (settings: CompanySettings): CompanySettingsView => ({
   expiryWindowDays: settings.expiryWindowDays,
   recipientRoles: settings.recipientRoles,
+  maintenanceEvidence: settings.maintenanceEvidence,
+  closeCostThreshold: settings.closeCostThreshold,
+  timeZone: settings.timeZone,
   version: settings.version,
   updatedBy: settings.updatedBy,
   updatedAt: settings.updatedAt,

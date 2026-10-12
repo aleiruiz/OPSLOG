@@ -23,6 +23,9 @@ const settings = (tenant: string, over: Partial<CompanySettings> = {}): CompanyS
   tenantId: tenant,
   expiryWindowDays: 15,
   recipientRoles: ['admin', 'editor'],
+  maintenanceEvidence: 'none',
+  closeCostThreshold: null,
+  timeZone: 'UTC',
   version: 1,
   updatedBy: ACTOR,
   updatedAt: NOW.toISOString(),
@@ -102,7 +105,7 @@ suite('persistent settings store on MySQL', () => {
           WHERE TABLE_SCHEMA = ? AND DATA_TYPE IN ('varchar', 'char') AND TABLE_NAME = ?`,
         [db.databaseName, T.settings],
       );
-      expect(columns).toHaveLength(3);
+      expect(columns).toHaveLength(6);
       expect(columns.filter((column) => column.coll !== BINARY_COLLATION)).toEqual([]);
       const keys = await db.rows<{ name: string; col: string }>(
         `SELECT INDEX_NAME AS name, COLUMN_NAME AS col FROM information_schema.STATISTICS
@@ -124,6 +127,11 @@ suite('persistent settings store on MySQL', () => {
         'leading space': { recipient_roles: ' admin' },
         'upper case role': { recipient_roles: 'Admin' },
         'six roles': { recipient_roles: 'admin,editor,viewer,auditor,pii_reader,admin' },
+        'unknown evidence requirement': { maintenance_evidence: 'invoice' },
+        'blank zone': { time_zone: '  ' },
+        'threshold without currency': { close_threshold_minor: 100 },
+        'currency without threshold': { close_threshold_currency: 'MXN' },
+        'zero threshold': { close_threshold_minor: 0, close_threshold_currency: 'MXN' },
       };
       for (const [label, patch] of Object.entries(illegal)) {
         const error = await insert(db, row(patch));
@@ -183,6 +191,23 @@ suite('persistent settings store on MySQL', () => {
       expect(await storeA.find('tenant-rt')).toBeNull();
       expect(await storeA.insert(value)).toBe(true);
       expect(await storeB.find('tenant-rt')).toEqual(value);
+    });
+
+    it('round-trips the evidence requirement, the D20 threshold and the zone, and keeps old rows on the defaults', async () => {
+      const value = settings('tenant-maintenance', {
+        maintenanceEvidence: 'evidence_invoice',
+        closeCostThreshold: { amountMinor: '999999999999999', currency: 'MXN' },
+        timeZone: 'America/Mexico_City',
+      });
+      expect(await storeA.insert(value)).toBe(true);
+      expect(await storeB.find('tenant-maintenance')).toEqual(value);
+      // A row written without the new columns (an older writer) reads the defaults.
+      expect(await insert(db, row({ company_id: 'tenant-legacy' }))).toBeUndefined();
+      expect(await storeA.find('tenant-legacy')).toMatchObject({
+        maintenanceEvidence: 'none',
+        closeCostThreshold: null,
+        timeZone: 'UTC',
+      });
     });
 
     it('rolls settings back when the runtime cannot append local audit', async () => {

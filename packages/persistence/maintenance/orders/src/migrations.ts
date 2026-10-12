@@ -74,3 +74,29 @@ export class CreateMaintenanceWorkOrders2026101200030 implements MigrationInterf
     await queryRunner.dropTable(T.orders);
   }
 }
+
+export const WORK_ORDER_FILES_MIGRATION_VERSION = '2026101300020';
+
+/**
+ * Evidence and invoice links of a work order (G3 H3). Rows only reference the file of the files
+ * module (no foreign key across modules); a file is linked at most once per company. The runtime
+ * account may insert and delete links, never update them.
+ */
+export class CreateMaintenanceWorkOrderFiles2026101300020 implements MigrationInterface {
+  public name = 'CreateMaintenanceWorkOrderFiles2026101300020';
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`CREATE TABLE \`${T.files}\` (
+        ${id('company_id')}, ${id('order_id')}, ${id('id')}, ${id('file_id')},
+        kind VARCHAR(16) COLLATE utf8mb4_0900_bin NOT NULL,
+        display_name VARCHAR(120) COLLATE utf8mb4_0900_bin NOT NULL,
+        content_type VARCHAR(100) COLLATE utf8mb4_0900_bin NOT NULL,
+        size_bytes BIGINT UNSIGNED NOT NULL, ${actor('attached_by')}, attached_at DATETIME(6) NOT NULL,
+        PRIMARY KEY (company_id,order_id,id), UNIQUE KEY uq_work_order_file (company_id,file_id),
+        ${owner('work_order_file')},
+        CONSTRAINT ck_work_order_file_kind CHECK (kind IN ('evidence','invoice'))
+      ) ${TABLE}`);
+  }
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.dropTable(T.files);
+  }
+}

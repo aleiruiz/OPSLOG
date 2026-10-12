@@ -3,6 +3,8 @@ import type { DataSource } from 'typeorm';
 import { appendLocalAuditAndDelivery, type AuditEvent } from '../../audit/src/index.js';
 import {
   isAlertRecipientRole,
+  isMaintenanceEvidenceRequirement,
+  isValidTimeZone,
   normalizeRoles,
   type CompanySettings,
   type SettingsStore,
@@ -40,10 +42,23 @@ function rolesOf(value: string): CompanySettings['recipientRoles'] {
     : integrity();
 }
 
+function thresholdOf(row: SettingsEntity): CompanySettings['closeCostThreshold'] {
+  const minor = row.closeThresholdMinor ?? null;
+  const currency = row.closeThresholdCurrency ?? null;
+  if (minor === null && currency === null) return null;
+  if (minor === null || currency === null) return integrity();
+  return { amountMinor: String(minor), currency };
+}
+
 const toSettings = (row: SettingsEntity): CompanySettings => ({
   tenantId: row.tenantId,
   expiryWindowDays: row.expiryWindowDays,
   recipientRoles: rolesOf(row.recipientRoles),
+  maintenanceEvidence: isMaintenanceEvidenceRequirement(row.maintenanceEvidence)
+    ? row.maintenanceEvidence
+    : integrity(),
+  closeCostThreshold: thresholdOf(row),
+  timeZone: isValidTimeZone(row.timeZone) ? row.timeZone : integrity(),
   version: row.version,
   updatedBy: row.updatedBy,
   updatedAt: row.updatedAt.toISOString(),
@@ -53,6 +68,10 @@ const toSettings = (row: SettingsEntity): CompanySettings => ({
 const mutableColumns = (settings: CompanySettings) => ({
   expiryWindowDays: settings.expiryWindowDays,
   recipientRoles: settings.recipientRoles.join(','),
+  maintenanceEvidence: settings.maintenanceEvidence,
+  closeThresholdMinor: settings.closeCostThreshold?.amountMinor ?? null,
+  closeThresholdCurrency: settings.closeCostThreshold?.currency ?? null,
+  timeZone: settings.timeZone,
   version: settings.version,
   updatedBy: settings.updatedBy as string,
   updatedAt: new Date(settings.updatedAt as string),

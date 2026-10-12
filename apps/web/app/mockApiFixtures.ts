@@ -41,6 +41,7 @@ export const allPermissions: readonly Permission[] = [
   'approve',
   'reopen',
   'incidents:report',
+  'incidents:approve',
 ];
 
 export const systemRoles: RoleSummary[] = [
@@ -55,7 +56,7 @@ export const systemRoles: RoleSummary[] = [
     id: 'role-fleet',
     name: 'Responsable de flotilla',
     kind: 'system',
-    permissions: ['view', 'create', 'edit', 'export', 'view_costs', 'approve'],
+    permissions: ['view', 'create', 'edit', 'export', 'view_costs', 'approve', 'incidents:approve'],
     memberCount: 2,
   },
   {
@@ -69,7 +70,7 @@ export const systemRoles: RoleSummary[] = [
     id: 'role-claims',
     name: 'Responsable de siniestros',
     kind: 'system',
-    permissions: ['view', 'create', 'edit', 'approve', 'reopen', 'view_costs'],
+    permissions: ['view', 'create', 'edit', 'approve', 'incidents:approve', 'reopen', 'view_costs'],
     memberCount: 1,
   },
   {
@@ -83,7 +84,7 @@ export const systemRoles: RoleSummary[] = [
     id: 'role-supervisor',
     name: 'Supervisor o gerente',
     kind: 'system',
-    permissions: ['view', 'export', 'view_costs', 'view_audit', 'approve'],
+    permissions: ['view', 'export', 'view_costs', 'view_audit', 'approve', 'incidents:approve'],
     memberCount: 1,
   },
   {

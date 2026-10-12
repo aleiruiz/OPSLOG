@@ -1,5 +1,6 @@
 import { validateWorkOrderEvent } from './events.js';
 import type {
+  WorkOrderAttachment,
   WorkOrder,
   WorkOrderEvent,
   WorkOrderMutation,
@@ -14,6 +15,7 @@ const OPEN_WORKSHOP: readonly WorkOrder['status'][] = ['in_progress', 'completed
 export class InMemoryWorkOrderStore implements WorkOrderStore {
   private readonly orders = new Map<string, WorkOrder>();
   private readonly transitions = new Map<string, WorkOrderTransition[]>();
+  private readonly files = new Map<string, WorkOrderAttachment[]>();
   public readonly events: { readonly tenantId: string; readonly event: WorkOrderEvent }[] = [];
   public readonly audit: { readonly tenantId: string; readonly action: string }[] = [];
 
@@ -23,6 +25,23 @@ export class InMemoryWorkOrderStore implements WorkOrderStore {
     const current = this.orders.get(k);
     if (mutation.expectedVersion === null ? current : current?.version !== mutation.expectedVersion)
       return false;
+    const change = mutation.file;
+    const linked = this.files.get(k) ?? [];
+    if (change?.op === 'attach') {
+      // One link per file in the tenant, whatever the order.
+      const taken = [...this.files.entries()].some(
+        ([owner, list]) =>
+          owner.startsWith(`${mutation.order.tenantId.length}:${mutation.order.tenantId}`) &&
+          list.some((link) => link.fileId === change.attachment.fileId),
+      );
+      if (taken) return false;
+      this.files.set(k, [...linked, structuredClone(change.attachment)]);
+    } else if (change?.op === 'detach') {
+      this.files.set(
+        k,
+        linked.filter((link) => link.id !== change.attachmentId),
+      );
+    }
     this.orders.set(k, structuredClone(mutation.order));
     if (mutation.transition) {
       const history = this.transitions.get(k) ?? [];
@@ -53,6 +72,12 @@ export class InMemoryWorkOrderStore implements WorkOrderStore {
   }
   public async history(tenantId: string, id: string): Promise<readonly WorkOrderTransition[]> {
     return structuredClone(this.transitions.get(key(tenantId, id)) ?? []);
+  }
+  public async attachments(
+    tenantId: string,
+    orderId: string,
+  ): Promise<readonly WorkOrderAttachment[]> {
+    return structuredClone(this.files.get(key(tenantId, orderId)) ?? []);
   }
   public async openWorkshopOrders(
     tenantId: string,

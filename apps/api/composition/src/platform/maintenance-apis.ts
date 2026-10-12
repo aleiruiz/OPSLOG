@@ -20,6 +20,7 @@ import {
 } from '../../../../../packages/domain/vehicles/src/index.js';
 import { MaintenanceApi } from '../../../maintenance/plans/src/index.js';
 import { createMechanicScope } from './mechanic-scope.js';
+import type { SettingsService } from '../../../../../packages/domain/settings/src/index.js';
 import type { PlatformKernel } from './kernel.js';
 import type { PlatformAdapters } from './types.js';
 
@@ -27,6 +28,7 @@ export function buildMaintenanceApis(
   kernel: PlatformKernel,
   adapters: PlatformAdapters,
   vehicleService: VehicleService,
+  settings: SettingsService,
 ): {
   readonly maintenance: MaintenanceApi;
   readonly maintenancePlanWorker?: MaintenancePlanWorker;
@@ -65,6 +67,8 @@ export function buildMaintenanceApis(
             },
           },
           kernel.now,
+          // SPECS:184: scans judge "today" on the company's calendar.
+          async (tenantId) => (await settings.get(tenantId)).timeZone,
         )
       : undefined;
   const mechanicScope = createMechanicScope(mechanicStore);

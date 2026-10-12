@@ -7,6 +7,7 @@ import {
   type WorkOrder,
   type WorkOrderCommand,
   type WorkOrderEvent,
+  type WorkOrderFileCommand,
   type WorkOrderReferences,
   type WorkOrderStore,
   type WorkOrderTransition,
@@ -212,7 +213,7 @@ export abstract class WorkOrderServiceBase {
 
   protected timeline(
     order: WorkOrder,
-    command: WorkOrderCommand | 'create',
+    command: WorkOrderCommand | WorkOrderFileCommand | 'create',
     previous: WorkOrder | null,
     actor: WorkOrderActor,
     comment: string | null,

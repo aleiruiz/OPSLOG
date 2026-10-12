@@ -94,6 +94,63 @@ suite('maintenance persistence on disposable MySQL 8.4', () => {
     expect(await storeA.listScheduledOrders(tenantA, value.id)).toHaveLength(1);
   });
 
+  it('judges due and overdue on the tenant calendar day, not on UTC (G3 M4)', async () => {
+    const tenant = randomUUID();
+    const value = plan(tenant, randomUUID());
+    await storeA.create(value, 'synthetic-actor');
+    const zone = 'America/Mexico_City';
+    const odometer = { km: 0, updatedAt: now.toISOString() };
+    const orderCount = async () =>
+      Number(
+        (
+          await db.rows<{ count: number }>(
+            `SELECT COUNT(*) AS count FROM ${MAINTENANCE_TABLES.orders} WHERE company_id=?`,
+            [tenant],
+          )
+        )[0]?.count,
+      );
+    // 2026-10-12T00:30Z is still the 11th (18:30) in Mexico City: the target (the 12th) is not reached.
+    const early = await storeA.scan(
+      tenant,
+      value.id,
+      new Date('2026-10-12T00:30:00.000Z'),
+      odometer,
+      zone,
+    );
+    expect(early.map((item) => [item.kind, item.threshold])).toEqual([['upcoming', '15_days']]);
+    expect(await orderCount()).toBe(0);
+    // The target day itself, local 18:30 on the 12th: due, not yet overdue.
+    const onTarget = await storeA2.scan(
+      tenant,
+      value.id,
+      new Date('2026-10-13T00:30:00.000Z'),
+      odometer,
+      zone,
+    );
+    expect(onTarget.map((item) => item.kind)).toEqual(['due']);
+    expect(await orderCount()).toBe(1);
+    // The next local day: overdue, once.
+    const late = await storeA.scan(
+      tenant,
+      value.id,
+      new Date('2026-10-14T00:30:00.000Z'),
+      odometer,
+      zone,
+    );
+    expect(late.map((item) => item.kind)).toEqual(['overdue']);
+    // Without a zone the same instants are judged on UTC, which is the previous behaviour.
+    const utcTenant = randomUUID();
+    const utcPlan = plan(utcTenant, randomUUID());
+    await storeA.create(utcPlan, 'synthetic-actor');
+    const utc = await storeA.scan(
+      utcTenant,
+      utcPlan.id,
+      new Date('2026-10-13T00:30:00.000Z'),
+      odometer,
+    );
+    expect(utc.map((item) => item.kind)).toEqual(['due', 'overdue']);
+  });
+
   it('commits overdue once while incomplete and advances only on an idempotent closure', async () => {
     const tenant = randomUUID();
     const value = plan(tenant, randomUUID());
