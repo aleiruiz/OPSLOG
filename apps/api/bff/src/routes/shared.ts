@@ -66,7 +66,7 @@ export const SCOPE = /^[A-Za-z0-9][A-Za-z0-9:._-]{0,63}$/;
 /** Maps a composition failure to a uniform error. Unknown codes are internal errors, never echoed. */
 export function failure(
   ctx: RouteContext,
-  error: { code: string; field?: string } | undefined,
+  error: { code: string; field?: string; missingRequirements?: readonly string[] } | undefined,
 ): BffResponse {
   const map: Readonly<Record<string, ErrorCode>> = {
     invalid_input: 'bad_request',
@@ -90,6 +90,7 @@ export function failure(
     area_in_use: 'area_in_use',
     invalid_hierarchy: 'invalid_hierarchy',
     invalid_responsible: 'invalid_responsible',
+    missing_requirements: 'missing_requirements',
   };
   const code = map[error?.code ?? ''] ?? 'internal_error';
   return errorResponse(
@@ -106,6 +107,7 @@ export function failure(
       code === 'already_assigned'
       ? error?.field
       : undefined,
+    code === 'missing_requirements' ? (error?.missingRequirements ?? []) : undefined,
   );
 }
 

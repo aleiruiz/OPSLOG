@@ -251,6 +251,23 @@ function writes(f: Fixture): [string, string, unknown?][] {
       { name: 'Mecánico externo', specialties: ['motor'], kind: 'external' },
     ],
     ['POST', '/api/v1/maintenance/mechanics/00000000-0000-4000-8000-000000000001/deactivate'],
+    ['POST', '/api/v1/work-orders', { vehicleId: f.vehicleId, description: 'Frenos' }],
+    ['POST', '/api/v1/work-orders/preventive', { planId: 'plan-1', scheduledOrderId: 'order-1' }],
+    [
+      'POST',
+      '/api/v1/work-orders/00000000-0000-4000-8000-000000000001/transitions',
+      { command: 'cancel', version: 1, reason: 'Duplicada' },
+    ],
+    [
+      'PUT',
+      '/api/v1/work-orders/00000000-0000-4000-8000-000000000001/work',
+      { version: 1, tasks: [] },
+    ],
+    [
+      'PUT',
+      '/api/v1/work-orders/00000000-0000-4000-8000-000000000001/costs',
+      { version: 1, costs: [] },
+    ],
   ];
 }
 

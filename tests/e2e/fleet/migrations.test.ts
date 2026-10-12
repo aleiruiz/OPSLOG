@@ -11,6 +11,7 @@ import { SETTINGS_TABLES } from '../../../packages/persistence/settings/src/inde
 import { IMPORT_TABLES } from '../../../packages/persistence/imports/src/index.js';
 import { FILE_TABLES } from '../../../packages/persistence/files/src/index.js';
 import { MAINTENANCE_TABLES } from '../../../packages/persistence/maintenance/plans/src/index.js';
+import { WORK_ORDER_TABLES } from '../../../packages/persistence/maintenance/orders/src/index.js';
 import { adminUrl, startFleetDatabase, type FleetDatabase } from './mysql.js';
 
 const suite = adminUrl ? describe : describe.skip;
@@ -38,6 +39,7 @@ suite('fleet tenant migration composition on real MySQL', () => {
       'imports:2026100600090',
       'files:2026100700010',
       'maintenance:2026101200010',
+      'maintenance-orders:2026101200030',
       'audit:2026100700010',
     ]);
     expect(database.databaseName).toMatch(/^opslog_t_[a-f0-9]+$/);
@@ -75,6 +77,7 @@ suite('fleet tenant migration composition on real MySQL', () => {
         MAINTENANCE_TABLES.alerts,
         MAINTENANCE_TABLES.workshops,
         MAINTENANCE_TABLES.mechanics,
+        ...Object.values(WORK_ORDER_TABLES),
         'opslog_audit_local',
         'opslog_audit_delivery',
         'opslog_audit_log',

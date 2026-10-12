@@ -21,6 +21,10 @@ import {
   MAINTENANCE_RUNTIME_ACCOUNT,
 } from '../../../packages/persistence/maintenance/plans/src/index.js';
 import {
+  WORK_ORDER_MIGRATIONS_TABLE,
+  WORK_ORDER_TABLES,
+} from '../../../packages/persistence/maintenance/orders/src/index.js';
+import {
   createFleetMigrationModules,
   openFleetRuntimeStores,
   runFleetAuditMigrations,
@@ -99,6 +103,11 @@ const grants = {
     { table: MAINTENANCE_TABLES.alerts, privileges: ['SELECT', 'INSERT'] },
     { table: MAINTENANCE_TABLES.workshops, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
     { table: MAINTENANCE_TABLES.mechanics, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
+    { table: WORK_ORDER_TABLES.orders, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
+    { table: WORK_ORDER_TABLES.tasks, privileges: ['SELECT', 'INSERT', 'DELETE'] },
+    { table: WORK_ORDER_TABLES.parts, privileges: ['SELECT', 'INSERT', 'DELETE'] },
+    { table: WORK_ORDER_TABLES.costs, privileges: ['SELECT', 'INSERT', 'DELETE'] },
+    { table: WORK_ORDER_TABLES.transitions, privileges: ['SELECT', 'INSERT'] },
   ],
 } satisfies Record<string, readonly Grant[]>;
 
@@ -215,6 +224,9 @@ async function startTenantDatabase(label: string): Promise<FleetTenantDatabase> 
     );
     await connection.query(
       `GRANT DELETE ON ${identifier(databaseName)}.${identifier(MAINTENANCE_MIGRATIONS_TABLE)} TO '${maintenanceMigrator.username}'@'%'`,
+    );
+    await connection.query(
+      `GRANT DELETE ON ${identifier(databaseName)}.${identifier(WORK_ORDER_MIGRATIONS_TABLE)} TO '${maintenanceMigrator.username}'@'%'`,
     );
     const idempotentMigrations = await runFleetMigrations(migrationCredentials);
     if (idempotentMigrations.join(',') !== appliedMigrations.join(','))

@@ -29,6 +29,7 @@ export const BFF_ERRORS = {
   invalid_employee: { status: 422, message: 'Unprocessable request' },
   invalid_hierarchy: { status: 422, message: 'Unprocessable request' },
   invalid_responsible: { status: 422, message: 'Unprocessable request' },
+  missing_requirements: { status: 422, message: 'Unprocessable request' },
   payload_too_large: { status: 413, message: 'Payload too large' },
   unsupported_media_type: { status: 415, message: 'Unsupported media type' },
   internal_error: { status: 500, message: 'Request failed' },
@@ -51,6 +52,8 @@ export interface BffErrorBody {
    * (`employee_id`); never a value or a count.
    */
   readonly field?: string;
+  /** Only on `missing_requirements`: stable ids of the workflow requirements still missing. */
+  readonly missingRequirements?: readonly string[];
 }
 
 export const isBffErrorBody = (value: unknown): value is BffErrorBody => {
@@ -62,7 +65,10 @@ export const isBffErrorBody = (value: unknown): value is BffErrorBody => {
     typeof body.status === 'number' &&
     typeof body.message === 'string' &&
     typeof body.correlationId === 'string' &&
-    (body.field === undefined || typeof body.field === 'string')
+    (body.field === undefined || typeof body.field === 'string') &&
+    (body.missingRequirements === undefined ||
+      (Array.isArray(body.missingRequirements) &&
+        body.missingRequirements.every((item) => typeof item === 'string')))
   );
 };
 

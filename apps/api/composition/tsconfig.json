@@ -26,6 +26,7 @@
     "../../../packages/domain/maintenance/plans/src/**/*.ts",
     "../../../packages/domain/maintenance/workshops/src/**/*.ts",
     "../../../packages/domain/maintenance/mechanics/src/**/*.ts",
+    "../../../packages/domain/maintenance/orders/src/**/*.ts",
     "../../../packages/platform/pii/src/**/*.ts",
     "../../../packages/platform/auth/src/**/*.ts",
     "../../../packages/platform/audit/src/**/*.ts",
@@ -52,6 +53,9 @@
     { "path": "../../../packages/persistence/maintenance/plans" },
     { "path": "../../../packages/persistence/maintenance/workshops" },
     { "path": "../../../packages/persistence/maintenance/mechanics" },
+    { "path": "../../../packages/domain/maintenance/orders" },
+    { "path": "../../../packages/persistence/maintenance/orders" },
+    { "path": "../maintenance/orders" },
     { "path": "../maintenance/plans" },
     { "path": "../../worker/maintenance-plans" }
   ]

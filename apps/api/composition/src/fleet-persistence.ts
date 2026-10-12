@@ -59,12 +59,12 @@ import {
   createMySqlAuditRuntime,
   runAuditMigrations,
 } from '../../../../packages/persistence/audit/src/index.js';
-import {
-  createMaintenanceMigrationDataSource,
-  runMaintenanceMigrations,
-} from '../../../../packages/persistence/maintenance/plans/src/index.js';
 import type { PlatformAdapters } from './platform/types.js';
-import { maintenanceRuntimeAdapters, openMaintenanceRuntimeSource } from './maintenance-source.js';
+import {
+  createMaintenanceRuntimeSources,
+  maintenanceMigrationSteps,
+  maintenanceRuntimeAdapters,
+} from './maintenance-source.js';
 
 type FleetDataSource = ReturnType<typeof createAreasMigrationDataSource>;
 
@@ -186,18 +186,10 @@ export function createFleetMigrationModules(
       }),
       runFilesMigrations,
     ),
-    migrationModule(
-      'maintenance',
-      '2026101200010',
-      createMaintenanceMigrationDataSource({
-        host: credentials.host,
-        port: credentials.port,
-        database: credentials.database,
-        username: credentials.maintenanceMigrator.username,
-        password: credentials.maintenanceMigrator.password,
-      }),
-      runMaintenanceMigrations,
-    ),
+    ...maintenanceMigrationSteps(
+      { host: credentials.host, port: credentials.port, database: credentials.database },
+      credentials.maintenanceMigrator,
+    ).map((step) => migrationModule(step.name, step.version, step.source, step.run)),
   ];
 }
 
@@ -262,6 +254,7 @@ export interface FleetRuntimeStores {
       | 'maintenancePlans'
       | 'maintenanceWorkshops'
       | 'maintenanceMechanics'
+      | 'maintenanceOrders'
     >
   >;
   readonly audit: NonNullable<PlatformAdapters['audit']>;
@@ -319,22 +312,18 @@ export async function openFleetRuntimeStores(
     ...endpoint,
     ...credentials.accounts.files,
   });
-  const maintenanceSource = await openMaintenanceRuntimeSource(
-    endpoint,
-    credentials.accounts.maintenance,
-  );
+  const maintenance = createMaintenanceRuntimeSources(endpoint, credentials.accounts.maintenance);
+  sources.push(maintenance.plans, maintenance.orders);
   const initialized: FleetDataSource[] = [];
   let auditRuntimeInitialized = false;
   let auditRelayInitialized = false;
   let filesInitialized = false;
-  let maintenanceInitialized = false;
   const closeSources = async () => {
     await Promise.allSettled([
       ...initialized.map((source) => source.destroy()),
       ...(auditRuntimeInitialized ? [auditRuntimeSource.destroy()] : []),
       ...(auditRelayInitialized ? [auditRelaySource.destroy()] : []),
       ...(filesInitialized ? [filesSource.destroy()] : []),
-      ...(maintenanceInitialized ? [maintenanceSource.destroy()] : []),
     ]);
   };
   try {
@@ -348,7 +337,6 @@ export async function openFleetRuntimeStores(
     auditRelayInitialized = true;
     await filesSource.initialize();
     filesInitialized = true;
-    maintenanceInitialized = true;
     let boundTenantId: string | undefined;
     let fileStore: TypeOrmFileSagaStore | undefined;
     const resolveTenantSource = (tenantId: string) => {
@@ -376,7 +364,7 @@ export async function openFleetRuntimeStores(
         assignments: new TypeOrmAssignmentStore(sources[5] as FleetDataSource),
         settings: new TypeOrmSettingsStore(sources[6] as FleetDataSource),
         imports: new TypeOrmImportStore(sources[7] as FleetDataSource),
-        ...maintenanceRuntimeAdapters(maintenanceSource),
+        ...maintenanceRuntimeAdapters(maintenance),
         get records() {
           if (!fileStore) throw new Error('fleet file runtime must be bound to a tenant first');
           return fileStore;

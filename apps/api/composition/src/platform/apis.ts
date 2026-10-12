@@ -48,6 +48,8 @@ import { VehiclesApi } from '../vehicles.js';
 import type { PlatformKernel } from './kernel.js';
 import type { PlatformAdapters } from './types.js';
 import { buildMaintenanceApis } from './maintenance-apis.js';
+import { buildWorkOrderApi, withMaintenanceDefaults } from './work-order-apis.js';
+import type { WorkOrderApi } from '../../../maintenance/orders/src/index.js';
 import type { MaintenanceApi } from '../../../maintenance/plans/src/index.js';
 import type { MaintenancePlanWorker } from '../../../../../packages/domain/maintenance/plans/src/index.js';
 
@@ -63,6 +65,7 @@ export interface DomainApis {
   readonly alerts: AlertsApi;
   readonly maintenance: MaintenanceApi;
   readonly maintenancePlanWorker?: MaintenancePlanWorker;
+  readonly workOrders: WorkOrderApi;
 }
 
 /** Wires the domain services and their HTTP-facing APIs over the adapters (in-memory by default). */
@@ -378,7 +381,8 @@ export function buildDomainApis(kernel: PlatformKernel, adapters: PlatformAdapte
       );
     },
   });
-  const maintenanceApis = buildMaintenanceApis(kernel, adapters, vehicleService);
+  const maintenanceAdapters = withMaintenanceDefaults(adapters);
+  const maintenanceApis = buildMaintenanceApis(kernel, maintenanceAdapters, vehicleService);
   return {
     vehicles,
     areas,
@@ -390,5 +394,6 @@ export function buildDomainApis(kernel: PlatformKernel, adapters: PlatformAdapte
     companySettings,
     alerts,
     ...maintenanceApis,
+    workOrders: buildWorkOrderApi(kernel, maintenanceAdapters, vehicleService),
   };
 }

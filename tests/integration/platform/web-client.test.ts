@@ -536,6 +536,47 @@ describe('typed client against the real BFF', () => {
       }),
     ).toMatchObject({ ok: true, value: { active: false } });
 
+    // Work orders through their BFF contract routes.
+    const order = await client.call('workOrders.create', {
+      body: { vehicleId: truck.value.id, description: 'Revisión de frenos' },
+    });
+    if (!order.ok) throw new Error(`work order create failed: ${JSON.stringify(order)}`);
+    expect(await client.call('workOrders.list')).toMatchObject({
+      ok: true,
+      value: [expect.objectContaining({ id: order.value.id, status: 'scheduled' })],
+    });
+    expect(
+      await client.call('workOrders.get', { params: { orderId: order.value.id } }),
+    ).toMatchObject({ ok: true, value: { id: order.value.id, kind: 'corrective' } });
+    expect(
+      await client.call('workOrders.transition', {
+        params: { orderId: order.value.id },
+        body: { command: 'assign', version: 1 },
+      }),
+    ).toMatchObject({ ok: false, error: { code: 'missing_requirements' } });
+    const worked = await client.call('workOrders.work', {
+      params: { orderId: order.value.id },
+      body: { version: 1, tasks: [{ description: 'Diagnóstico' }] },
+    });
+    expect(worked).toMatchObject({ ok: true, value: { version: 2 } });
+    expect(
+      await client.call('workOrders.costs', {
+        params: { orderId: order.value.id },
+        body: {
+          version: 2,
+          costs: [{ category: 'labor', amount: { amountMinor: '50000', currency: 'MXN' } }],
+        },
+      }),
+    ).toMatchObject({ ok: true, value: { version: 3 } });
+    expect(
+      await client.call('workOrders.history', { params: { orderId: order.value.id } }),
+    ).toMatchObject({ ok: true, value: [expect.objectContaining({ command: 'create' })] });
+    expect(
+      await client.call('workOrders.adopt', {
+        body: { planId: plan.value.id, scheduledOrderId: 'not-generated' },
+      }),
+    ).toMatchObject({ ok: false, error: { code: 'not_found' } });
+
     // Insurance policies through the typed client.
     const insurance = createInsuranceClient(client);
     const policy = await insurance.create({

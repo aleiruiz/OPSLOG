@@ -55,14 +55,24 @@ export async function enqueuePlanScans(
   } finally {
     await source.destroy();
   }
-  // The enqueue procedure stamps available_at with the database clock, while the composed world
-  // runs on a fixed fake clock in the past; align only these synthetic events with that clock.
+  await makeEventsAvailable(database, tenantId, eventIds);
+  return eventIds;
+}
+
+/**
+ * The enqueue procedure stamps available_at with the database clock, while the composed world runs
+ * on a fixed fake clock in the past; align only these synthetic events with that clock.
+ */
+export async function makeEventsAvailable(
+  database: FleetTenantDatabase,
+  tenantId: string,
+  eventIds: readonly string[],
+): Promise<void> {
   const worldNow = new Date(Date.now()).toISOString().replace('T', ' ').replace('Z', '');
   await database.rows(
     `UPDATE ${AUDIT_TABLES.outbox} SET available_at = ? WHERE tenant_id = ? AND event_id IN (?)`,
     [worldNow, tenantId, eventIds],
   );
-  return eventIds;
 }
 
 /** Drains the composed worker and checks delivery through the synthetic admin connection. */
