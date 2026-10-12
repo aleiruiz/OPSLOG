@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { InMemoryMaintenancePlanStore } from '../../../../packages/domain/maintenance/plans/src/index.js';
 import { BFF_ROUTES } from '../../../../packages/contracts/src/index.js';
 import { createBffWorld, type BffWorld } from './test-support.js';
 
@@ -32,7 +33,7 @@ async function fixture() {
 describe('maintenance contract', () => {
   it('declares all maintenance routes as session reads or CSRF-protected writes', () => {
     const routes = Object.entries(BFF_ROUTES).filter(([id]) => id.startsWith('maintenance.'));
-    expect(routes).toHaveLength(18);
+    expect(routes).toHaveLength(19);
     for (const [id, definition] of routes)
       expect(definition.kind, id).toBe(definition.method === 'GET' ? 'session' : 'session-csrf');
   });
@@ -192,5 +193,98 @@ describe('maintenance over HTTP', () => {
     expect(failed.status).toBe(500);
     expect(failed.text).not.toContain('database is unavailable');
     expect((await adminA.get('/api/v1/maintenance/plans')).status).toBe(200);
+  });
+});
+
+describe('maintenance alert records over HTTP', () => {
+  it('pages, filters and isolates the persisted alert records by tenant', async () => {
+    const store = new InMemoryMaintenancePlanStore();
+    world = createBffWorld({ adapters: { maintenancePlans: store } });
+    await world.tenant('Empresa Alfa', 'subject-admin-a');
+    await world.tenant('Empresa Beta', 'subject-admin-b');
+    await world.member('subject-admin-a', 'viewer', 'subject-viewer-a');
+    const adminA = await world.loginAs('subject-admin-a');
+    const viewerA = await world.loginAs('subject-viewer-a');
+    const adminB = await world.loginAs('subject-admin-b');
+    const tenantA = (await adminA.get('/api/auth/session')).json.company.id as string;
+    const tenantB = (await adminB.get('/api/auth/session')).json.company.id as string;
+    const area = await adminA.post('/api/areas', { json: { name: 'Operaciones' } });
+    const vehicle = await adminA.post('/api/vehicles', {
+      json: {
+        economicNumber: 'M-001',
+        plate: 'MNT-001',
+        make: 'Toyota',
+        model: 'Hilux',
+        year: 2024,
+        areaId: area.json.id,
+        odometerKm: 1000,
+      },
+    });
+    const plan = await adminA.post('/api/v1/maintenance/plans', {
+      json: { vehicleId: vehicle.json.id, intervalDays: 30, lastServiceDate: '2026-01-01' },
+    });
+    const planId = plan.json.id as string;
+    const record = (tenantId: string, index: number) => ({
+      id: `alert-${tenantId.slice(0, 4)}-${String(index).padStart(2, '0')}`,
+      tenantId,
+      planId,
+      vehicleId: vehicle.json.id as string,
+      occurrence: 1,
+      planVersion: 1,
+      kind: 'upcoming' as const,
+      trigger: 'odometer' as const,
+      threshold: '500_km' as const,
+      targetDate: null,
+      targetKm: 5000,
+      odometerLastUpdatedAt: '2026-10-10T00:00:00.000Z',
+      odometerAgeSeconds: 3600,
+      occurredAt: `2026-10-${String(index + 1).padStart(2, '0')}T00:00:00.000Z`,
+    });
+    for (let i = 0; i < 30; i += 1) store.seedAlert(record(tenantA, i));
+    store.seedAlert(record(tenantB, 0));
+
+    const first = await adminA.get('/api/v1/maintenance/alerts');
+    expect(first.status).toBe(200);
+    expect(first.json).toMatchObject({
+      total: 30,
+      sort: { field: 'occurredAt', direction: 'desc' },
+    });
+    expect(first.json.items).toHaveLength(25);
+    expect(first.json.items[0]).toMatchObject({ occurredAt: '2026-10-30T00:00:00.000Z' });
+    expect(first.json.items[0]).not.toHaveProperty('tenantId');
+    expect(first.text).not.toContain(tenantA);
+    const second = await adminA.get(
+      `/api/v1/maintenance/alerts?cursor=${encodeURIComponent(first.json.nextCursor)}`,
+    );
+    expect(second.json.items).toHaveLength(5);
+    expect(second.json.nextCursor).toBeNull();
+    expect(
+      (await adminA.get(`/api/v1/maintenance/alerts?planId=${planId}&vehicleId=${vehicle.json.id}`))
+        .json.total,
+    ).toBe(30);
+    // The same read-only audience as the plans catalog.
+    expect((await viewerA.get('/api/v1/maintenance/alerts?limit=50')).json.items).toHaveLength(30);
+    expect((await adminB.get('/api/v1/maintenance/alerts')).json).toMatchObject({ total: 1 });
+    expect((await adminB.get(`/api/v1/maintenance/alerts?planId=${planId}`)).status).toBe(404);
+
+    // A cursor is bound to the tenant and to the filters it was issued for; queries are strict.
+    expect(
+      (
+        await adminB.get(
+          `/api/v1/maintenance/alerts?cursor=${encodeURIComponent(first.json.nextCursor)}`,
+        )
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await adminA.get(
+          `/api/v1/maintenance/alerts?limit=50&cursor=${encodeURIComponent(first.json.nextCursor)}`,
+        )
+      ).status,
+    ).toBe(400);
+    for (const query of ['limit=7', 'planId=bad id', 'extra=1', 'limit=25&limit=25', 'cursor=x'])
+      expect((await adminA.get(`/api/v1/maintenance/alerts?${query}`)).status, query).toBe(400);
+    expect((await adminA.get('/api/v1/maintenance/alerts', { cookies: false })).status).toBe(401);
+    expect(tenantB).not.toBe(tenantA);
   });
 });

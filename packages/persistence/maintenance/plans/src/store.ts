@@ -3,6 +3,9 @@ import { type DataSource, type EntityManager } from 'typeorm';
 import type {
   MaintenancePlan,
   MaintenancePlanSchedule,
+  PlanAlertPage,
+  PlanAlertQuery,
+  PlanAlertReader,
   PlanEvaluation,
   PlanOccurrence,
   PlanScanStore,
@@ -22,6 +25,7 @@ import {
   MaintenancePlanVersionEntity,
 } from './entities.js';
 import { appendMaintenanceAudit } from './audit.js';
+import { listPlanAlerts } from './alert-reader.js';
 import { fromRow, toRow } from './plan-mapping.js';
 import { TypeOrmMaintenancePlanWorkerStore } from './worker-store.js';
 
@@ -29,7 +33,9 @@ export interface TypeOrmMaintenancePlanStoreOptions {
   readonly maxAttempts?: number;
 }
 /** Tenant is part of every selector. Plan snapshots are append-only and changes use version CAS. */
-export class TypeOrmMaintenancePlanStore implements PlanStore, PlanScanStore, PlanScheduleReader {
+export class TypeOrmMaintenancePlanStore
+  implements PlanStore, PlanScanStore, PlanScheduleReader, PlanAlertReader
+{
   private readonly workerStore: TypeOrmMaintenancePlanWorkerStore;
   private readonly maxAttempts: number;
   public constructor(
@@ -162,6 +168,9 @@ export class TypeOrmMaintenancePlanStore implements PlanStore, PlanScanStore, Pl
       snapshot: row.snapshot as Readonly<Record<string, unknown>>,
       createdAt: row.createdAt.toISOString(),
     }));
+  }
+  public listAlerts(tenantId: string, query: PlanAlertQuery): Promise<PlanAlertPage> {
+    return listPlanAlerts(this.dataSource, tenantId, query);
   }
   public async update(
     plan: MaintenancePlan,

@@ -72,7 +72,7 @@ test('preventive order from plan to closure advances the plan once, over the rea
 
   await page.getByRole('tab', { name: 'Planes' }).click();
   await page.getByRole('button', { name: 'Nuevo plan' }).click();
-  await page.getByLabel(/^Vehículo/).fill(vehicleId);
+  await page.getByLabel(/^Vehículo/).selectOption(vehicleId);
   await page.getByLabel('Cada cuántos días').fill('30');
   await page.getByLabel('Fecha del último servicio').fill(day(-31));
   await submit(page, 'Nuevo plan', 'Guardar plan');
@@ -90,8 +90,20 @@ test('preventive order from plan to closure advances the plan once, over the rea
 
   await page.getByRole('tab', { name: 'Órdenes', exact: true }).click();
   await page.getByRole('tab', { name: 'Planes' }).click();
-  await page.getByRole('button', { name: vehicleId }).click();
+  await page.getByRole('button', { name: /^MNT-E2E01 · / }).click();
   await expect(page.getByText(/Orden generada por fecha/)).toBeVisible();
+  // M2: the worker's alert record is visible on the plan and in the shell's alerts area.
+  await expect(
+    page.getByRole('table', { name: /^Alertas de MNT-E2E01 · .*\(\d+\)$/ }),
+  ).toContainText('Toca servicio');
+  await page.getByRole('link', { name: 'Alertas', exact: true }).click();
+  await expect(
+    page.getByRole('table', { name: /^Alertas de mantenimiento \(\d+\)$/ }),
+  ).toContainText('E2E01');
+  await expectNoViolations(page);
+  await page.goBack();
+  await page.getByRole('tab', { name: 'Planes' }).click();
+  await page.getByRole('button', { name: /^MNT-E2E01 · / }).click();
   await page.getByRole('button', { name: 'Abrir orden de trabajo' }).click();
   await expect(page.getByLabel('Estado: Programada')).toBeVisible();
   orderId = (
@@ -102,7 +114,7 @@ test('preventive order from plan to closure advances the plan once, over the rea
   )[0]?.id as string;
 
   await page.getByRole('button', { name: 'Asignar' }).click();
-  await page.getByLabel('Persona responsable (usuario)').fill(me.user.id);
+  await page.getByLabel('Persona responsable').selectOption(me.user.id);
   await pick(page, 'Taller', 'Taller E2E');
   await page.getByLabel('Fecha programada').fill(day(0));
   await submit(page, 'Asignar');
@@ -146,7 +158,7 @@ test('preventive order from plan to closure advances the plan once, over the rea
 
   await page.getByRole('button', { name: 'Volver a órdenes' }).click();
   await page.getByRole('tab', { name: 'Planes' }).click();
-  await page.getByRole('button', { name: vehicleId }).click();
+  await page.getByRole('button', { name: /^MNT-E2E01 · / }).click();
   await expect(page.getByText(`Siguiente objetivo por fecha: ${shown(day(30))}`)).toBeVisible();
   await expect(page.getByText(/Todavía no se alcanza ningún objetivo/)).toBeVisible();
   const occurrences = await a.database.rows<{ state: string }>(
@@ -161,11 +173,14 @@ test('a role without view_costs sees the closed order without any amount', async
   await page.getByRole('button', { name: 'Orden preventiva' }).click();
   await expect(page.getByText('Filtro de aceite · 1')).toBeVisible();
   expect(await page.content()).not.toMatch(/1,500|150050|MXN|unitCost/);
-  const raw = await page.evaluate(
-    async (id) => (await fetch(`/api/v1/work-orders/${id}`)).text(),
-    orderId,
-  );
-  expect(raw).not.toMatch(/150050|MXN|"costs"/);
+  const raw = await page.evaluate(async (id) => {
+    const response = await fetch(`/api/v1/work-orders/${id}`);
+    return { status: response.status, body: await response.text() };
+  }, orderId);
+  // The request must have succeeded: an error body would also lack the amounts.
+  expect(raw.status).toBe(200);
+  expect(JSON.parse(raw.body)).toMatchObject({ id: orderId, status: 'closed' });
+  expect(raw.body).not.toMatch(/150050|MXN|"costs"/);
 });
 
 test('evidence requirement: configure, block, upload, complete and close with an assigned mechanic (G3 H3, MNT-QA-M3:89)', async ({
@@ -276,6 +291,11 @@ test('tenant B, on its own database, sees nothing of tenant A', async ({ page })
     async () => (await fetch('/api/v1/work-orders/00000000-0000-4000-8000-0000000000aa')).status,
   );
   expect([foreign, unknown]).toEqual([404, 404]);
+  const alerts = await page.evaluate(async () => {
+    const response = await fetch('/api/v1/maintenance/alerts');
+    return { status: response.status, body: (await response.json()) as { total: number } };
+  });
+  expect(alerts).toMatchObject({ status: 200, body: { total: 0 } });
 });
 
 async function expectNoViolations(page: Page) {

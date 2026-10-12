@@ -174,6 +174,8 @@ export type {
   BffAreaHistoryQuery,
 } from './bff/areas.js';
 export type {
+  BffMaintenanceAlert,
+  BffMaintenanceAlertsQuery,
   BffMaintenancePlan,
   BffMaintenancePlanInput,
   BffMaintenancePlanPatch,

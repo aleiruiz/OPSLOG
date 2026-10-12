@@ -1,6 +1,8 @@
 import type {
   ApiError,
   BffClient,
+  BffMaintenanceAlert,
+  BffMaintenanceAlertsQuery,
   BffMaintenanceMechanic,
   BffMaintenanceMechanicInput,
   BffMaintenancePlan,
@@ -19,6 +21,7 @@ import type {
   BffWorkOrderTransition,
   BffWorkOrderTransitionInput,
   BffWorkOrderWorkInput,
+  Page,
 } from '@opslog/contracts';
 
 export type Result<T> =
@@ -64,6 +67,10 @@ export interface MaintenancePorts {
     update(id: string, body: BffMaintenancePlanPatch): Promise<Result<BffMaintenancePlan>>;
     schedule(id: string): Promise<Result<BffMaintenancePlanSchedule>>;
   };
+  /** In-app records the plans worker persisted (upcoming, due, overdue), newest first. */
+  readonly alerts: {
+    list(query?: BffMaintenanceAlertsQuery): Promise<Result<Page<BffMaintenanceAlert>>>;
+  };
   readonly workshops: {
     list(): Promise<Result<readonly BffMaintenanceWorkshop[]>>;
     create(body: BffMaintenanceWorkshopInput): Promise<Result<BffMaintenanceWorkshop>>;
@@ -107,6 +114,10 @@ export function createMaintenancePorts(client: BffClient): MaintenancePorts {
       create: (body) => call('maintenance.plans.create', { body }),
       update: (planId, body) => call('maintenance.plans.update', { params: { planId }, body }),
       schedule: (planId) => call('maintenance.plans.schedule', { params: { planId } }),
+    },
+    alerts: {
+      list: (query) =>
+        query ? call('maintenance.alerts.list', { query }) : call('maintenance.alerts.list'),
     },
     workshops: {
       list: () => call('maintenance.workshops.list'),

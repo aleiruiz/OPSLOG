@@ -66,7 +66,7 @@ describe('work order detail', () => {
     expect(within(panel).getByText('Indica la persona responsable.')).toBeInTheDocument();
     expect(within(panel).getByText('Indica la fecha programada.')).toBeInTheDocument();
     expect(fake.state.calls).toEqual(['transition:assign']);
-    fill('Persona responsable (usuario)', 'u-fleet');
+    fill('Persona responsable', 'u-fleet');
     fill('Fecha programada', '2026-10-13');
     fireEvent.mouseDown(screen.getByLabelText('Taller'));
     fireEvent.click(await screen.findByRole('option', { name: 'Taller Uno' }));
@@ -74,6 +74,10 @@ describe('work order detail', () => {
     await screen.findByLabelText('Estado: Asignada');
     expect(screen.getByRole('status')).toHaveTextContent('Asignar: listo.');
     expect(await screen.findByText('Asignar → Asignada')).toBeInTheDocument();
+    // People and vehicles are named, never shown as technical ids.
+    expect(screen.getByText('Responsable de flotilla 1')).toBeInTheDocument();
+    expect(screen.getByText(/ECO-001 · Toyota Hilux/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/u-fleet|veh-001/);
   });
 
   it('lets the assigned mechanic start and finish, with the workshop suggestion, never closing', async () => {
@@ -210,6 +214,65 @@ describe('work order detail', () => {
     expect(screen.getByLabelText(/Motivo de la cancelación/)).toHaveValue('Duplicada');
     press('Recargar');
     await waitFor(() => expect(screen.queryByText(/La orden cambió/)).toBeNull());
+    // The unsent draft survives the reload.
+    expect(screen.getByLabelText(/Motivo de la cancelación/)).toHaveValue('Duplicada');
+  });
+
+  it('rebases an unsent work draft onto the reloaded order instead of dropping concurrent tasks', async () => {
+    const fake = createFakeMaintenancePorts({
+      orders: [
+        baseOrder({
+          status: 'in_progress',
+          version: 3,
+          tasks: [{ id: 't1', description: 'Cambio de aceite' }],
+          parts: [{ id: 'p1', name: 'Filtro', quantity: '1', unitCost: null }],
+        }),
+      ],
+    });
+    view(EDITOR, fake);
+    await screen.findByLabelText('Estado: En proceso');
+    press('Registrar trabajo');
+    fill('Trabajos realizados', 'Cambio de aceite\nAjuste de freno');
+    fill('Cantidad de la refacción 1', '2');
+    // Someone else saves a task and a part first.
+    fake.bump('wo-1', {
+      tasks: [
+        { id: 't1', description: 'Cambio de aceite' },
+        { id: 't2', description: 'Rotación de llantas' },
+      ],
+      parts: [
+        { id: 'p1', name: 'Filtro', quantity: '1', unitCost: null },
+        { id: 'p2', name: 'Anticongelante', quantity: '3', unitCost: null },
+      ],
+    });
+    press('Guardar trabajo');
+    expect(await screen.findByText(/La orden cambió mientras la editabas/)).toBeInTheDocument();
+    // Nothing was written by the failed attempt and the draft is still there.
+    expect(screen.getByLabelText('Trabajos realizados')).toHaveValue(
+      'Cambio de aceite\nAjuste de freno',
+    );
+    press('Recargar');
+    const changes = await screen.findByRole('status');
+    expect(changes).toHaveTextContent('Otra persona agregó el trabajo «Rotación de llantas».');
+    expect(changes).toHaveTextContent('Otra persona agregó la refacción «Anticongelante».');
+    // The draft keeps the person's line and quantity and now includes the concurrent work.
+    expect(screen.getByLabelText('Trabajos realizados')).toHaveValue(
+      'Cambio de aceite\nRotación de llantas\nAjuste de freno',
+    );
+    expect(screen.getByLabelText('Cantidad de la refacción 1')).toHaveValue('2');
+    expect(screen.getByLabelText('Refacción 2')).toHaveValue('Anticongelante');
+    press('Guardar trabajo');
+    await screen.findByText('Trabajo guardado.');
+    for (const text of ['Cambio de aceite', 'Rotación de llantas', 'Ajuste de freno'])
+      expect(screen.getByText(text)).toBeInTheDocument();
+    expect(screen.getByText('Filtro · 2')).toBeInTheDocument();
+    expect(screen.getByText('Anticongelante · 3')).toBeInTheDocument();
+    const saved = await fake.ports.orders.get('wo-1');
+    expect(saved.ok && saved.value.tasks.map((task) => task.description)).toEqual([
+      'Cambio de aceite',
+      'Rotación de llantas',
+      'Ajuste de freno',
+    ]);
   });
 
   it('answers a foreign or unknown order neutrally and hands a 401 to the session', async () => {

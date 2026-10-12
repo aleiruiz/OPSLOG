@@ -4,6 +4,8 @@ import { makePlan, opaqueId, parsePlanInput, patchPlan, targets } from './rules.
 import type {
   MaintenancePlan,
   MaintenancePlanSchedule,
+  PlanAlertPage,
+  PlanAlertReader,
   PlanInput,
   PlanScheduleReader,
   PlanStore,
@@ -14,6 +16,7 @@ export interface PlanServiceOptions {
   readonly now?: () => Date;
   readonly newId?: () => string;
   readonly scheduleReader?: PlanScheduleReader;
+  readonly alertReader?: PlanAlertReader;
   readonly references?: {
     readonly vehicleExists: (tenantId: string, vehicleId: string) => Promise<boolean>;
     readonly validateAssignments: (
@@ -29,6 +32,7 @@ export class MaintenancePlanService {
   private readonly newId: () => string;
   private readonly references: PlanServiceOptions['references'];
   private readonly scheduleReader: PlanServiceOptions['scheduleReader'];
+  private readonly alertReader: PlanServiceOptions['alertReader'];
   public constructor(
     private readonly store: PlanStore,
     options: PlanServiceOptions = {},
@@ -37,6 +41,7 @@ export class MaintenancePlanService {
     this.newId = options.newId ?? randomUUID;
     this.references = options.references;
     this.scheduleReader = options.scheduleReader;
+    this.alertReader = options.alertReader;
   }
   public async create(tenantId: string, actorId: string, input: unknown): Promise<MaintenancePlan> {
     const tenant = opaqueId(tenantId);
@@ -72,6 +77,32 @@ export class MaintenancePlanService {
     return this.scheduleReader
       ? this.scheduleReader.listScheduledOrders(plan.tenantId, plan.id)
       : [];
+  }
+  /**
+   * The in-app alert records of the company, newest first, optionally narrowed to a plan or a
+   * vehicle. Same audience as the plans catalog; an unknown or foreign plan is `not_found`.
+   */
+  public async listAlerts(
+    tenantId: string,
+    query: { planId?: unknown; vehicleId?: unknown; limit?: unknown; offset?: unknown },
+  ): Promise<PlanAlertPage> {
+    const tenant = opaqueId(tenantId);
+    const limit = query.limit ?? 25;
+    const offset = query.offset ?? 0;
+    if (!Number.isInteger(limit) || (limit as number) < 1 || (limit as number) > 100)
+      throw new MaintenancePlanError('invalid_input');
+    if (!Number.isInteger(offset) || (offset as number) < 0)
+      throw new MaintenancePlanError('invalid_input');
+    const planId = query.planId === undefined ? undefined : opaqueId(query.planId);
+    const vehicleId = query.vehicleId === undefined ? undefined : opaqueId(query.vehicleId);
+    if (planId !== undefined) await this.get(tenant, planId);
+    if (!this.alertReader) return { items: [], total: 0 };
+    return this.alertReader.listAlerts(tenant, {
+      ...(planId === undefined ? {} : { planId }),
+      ...(vehicleId === undefined ? {} : { vehicleId }),
+      limit: limit as number,
+      offset: offset as number,
+    });
   }
   public async update(
     tenantId: string,

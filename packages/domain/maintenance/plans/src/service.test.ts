@@ -164,4 +164,53 @@ describe('MaintenancePlanService', () => {
     });
     expect(update).toHaveBeenCalledTimes(1);
   });
+
+  it('lists alert records per tenant with validated paging and filters', async () => {
+    const store = new InMemoryMaintenancePlanStore();
+    const base = {
+      planId: 'plan-a',
+      occurrence: 1,
+      planVersion: 1,
+      kind: 'due' as const,
+      trigger: 'date' as const,
+      threshold: 'target' as const,
+      targetDate: '2026-02-01',
+      targetKm: null,
+      odometerLastUpdatedAt: null,
+      odometerAgeSeconds: null,
+    };
+    for (let i = 0; i < 3; i += 1)
+      store.seedAlert({
+        ...base,
+        id: `alert-${i}`,
+        tenantId: 'tenant-a',
+        vehicleId: 'vehicle-a',
+        occurredAt: `2026-02-0${i + 1}T00:00:00.000Z`,
+      });
+    store.seedAlert({
+      ...base,
+      id: 'alert-b',
+      tenantId: 'tenant-b',
+      planId: 'plan-b',
+      vehicleId: 'vehicle-a',
+      occurredAt: '2026-03-01T00:00:00.000Z',
+    });
+    const plans = service(store, { alertReader: store });
+    await plans.create('tenant-a', 'actor-a', input);
+    const page = await plans.listAlerts('tenant-a', { limit: 2 });
+    expect(page.total).toBe(3);
+    expect(page.items.map((alert) => alert.id)).toEqual(['alert-2', 'alert-1']);
+    expect((await plans.listAlerts('tenant-a', { limit: 2, offset: 2 })).items).toHaveLength(1);
+    expect((await plans.listAlerts('tenant-a', { vehicleId: 'vehicle-z' })).total).toBe(0);
+    expect((await plans.listAlerts('tenant-a', { planId: 'plan-a' })).total).toBe(3);
+    expect((await plans.listAlerts('tenant-b', { vehicleId: 'vehicle-a' })).total).toBe(1);
+    await expect(plans.listAlerts('tenant-b', { planId: 'plan-a' })).rejects.toMatchObject({
+      code: 'not_found',
+    });
+    for (const bad of [{ limit: 0 }, { limit: 101 }, { offset: -1 }, { limit: 1.5 }, { planId: 7 }])
+      await expect(plans.listAlerts('tenant-a', bad)).rejects.toMatchObject({
+        code: 'invalid_input',
+      });
+    expect(await service().listAlerts('tenant-a', {})).toEqual({ items: [], total: 0 });
+  });
 });

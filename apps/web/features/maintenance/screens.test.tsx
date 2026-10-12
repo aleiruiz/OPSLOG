@@ -5,7 +5,7 @@ import { baseOrder, createFakeMaintenancePorts } from './fakePorts';
 import { MaintenanceArea } from './MaintenanceArea';
 import { MyOrdersScreen } from './MyOrdersScreen';
 import { PlansScreen } from './PlansScreen';
-import { ADMIN, EDITOR, VIEWER, renderView, violations } from './testing';
+import { ADMIN, EDITOR, VEHICLES, VIEWER, renderView, violations } from './testing';
 import { WorkOrdersScreen } from './WorkOrdersScreen';
 
 const press = (name: string | RegExp) => fireEvent.click(screen.getByRole('button', { name }));
@@ -64,7 +64,7 @@ describe('work order list and calendar', () => {
     fireEvent.click(
       within(screen.getByRole('search')).getByRole('button', { name: 'Limpiar filtros' }),
     );
-    await pick('Vehículo', 'veh-002');
+    await pick('Vehículo', 'ECO-002 · Nissan NP300');
     expect(within(screen.getByRole('table')).getByText('Suspensión')).toBeInTheDocument();
     fill('Mes programado', '2025-01');
     expect(screen.getByText('Sin resultados')).toBeInTheDocument();
@@ -163,8 +163,10 @@ describe('plans', () => {
     expect(await screen.findByText('Aún no hay planes')).toBeInTheDocument();
     press('Nuevo plan');
     press('Guardar plan');
-    expect(screen.getByRole('alert')).toHaveTextContent('Indica un intervalo');
+    expect(screen.getByRole('alert')).toHaveTextContent('Elige el vehículo del plan');
     fill(/^Vehículo/, 'veh-001');
+    press('Guardar plan');
+    expect(screen.getByRole('alert')).toHaveTextContent('Indica un intervalo');
     fill('Cada cuántos días', '30');
     fill('Fecha del último servicio', '2026-09-01');
     fill('Cada cuántos kilómetros', '10000');
@@ -203,7 +205,7 @@ describe('plans', () => {
         onExpired={vi.fn()}
       />,
     );
-    fireEvent.click(await screen.findByRole('button', { name: 'veh-001' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'ECO-001 · Toyota Hilux' }));
     press('Editar plan');
     await fake.ports.plans.update('plan-1', { version: 1, intervalDays: 60 });
     press('Guardar plan');
@@ -291,6 +293,7 @@ describe('maintenance area', () => {
         ports={fake.ports}
         permissions={VIEWER}
         userId="u-ana"
+        vehicles={VEHICLES}
         onExpired={vi.fn()}
       />,
     );
@@ -318,6 +321,7 @@ describe('maintenance area', () => {
         ports={createFakeMaintenancePorts({ orders }).ports}
         permissions={ADMIN}
         userId="u-admin"
+        vehicles={VEHICLES}
         onExpired={vi.fn()}
       />,
     );
@@ -341,6 +345,7 @@ describe('maintenance area', () => {
         ports={fake.ports}
         permissions={VIEWER}
         userId="u-ana"
+        vehicles={VEHICLES}
         initialView="mine"
         onExpired={vi.fn()}
       />,
@@ -371,18 +376,19 @@ describe('maintenance area', () => {
         ports={fake.ports}
         permissions={EDITOR}
         userId="u-fleet"
+        vehicles={VEHICLES}
         initialView="plans"
         onExpired={vi.fn()}
       />,
     );
-    fireEvent.click(await screen.findByRole('button', { name: 'veh-001' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'ECO-001 · Toyota Hilux' }));
     expect(await screen.findByText(/Orden generada por fecha/)).toBeInTheDocument();
     fireEvent.click(await screen.findByRole('button', { name: 'Abrir orden de trabajo' }));
     expect(await screen.findByLabelText('Estado: Programada')).toBeInTheDocument();
-    expect(screen.getByText('Plan preventivo plan-1')).toBeInTheDocument();
+    expect(screen.getByText('Plan preventivo de ECO-001 · Toyota Hilux')).toBeInTheDocument();
     press('Volver a órdenes');
     fireEvent.click(screen.getByRole('tab', { name: 'Planes' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'veh-001' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'ECO-001 · Toyota Hilux' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Abrir orden de trabajo' }));
     expect(await screen.findByLabelText('Estado: Programada')).toBeInTheDocument();
     const missing = createFakeMaintenancePorts({
@@ -422,7 +428,7 @@ describe('maintenance area', () => {
         onExpired={vi.fn()}
       />,
     );
-    fireEvent.click(await screen.findByRole('button', { name: 'veh-002' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'ECO-002 · Nissan NP300' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Abrir orden de trabajo' }));
     expect(
       await screen.findByText('No pudimos abrir la orden. Intenta nuevamente.'),

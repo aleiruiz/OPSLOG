@@ -20,6 +20,7 @@ import type { MaintenancePorts } from './ports';
 import { errorKind, useResult } from './useResult';
 import type { MaintenanceViewer } from './workflow';
 import { CorrectiveOrderForm } from './CorrectiveOrderForm';
+import { useDirectory, vehicleLabel } from './directory';
 
 export interface WorkOrdersScreenProps {
   readonly ports: MaintenancePorts;
@@ -53,6 +54,7 @@ export function byScheduledDate(orders: readonly BffWorkOrder[]) {
 /** S14: one list of work orders shown as a table and as a calendar, from the same contract. */
 export function WorkOrdersScreen({ ports, viewer, onOpen, onExpired }: WorkOrdersScreenProps) {
   const { state, reload } = useResult(() => ports.orders.list(), [ports], onExpired);
+  const directory = useDirectory();
   const [filters, setFilters] = React.useState<Filters>(NO_FILTERS);
   const [tab, setTab] = React.useState('list');
   const [creating, setCreating] = React.useState(false);
@@ -87,7 +89,9 @@ export function WorkOrdersScreen({ ports, viewer, onOpen, onExpired }: WorkOrder
     );
   const orders = state.data;
   const shown = orders.filter((order) => matches(order, filters));
-  const vehicles = [...new Set(orders.map((order) => order.vehicleId))].sort();
+  const vehicles = [...new Set(orders.map((order) => order.vehicleId))]
+    .map((id) => ({ id, label: vehicleLabel(directory, id) }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'es'));
   const open = (order: BffWorkOrder) => (
     <Link component="button" type="button" onClick={() => onOpen(order.id)}>
       {order.description ?? `Orden ${KIND_LABELS[order.kind].toLowerCase()}`}
@@ -118,7 +122,6 @@ export function WorkOrdersScreen({ ports, viewer, onOpen, onExpired }: WorkOrder
       {creating && (
         <CorrectiveOrderForm
           ports={ports}
-          vehicles={vehicles}
           onExpired={onExpired}
           onCancel={() => setCreating(false)}
           onCreated={(order) => {
@@ -154,9 +157,9 @@ export function WorkOrdersScreen({ ports, viewer, onOpen, onExpired }: WorkOrder
           sx={{ minWidth: 180 }}
         >
           <MenuItem value="">Todos</MenuItem>
-          {vehicles.map((id) => (
-            <MenuItem key={id} value={id}>
-              {id}
+          {vehicles.map((vehicle) => (
+            <MenuItem key={vehicle.id} value={vehicle.id}>
+              {vehicle.label}
             </MenuItem>
           ))}
         </Field>
@@ -191,7 +194,11 @@ export function WorkOrdersScreen({ ports, viewer, onOpen, onExpired }: WorkOrder
                         label: 'Tipo',
                         render: (_value, row) => KIND_LABELS[row.kind],
                       },
-                      { key: 'vehicleId', label: 'Vehículo' },
+                      {
+                        key: 'vehicleId',
+                        label: 'Vehículo',
+                        render: (_value, row) => vehicleLabel(directory, row.vehicleId),
+                      },
                       {
                         key: 'status',
                         label: 'Estado',

@@ -12,6 +12,7 @@ import type {
 } from '@opslog/contracts';
 import { CommandForm } from './CommandForm';
 import { EvidencePanel } from './EvidencePanel';
+import { memberLabel, useDirectory, vehicleLabel } from './directory';
 import {
   COMMAND_LABELS,
   COST_CATEGORY_LABELS,
@@ -55,6 +56,7 @@ export function WorkOrderDetail({
   onBack: () => void;
   onExpired: () => void;
 }) {
+  const directory = useDirectory();
   const { state, reload } = useResult(() => ports.orders.get(orderId), [ports, orderId], onExpired);
   const history = useResult(
     () => ports.orders.history(orderId),
@@ -149,7 +151,7 @@ export function WorkOrderDetail({
       {back}
       <PageHeader
         title={order.description ?? `Orden ${KIND_LABELS[order.kind].toLowerCase()}`}
-        description={`${KIND_LABELS[order.kind]} · Vehículo ${order.vehicleId}`}
+        description={`${KIND_LABELS[order.kind]} · ${vehicleLabel(directory, order.vehicleId)}`}
         actions={
           <StatusBadge label={STATUS_LABELS[order.status]} tone={STATUS_TONES[order.status]} />
         }
@@ -172,7 +174,7 @@ export function WorkOrderDetail({
           }
         >
           La orden cambió mientras la editabas. Recarga para ver la versión actual; tus campos
-          siguen en el formulario.
+          siguen en el formulario y se combinan con los cambios.
         </Alert>
       )}
       {notice && (
@@ -197,20 +199,29 @@ export function WorkOrderDetail({
           >
             {detail(
               'Origen',
-              order.planId ? `Plan preventivo ${order.planId}` : 'Registro correctivo',
+              order.planId
+                ? `Plan preventivo de ${vehicleLabel(directory, order.vehicleId)}`
+                : 'Registro correctivo',
             )}
-            {detail('Responsable', order.responsibleId ?? 'Sin asignar')}
+            {detail(
+              'Responsable',
+              order.responsibleId === null
+                ? 'Sin asignar'
+                : memberLabel(directory, order.responsibleId),
+            )}
             {detail(
               'Taller',
-              workshops.find((w) => w.id === order.workshopId)?.name ??
-                order.workshopId ??
-                'Sin taller',
+              order.workshopId === null
+                ? 'Sin taller'
+                : (workshops.find((w) => w.id === order.workshopId)?.name ??
+                    'Taller no disponible'),
             )}
             {detail(
               'Mecánico',
-              mechanics.find((m) => m.id === order.mechanicId)?.name ??
-                order.mechanicId ??
-                'Sin mecánico',
+              order.mechanicId === null
+                ? 'Sin mecánico'
+                : (mechanics.find((m) => m.id === order.mechanicId)?.name ??
+                    'Mecánico no disponible'),
             )}
             {detail('Fecha programada', formatDate(order.scheduledDate))}
             {detail('Fecha real', formatDate(order.actualDate))}
