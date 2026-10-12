@@ -578,7 +578,13 @@ describe('work order workflow', () => {
         completedAt: '2026-10-12T12:00:00.000Z',
         actualDate: '2026-10-10',
         actualKm: 10400,
+        version: 6,
       },
+    ]);
+    const ofType = (type: string) => h.store.events.filter((e) => e.event.type === type);
+    // Adoption is announced to the plans side with ids and the order version only.
+    expect(ofType('maintenance.order.preventive_adopted').map((e) => e.event.payload)).toEqual([
+      { planId: 'plan-1', occurrenceId: 'occ-1', orderId: 'sched-1', version: 1 },
     ]);
     expect(
       await code(
@@ -598,6 +604,9 @@ describe('work order workflow', () => {
       closeApproval: null,
       reopenCount: 1,
     });
+    expect(ofType('maintenance.order.preventive_reopened').map((e) => e.event.payload)).toEqual([
+      { planId: 'plan-1', occurrenceId: 'occ-1', orderId: 'sched-1', version: reopened.version },
+    ]);
     const history = await h.service.history(TENANT, ADMIN, 'sched-1');
     expect(history.at(-1)).toMatchObject({
       command: 'reopen',
@@ -610,6 +619,42 @@ describe('work order workflow', () => {
       closedBy: 'user-admin',
       vehicleStatusDecision: 'active',
     });
+  });
+
+  it('emits an allowlisted cancel event only for preventive orders', async () => {
+    const h = harness();
+    h.refs.scheduled.push({
+      id: 'sched-1',
+      occurrenceId: 'occ-1',
+      planId: 'plan-1',
+      vehicleId: 'vehicle-1',
+      status: 'scheduled',
+      workshopId: null,
+      mechanicId: null,
+    });
+    const adopted = await h.service.adoptPreventive(TENANT, FLEET, {
+      planId: 'plan-1',
+      scheduledOrderId: 'sched-1',
+    });
+    const cancelled = await h.service.cancel(TENANT, FLEET, adopted.id, {
+      version: adopted.version,
+      reason: 'Duplicada',
+    });
+    expect(
+      h.store.events
+        .filter((e) => e.event.type === 'maintenance.order.preventive_cancelled')
+        .map((e) => e.event.payload),
+    ).toEqual([
+      { planId: 'plan-1', occurrenceId: 'occ-1', orderId: 'sched-1', version: cancelled.version },
+    ]);
+    const corrective = await h.service.createCorrective(TENANT, FLEET, {
+      vehicleId: 'vehicle-1',
+      description: 'Ruido',
+    });
+    await h.service.cancel(TENANT, FLEET, corrective.id, { version: 1, reason: 'Duplicada' });
+    expect(
+      h.store.events.filter((e) => e.event.type === 'maintenance.order.preventive_cancelled'),
+    ).toHaveLength(1);
   });
 
   it('cancels with a reason, keeping the recorded work', async () => {

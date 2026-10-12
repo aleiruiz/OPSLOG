@@ -1,6 +1,9 @@
 import { WorkOrderError } from './errors.js';
 import {
+  PREVENTIVE_ORDER_ADOPTED_EVENT,
+  PREVENTIVE_ORDER_CANCELLED_EVENT,
   PREVENTIVE_ORDER_CLOSED_EVENT,
+  PREVENTIVE_ORDER_REOPENED_EVENT,
   WORK_ORDER_CREATED_EVENT,
   WORK_ORDER_STATUS_CHANGED_EVENT,
   type WorkOrderEvent,
@@ -27,7 +30,15 @@ const SCHEMAS: Readonly<Record<string, Readonly<Record<string, (value: unknown) 
     completedAt: (value) => typeof value === 'string' && !Number.isNaN(Date.parse(value)),
     actualDate: (value) => typeof value === 'string' && DATE.test(value),
     actualKm: count,
+    version: count,
   },
+  ...Object.fromEntries(
+    [
+      PREVENTIVE_ORDER_REOPENED_EVENT,
+      PREVENTIVE_ORDER_CANCELLED_EVENT,
+      PREVENTIVE_ORDER_ADOPTED_EVENT,
+    ].map((type) => [type, { planId: id, occurrenceId: id, orderId: id, version: count }]),
+  ),
 };
 
 export function validateWorkOrderEvent(event: WorkOrderEvent): WorkOrderEvent {

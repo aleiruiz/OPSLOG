@@ -5,6 +5,7 @@ import {
 } from '../../../../../packages/domain/maintenance/orders/src/index.js';
 import {
   InMemoryMaintenancePlanStore,
+  type PlanScanStore,
   type PlanScheduleReader,
 } from '../../../../../packages/domain/maintenance/plans/src/index.js';
 import { InMemoryWorkshopStore } from '../../../../../packages/domain/maintenance/workshops/src/index.js';
@@ -78,7 +79,10 @@ export function buildWorkOrderApi(
           }
         : null;
     },
-    planBaseline: async (tenantId, planId) => {
+    planBaseline: async (tenantId, planId, occurrenceId) => {
+      const scans = plans as Partial<PlanScanStore>;
+      if (occurrenceId !== null && typeof scans.baselineBeforeClosure === 'function')
+        return scans.baselineBeforeClosure.call(plans, tenantId, planId, occurrenceId);
       const plan = await plans.get(tenantId, planId);
       return plan
         ? {

@@ -6,6 +6,12 @@ import {
   type PlanScanStore,
 } from './index.js';
 
+const stubs = () => ({
+  reopenPreventive: vi.fn(async () => undefined),
+  cancelPreventive: vi.fn(async () => undefined),
+  adoptPreventive: vi.fn(async () => undefined),
+  baselineBeforeClosure: vi.fn(async () => null),
+});
 const input = { vehicleId: 'vehicle-a', intervalDays: 30, lastServiceDate: '2026-01-01' };
 
 describe('MaintenancePlanWorker', () => {
@@ -16,6 +22,7 @@ describe('MaintenancePlanWorker', () => {
     const scans: PlanScanStore = {
       scan: vi.fn(async (_tenantId, _planId, _now, _odometer) => []),
       closePreventive: vi.fn(async () => undefined),
+      ...stubs(),
     };
     const worker = new MaintenancePlanWorker(
       plans,
@@ -48,6 +55,20 @@ describe('MaintenancePlanWorker', () => {
     };
     await worker.consumeClosure(event);
     expect(scans.closePreventive).toHaveBeenCalledWith(event);
+    const lifecycle = {
+      tenantId: 'tenant-a',
+      planId: 'plan-a',
+      occurrenceId: 'occurrence-a',
+      orderId: 'order-a',
+      eventId: 'event-b',
+      version: 7,
+    };
+    await worker.consumeReopened(lifecycle);
+    await worker.consumeCancelled(lifecycle);
+    await worker.consumeAdopted(lifecycle);
+    expect(scans.reopenPreventive).toHaveBeenCalledWith(lifecycle);
+    expect(scans.cancelPreventive).toHaveBeenCalledWith(lifecycle);
+    expect(scans.adoptPreventive).toHaveBeenCalledWith(lifecycle);
   });
 
   it('rejects missing plans, missing vehicles and mismatched vehicle identity uniformly', async () => {
@@ -56,7 +77,7 @@ describe('MaintenancePlanWorker', () => {
     await service.create('tenant-a', 'actor-a', input);
     const noVehicle = new MaintenancePlanWorker(
       plans,
-      { scan: vi.fn(), closePreventive: vi.fn() },
+      { scan: vi.fn(), closePreventive: vi.fn(), ...stubs() },
       {
         read: async () => null,
       },
@@ -64,7 +85,7 @@ describe('MaintenancePlanWorker', () => {
     await expect(noVehicle.scan('tenant-a', 'plan-a')).rejects.toMatchObject({ code: 'not_found' });
     const wrongVehicle = new MaintenancePlanWorker(
       plans,
-      { scan: vi.fn(), closePreventive: vi.fn() },
+      { scan: vi.fn(), closePreventive: vi.fn(), ...stubs() },
       { read: async () => ({ id: 'vehicle-b', odometer: { km: 1, updatedAt: null } }) },
     );
     await expect(wrongVehicle.scan('tenant-a', 'plan-a')).rejects.toMatchObject({
@@ -72,7 +93,7 @@ describe('MaintenancePlanWorker', () => {
     });
     const missingPlan = new MaintenancePlanWorker(
       plans,
-      { scan: vi.fn(), closePreventive: vi.fn() },
+      { scan: vi.fn(), closePreventive: vi.fn(), ...stubs() },
       { read: async () => null },
     );
     await expect(missingPlan.scan('tenant-b', 'plan-a')).rejects.toMatchObject({

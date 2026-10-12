@@ -104,6 +104,10 @@ export const WORK_ORDER_STATUS_CHANGED_EVENT = 'maintenance.status_changed';
 export const WORK_ORDER_CREATED_EVENT = 'maintenance.created';
 /** Accepted MNT-PLANS port: consumed by the plans worker to advance the occurrence once. */
 export const PREVENTIVE_ORDER_CLOSED_EVENT = 'maintenance.order.preventive_closed';
+/** Plans-side lifecycle ports (ids and order version only): reopen invalidates the closure, cancel frees the plan. */
+export const PREVENTIVE_ORDER_REOPENED_EVENT = 'maintenance.order.preventive_reopened';
+export const PREVENTIVE_ORDER_CANCELLED_EVENT = 'maintenance.order.preventive_cancelled';
+export const PREVENTIVE_ORDER_ADOPTED_EVENT = 'maintenance.order.preventive_adopted';
 
 export interface WorkOrderEvent {
   readonly type: string;
@@ -139,7 +143,7 @@ export interface PlanScheduledOrderRef {
   readonly occurrenceId: string;
   readonly planId: string;
   readonly vehicleId: string;
-  readonly status: 'scheduled' | 'completed' | 'closed';
+  readonly status: 'scheduled' | 'completed' | 'closed' | 'cancelled';
   readonly workshopId: string | null;
   readonly mechanicId: string | null;
 }
@@ -167,7 +171,15 @@ export interface WorkOrderReferences {
     planId: string,
     orderId: string,
   ): Promise<PlanScheduledOrderRef | null>;
-  planBaseline(tenantId: string, planId: string): Promise<PlanServiceBaseline | null>;
+  /**
+   * Service baseline of the plan excluding the closure of `occurrenceId` (when that closure is still
+   * applied), so a reopened order is validated against the baseline that existed before its first close.
+   */
+  planBaseline(
+    tenantId: string,
+    planId: string,
+    occurrenceId: string | null,
+  ): Promise<PlanServiceBaseline | null>;
   /** SPECS D20: true only when the tenant configured a costly-closure threshold. */
   closeApprovalRequired(tenantId: string): Promise<boolean>;
 }
