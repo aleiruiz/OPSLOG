@@ -13,15 +13,8 @@ import {
   type AuditStore,
   type PersistedAuditEvent,
 } from '../../../../packages/platform/audit/src/index.js';
-import { TypeOrmAreaStore } from '../../../../packages/persistence/areas/src/index.js';
 import { isDurableAuditAdapterSet } from './platform/durable-audit.js';
-import { TypeOrmAssignmentStore } from '../../../../packages/persistence/assignments/src/index.js';
-import { TypeOrmDocumentStore } from '../../../../packages/persistence/documents/src/index.js';
-import { TypeOrmEmployeeStore } from '../../../../packages/persistence/employees/src/index.js';
-import { TypeOrmImportStore } from '../../../../packages/persistence/imports/src/index.js';
-import { TypeOrmPolicyStore } from '../../../../packages/persistence/insurance/src/index.js';
-import { TypeOrmSettingsStore } from '../../../../packages/persistence/settings/src/index.js';
-import { TypeOrmVehicleStore } from '../../../../packages/persistence/vehicles/src/index.js';
+import { hasPersistentBusinessStores } from './platform/persistence-flags.js';
 import { TypeOrmFileSagaStore } from '../../../../packages/persistence/files/src/index.js';
 import {
   verifyExternalPrincipal,
@@ -59,6 +52,7 @@ import type { CompanySettingsApi } from './settings.js';
 import type { InsuranceApi } from './insurance.js';
 import type { EmployeesApi } from './employees.js';
 import type { VehiclesApi } from './vehicles.js';
+import type { MaintenanceApi } from '../../maintenance/plans/src/index.js';
 import { buildDomainApis } from './platform/apis.js';
 import { acceptInvitation, inspectInvitation, inviteUser } from './platform/invitations.js';
 import { PlatformError, failure, success, type PlatformResponse } from './platform/errors.js';
@@ -119,6 +113,7 @@ export class Platform {
   public readonly imports: ImportsApi;
   public readonly companySettings: CompanySettingsApi;
   public readonly alerts: AlertsApi;
+  public readonly maintenance: MaintenanceApi;
   public readonly access: AccessDirectory;
   public readonly tenants: InMemoryTenantStore;
   public readonly audit: AuditStore;
@@ -142,19 +137,7 @@ export class Platform {
     this.tenants = adapters.tenants ?? new InMemoryTenantStore(this.now);
     const identityStore = adapters.identityStore ?? new InMemoryIdentityStore();
     const persistentIdentity = !(identityStore instanceof InMemoryIdentityStore);
-    const persistentBusinessStores = [
-      adapters.roleStore !== undefined,
-      adapters.areas instanceof TypeOrmAreaStore,
-      adapters.vehicles instanceof TypeOrmVehicleStore,
-      adapters.employees instanceof TypeOrmEmployeeStore,
-      adapters.documents instanceof TypeOrmDocumentStore,
-      adapters.insurance instanceof TypeOrmPolicyStore,
-      adapters.assignments instanceof TypeOrmAssignmentStore,
-      adapters.settings instanceof TypeOrmSettingsStore,
-      adapters.imports instanceof TypeOrmImportStore,
-      adapters.records !== undefined,
-    ];
-    const requiresDurableAudit = persistentIdentity || persistentBusinessStores.some(Boolean);
+    const requiresDurableAudit = persistentIdentity || hasPersistentBusinessStores(adapters);
     if (
       requiresDurableAudit &&
       !isDurableAuditAdapterSet(adapters.audit, adapters.auditRelay, adapters.outbox)
@@ -247,11 +230,13 @@ export class Platform {
     this.imports = apis.imports;
     this.companySettings = apis.companySettings;
     this.alerts = apis.alerts;
+    this.maintenance = apis.maintenance;
     this.runtime = buildWorkerRuntime(
       this.kernel,
       this.pipeline,
       options.worker,
       adapters.auditRelay,
+      apis.maintenancePlanWorker,
     );
   }
 

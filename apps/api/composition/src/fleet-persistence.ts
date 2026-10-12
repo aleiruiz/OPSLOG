@@ -59,7 +59,12 @@ import {
   createMySqlAuditRuntime,
   runAuditMigrations,
 } from '../../../../packages/persistence/audit/src/index.js';
+import {
+  createMaintenanceMigrationDataSource,
+  runMaintenanceMigrations,
+} from '../../../../packages/persistence/maintenance/plans/src/index.js';
 import type { PlatformAdapters } from './platform/types.js';
+import { maintenanceRuntimeAdapters, openMaintenanceRuntimeSource } from './maintenance-source.js';
 
 type FleetDataSource = ReturnType<typeof createAreasMigrationDataSource>;
 
@@ -75,6 +80,7 @@ export interface FleetMigrationCredentials extends FleetDatabaseEndpoint {
   readonly password: string;
   readonly auditMigrator: { readonly username: string; readonly password: string };
   readonly filesMigrator: { readonly username: string; readonly password: string };
+  readonly maintenanceMigrator: { readonly username: string; readonly password: string };
 }
 
 export interface FleetRuntimeCredentials extends FleetDatabaseEndpoint {
@@ -88,6 +94,7 @@ export interface FleetRuntimeCredentials extends FleetDatabaseEndpoint {
     readonly settings: { readonly username: string; readonly password: string };
     readonly imports: { readonly username: string; readonly password: string };
     readonly files: { readonly username: string; readonly password: string };
+    readonly maintenance: { readonly username: string; readonly password: string };
     readonly auditRuntime: { readonly username: string; readonly password: string };
     readonly auditRelay: { readonly username: string; readonly password: string };
   };
@@ -121,7 +128,7 @@ export function createFleetMigrationModules(
   return [
     migrationModule(
       'vehicles',
-      '2026100600030',
+      '2026101200020',
       createVehiclesMigrationDataSource(endpoint),
       runVehiclesMigrations,
     ),
@@ -178,6 +185,18 @@ export function createFleetMigrationModules(
         password: credentials.filesMigrator.password,
       }),
       runFilesMigrations,
+    ),
+    migrationModule(
+      'maintenance',
+      '2026101200010',
+      createMaintenanceMigrationDataSource({
+        host: credentials.host,
+        port: credentials.port,
+        database: credentials.database,
+        username: credentials.maintenanceMigrator.username,
+        password: credentials.maintenanceMigrator.password,
+      }),
+      runMaintenanceMigrations,
     ),
   ];
 }
@@ -240,6 +259,9 @@ export interface FleetRuntimeStores {
       | 'audit'
       | 'auditRelay'
       | 'outbox'
+      | 'maintenancePlans'
+      | 'maintenanceWorkshops'
+      | 'maintenanceMechanics'
     >
   >;
   readonly audit: NonNullable<PlatformAdapters['audit']>;
@@ -250,7 +272,6 @@ export interface FleetRuntimeStores {
   close(): Promise<void>;
 }
 
-/** Ensure the Fleet Platform receives the same tenant-local durable outbox as its audit adapters. */
 export function withFleetAuditRuntime<T extends object>(
   adapters: T,
   auditRuntime: ReturnType<typeof createMySqlAuditRuntime>,
@@ -267,7 +288,6 @@ export function withFleetAuditRuntime<T extends object>(
   return composed;
 }
 
-/** Open module-owned runtime accounts against one tenant database; no credential can perform DDL. */
 export async function openFleetRuntimeStores(
   credentials: FleetRuntimeCredentials,
 ): Promise<FleetRuntimeStores> {
@@ -299,10 +319,24 @@ export async function openFleetRuntimeStores(
     ...endpoint,
     ...credentials.accounts.files,
   });
+  const maintenanceSource = await openMaintenanceRuntimeSource(
+    endpoint,
+    credentials.accounts.maintenance,
+  );
   const initialized: FleetDataSource[] = [];
   let auditRuntimeInitialized = false;
   let auditRelayInitialized = false;
   let filesInitialized = false;
+  let maintenanceInitialized = false;
+  const closeSources = async () => {
+    await Promise.allSettled([
+      ...initialized.map((source) => source.destroy()),
+      ...(auditRuntimeInitialized ? [auditRuntimeSource.destroy()] : []),
+      ...(auditRelayInitialized ? [auditRelaySource.destroy()] : []),
+      ...(filesInitialized ? [filesSource.destroy()] : []),
+      ...(maintenanceInitialized ? [maintenanceSource.destroy()] : []),
+    ]);
+  };
   try {
     for (const source of sources) {
       await source.initialize();
@@ -314,6 +348,7 @@ export async function openFleetRuntimeStores(
     auditRelayInitialized = true;
     await filesSource.initialize();
     filesInitialized = true;
+    maintenanceInitialized = true;
     let boundTenantId: string | undefined;
     let fileStore: TypeOrmFileSagaStore | undefined;
     const resolveTenantSource = (tenantId: string) => {
@@ -341,6 +376,7 @@ export async function openFleetRuntimeStores(
         assignments: new TypeOrmAssignmentStore(sources[5] as FleetDataSource),
         settings: new TypeOrmSettingsStore(sources[6] as FleetDataSource),
         imports: new TypeOrmImportStore(sources[7] as FleetDataSource),
+        ...maintenanceRuntimeAdapters(maintenanceSource),
         get records() {
           if (!fileStore) throw new Error('fleet file runtime must be bound to a tenant first');
           return fileStore;
@@ -369,22 +405,10 @@ export async function openFleetRuntimeStores(
         boundTenantId = tenantId;
         fileStore ??= new TypeOrmFileSagaStore(filesSource, tenantId);
       },
-      close: async () => {
-        await Promise.allSettled([
-          ...initialized.map((source) => source.destroy()),
-          ...(auditRuntimeInitialized ? [auditRuntimeSource.destroy()] : []),
-          ...(auditRelayInitialized ? [auditRelaySource.destroy()] : []),
-          ...(filesInitialized ? [filesSource.destroy()] : []),
-        ]);
-      },
+      close: closeSources,
     };
   } catch (error) {
-    await Promise.allSettled([
-      ...initialized.map((source) => source.destroy()),
-      ...(auditRuntimeInitialized ? [auditRuntimeSource.destroy()] : []),
-      ...(auditRelayInitialized ? [auditRelaySource.destroy()] : []),
-      ...(filesInitialized ? [filesSource.destroy()] : []),
-    ]);
+    await closeSources();
     throw error;
   }
 }

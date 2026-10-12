@@ -15,8 +15,10 @@ export {
 export { VehicleStoreError, type VehicleStoreErrorCode } from './errors.js';
 export {
   CreateVehicles2026100600030,
+  AddVehicleOdometerTimestamp2026101200020,
   VEHICLES_MIGRATIONS_TABLE,
   VEHICLES_MIGRATION_VERSION,
+  VEHICLES_ODOMETER_TIMESTAMP_MIGRATION_VERSION,
   VEHICLE_CHECKS,
 } from './migrations.js';
 export {

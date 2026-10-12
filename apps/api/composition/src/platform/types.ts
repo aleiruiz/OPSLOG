@@ -11,6 +11,9 @@ import type { SettingsStore } from '../../../../../packages/domain/settings/src/
 import type { AssignmentStore } from '../../../../../packages/domain/assignments/src/index.js';
 import type { ImportStore } from '../../../../../packages/domain/imports/src/index.js';
 import type { PolicyStore } from '../../../../../packages/domain/insurance/src/index.js';
+import type { PlanStore } from '../../../../../packages/domain/maintenance/plans/src/index.js';
+import type { WorkshopStore } from '../../../../../packages/domain/maintenance/workshops/src/index.js';
+import type { MechanicStore } from '../../../../../packages/domain/maintenance/mechanics/src/index.js';
 import type { PiiCipher } from '../../../../../packages/platform/pii/src/index.js';
 import type {
   AreaResourceCounter,
@@ -58,6 +61,9 @@ export interface PlatformAdapters {
   readonly imports?: ImportStore;
   /** Persistent company settings store (the TypeORM adapter of `packages/persistence/settings`); in-memory by default. */
   readonly settings?: SettingsStore;
+  readonly maintenancePlans?: PlanStore;
+  readonly maintenanceWorkshops?: WorkshopStore;
+  readonly maintenanceMechanics?: MechanicStore;
   /**
    * Personal-data protection (SPECS D23): envelope encryption plus blind indexes. Defaults to the
    * local development KMS with a random per-process key, which refuses production-mode

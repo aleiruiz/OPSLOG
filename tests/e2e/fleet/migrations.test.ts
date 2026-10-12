@@ -10,6 +10,7 @@ import { ASSIGNMENT_TABLES } from '../../../packages/persistence/assignments/src
 import { SETTINGS_TABLES } from '../../../packages/persistence/settings/src/index.js';
 import { IMPORT_TABLES } from '../../../packages/persistence/imports/src/index.js';
 import { FILE_TABLES } from '../../../packages/persistence/files/src/index.js';
+import { MAINTENANCE_TABLES } from '../../../packages/persistence/maintenance/plans/src/index.js';
 import { adminUrl, startFleetDatabase, type FleetDatabase } from './mysql.js';
 
 const suite = adminUrl ? describe : describe.skip;
@@ -27,7 +28,7 @@ suite('fleet tenant migration composition on real MySQL', () => {
 
   it('applies, reverses, reapplies, and idempotently reruns the ordered module migrations', async () => {
     expect(database.appliedMigrations).toEqual([
-      'vehicles:2026100600030',
+      'vehicles:2026101200020',
       'areas:2026100600040',
       'employees:2026100600050',
       'documents:2026100600060',
@@ -36,6 +37,7 @@ suite('fleet tenant migration composition on real MySQL', () => {
       'settings:2026100600090',
       'imports:2026100600090',
       'files:2026100700010',
+      'maintenance:2026101200010',
       'audit:2026100700010',
     ]);
     expect(database.databaseName).toMatch(/^opslog_t_[a-f0-9]+$/);
@@ -66,6 +68,13 @@ suite('fleet tenant migration composition on real MySQL', () => {
         FILE_TABLES.records,
         FILE_TABLES.history,
         FILE_TABLES.saga,
+        MAINTENANCE_TABLES.plans,
+        MAINTENANCE_TABLES.versions,
+        MAINTENANCE_TABLES.occurrences,
+        MAINTENANCE_TABLES.orders,
+        MAINTENANCE_TABLES.alerts,
+        MAINTENANCE_TABLES.workshops,
+        MAINTENANCE_TABLES.mechanics,
         'opslog_audit_local',
         'opslog_audit_delivery',
         'opslog_audit_log',

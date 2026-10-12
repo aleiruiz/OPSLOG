@@ -34,6 +34,7 @@ export function newVehicle(tenantId: string, id: string, data: NewVehicleData, n
     ...data,
     status: 'active',
     statusReason: 'Alta',
+    odometerUpdatedAt: now.toISOString(),
     version: 1,
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
@@ -97,7 +98,7 @@ export function applyOdometer(
   assertVersion(vehicle, expectedVersion);
   if (odometerKm < vehicle.odometerKm) throw new VehicleError('odometer_decrease');
   if (odometerKm === vehicle.odometerKm) return vehicle;
-  return { ...vehicle, odometerKm, ...touched(vehicle, now) };
+  return { ...vehicle, odometerKm, odometerUpdatedAt: now.toISOString(), ...touched(vehicle, now) };
 }
 
 /** Soft delete (BR-009): the row stays, hidden from default listings and read-only. */

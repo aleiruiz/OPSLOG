@@ -32,6 +32,7 @@ export class VehicleEntity {
   status!: string;
   statusReason!: string;
   odometerKm!: number;
+  odometerUpdatedAt!: Date | null;
   registeredOn!: string;
   version!: number;
   createdAt!: Date;
@@ -77,6 +78,12 @@ export const VehicleEntitySchema = new EntitySchema<VehicleEntity>({
     status: { type: 'varchar', length: 16, collation: bin },
     statusReason: { name: 'status_reason', type: 'varchar', length: 200, collation: bin },
     odometerKm: { name: 'odometer_km', type: 'int', unsigned: true },
+    odometerUpdatedAt: {
+      name: 'odometer_updated_at',
+      type: 'datetime',
+      precision: 6,
+      nullable: true,
+    },
     registeredOn: { name: 'registered_on', type: 'char', length: 10, collation: bin },
     version: { type: 'int', unsigned: true },
     createdAt: { name: 'created_at', type: 'datetime', precision: 6 },

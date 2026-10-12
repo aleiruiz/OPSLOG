@@ -1,0 +1,8 @@
+{
+  "name": "@opslog/api-maintenance-plans",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:unit": "vitest run"
+  }
+}

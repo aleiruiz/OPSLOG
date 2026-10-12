@@ -1,8 +1,10 @@
 packages:
   - apps/*
   - apps/*/*
+  - apps/*/*/*
   - packages/*
   - packages/*/*
+  - packages/*/*/*
 allowBuilds:
   esbuild: true
 overrides:

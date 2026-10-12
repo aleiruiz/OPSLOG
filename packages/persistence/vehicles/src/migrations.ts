@@ -2,6 +2,7 @@ import {
   MigrationInterface,
   QueryRunner,
   Table,
+  TableColumn,
   TableForeignKey,
   TableIndex,
   TableUnique,
@@ -10,6 +11,7 @@ import {
 import { BINARY_COLLATION, VEHICLE_TABLES } from './entities.js';
 
 export const VEHICLES_MIGRATION_VERSION = '2026100600030';
+export const VEHICLES_ODOMETER_TIMESTAMP_MIGRATION_VERSION = '2026101200020';
 export const VEHICLES_MIGRATIONS_TABLE = 'opslog_vehicles_migrations';
 
 const text = (name: string, length: number, extra: Partial<TableColumnOptions> = {}) =>
@@ -194,5 +196,26 @@ export class CreateVehicles2026100600030 implements MigrationInterface {
   async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.dropTable(T.statusHistory);
     await queryRunner.dropTable(T.vehicles);
+  }
+}
+
+/** Adds a reading-specific timestamp. Existing rows remain NULL because updated_at is not reliable evidence. */
+export class AddVehicleOdometerTimestamp2026101200020 implements MigrationInterface {
+  name = 'AddVehicleOdometerTimestamp2026101200020';
+
+  async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.addColumn(
+      T.vehicles,
+      new TableColumn({
+        name: 'odometer_updated_at',
+        type: 'datetime',
+        precision: 6,
+        isNullable: true,
+      }),
+    );
+  }
+
+  async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.dropColumn(T.vehicles, 'odometer_updated_at');
   }
 }

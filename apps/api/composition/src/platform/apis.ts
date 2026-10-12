@@ -47,6 +47,9 @@ import { CompanySettingsApi } from '../settings.js';
 import { VehiclesApi } from '../vehicles.js';
 import type { PlatformKernel } from './kernel.js';
 import type { PlatformAdapters } from './types.js';
+import { buildMaintenanceApis } from './maintenance-apis.js';
+import type { MaintenanceApi } from '../../../maintenance/plans/src/index.js';
+import type { MaintenancePlanWorker } from '../../../../../packages/domain/maintenance/plans/src/index.js';
 
 export interface DomainApis {
   readonly vehicles: VehiclesApi;
@@ -58,6 +61,8 @@ export interface DomainApis {
   readonly imports: ImportsApi;
   readonly companySettings: CompanySettingsApi;
   readonly alerts: AlertsApi;
+  readonly maintenance: MaintenanceApi;
+  readonly maintenancePlanWorker?: MaintenancePlanWorker;
 }
 
 /** Wires the domain services and their HTTP-facing APIs over the adapters (in-memory by default). */
@@ -373,6 +378,7 @@ export function buildDomainApis(kernel: PlatformKernel, adapters: PlatformAdapte
       );
     },
   });
+  const maintenanceApis = buildMaintenanceApis(kernel, adapters, vehicleService);
   return {
     vehicles,
     areas,
@@ -383,5 +389,6 @@ export function buildDomainApis(kernel: PlatformKernel, adapters: PlatformAdapte
     imports,
     companySettings,
     alerts,
+    ...maintenanceApis,
   };
 }

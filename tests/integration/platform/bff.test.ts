@@ -213,6 +213,44 @@ function writes(f: Fixture): [string, string, unknown?][] {
     ['PUT', `/api/areas/${f.areaId}`, { version: 1, name: 'Renombrada' }],
     ['POST', `/api/areas/${f.areaId}/deactivate`, { version: 1 }],
     ['POST', `/api/areas/${f.areaId}/activate`, { version: 2 }],
+    [
+      'POST',
+      '/api/v1/maintenance/plans',
+      { vehicleId: f.vehicleId, intervalDays: 90, lastServiceDate: '2026-01-01' },
+    ],
+    [
+      'PUT',
+      '/api/v1/maintenance/plans/00000000-0000-4000-8000-000000000001',
+      { version: 1, intervalDays: 120 },
+    ],
+    [
+      'POST',
+      '/api/v1/maintenance/plans/00000000-0000-4000-8000-000000000001/pause',
+      { version: 1 },
+    ],
+    [
+      'POST',
+      '/api/v1/maintenance/plans/00000000-0000-4000-8000-000000000001/resume',
+      { version: 2 },
+    ],
+    ['POST', '/api/v1/maintenance/workshops', { name: 'Taller Norte', specialties: ['motor'] }],
+    [
+      'PUT',
+      '/api/v1/maintenance/workshops/00000000-0000-4000-8000-000000000001',
+      { name: 'Taller Norte', specialties: ['motor'] },
+    ],
+    ['POST', '/api/v1/maintenance/workshops/00000000-0000-4000-8000-000000000001/deactivate'],
+    [
+      'POST',
+      '/api/v1/maintenance/mechanics',
+      { name: 'Mecánico externo', specialties: ['motor'], kind: 'external' },
+    ],
+    [
+      'PUT',
+      '/api/v1/maintenance/mechanics/00000000-0000-4000-8000-000000000001',
+      { name: 'Mecánico externo', specialties: ['motor'], kind: 'external' },
+    ],
+    ['POST', '/api/v1/maintenance/mechanics/00000000-0000-4000-8000-000000000001/deactivate'],
   ];
 }
 

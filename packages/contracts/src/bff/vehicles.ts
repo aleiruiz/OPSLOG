@@ -24,6 +24,8 @@ export interface BffVehicle {
   readonly status: BffVehicleStatus;
   readonly statusReason: string;
   readonly odometerKm: number;
+  /** Timestamp of the latest known odometer reading; absent on older API deployments. */
+  readonly odometerUpdatedAt?: ISODateTime | null;
   /** `YYYY-MM-DD`. */
   readonly registeredOn: string;
   readonly version: number;
