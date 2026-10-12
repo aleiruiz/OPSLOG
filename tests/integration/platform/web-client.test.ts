@@ -508,6 +508,11 @@ describe('typed client against the real BFF', () => {
       await client.call('maintenance.plans.orders', { params: { planId: plan.value.id } }),
     ).toMatchObject({ ok: true, value: [] });
     expect(
+      await client.call('maintenance.alerts.list', {
+        query: { planId: plan.value.id, limit: 25 },
+      }),
+    ).toMatchObject({ ok: true, value: { items: [], total: 0, nextCursor: null } });
+    expect(
       await client.call('maintenance.plans.update', {
         params: { planId: plan.value.id },
         body: { version: 1, intervalDays: 120 },

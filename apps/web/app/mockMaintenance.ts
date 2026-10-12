@@ -109,6 +109,38 @@ export function createMockMaintenancePorts(session: {
         updatedAt: at,
       },
     ],
+    alerts: [
+      {
+        id: 'alert-001',
+        planId: 'plan-001',
+        vehicleId: 'veh-001',
+        occurrence: 1,
+        planVersion: 3,
+        kind: 'upcoming',
+        trigger: 'odometer',
+        threshold: '500_km',
+        targetDate: null,
+        targetKm: 10400,
+        odometerLastUpdatedAt: '2026-10-04T12:00:00.000Z',
+        odometerAgeSeconds: 172800,
+        occurredAt: '2026-10-06T12:00:00.000Z',
+      },
+      {
+        id: 'alert-002',
+        planId: 'plan-001',
+        vehicleId: 'veh-001',
+        occurrence: 1,
+        planVersion: 3,
+        kind: 'due',
+        trigger: 'date',
+        threshold: 'target',
+        targetDate: '2026-10-05',
+        targetKm: null,
+        odometerLastUpdatedAt: null,
+        odometerAgeSeconds: null,
+        occurredAt: '2026-10-05T12:00:00.000Z',
+      },
+    ],
     mechanics: [
       {
         id: 'mec-001',
@@ -155,6 +187,7 @@ export function createMockMaintenancePorts(session: {
   return {
     orders: wrap(fake.ports.orders),
     plans: wrap(fake.ports.plans),
+    alerts: wrap(fake.ports.alerts),
     workshops: wrap(fake.ports.workshops),
     mechanics: wrap(fake.ports.mechanics),
   };

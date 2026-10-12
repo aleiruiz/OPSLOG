@@ -6,6 +6,7 @@ import { MaintenancePlanError } from '../../../../../packages/domain/maintenance
 import type {
   MaintenancePlan,
   MaintenancePlanSchedule,
+  PlanAlertRecord,
   PlanOccurrence,
   PlanInput,
   ScheduledMaintenanceOrder,
@@ -38,6 +39,11 @@ export type WorkshopView = Omit<Workshop, 'tenantId'>;
 export type MechanicView = Omit<Mechanic, 'tenantId'>;
 export type PlanOccurrenceView = Omit<PlanOccurrence, 'tenantId'>;
 export type ScheduledMaintenanceOrderView = Omit<ScheduledMaintenanceOrder, 'tenantId'>;
+export type PlanAlertView = Omit<PlanAlertRecord, 'tenantId'>;
+export interface PlanAlertPageView {
+  readonly items: readonly PlanAlertView[];
+  readonly total: number;
+}
 export type MaintenancePlanScheduleView = Omit<MaintenancePlanSchedule, 'occurrence' | 'order'> & {
   readonly occurrence: PlanOccurrenceView | null;
   readonly order: ScheduledMaintenanceOrderView | null;
@@ -189,6 +195,18 @@ export class MaintenanceApi {
     return this.runPublicList(token, correlationId, async (c) =>
       (await this.scoped(c)) ? [] : this.deps.plans.list(c.tenantId),
     );
+  }
+  /** Same audience as the plans catalog (`view`): a mechanic-scoped caller sees no more than the plans list. */
+  public listAlerts(
+    token: string,
+    correlationId: string,
+    query: { planId?: string; vehicleId?: string; limit: number; offset: number },
+  ): Promise<MaintenanceApiResponse<PlanAlertPageView>> {
+    return this.run(token, correlationId, PERMISSIONS.read, async (context) => {
+      if (await this.scoped(context)) return { items: [], total: 0 };
+      const page = await this.deps.plans.listAlerts(context.tenantId, query);
+      return { items: page.items.map(withoutTenant), total: page.total };
+    });
   }
   public getPlanSchedule(
     token: string,

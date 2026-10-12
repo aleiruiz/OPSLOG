@@ -261,4 +261,71 @@ suite('maintenance persistence on disposable MySQL 8.4', () => {
     );
     expect(Number(rolledBackCreate?.count)).toBe(0);
   });
+  it('lists persisted alert records newest first with paging, plan and vehicle filters, per tenant', async () => {
+    const tenantA = randomUUID();
+    const tenantB = randomUUID();
+    const first = { ...plan(tenantA, randomUUID()), vehicleId: 'vehicle-one' };
+    const second = { ...plan(tenantA, randomUUID()), vehicleId: 'vehicle-two' };
+    await storeA.create(first, 'synthetic-actor');
+    await storeA.create(second, 'synthetic-actor');
+    await storeB.create({ ...plan(tenantB, randomUUID()), vehicleId: 'vehicle-one' }, 'actor');
+    const odometer = { km: 0, updatedAt: now.toISOString() };
+    // The first plan reaches its target (due); the second is scanned a day later (due, then overdue).
+    await storeA.scan(tenantA, first.id, new Date('2026-10-12T12:00:00.000Z'), odometer);
+    await storeA.scan(tenantA, second.id, new Date('2026-10-13T12:00:00.000Z'), odometer);
+
+    const all = await storeA.listAlerts(tenantA, { limit: 25, offset: 0 });
+    expect(all.total).toBe(3);
+    expect(all.items.map((item) => item.kind).sort()).toEqual(['due', 'due', 'overdue']);
+    expect(all.items.every((item) => item.tenantId === tenantA)).toBe(true);
+    const times = all.items.map((item) => item.occurredAt);
+    expect([...times].sort().reverse()).toEqual(times);
+
+    const pages = [
+      await storeA.listAlerts(tenantA, { limit: 1, offset: 0 }),
+      await storeA.listAlerts(tenantA, { limit: 1, offset: 1 }),
+    ];
+    expect(pages.map((page) => page.total)).toEqual([all.total, all.total]);
+    expect(pages.map((page) => page.items[0]?.id)).toEqual(all.items.slice(0, 2).map((i) => i.id));
+    expect((await storeA.listAlerts(tenantA, { limit: 25, offset: all.total })).items).toEqual([]);
+
+    const byVehicle = await storeA.listAlerts(tenantA, {
+      vehicleId: 'vehicle-two',
+      limit: 25,
+      offset: 0,
+    });
+    expect(byVehicle.total).toBe(2);
+    expect(
+      byVehicle.items.every((i) => i.planId === second.id && i.vehicleId === 'vehicle-two'),
+    ).toBe(true);
+    const byPlan = await storeA.listAlerts(tenantA, { planId: first.id, limit: 25, offset: 0 });
+    expect(byPlan.total).toBe(1);
+    expect(byPlan.items[0]).toMatchObject({
+      planId: first.id,
+      vehicleId: 'vehicle-one',
+      kind: 'due',
+    });
+    expect(
+      await storeA.listAlerts(tenantA, {
+        planId: first.id,
+        vehicleId: 'vehicle-two',
+        limit: 25,
+        offset: 0,
+      }),
+    ).toEqual({ items: [], total: 0 });
+
+    // Tenant B has the same vehicle id and sees none of tenant A's records, even asking by A's plan.
+    expect(await storeB.listAlerts(tenantB, { limit: 25, offset: 0 })).toEqual({
+      items: [],
+      total: 0,
+    });
+    expect(await storeB.listAlerts(tenantB, { planId: first.id, limit: 25, offset: 0 })).toEqual({
+      items: [],
+      total: 0,
+    });
+    expect(await storeB.listAlerts(tenantA, { limit: 25, offset: 0 })).toEqual({
+      items: [],
+      total: 0,
+    });
+  });
 });

@@ -1,4 +1,4 @@
-import type { ISODateTime } from '../index.js';
+import type { ISODateTime, Page } from '../index.js';
 import type { BffRouteDefinition } from './shared.js';
 
 export interface BffMaintenancePlan {
@@ -94,7 +94,39 @@ export type BffMaintenanceMechanicInput = Pick<
   readonly memberId?: string | null;
 };
 
+/**
+ * An in-app record the plans worker persisted when a plan crossed a threshold (SPECS §7: 15 days,
+ * 500 km, due, overdue). `odometerAgeSeconds` is how old the odometer reading was at detection and
+ * only exists for odometer triggers; the company is implicit.
+ */
+export interface BffMaintenanceAlert {
+  readonly id: string;
+  readonly planId: string;
+  readonly vehicleId: string;
+  readonly occurrence: number;
+  readonly planVersion: number;
+  readonly kind: 'upcoming' | 'due' | 'overdue';
+  readonly trigger: 'date' | 'odometer';
+  readonly threshold: '15_days' | '500_km' | 'target';
+  readonly targetDate: string | null;
+  readonly targetKm: number | null;
+  readonly odometerLastUpdatedAt: ISODateTime | null;
+  readonly odometerAgeSeconds: number | null;
+  readonly occurredAt: ISODateTime;
+}
+/** Newest first. `planId` and `vehicleId` narrow the list; the same visibility as the plans catalog applies. */
+export interface BffMaintenanceAlertsQuery {
+  readonly limit?: 25 | 50 | 100;
+  readonly cursor?: string;
+  readonly planId?: string;
+  readonly vehicleId?: string;
+}
+
 export interface MaintenanceRouteTypes {
+  'maintenance.alerts.list': {
+    query?: BffMaintenanceAlertsQuery;
+    response: Page<BffMaintenanceAlert>;
+  };
   'maintenance.plans.list': { response: readonly BffMaintenancePlan[] };
   'maintenance.plans.create': { body: BffMaintenancePlanInput; response: BffMaintenancePlan };
   'maintenance.plans.get': { params: { planId: string }; response: BffMaintenancePlan };
@@ -154,9 +186,11 @@ export interface MaintenanceRouteTypes {
 }
 
 const plans = ['api', 'v1', 'maintenance', 'plans'] as const;
+const alerts = ['api', 'v1', 'maintenance', 'alerts'] as const;
 const workshops = ['api', 'v1', 'maintenance', 'workshops'] as const;
 const mechanics = ['api', 'v1', 'maintenance', 'mechanics'] as const;
 export const MAINTENANCE_ROUTES = {
+  'maintenance.alerts.list': { method: 'GET', path: alerts, kind: 'session', status: 200 },
   'maintenance.plans.list': { method: 'GET', path: plans, kind: 'session', status: 200 },
   'maintenance.plans.create': { method: 'POST', path: plans, kind: 'session-csrf', status: 201 },
   'maintenance.plans.get': {

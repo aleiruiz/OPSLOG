@@ -11,7 +11,9 @@ import type {
   BffMaintenancePlan,
   BffMaintenanceWorkshop,
 } from '@opslog/contracts';
+import { useDirectory, vehicleLabel } from './directory';
 import { formatDate, formatKm } from './labels';
+import { MaintenanceAlertsPanel } from './MaintenanceAlertsPanel';
 import { PlanForm } from './PlanForm';
 import type { MaintenancePorts } from './ports';
 import { errorKind, useResult } from './useResult';
@@ -41,6 +43,7 @@ export function PlansScreen({
   onOpenOrder?: (orderId: string) => void;
   onExpired: () => void;
 }) {
+  const directory = useDirectory();
   const { state, reload } = useResult(() => ports.plans.list(), [ports], onExpired);
   const [selected, setSelected] = React.useState<string | null>(null);
   const [form, setForm] = React.useState<'create' | 'edit' | null>(null);
@@ -108,7 +111,7 @@ export function PlansScreen({
                 label: 'Vehículo',
                 render: (_value, row) => (
                   <Link component="button" type="button" onClick={() => setSelected(row.id)}>
-                    {row.vehicleId}
+                    {vehicleLabel(directory, row.vehicleId)}
                   </Link>
                 ),
               },
@@ -159,6 +162,8 @@ function PlanSchedule({
   onOpenOrder: ((orderId: string) => void) | undefined;
   onExpired: () => void;
 }) {
+  const directory = useDirectory();
+  const vehicle = vehicleLabel(directory, plan.vehicleId);
   const [opening, setOpening] = React.useState(false);
   const [failed, setFailed] = React.useState(false);
   // A generated preventive order becomes a work order (same id) the first time someone opens it.
@@ -181,13 +186,9 @@ function PlanSchedule({
     onExpired,
   );
   return (
-    <Card
-      component="section"
-      aria-label={`Próximo servicio de ${plan.vehicleId}`}
-      sx={{ p: 2, mt: 3 }}
-    >
+    <Card component="section" aria-label={`Próximo servicio de ${vehicle}`} sx={{ p: 2, mt: 3 }}>
       <Typography component="h2" variant="h6">
-        Próximo servicio de {plan.vehicleId}
+        Próximo servicio de {vehicle}
       </Typography>
       {state.status === 'ready' ? (
         <Stack spacing={1}>
@@ -232,6 +233,12 @@ function PlanSchedule({
           {state.status === 'loading' ? 'Cargando…' : 'No pudimos cargar el próximo servicio.'}
         </Typography>
       )}
+      <MaintenanceAlertsPanel
+        ports={ports}
+        planId={plan.id}
+        title={`Alertas de ${vehicle}`}
+        onExpired={onExpired}
+      />
       {onEdit && (
         <Button variant="outlined" onClick={onEdit} sx={{ mt: 2 }}>
           Editar plan

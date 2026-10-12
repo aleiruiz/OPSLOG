@@ -2,6 +2,7 @@ import {
   InMemoryMaintenancePlanStore,
   MaintenancePlanService,
   MaintenancePlanWorker,
+  type PlanAlertReader,
   type PlanScanStore,
   type PlanScheduleReader,
 } from '../../../../../packages/domain/maintenance/plans/src/index.js';
@@ -38,6 +39,10 @@ export function buildMaintenanceApis(
     typeof (planStore as Partial<PlanScheduleReader>).listScheduledOrders === 'function'
       ? (planStore as unknown as PlanScheduleReader)
       : undefined;
+  const alertReader =
+    typeof (planStore as Partial<PlanAlertReader>).listAlerts === 'function'
+      ? (planStore as unknown as PlanAlertReader)
+      : undefined;
   const scanStore = planStore as Partial<PlanScanStore>;
   const maintenancePlanWorker =
     typeof scanStore.scan === 'function' && typeof scanStore.closePreventive === 'function'
@@ -66,6 +71,7 @@ export function buildMaintenanceApis(
   const planService = new MaintenancePlanService(planStore, {
     now: kernel.now,
     ...(scheduleReader ? { scheduleReader } : {}),
+    ...(alertReader ? { alertReader } : {}),
     references: {
       vehicleExists: async (tenantId, vehicleId) => {
         const vehicle = await vehicleService.get(tenantId, vehicleId).catch((error: unknown) => {

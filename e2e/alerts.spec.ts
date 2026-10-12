@@ -47,10 +47,12 @@ test.describe('alerts: list, filters and links', () => {
       .getByRole('link', { name: 'Alertas', exact: true })
       .click();
     await expect(page.getByRole('heading', { name: 'Alertas', level: 1 })).toBeVisible();
-    await expect(page.getByRole('table', { name: 'Alertas (34)' })).toBeVisible();
-    await expect(page.getByRole('row')).toHaveCount(26);
+    const documents = page.getByRole('table', { name: 'Alertas (34)' });
+    await expect(documents).toBeVisible();
+    // Count the document/policy/license table only; maintenance records have their own table.
+    await expect(documents.getByRole('row')).toHaveCount(26);
     await page.getByRole('button', { name: 'Cargar más alertas' }).click();
-    await expect(page.getByRole('row')).toHaveCount(35);
+    await expect(documents.getByRole('row')).toHaveCount(35);
     await page.getByLabel('Estado', { exact: true }).selectOption('expired');
     await expect(page.getByRole('table', { name: 'Alertas (12)' })).toBeVisible();
     await page.getByLabel('Origen').selectOption('insurance_policy');
