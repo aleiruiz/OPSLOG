@@ -3,6 +3,7 @@ import { AUDIT_TABLES } from '../../../packages/persistence/audit/src/index.js';
 import { MAINTENANCE_TABLES } from '../../../packages/persistence/maintenance/plans/src/index.js';
 import { WORK_ORDER_TABLES } from '../../../packages/persistence/maintenance/orders/src/index.js';
 import {
+  transitionView,
   workOrderView,
   type WorkOrder,
   type WorkOrderService,
@@ -319,9 +320,33 @@ suite('work order acceptance on MySQL 8.4', () => {
       ...(await service.list(t, ACTORS.editor)).map((o) => workOrderView(o, false)),
     ]);
     expect(hidden).not.toMatch(/999999999999999|"costs"|unitCost|MXN/);
+    // The timeline keeps the facts before each command (before_snapshot), amounts included.
+    const closed = await service.close(t, ACTORS.admin, order.id, {
+      version: order.version,
+      vehicleStatus: 'active',
+    });
+    await service.reopen(t, ACTORS.admin, order.id, {
+      version: closed.version,
+      reason: 'Revisión de costos',
+    });
+    const history = await service.history(t, ACTORS.editor, order.id);
+    const reopen = history.find((entry) => entry.command === 'reopen');
+    expect(reopen?.before?.['costs']).toEqual(stored.costs);
+    expect(JSON.stringify(history.map((entry) => transitionView(entry, false)))).not.toMatch(
+      /999999999999999|"costs"|unitCost|MXN/,
+    );
+    expect(transitionView(reopen as NonNullable<typeof reopen>, true).before?.['costs']).toEqual(
+      stored.costs,
+    );
+    const [row] = await world.db.rows<{ before_snapshot: { costs: unknown[] } }>(
+      `SELECT before_snapshot FROM ${WORK_ORDER_TABLES.transitions} WHERE company_id=? AND order_id=? AND command='reopen'`,
+      [t, order.id],
+    );
+    expect(row?.before_snapshot.costs).toEqual(stored.costs);
+    const current = (await service.get(t, ACTORS.editor, order.id)) as WorkOrder;
     expect(
       await code(
-        service.updateCosts(t, ACTORS.editor, order.id, { version: order.version, costs: [] }),
+        service.updateCosts(t, ACTORS.editor, order.id, { version: current.version, costs: [] }),
       ),
     ).toBe('forbidden');
   });

@@ -190,5 +190,16 @@ suite('maintenance alert boundaries on MySQL 8.4', () => {
         updatedAt: null,
       }),
     ).rejects.toMatchObject({ code: 'not_found' });
+    // Tenant A's key inside tenant B's database: same non-disclosing answer as an unknown plan.
+    expect(await world.plansB.get(world.tenantA, planB.id)).toBeNull();
+    await expect(
+      world.plansB.scan(world.tenantA, planB.id, at('2026-10-31T00:00:00Z'), {
+        km: 0,
+        updatedAt: null,
+      }),
+    ).rejects.toMatchObject({ code: 'not_found' });
+    expect(await world.plansB.list(world.tenantA)).toEqual([]);
+    await expect(world.plansB.listScheduledOrders(world.tenantA, planB.id)).resolves.toEqual([]);
+    expect(await world.plansB.get(world.tenantB, planB.id)).toMatchObject({ id: planB.id });
   });
 });
