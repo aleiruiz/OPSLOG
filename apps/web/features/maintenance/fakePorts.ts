@@ -5,23 +5,27 @@ import type {
   BffMaintenanceWorkshop,
   BffWorkOrder,
   BffWorkOrderTransition,
-  BffWorkOrderTransitionInput,
 } from '@opslog/contracts';
 import type { MaintenancePorts, Result } from './ports';
+import { NEXT, baseOrder, missingFor } from './fakeOrder';
+
+export { baseOrder };
 
 /**
  * In-memory stand-in for the accepted MNT-PLANS/MNT-ORDERS routes, for component tests and stories
  * only. It mimics the server's answers (sanitized costs, 409, 422 lists); it is not a rule source.
  */
 export interface FakeMaintenanceOptions {
-  readonly viewCosts?: boolean;
+  readonly viewCosts?: boolean | (() => boolean);
   /** When set, the caller only sees orders assigned to these mechanics (server-side scope). */
-  readonly scopedTo?: readonly string[];
+  readonly scopedTo?: readonly string[] | (() => readonly string[] | undefined);
   readonly orders?: readonly BffWorkOrder[];
   readonly plans?: readonly BffMaintenancePlan[];
   readonly workshops?: readonly BffMaintenanceWorkshop[];
   readonly mechanics?: readonly BffMaintenanceMechanic[];
   readonly failLists?: boolean;
+  /** Plans whose schedule reports a generated, not yet opened preventive order. */
+  readonly generated?: readonly string[];
 }
 
 const at = '2026-10-12T12:00:00.000Z';
@@ -43,82 +47,6 @@ const ok = <T>(value: T): Result<T> => ({ ok: true, value: structuredClone(value
 const omit = <T extends object>(value: T, key: string): T =>
   Object.fromEntries(Object.entries(value).filter(([name]) => name !== key)) as T;
 
-export function baseOrder(overrides: Partial<BffWorkOrder> = {}): BffWorkOrder {
-  return {
-    id: 'wo-1',
-    kind: 'corrective',
-    vehicleId: 'veh-001',
-    planId: null,
-    occurrenceId: null,
-    status: 'scheduled',
-    version: 1,
-    description: 'Frenos rechinan',
-    responsibleId: null,
-    workshopId: null,
-    mechanicId: null,
-    scheduledDate: null,
-    requiresWorkshop: false,
-    startedAt: null,
-    completedAt: null,
-    actualDate: null,
-    actualKm: null,
-    tasks: [],
-    parts: [],
-    costs: [],
-    closeApproval: null,
-    closedAt: null,
-    closedBy: null,
-    vehicleStatusDecision: null,
-    cancelReason: null,
-    reopenCount: 0,
-    vehicleProposal: null,
-    createdAt: at,
-    createdBy: 'user-admin',
-    updatedAt: at,
-    updatedBy: 'user-admin',
-    ...overrides,
-  };
-}
-
-const NEXT: Record<string, BffWorkOrder['status']> = {
-  assign: 'assigned',
-  start: 'in_progress',
-  complete: 'completed',
-  close: 'closed',
-  cancel: 'cancelled',
-  reopen: 'in_progress',
-  approve_close: 'completed',
-};
-
-function missingFor(
-  order: BffWorkOrder,
-  input: BffWorkOrderTransitionInput,
-  approvalRequired: boolean,
-) {
-  const checks: Record<string, Record<string, boolean>> = {
-    assign: {
-      responsibleId: Boolean(input.responsibleId),
-      scheduledDate: Boolean(input.scheduledDate),
-      workshopOrMechanic: Boolean(input.workshopId ?? input.mechanicId),
-    },
-    complete: {
-      actualDate: Boolean(input.actualDate),
-      actualKm: input.actualKm !== undefined,
-      tasks: order.tasks.length > 0,
-    },
-    close: {
-      tasks: order.tasks.length > 0,
-      vehicleStatus: Boolean(input.vehicleStatus),
-      closeApproval: !approvalRequired || order.closeApproval !== null,
-    },
-    cancel: { reason: Boolean(input.reason) },
-    reopen: { reason: Boolean(input.reason) },
-  };
-  return Object.entries(checks[input.command] ?? {})
-    .filter(([, present]) => !present)
-    .map(([name]) => name);
-}
-
 export function createFakeMaintenancePorts(options: FakeMaintenanceOptions = {}) {
   const orders = new Map((options.orders ?? [baseOrder()]).map((o) => [o.id, structuredClone(o)]));
   const history = new Map<string, BffWorkOrderTransition[]>();
@@ -126,10 +54,15 @@ export function createFakeMaintenancePorts(options: FakeMaintenanceOptions = {})
   const workshops = [...(options.workshops ?? [])];
   const mechanics = [...(options.mechanics ?? [])];
   const state = { approvalRequired: false, calls: [] as string[] };
+  const viewCosts = () =>
+    typeof options.viewCosts === 'function' ? options.viewCosts() : Boolean(options.viewCosts);
+  const scope = () =>
+    typeof options.scopedTo === 'function' ? options.scopedTo() : options.scopedTo;
   const visible = (order: BffWorkOrder) =>
-    !options.scopedTo || (order.mechanicId !== null && options.scopedTo.includes(order.mechanicId));
+    !scope() ||
+    (order.mechanicId !== null && (scope() as readonly string[]).includes(order.mechanicId));
   const sanitize = (order: BffWorkOrder): BffWorkOrder => {
-    if (options.viewCosts) return order;
+    if (viewCosts()) return order;
     return { ...omit(order, 'costs'), parts: order.parts.map((part) => omit(part, 'unitCost')) };
   };
   const find = (id: string) => {
@@ -177,7 +110,20 @@ export function createFakeMaintenancePorts(options: FakeMaintenanceOptions = {})
         });
         return save(order, 'create', null, null);
       },
-      adoptPreventive: async () => fail(404, 'not_found'),
+      adoptPreventive: async (body) => {
+        const plan = plans.find((p) => p.id === body.planId);
+        if (!plan || body.scheduledOrderId !== `sched-${plan.id}`) return fail(404, 'not_found');
+        if (orders.has(body.scheduledOrderId)) return fail(409, 'duplicate');
+        const order = baseOrder({
+          id: body.scheduledOrderId,
+          kind: 'preventive',
+          planId: plan.id,
+          occurrenceId: `occ-${plan.id}`,
+          vehicleId: plan.vehicleId,
+          description: null,
+        });
+        return save(order, 'create', null, null);
+      },
       transition: async (id, input) => {
         state.calls.push(`transition:${input.command}`);
         const order = find(id);
@@ -264,7 +210,7 @@ export function createFakeMaintenancePorts(options: FakeMaintenanceOptions = {})
       recordCosts: async (id, body) => {
         const order = find(id);
         if (!order) return fail(404, 'not_found');
-        if (!options.viewCosts) return fail(403, 'forbidden');
+        if (!viewCosts()) return fail(403, 'forbidden');
         if (order.version !== body.version) return fail(409, 'stale_version');
         const costs = (body.costs ?? []).map((c, i) => ({
           id: c.id ?? `cost-${order.version}-${i}`,
@@ -306,13 +252,45 @@ export function createFakeMaintenancePorts(options: FakeMaintenanceOptions = {})
       },
       schedule: async (id) =>
         plans.some((p) => p.id === id)
-          ? ok({
-              planId: id,
-              nextTargetDate: '2026-11-01',
-              nextTargetKm: 15000,
-              occurrence: null,
-              order: null,
-            })
+          ? ok(
+              options.generated?.includes(id)
+                ? {
+                    planId: id,
+                    nextTargetDate: '2026-10-11',
+                    nextTargetKm: null,
+                    occurrence: {
+                      id: `occ-${id}`,
+                      planId: id,
+                      sequence: 1,
+                      planVersion: 1,
+                      trigger: 'date' as const,
+                      targetDate: '2026-10-11',
+                      targetKm: null,
+                      detectedAt: at,
+                      orderId: `sched-${id}`,
+                      workshopId: null,
+                      mechanicId: null,
+                      state: 'scheduled' as const,
+                    },
+                    order: {
+                      id: `sched-${id}`,
+                      occurrenceId: `occ-${id}`,
+                      planId: id,
+                      vehicleId: 'veh-001',
+                      status: 'scheduled' as const,
+                      kind: 'preventive' as const,
+                      snapshot: {},
+                      createdAt: at,
+                    },
+                  }
+                : {
+                    planId: id,
+                    nextTargetDate: '2026-11-01',
+                    nextTargetKm: 15000,
+                    occurrence: null,
+                    order: null,
+                  },
+            )
           : fail(404, 'not_found'),
     },
     workshops: {

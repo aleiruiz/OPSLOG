@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 
 interface StorybookEntry {
@@ -10,7 +10,10 @@ interface StorybookEntry {
 // The story list comes from the built Storybook index, so a new story gets a snapshot requirement
 // automatically (a missing baseline fails the check instead of being silently skipped).
 const index = JSON.parse(
-  readFileSync(resolve(__dirname, '../../packages/ui/storybook-static/index.json'), 'utf8'),
+  readFileSync(
+    fileURLToPath(new URL('../../packages/ui/storybook-static/index.json', import.meta.url)),
+    'utf8',
+  ),
 ) as { entries: Record<string, StorybookEntry> };
 const stories = Object.values(index.entries)
   .filter((entry) => entry.type === 'story')

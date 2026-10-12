@@ -52,6 +52,8 @@
     "../apps/web/**/*.test.ts",
     "../apps/web/**/*.test.tsx",
     "../apps/web/app/test/**",
-    "../apps/web/features/**/testing.tsx"
+    "../apps/web/features/**/testing.tsx",
+    "./real-api/**",
+    "./maintenance-real.spec.ts"
   ]
 }

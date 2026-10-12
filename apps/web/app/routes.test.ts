@@ -36,7 +36,7 @@ describe('route matching', () => {
     expect(resolveRoute('/flota/vehiculos/a/b/c')).toBeNull();
     // Only the lists are in the navigation, under "Flota".
     expect(routes.filter((route) => route.nav?.group === 'Flota').map((route) => route.id)).toEqual(
-      ['vehicles', 'assignments', 'documents', 'policies', 'alerts', 'imports'],
+      ['vehicles', 'assignments', 'documents', 'policies', 'alerts', 'maintenance', 'imports'],
     );
   });
 

@@ -64,7 +64,7 @@ export function MaintenanceArea({
     mechanicIds: mechanics.filter((m) => m.active && m.memberId === userId).map((m) => m.id),
   };
   return (
-    <Box component="main" aria-label="Mantenimiento">
+    <Box component="section" aria-label="Mantenimiento">
       <Tabs
         value={view}
         onChange={(_event, next: MaintenanceView) => {
@@ -108,6 +108,7 @@ export function MaintenanceArea({
           viewer={viewer}
           workshops={workshops}
           mechanics={mechanics}
+          onOpenOrder={setOrderId}
           onExpired={onExpired}
         />
       ) : (

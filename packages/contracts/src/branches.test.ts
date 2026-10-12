@@ -7,7 +7,7 @@ import {
   validateIdempotencyClaim,
   validateOutboxRecord,
   validatePageQuery,
-} from './index';
+} from './index.js';
 
 const uuid = '123e4567-e89b-12d3-a456-426614174000';
 const notObject = [{ path: '', code: 'invalid_type', message: 'Expected object' }];

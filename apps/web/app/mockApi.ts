@@ -9,6 +9,7 @@ import { demoInvitations, people, systemRoles } from './mockApiFixtures';
 import { createModulePorts } from './mockApiModulePorts';
 import type { Guarded, MockApi, MockApiOptions, MockOperation } from './mockApiTypes';
 import { createMockAlertsStore, type MockAlertsStore } from './mockAlerts';
+import { createMockMaintenancePorts } from './mockMaintenance';
 import { createMockAreaStore, type MockAreaStore } from './mockAreas';
 import { createMockDocumentStore, type MockDocumentStore } from './mockDocuments';
 import { createMockInsuranceStore, type MockInsuranceStore } from './mockInsurance';
@@ -290,6 +291,7 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     ...createAccessPorts(guarded, users, roles, invitations, roleName),
     ...createModulePorts(guarded, fleet, orgTree, paperwork, cover, staff, warnings),
     ...createBulkPorts(guarded, bulkStores),
+    maintenance: createMockMaintenancePorts({ userId: () => currentUser()?.id ?? null, can }),
     drafts: {
       load: (scope) => guarded('loadDraft', null, () => ok(drafts.get(draftKey(scope)) ?? null)),
       save: (scope, values) =>
