@@ -100,3 +100,30 @@ export class CreateMaintenanceWorkOrderFiles2026101300020 implements MigrationIn
     await queryRunner.dropTable(T.files);
   }
 }
+
+export const WORK_ORDER_IDEMPOTENCY_MIGRATION_VERSION = '2026101400010';
+
+/**
+ * Idempotency-Key registry of the work order commands (G3 H2, SPECS:195). The row is written in the
+ * transaction of the mutation it protects, so a key exists exactly when its command was applied. The
+ * stored response is the order as the caller received it (costs are filtered per caller on replay).
+ * The runtime account inserts, reads and deletes expired keys of the same tuple; it never updates.
+ */
+export class CreateMaintenanceWorkOrderIdempotency2026101400010 implements MigrationInterface {
+  public name = 'CreateMaintenanceWorkOrderIdempotency2026101400010';
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`CREATE TABLE \`${T.idempotency}\` (
+        ${id('company_id')}, ${actor('actor_id')}, command VARCHAR(32) COLLATE utf8mb4_0900_bin NOT NULL,
+        idempotency_key VARCHAR(128) COLLATE utf8mb4_0900_bin NOT NULL, ${id('order_id')},
+        payload_hash CHAR(64) COLLATE utf8mb4_0900_bin NOT NULL, status VARCHAR(16) COLLATE utf8mb4_0900_bin NOT NULL,
+        response JSON NOT NULL, created_at DATETIME(6) NOT NULL, expires_at DATETIME(6) NOT NULL,
+        PRIMARY KEY (company_id,actor_id,command,idempotency_key),
+        KEY ix_work_order_idempotency_expiry (company_id,expires_at), ${owner('work_order_idempotency')},
+        CONSTRAINT ck_work_order_idempotency_status CHECK (status = 'completed'),
+        CONSTRAINT ck_work_order_idempotency_key CHECK (CHAR_LENGTH(idempotency_key) BETWEEN 8 AND 128)
+      ) ${TABLE}`);
+  }
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.dropTable(T.idempotency);
+  }
+}

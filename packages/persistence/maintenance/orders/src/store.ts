@@ -1,11 +1,13 @@
 import 'reflect-metadata';
 import { createHash } from 'node:crypto';
-import { In, type DataSource, type EntityManager } from 'typeorm';
+import { In, LessThanOrEqual, type DataSource, type EntityManager } from 'typeorm';
 import { appendLocalAuditAndDelivery, MySqlTenantOutboxStore } from '../../../audit/src/index.js';
 import {
   validateWorkOrderEvent,
+  type IdempotencyRecord,
   type WorkOrder,
   type WorkOrderAttachment,
+  type WorkOrderCommand,
   type WorkOrderMutation,
   type WorkOrderStore,
   type WorkOrderTransition,
@@ -14,6 +16,7 @@ import { WORK_ORDER_RUNTIME_ACCOUNT } from './data-source.js';
 import {
   WorkOrderCostSchema,
   WorkOrderFileSchema,
+  WorkOrderIdempotencySchema,
   WorkOrderPartSchema,
   WorkOrderSchema,
   WorkOrderTaskSchema,
@@ -23,6 +26,8 @@ import {
   childRows,
   fileFrom,
   fileRow,
+  idempotencyFrom,
+  idempotencyRow,
   orderFrom,
   orderRow,
   transitionFrom,
@@ -120,6 +125,19 @@ export class TypeOrmWorkOrderStore implements WorkOrderStore {
           correlationId: `${order.id}.v${order.version}`,
           data: { attempts: 1 },
         });
+        if (mutation.idempotency) {
+          const idempotency = manager.getRepository(WorkOrderIdempotencySchema);
+          const { actorId, command, key, createdAt } = mutation.idempotency;
+          // An expired key of the same tuple is a new command; a live one trips the primary key.
+          await idempotency.delete({
+            tenantId: order.tenantId,
+            actorId,
+            command,
+            key,
+            expiresAt: LessThanOrEqual(new Date(createdAt)),
+          });
+          await idempotency.insert(idempotencyRow(order.tenantId, mutation.idempotency, order));
+        }
         if (events.length)
           await this.outbox.transaction(manager, (tx) =>
             events.forEach((event, index) => {
@@ -201,6 +219,18 @@ export class TypeOrmWorkOrderStore implements WorkOrderStore {
       .getRepository(WorkOrderTransitionSchema)
       .find({ where: { tenantId, orderId: id }, order: { sequence: 'ASC' } });
     return rows.map(transitionFrom);
+  }
+
+  public async idempotency(
+    tenantId: string,
+    actorId: string,
+    command: WorkOrderCommand,
+    key: string,
+  ): Promise<IdempotencyRecord | null> {
+    const row = await this.dataSource
+      .getRepository(WorkOrderIdempotencySchema)
+      .findOneBy({ tenantId, actorId, command, key });
+    return row ? idempotencyFrom(row) : null;
   }
 
   public async attachments(

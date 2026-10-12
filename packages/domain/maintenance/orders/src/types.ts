@@ -1,3 +1,5 @@
+import type { IdempotencyClaim, IdempotencyRecord } from './idempotency.js';
+
 /** Work order states of SPECS §6.1. Ids are English snake_case; Spanish labels belong to the web layer. */
 export const WORK_ORDER_STATUSES = [
   'scheduled',
@@ -153,10 +155,12 @@ export interface WorkOrderMutation {
   readonly events: readonly WorkOrderEvent[];
   /** A file link added or removed in the same transaction (the order version still moves on). */
   readonly file?: WorkOrderFileChange;
+  /** Idempotency key of the command, recorded with `order` as its response in the same transaction. */
+  readonly idempotency?: IdempotencyClaim;
 }
 
 export interface WorkOrderStore {
-  /** Applies the mutation atomically; returns false on a stale version (nothing written). */
+  /** Applies the mutation atomically; returns false on a stale version or a taken key (nothing written). */
   apply(mutation: WorkOrderMutation): Promise<boolean>;
   get(tenantId: string, id: string): Promise<WorkOrder | null>;
   list(
@@ -164,6 +168,13 @@ export interface WorkOrderStore {
     filter?: { readonly mechanicIds?: readonly string[] },
   ): Promise<readonly WorkOrder[]>;
   history(tenantId: string, id: string): Promise<readonly WorkOrderTransition[]>;
+  /** The stored key of the (tenant, actor, command, key), expired or not; null when unknown. */
+  idempotency(
+    tenantId: string,
+    actorId: string,
+    command: WorkOrderCommand,
+    key: string,
+  ): Promise<IdempotencyRecord | null>;
   /** Files linked to the order, oldest first. */
   attachments(tenantId: string, orderId: string): Promise<readonly WorkOrderAttachment[]>;
   /** Open orders of the vehicle that hold it in a workshop (eligibility blocks of this module). */

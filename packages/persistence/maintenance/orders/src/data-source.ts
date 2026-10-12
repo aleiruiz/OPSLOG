@@ -4,6 +4,7 @@ import { AUDIT_ENTITIES } from '../../../audit/src/index.js';
 import { WORK_ORDER_ENTITIES } from './entities.js';
 import {
   CreateMaintenanceWorkOrderFiles2026101300020,
+  CreateMaintenanceWorkOrderIdempotency2026101400010,
   CreateMaintenanceWorkOrders2026101200030,
   WORK_ORDER_MIGRATIONS_TABLE,
 } from './migrations.js';
@@ -26,6 +27,7 @@ const common = {
   migrations: [
     CreateMaintenanceWorkOrders2026101200030,
     CreateMaintenanceWorkOrderFiles2026101300020,
+    CreateMaintenanceWorkOrderIdempotency2026101400010,
   ],
   migrationsTableName: WORK_ORDER_MIGRATIONS_TABLE,
   synchronize: false,

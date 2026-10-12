@@ -198,6 +198,40 @@ describe('work order detail', () => {
     expect(await screen.findByText('Falta factura')).toBeInTheDocument();
   });
 
+  it('retries a close whose response was lost with the same key, and takes a new key per submit', async () => {
+    const fake = createFakeMaintenancePorts({
+      viewCosts: true,
+      orders: [
+        baseOrder({
+          status: 'completed',
+          version: 5,
+          tasks: [{ id: 't1', description: 'Servicio' }],
+        }),
+      ],
+    });
+    fake.state.lostResponses = 1;
+    view(ADMIN, fake);
+    await screen.findByLabelText('Estado: Terminada');
+    press('Cerrar orden');
+    fireEvent.mouseDown(screen.getByLabelText('Estado del vehículo al cerrar'));
+    fireEvent.click(await screen.findByRole('option', { name: 'Activo' }));
+    fireEvent.click(
+      within(screen.getByRole('form', { name: 'Cerrar orden' })).getByRole('button', {
+        name: 'Cerrar orden',
+      }),
+    );
+    await screen.findByLabelText('Estado: Cerrada');
+    expect(fake.state.keys).toHaveLength(2);
+    expect(fake.state.keys[0]).toBe(fake.state.keys[1]);
+    expect(fake.state.calls).toEqual(['transition:close']);
+    press('Reabrir orden');
+    fill(/Motivo de la reapertura/, 'Falta factura');
+    press('Confirmar');
+    await screen.findByLabelText('Estado: En proceso');
+    expect(fake.state.keys).toHaveLength(3);
+    expect(fake.state.keys[2]).not.toBe(fake.state.keys[0]);
+  });
+
   it('explains a version conflict, keeps the form and reloads on request', async () => {
     const fake = createFakeMaintenancePorts();
     view(EDITOR, fake);

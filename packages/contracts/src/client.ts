@@ -2,6 +2,7 @@ import {
   BFF_ERRORS,
   BFF_ROUTES,
   CSRF_HEADER,
+  IDEMPOTENCY_KEY_HEADER,
   bffPath,
   isBffErrorBody,
   type BffCallArgs,
@@ -152,6 +153,8 @@ export function createBffClient(options: BffClientOptions = {}): BffClient {
     );
     const headers: Record<string, string> = { accept: 'application/json' };
     if (csrf !== null) headers[CSRF_HEADER] = csrf;
+    const idempotencyKey = input['idempotencyKey'];
+    if (typeof idempotencyKey === 'string') headers[IDEMPOTENCY_KEY_HEADER] = idempotencyKey;
     const hasBody = input['body'] !== undefined;
     if (hasBody) headers['content-type'] = 'application/json';
     let response;

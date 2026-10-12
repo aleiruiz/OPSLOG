@@ -1,5 +1,6 @@
 export * from './errors.js';
 export * from './types.js';
+export * from './idempotency.js';
 export * from './rules.js';
 export * from './workflow.js';
 export * from './work.js';
@@ -7,5 +8,6 @@ export * from './events.js';
 export * from './views.js';
 export * from './base.js';
 export * from './files.js';
+export * from './execute.js';
 export * from './service.js';
 export * from './store.js';

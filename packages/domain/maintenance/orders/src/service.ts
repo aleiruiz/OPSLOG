@@ -11,7 +11,8 @@ import {
   text,
 } from './rules.js';
 import { parseCosts, parseWork } from './work.js';
-import { WorkOrderFilesBase } from './files.js';
+import { type IdempotencyClaim } from './idempotency.js';
+import { IdempotentCommands } from './execute.js';
 import {
   PREVENTIVE_ORDER_ADOPTED_EVENT,
   PREVENTIVE_ORDER_CANCELLED_EVENT,
@@ -25,7 +26,7 @@ import { missing, requireCommand, type WorkOrderActor } from './workflow.js';
 export type { WorkOrderServiceOptions } from './base.js';
 
 /** Workflow of SPECS §6.1 for preventive (MNT-PLANS) and corrective orders. */
-export class WorkOrderService extends WorkOrderFilesBase {
+export class WorkOrderService extends IdempotentCommands {
   /** Plans-side lifecycle port: ids and the order version the transition will have (never free text). */
   private planEvent(type: string, order: WorkOrder, version: number): readonly WorkOrderEvent[] {
     return order.kind === 'preventive' && order.planId && order.occurrenceId
@@ -103,6 +104,7 @@ export class WorkOrderService extends WorkOrderFilesBase {
     actor: WorkOrderActor,
     id: string,
     input: unknown,
+    claim?: IdempotencyClaim,
   ): Promise<WorkOrder> {
     const data = record(input, [
       'version',
@@ -145,6 +147,8 @@ export class WorkOrderService extends WorkOrderFilesBase {
       'assign',
       { responsibleId, workshopId, mechanicId, scheduledDate },
       null,
+      [],
+      claim,
     );
   }
 
@@ -153,6 +157,7 @@ export class WorkOrderService extends WorkOrderFilesBase {
     actor: WorkOrderActor,
     id: string,
     input: unknown,
+    claim?: IdempotencyClaim,
   ): Promise<WorkOrder> {
     const data = record(input, ['version', 'requiresWorkshop']);
     const order = await this.prepare(tenantId, actor, id, 'start', data['version']);
@@ -165,6 +170,8 @@ export class WorkOrderService extends WorkOrderFilesBase {
       'start',
       { requiresWorkshop, startedAt: this.now().toISOString() },
       null,
+      [],
+      claim,
     );
   }
 
@@ -173,6 +180,7 @@ export class WorkOrderService extends WorkOrderFilesBase {
     actor: WorkOrderActor,
     id: string,
     input: unknown,
+    claim?: IdempotencyClaim,
   ): Promise<WorkOrder> {
     const data = record(input, ['version', 'actualDate', 'actualKm']);
     const order = await this.prepare(tenantId, actor, id, 'complete', data['version']);
@@ -203,6 +211,8 @@ export class WorkOrderService extends WorkOrderFilesBase {
       'complete',
       { actualDate, actualKm, completedAt: this.now().toISOString() },
       null,
+      [],
+      claim,
     );
   }
 
@@ -211,6 +221,7 @@ export class WorkOrderService extends WorkOrderFilesBase {
     actor: WorkOrderActor,
     id: string,
     input: unknown,
+    claim?: IdempotencyClaim,
   ): Promise<WorkOrder> {
     const data = record(input, ['version']);
     const order = await this.prepare(tenantId, actor, id, 'approve_close', data['version']);
@@ -218,7 +229,7 @@ export class WorkOrderService extends WorkOrderFilesBase {
       throw new WorkOrderError('invalid_transition');
     if (order.closeApproval) throw new WorkOrderError('duplicate');
     const closeApproval = { approvedBy: actor.id, approvedAt: this.now().toISOString() };
-    return this.transition(order, actor, 'approve_close', { closeApproval }, null);
+    return this.transition(order, actor, 'approve_close', { closeApproval }, null, [], claim);
   }
 
   public async close(
@@ -226,6 +237,7 @@ export class WorkOrderService extends WorkOrderFilesBase {
     actor: WorkOrderActor,
     id: string,
     input: unknown,
+    claim?: IdempotencyClaim,
   ): Promise<WorkOrder> {
     const data = record(input, ['version', 'vehicleStatus', 'comment']);
     const order = await this.prepare(tenantId, actor, id, 'close', data['version']);
@@ -272,6 +284,7 @@ export class WorkOrderService extends WorkOrderFilesBase {
       { closedAt, closedBy: actor.id, vehicleStatusDecision: vehicleStatus },
       comment,
       extra,
+      claim,
     );
   }
 
@@ -280,6 +293,7 @@ export class WorkOrderService extends WorkOrderFilesBase {
     actor: WorkOrderActor,
     id: string,
     input: unknown,
+    claim?: IdempotencyClaim,
   ): Promise<WorkOrder> {
     const data = record(input, ['version', 'reason']);
     const order = await this.prepare(tenantId, actor, id, 'cancel', data['version']);
@@ -292,6 +306,7 @@ export class WorkOrderService extends WorkOrderFilesBase {
       { cancelReason: reason },
       reason,
       this.planEvent(PREVENTIVE_ORDER_CANCELLED_EVENT, order, order.version + 1),
+      claim,
     );
   }
 
@@ -300,6 +315,7 @@ export class WorkOrderService extends WorkOrderFilesBase {
     actor: WorkOrderActor,
     id: string,
     input: unknown,
+    claim?: IdempotencyClaim,
   ): Promise<WorkOrder> {
     const data = record(input, ['version', 'reason']);
     const order = await this.prepare(tenantId, actor, id, 'reopen', data['version']);
@@ -320,6 +336,7 @@ export class WorkOrderService extends WorkOrderFilesBase {
       cleared,
       reason,
       this.planEvent(PREVENTIVE_ORDER_REOPENED_EVENT, order, order.version + 1),
+      claim,
     );
   }
 
