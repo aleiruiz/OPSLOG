@@ -6,6 +6,7 @@ export const WORK_ORDER_TABLES = {
   parts: 'opslog_maintenance_work_order_parts',
   costs: 'opslog_maintenance_work_order_costs',
   transitions: 'opslog_maintenance_work_order_transitions',
+  files: 'opslog_maintenance_work_order_files',
 } as const;
 
 const bin = 'utf8mb4_0900_bin';
@@ -87,6 +88,18 @@ export class WorkOrderCostEntity {
   category!: string;
   amountMinor!: string;
   currency!: string;
+}
+export class WorkOrderFileEntity {
+  tenantId!: string;
+  orderId!: string;
+  id!: string;
+  fileId!: string;
+  kind!: string;
+  displayName!: string;
+  contentType!: string;
+  sizeBytes!: string | number;
+  attachedBy!: string;
+  attachedAt!: Date;
 }
 export class WorkOrderTransitionEntity {
   tenantId!: string;
@@ -199,10 +212,28 @@ export const WorkOrderTransitionSchema = new EntitySchema<WorkOrderTransitionEnt
   },
 });
 
+export const WorkOrderFileSchema = new EntitySchema<WorkOrderFileEntity>({
+  name: 'WorkOrderFileEntity',
+  target: WorkOrderFileEntity,
+  tableName: WORK_ORDER_TABLES.files,
+  columns: {
+    ...child,
+    id: { ...text('id', 64), primary: true },
+    fileId: text('file_id', 64),
+    kind: text('kind', 16),
+    displayName: text('display_name', 120),
+    contentType: text('content_type', 100),
+    sizeBytes: { name: 'size_bytes', type: 'bigint', unsigned: true },
+    attachedBy: text('attached_by', 72),
+    attachedAt: instant('attached_at'),
+  },
+});
+
 export const WORK_ORDER_ENTITIES = [
   WorkOrderSchema,
   WorkOrderTaskSchema,
   WorkOrderPartSchema,
   WorkOrderCostSchema,
   WorkOrderTransitionSchema,
+  WorkOrderFileSchema,
 ] as const;

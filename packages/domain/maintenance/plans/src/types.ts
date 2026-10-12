@@ -106,6 +106,8 @@ export interface PlanScanStore {
     planId: string,
     now: Date,
     odometer: OdometerReading,
+    /** IANA zone of the tenant for the calendar-day comparisons; UTC when omitted. */
+    timeZone?: string,
   ): Promise<readonly PlanEvaluation[]>;
   closePreventive(event: PreventiveOrderClosedEvent): Promise<void>;
   /** Invalidates the closure of a reopened order and restores the pre-closure plan baseline. */

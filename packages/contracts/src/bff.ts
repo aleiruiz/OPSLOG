@@ -196,6 +196,17 @@ export type {
   BffWorkOrderTransition,
   BffWorkOrderTransitionInput,
   BffWorkOrderWorkInput,
+  BffWorkOrderFile,
+  BffWorkOrderFileCommand,
+  BffWorkOrderFileContent,
+  BffWorkOrderFileKind,
+  BffWorkOrderFileStatus,
+  BffWorkOrderFileUpload,
+} from './bff/work-orders.js';
+export {
+  BFF_WORK_ORDER_FILE_KINDS,
+  BFF_WORK_ORDER_FILE_MAX_BYTES,
+  BFF_WORK_ORDER_FILE_MAX_BODY_BYTES,
 } from './bff/work-orders.js';
 
 /** Request and response types of every route. Keys are route ids. */

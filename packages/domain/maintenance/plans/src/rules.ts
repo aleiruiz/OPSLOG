@@ -106,6 +106,26 @@ export function makePlan(
   };
 }
 
+const formatters = new Map<string, Intl.DateTimeFormat>();
+/**
+ * Calendar day `YYYY-MM-DD` of an instant in an IANA zone (the tenant's, SPECS:184). UTC when no
+ * zone is given, which keeps the behaviour of a tenant that never configured one.
+ */
+export function calendarDay(instant: Date, timeZone = 'UTC'): string {
+  let format = formatters.get(timeZone);
+  if (!format) {
+    format = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    formatters.set(timeZone, format);
+  }
+  const parts = Object.fromEntries(format.formatToParts(instant).map((p) => [p.type, p.value]));
+  return `${parts['year']}-${parts['month']}-${parts['day']}`;
+}
+
 export function addCalendarDays(isoDate: string, days: number): string {
   const value = new Date(`${isoDate}T00:00:00.000Z`);
   value.setUTCDate(value.getUTCDate() + days);

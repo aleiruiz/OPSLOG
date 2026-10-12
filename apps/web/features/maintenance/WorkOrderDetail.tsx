@@ -21,6 +21,7 @@ import {
   formatDate,
   formatKm,
   formatMoney,
+  historyTitle,
 } from './labels';
 import type { MaintenancePorts, Result } from './ports';
 import { errorKind, useResult } from './useResult';
@@ -313,10 +314,7 @@ export function WorkOrderDetail({
               <Timeline
                 items={history.state.data.map((entry) => ({
                   id: String(entry.sequence),
-                  title:
-                    entry.command === 'create'
-                      ? 'Orden registrada'
-                      : `${COMMAND_LABELS[entry.command]} → ${STATUS_LABELS[entry.to]}`,
+                  title: historyTitle(entry),
                   date: entry.occurredAt.slice(0, 16).replace('T', ' '),
                   ...(entry.comment ? { description: entry.comment } : {}),
                 }))}

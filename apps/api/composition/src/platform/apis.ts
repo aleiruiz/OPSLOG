@@ -48,7 +48,11 @@ import { VehiclesApi } from '../vehicles.js';
 import type { PlatformKernel } from './kernel.js';
 import type { PlatformAdapters } from './types.js';
 import { buildMaintenanceApis } from './maintenance-apis.js';
-import { buildWorkOrderApi, withMaintenanceDefaults } from './work-order-apis.js';
+import {
+  buildWorkOrderApi,
+  withMaintenanceDefaults,
+  type WorkOrderFileSupport,
+} from './work-order-apis.js';
 import type { WorkOrderApi } from '../../../maintenance/orders/src/index.js';
 import type { MaintenanceApi } from '../../../maintenance/plans/src/index.js';
 import type { MaintenancePlanWorker } from '../../../../../packages/domain/maintenance/plans/src/index.js';
@@ -69,7 +73,11 @@ export interface DomainApis {
 }
 
 /** Wires the domain services and their HTTP-facing APIs over the adapters (in-memory by default). */
-export function buildDomainApis(kernel: PlatformKernel, adapters: PlatformAdapters): DomainApis {
+export function buildDomainApis(
+  kernel: PlatformKernel,
+  adapters: PlatformAdapters,
+  files: WorkOrderFileSupport,
+): DomainApis {
   const vehicleStore = adapters.vehicles ?? new InMemoryVehicleStore();
   const vehicleAuditInTransaction =
     adapters.vehicles !== undefined && !(adapters.vehicles instanceof InMemoryVehicleStore);
@@ -382,7 +390,12 @@ export function buildDomainApis(kernel: PlatformKernel, adapters: PlatformAdapte
     },
   });
   const maintenanceAdapters = withMaintenanceDefaults(adapters);
-  const maintenanceApis = buildMaintenanceApis(kernel, maintenanceAdapters, vehicleService);
+  const maintenanceApis = buildMaintenanceApis(
+    kernel,
+    maintenanceAdapters,
+    vehicleService,
+    settingsService,
+  );
   return {
     vehicles,
     areas,
@@ -394,6 +407,12 @@ export function buildDomainApis(kernel: PlatformKernel, adapters: PlatformAdapte
     companySettings,
     alerts,
     ...maintenanceApis,
-    workOrders: buildWorkOrderApi(kernel, maintenanceAdapters, vehicleService),
+    workOrders: buildWorkOrderApi(
+      kernel,
+      maintenanceAdapters,
+      vehicleService,
+      settingsService,
+      files,
+    ),
   };
 }

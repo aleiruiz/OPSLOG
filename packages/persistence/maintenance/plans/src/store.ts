@@ -219,8 +219,9 @@ export class TypeOrmMaintenancePlanStore implements PlanStore, PlanScanStore, Pl
     planId: string,
     now: Date,
     odometer: OdometerReading,
+    timeZone?: string,
   ): Promise<readonly PlanEvaluation[]> {
-    return this.workerStore.scan(tenantId, planId, now, odometer);
+    return this.workerStore.scan(tenantId, planId, now, odometer, timeZone);
   }
   public closePreventive(event: PreventiveOrderClosedEvent): Promise<void> {
     return this.workerStore.closePreventive(event);
