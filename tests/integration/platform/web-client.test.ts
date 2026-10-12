@@ -569,8 +569,41 @@ describe('typed client against the real BFF', () => {
       }),
     ).toMatchObject({ ok: true, value: { version: 3 } });
     expect(
+      await client.call('workOrders.files.list', { params: { orderId: order.value.id } }),
+    ).toEqual({ ok: true, value: [] });
+    const attached = await client.call('workOrders.files.upload', {
+      params: { orderId: order.value.id },
+      body: {
+        version: 3,
+        kind: 'evidence',
+        name: 'frenos.pdf',
+        contentType: 'application/pdf',
+        contentBase64: Buffer.from('%PDF-1.4 evidencia').toString('base64'),
+      },
+    });
+    expect(attached).toMatchObject({ ok: true, value: { version: 4 } });
+    const linked = await client.call('workOrders.files.list', {
+      params: { orderId: order.value.id },
+    });
+    if (!linked.ok || !linked.value[0]) throw new Error('evidence link missing');
+    const fileId = linked.value[0].id;
+    expect(
+      await client.call('workOrders.files.content', {
+        params: { orderId: order.value.id, fileId },
+      }),
+    ).toMatchObject({ ok: false });
+    expect(
+      await client.call('workOrders.files.detach', {
+        params: { orderId: order.value.id, fileId },
+        body: { version: 4 },
+      }),
+    ).toMatchObject({ ok: true, value: { version: 5 } });
+    expect(
       await client.call('workOrders.history', { params: { orderId: order.value.id } }),
-    ).toMatchObject({ ok: true, value: [expect.objectContaining({ command: 'create' })] });
+    ).toMatchObject({
+      ok: true,
+      value: expect.arrayContaining([expect.objectContaining({ command: 'create' })]),
+    });
     expect(
       await client.call('workOrders.adopt', {
         body: { planId: plan.value.id, scheduledOrderId: 'not-generated' },
@@ -811,6 +844,9 @@ describe('typed client against the real BFF', () => {
       value: {
         expiryWindowDays: 30,
         recipientRoles: ['admin', 'editor'],
+        maintenanceEvidence: 'none',
+        closeCostThreshold: null,
+        timeZone: 'UTC',
         version: 0,
         updatedBy: null,
         updatedAt: null,

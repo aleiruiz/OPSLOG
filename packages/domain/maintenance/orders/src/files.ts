@@ -79,7 +79,9 @@ export abstract class WorkOrderFilesBase extends WorkOrderServiceBase {
     const order = await this.get(tenantId, actor, id);
     const links = await this.store.attachments(tenantId, order.id);
     const views: WorkOrderAttachmentView[] = [];
-    for (const { tenantId: _tenant, ...link } of links) {
+    for (const stored of links) {
+      const { tenantId: _tenant, ...link } = stored;
+      void _tenant;
       // Invoices are cost data: without `view_costs` they are not even listed.
       if (link.kind === 'invoice' && !can(actor, 'view_costs')) continue;
       const file = await this.refs.fileRecord(tenantId, link.fileId);

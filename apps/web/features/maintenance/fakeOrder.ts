@@ -54,7 +54,16 @@ export function missingFor(
   order: BffWorkOrder,
   input: BffWorkOrderTransitionInput,
   approvalRequired: boolean,
+  files: {
+    required: 'none' | 'evidence' | 'evidence_invoice';
+    evidence: boolean;
+    invoice: boolean;
+  } = { required: 'none', evidence: false, invoice: false },
 ) {
+  const proof = {
+    ...(files.required !== 'none' ? { evidence: files.evidence } : {}),
+    ...(files.required === 'evidence_invoice' ? { invoice: files.invoice } : {}),
+  };
   const checks: Record<string, Record<string, boolean>> = {
     assign: {
       responsibleId: Boolean(input.responsibleId),
@@ -65,11 +74,13 @@ export function missingFor(
       actualDate: Boolean(input.actualDate),
       actualKm: input.actualKm !== undefined,
       tasks: order.tasks.length > 0,
+      ...proof,
     },
     close: {
       tasks: order.tasks.length > 0,
       vehicleStatus: Boolean(input.vehicleStatus),
       closeApproval: !approvalRequired || order.closeApproval !== null,
+      ...proof,
     },
     cancel: { reason: Boolean(input.reason) },
     reopen: { reason: Boolean(input.reason) },

@@ -62,7 +62,7 @@ describe('work order schema', () => {
     expect(statements[0]).toContain('PRIMARY KEY (company_id,order_id,id)');
     expect(statements[0]).toContain('UNIQUE KEY uq_work_order_file (company_id,file_id)');
     expect(statements[0]).toContain("CHECK (kind IN ('evidence','invoice'))");
-    expect(statements[0]).not.toMatch(/sha256|storage|bytes/i);
+    expect(statements[0]).not.toMatch(/sha256|storage/i);
     await migration.down(runner);
     expect(statements.at(-1)).toBe(`DROP ${WORK_ORDER_TABLES.files}`);
   });

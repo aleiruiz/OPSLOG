@@ -11,6 +11,7 @@ import type {
   BffWorkOrderCommand,
 } from '@opslog/contracts';
 import { CommandForm } from './CommandForm';
+import { EvidencePanel } from './EvidencePanel';
 import {
   COMMAND_LABELS,
   COST_CATEGORY_LABELS,
@@ -264,6 +265,17 @@ export function WorkOrderDetail({
               )}
             </Box>
           )}
+          <EvidencePanel
+            ports={ports}
+            order={order}
+            viewer={viewer}
+            onOrder={(next) => {
+              setOrder(next);
+              setMissing([]);
+              history.reload();
+            }}
+            onExpired={onExpired}
+          />
           {editing === 'work' && (
             <WorkEditor
               order={order}

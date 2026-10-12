@@ -58,6 +58,14 @@ export const canRecordCosts = (order: BffWorkOrder, viewer: MaintenanceViewer): 
   has(viewer, 'edit') &&
   has(viewer, 'view_costs');
 
+/** Evidence follows the server rule: fleet editors, or the assigned mechanic while in progress (D9). */
+export const canAttachEvidence = (order: BffWorkOrder, viewer: MaintenanceViewer): boolean =>
+  ['scheduled', 'assigned', 'in_progress', 'completed'].includes(order.status) &&
+  (has(viewer, 'edit') || (isAssignedTo(viewer, order) && order.status === 'in_progress'));
+/** Invoices are cost data: they also need `view_costs`. */
+export const canAttachInvoice = (order: BffWorkOrder, viewer: MaintenanceViewer): boolean =>
+  canAttachEvidence(order, viewer) && has(viewer, 'view_costs');
+
 const NEXT_STEP: Readonly<Record<BffWorkOrder['status'], string>> = {
   scheduled: 'Asigna responsable, taller o mecánico y fecha programada.',
   assigned: 'Inicia el trabajo cuando el vehículo llegue al taller.',

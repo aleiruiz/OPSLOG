@@ -295,6 +295,9 @@ describe('company settings through the platform', () => {
     expect(ok(await platform.companySettings.get(admin.token, corr()))).toEqual({
       expiryWindowDays: 30,
       recipientRoles: ['admin', 'editor'],
+      maintenanceEvidence: 'none',
+      closeCostThreshold: null,
+      timeZone: 'UTC',
       version: 0,
       updatedBy: null,
       updatedAt: null,
@@ -303,12 +306,24 @@ describe('company settings through the platform', () => {
     expect(saved).toEqual({
       expiryWindowDays: 7,
       recipientRoles: ['admin', 'editor'],
+      maintenanceEvidence: 'none',
+      closeCostThreshold: null,
+      timeZone: 'UTC',
       version: 1,
       updatedBy: `user-${admin.identityId}`,
       updatedAt: '2026-10-06T12:00:00.000Z',
     });
     expect(Object.keys(saved).sort()).toEqual(
-      ['expiryWindowDays', 'recipientRoles', 'version', 'updatedBy', 'updatedAt'].sort(),
+      [
+        'expiryWindowDays',
+        'recipientRoles',
+        'maintenanceEvidence',
+        'closeCostThreshold',
+        'timeZone',
+        'version',
+        'updatedBy',
+        'updatedAt',
+      ].sort(),
     );
     expect(ok(await platform.companySettings.get(f.roles.viewer.token, corr()))).toEqual(saved);
     ok(
