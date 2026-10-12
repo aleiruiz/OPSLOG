@@ -12,6 +12,7 @@ import type {
   BffWorkOrderCommand,
   BffWorkOrderTransitionInput,
 } from '@opslog/contracts';
+import { OptionPicker, useDirectory } from './directory';
 import { COMMAND_LABELS, VEHICLE_STATUS_LABELS } from './labels';
 
 type Fields = Omit<BffWorkOrderTransitionInput, 'command' | 'version'>;
@@ -37,7 +38,9 @@ export function CommandForm({
   onSubmit: (fields: Fields) => void;
   onCancel: () => void;
 }) {
+  const directory = useDirectory();
   const [values, setValues] = React.useState<Record<string, string>>({
+    responsibleId: order.responsibleId ?? '',
     workshopId: order.workshopId ?? '',
     mechanicId: order.mechanicId ?? '',
     scheduledDate: order.scheduledDate ?? '',
@@ -63,11 +66,16 @@ export function CommandForm({
   const fields: Record<Exclude<BffWorkOrderCommand, 'cancel' | 'reopen'>, React.ReactNode> = {
     assign: (
       <>
-        <Field
+        <OptionPicker
           id="mnt-cmd-responsible"
-          label="Persona responsable (usuario)"
+          label="Persona responsable"
+          placeholder="Sin responsable"
+          options={directory.members}
           value={value('responsibleId')}
-          onChange={set('responsibleId')}
+          onChange={(next) => setValues({ ...values, responsibleId: next })}
+          {...(directory.membersTruncated
+            ? { description: 'Se muestran las primeras personas de la empresa.' }
+            : {})}
         />
         <Field
           select

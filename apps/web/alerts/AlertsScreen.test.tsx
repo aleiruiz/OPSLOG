@@ -17,7 +17,12 @@ import { makePolicy } from '../insurance/fixtures';
 /** Exact label match: the status badges also carry "Estado: ..." accessible names. */
 const exact = (label: string) => screen.getByLabelText(label);
 const set = (label: string, value: string) => fireEvent.change(exact(label), { target: { value } });
-const rowsOf = () => screen.getAllByRole('row').slice(1);
+/** The expiry table; the maintenance records (a second source) are listed in a table of their own. */
+const expiryTable = /^Alertas \(\d+\)$/;
+const rowsOf = () =>
+  within(screen.getByRole('table', { name: expiryTable }))
+    .getAllByRole('row')
+    .slice(1);
 const list = (options: Parameters<typeof renderApp>[0] = {}) =>
   renderApp({ path: '/flota/alertas', ...options });
 
@@ -41,7 +46,7 @@ describe('alert list', () => {
 
   it('links each alert to its source record and to its vehicle', async () => {
     await list();
-    const table = await screen.findByRole('table');
+    const table = await screen.findByRole('table', { name: expiryTable });
     expect(
       within(table).getAllByRole('link', { name: /^Ver documento de vehículo: / })[0],
     ).toHaveAttribute('href', '/flota/documentos/doc-001');
@@ -60,7 +65,7 @@ describe('alert list', () => {
     const api = createMockApi();
     api.controls.failNext('listVehicles');
     await list({ api });
-    const table = await screen.findByRole('table');
+    const table = await screen.findByRole('table', { name: expiryTable });
     expect(within(table).getAllByText('Vehículo').length).toBeGreaterThan(0);
     expect(screen.queryByLabelText('Vehículo')).toBeNull();
   });
@@ -82,7 +87,7 @@ describe('alert list', () => {
     const api = createMockApi();
     const spy = vi.spyOn(api.alerts, 'list');
     await list({ api });
-    await screen.findByRole('table');
+    await screen.findByRole('table', { name: expiryTable });
     click('Cargar más alertas');
     await waitFor(() => expect(rowsOf()).toHaveLength(34));
     expect(spy).toHaveBeenLastCalledWith({ limit: 25, cursor: 'mock:25' });
@@ -90,6 +95,54 @@ describe('alert list', () => {
     set('Estado', 'expired');
     await screen.findByRole('table', { name: 'Alertas (12)' });
     expect(spy).toHaveBeenLastCalledWith({ limit: 25, severity: 'expired' });
+  });
+
+  it('lists the maintenance alert records as a source of their own, with the odometer age', async () => {
+    const api = createMockApi();
+    const spy = vi.spyOn(api.maintenance.alerts, 'list');
+    await list({ api });
+    const table = await screen.findByRole('table', { name: 'Alertas de mantenimiento (2)' });
+    expect(spy).toHaveBeenCalledWith({ limit: 25 });
+    const rows = within(table).getAllByRole('row').slice(1);
+    // Newest first; the odometer alert carries the age of the reading, the date alert does not.
+    expect(rows[0]).toHaveTextContent('Próximo');
+    expect(rows[0]).toHaveTextContent(/Por kilometraje: 10.400 km/);
+    expect(rows[0]).toHaveTextContent('Lectura del odómetro de hace 2 días');
+    expect(rows[1]).toHaveTextContent('Toca servicio');
+    expect(rows[1]).toHaveTextContent('Por fecha: 05/10/2026');
+    expect(rows[1]).not.toHaveTextContent('odómetro');
+    await waitFor(() => expect(table).toHaveTextContent(/ECO-\d+/));
+    expect(table).not.toHaveTextContent(/veh-001|plan-001|alert-00|odometer|upcoming/);
+    expect(within(exact('Origen')).getByRole('option', { name: 'Mantenimiento' })).toBeTruthy();
+  });
+
+  it('shows only the maintenance records for that origin, and narrows them by vehicle', async () => {
+    const api = createMockApi();
+    const alerts = vi.spyOn(api.alerts, 'list');
+    const maintenance = vi.spyOn(api.maintenance.alerts, 'list');
+    await list({ api });
+    await screen.findByRole('table', { name: expiryTable });
+    set('Origen', 'maintenance');
+    await screen.findByRole('table', { name: 'Alertas de mantenimiento (2)' });
+    expect(screen.queryByRole('table', { name: expiryTable })).toBeNull();
+    expect(alerts).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(within(exact('Vehículo')).getAllByRole('option').length).toBeGreaterThan(20),
+    );
+    set('Vehículo', 'veh-002');
+    await waitFor(() =>
+      expect(maintenance).toHaveBeenLastCalledWith({ limit: 25, vehicleId: 'veh-002' }),
+    );
+    expect(await screen.findByText(/No hay alertas de mantenimiento/)).toBeInTheDocument();
+    // An expiry severity does not apply to maintenance records.
+    set('Vehículo', '');
+    await screen.findByRole('table', { name: 'Alertas de mantenimiento (2)' });
+    set('Estado', 'expired');
+    await waitFor(() => expect(screen.queryByRole('table', { name: /mantenimiento/ })).toBeNull());
+    expect(screen.getByText('Sin resultados')).toBeInTheDocument();
+    set('Origen', '');
+    await screen.findByRole('table', { name: 'Alertas (12)' });
+    expect(screen.queryByRole('table', { name: /mantenimiento/ })).toBeNull();
   });
 
   it('filters by origin, state and vehicle, and clears the filters', async () => {
@@ -125,7 +178,7 @@ describe('alert list', () => {
         policies: [],
       }),
     });
-    await screen.findByRole('table');
+    await screen.findByRole('table', { name: expiryTable });
     set('Estado', 'expired');
     expect(await screen.findByRole('heading', { name: 'Sin resultados' })).toBeInTheDocument();
     const form = screen.getByRole('search', { name: 'Filtros' });
@@ -161,13 +214,13 @@ describe('alert list', () => {
 
   it('links to the settings from the header for every role, and from the navigation only for manage_config', async () => {
     const admin = await list();
-    await screen.findByRole('table');
+    await screen.findByRole('table', { name: expiryTable });
     const links = screen.getAllByRole('link', { name: 'Ajustes de alertas' });
     expect(links).toHaveLength(2);
     for (const link of links) expect(link).toHaveAttribute('href', '/configuracion/alertas');
     admin.unmount();
     await list({ account: 'viewer' });
-    await screen.findByRole('table');
+    await screen.findByRole('table', { name: expiryTable });
     const only = screen.getByRole('link', { name: 'Ajustes de alertas' });
     expect(
       within(screen.getByRole('navigation', { name: 'Principal' })).queryByRole('link', {
@@ -181,14 +234,14 @@ describe('alert list', () => {
 
   it('reports a recoverable error with retry, a 403 as no permission and a 401 as an expired session', async () => {
     const { api } = await list();
-    await screen.findByRole('table');
+    await screen.findByRole('table', { name: expiryTable });
     api.controls.failNext('listAlerts');
     set('Estado', 'expired');
     expect(
       await screen.findByRole('heading', { name: 'No pudimos cargar la información' }),
     ).toBeInTheDocument();
     click('Reintentar');
-    await screen.findByRole('table');
+    await screen.findByRole('table', { name: expiryTable });
     api.controls.failNext('listAlerts', 403);
     set('Estado', 'expiring');
     expect(await screen.findByRole('heading', { name: 'No tienes acceso' })).toBeInTheDocument();
@@ -197,12 +250,12 @@ describe('alert list', () => {
     await screen.findByRole('group', { name: 'Sesión expirada' });
     type('Cuenta de prueba', demoSubjects.admin);
     click('Continuar');
-    await screen.findByRole('table', { name: /Alertas/ });
+    await screen.findByRole('table', { name: expiryTable });
   });
 
   it('reports a failure when loading more, and expires the session on a 401', async () => {
     const { api } = await list();
-    await screen.findByRole('table');
+    await screen.findByRole('table', { name: expiryTable });
     api.controls.failNext('listAlerts');
     click('Cargar más alertas');
     expect(await screen.findByText('No pudimos cargar más alertas.')).toBeInTheDocument();
@@ -216,7 +269,7 @@ describe('alert list', () => {
     const real = api.alerts.list;
     const gate = deferred();
     await list({ api });
-    await screen.findByRole('table');
+    await screen.findByRole('table', { name: expiryTable });
     api.alerts.list = async (query) => {
       if (query?.cursor) await gate.promise;
       return real(query);
@@ -232,7 +285,7 @@ describe('alert list', () => {
 
   it('shows no alert details beyond ids, kinds and dates (no titles, numbers or insurers)', async () => {
     await list();
-    const table = await screen.findByRole('table');
+    const table = await screen.findByRole('table', { name: expiryTable });
     expect(table).not.toHaveTextContent(/POL-2026|TC-2025|Aseguradora Demo|Seguros Demo/);
   });
 });

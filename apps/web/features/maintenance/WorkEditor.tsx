@@ -1,4 +1,5 @@
 import React from 'react';
+import Alert from '@mui/material/Alert';
 import Card from '@mui/material/Card';
 import IconButton from '@mui/material/IconButton';
 import MenuItem from '@mui/material/MenuItem';
@@ -12,8 +13,20 @@ import type {
   BffWorkOrderWorkInput,
 } from '@opslog/contracts';
 import { COST_CATEGORY_LABELS } from './labels';
+import {
+  draftOf,
+  rebaseDraft,
+  taskLines,
+  type DraftPart,
+  type WorkDraft,
+  type WorkSnapshot,
+} from './workMerge';
 
-/** Work facts: tasks (one per line) and parts. Parts are order records, never stock. */
+/**
+ * Work facts: tasks (one per line) and parts. Parts are order records, never stock. When the order
+ * changes under an unsent draft (another person saved first), the draft is rebased onto the new
+ * version: the person's edits stay, concurrent work is kept, and the differences are listed.
+ */
 export function WorkEditor({
   order,
   busy,
@@ -25,23 +38,27 @@ export function WorkEditor({
   onSubmit: (body: BffWorkOrderWorkInput) => void;
   onCancel: () => void;
 }) {
-  const [tasks, setTasks] = React.useState(order.tasks.map((task) => task.description).join('\n'));
-  const [parts, setParts] = React.useState(
-    order.parts.map((part) => ({
-      id: part.id as string | undefined,
-      name: part.name,
-      quantity: part.quantity,
-    })),
-  );
+  const [draft, setDraft] = React.useState<WorkDraft>(() => draftOf(order));
+  const [base, setBase] = React.useState<{ version: number; snapshot: WorkSnapshot }>({
+    version: order.version,
+    snapshot: order,
+  });
+  const [changes, setChanges] = React.useState<readonly string[]>([]);
+  React.useEffect(() => {
+    if (order.version === base.version) return;
+    const rebased = rebaseDraft(base.snapshot, order, draft);
+    setDraft(rebased.draft);
+    setChanges(rebased.changes);
+    setBase({ version: order.version, snapshot: order });
+  }, [order.version]);
+  const { tasks, parts } = draft;
+  const setTasks = (next: string) => setDraft({ ...draft, tasks: next });
+  const setParts = (next: readonly DraftPart[]) => setDraft({ ...draft, parts: next });
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
-    const lines = tasks
-      .split('\n')
-      .map((line) => line.trim())
-      .filter(Boolean);
     onSubmit({
       version: order.version,
-      tasks: lines.map((description) => {
+      tasks: taskLines(tasks).map((description) => {
         const known = order.tasks.find((task) => task.description === description);
         return known ? { id: known.id, description } : { description };
       }),
@@ -57,6 +74,17 @@ export function WorkEditor({
   return (
     <Card component="form" aria-label="Registrar trabajo" onSubmit={submit} sx={{ p: 2 }}>
       <FormSection title="Registrar trabajo" description="Escribe un trabajo realizado por línea.">
+        {changes.length > 0 && (
+          <Alert severity="info" role="status">
+            La orden cambió mientras editabas. Conservamos tu borrador y le sumamos lo nuevo; revisa
+            antes de guardar:
+            <ul>
+              {changes.map((change) => (
+                <li key={change}>{change}</li>
+              ))}
+            </ul>
+          </Alert>
+        )}
         <Field
           id="mnt-work-tasks"
           label="Trabajos realizados"

@@ -4,6 +4,7 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { Button, PageHeader, StatusBadge, UiState } from '@opslog/ui';
 import { COMMAND_LABELS, KIND_LABELS, STATUS_LABELS, STATUS_TONES, formatDate } from './labels';
+import { useDirectory, vehicleLabel } from './directory';
 import type { MaintenancePorts } from './ports';
 import { errorKind, useResult } from './useResult';
 import { availableCommands, isAssignedTo, type MaintenanceViewer } from './workflow';
@@ -25,6 +26,7 @@ export function MyOrdersScreen({
   onOpen: (orderId: string) => void;
   onExpired: () => void;
 }) {
+  const directory = useDirectory();
   const { state, reload } = useResult(() => ports.orders.list(), [ports], onExpired);
   const header = <PageHeader title="Mis órdenes" description="Órdenes asignadas a ti." />;
   if (state.status === 'loading')
@@ -68,7 +70,8 @@ export function MyOrdersScreen({
                     tone={STATUS_TONES[order.status]}
                   />
                   <Typography variant="body2" color="text.secondary">
-                    Vehículo {order.vehicleId} · Programada: {formatDate(order.scheduledDate)}
+                    {vehicleLabel(directory, order.vehicleId)} · Programada:{' '}
+                    {formatDate(order.scheduledDate)}
                   </Typography>
                   <Button variant="contained" onClick={() => onOpen(order.id)} fullWidth>
                     {next ? `Abrir para ${COMMAND_LABELS[next].toLowerCase()}` : 'Abrir orden'}

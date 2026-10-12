@@ -90,6 +90,8 @@ export interface MockControls {
   isSignedIn(): boolean;
   /** Simulates a server-side status change of a user (e.g. suspension) without a UI path. */
   setUserStatus(userId: string, status: UserSummary['status']): void;
+  /** Changes what a role grants on the server (sessions opened afterwards get the new set). */
+  setRolePermissions(roleId: string, permissions: readonly Permission[]): void;
   /** Server-side drafts of the current user, for assertions. */
   storedDrafts(): Readonly<Record<string, DraftValues>>;
   /** Another actor edits a vehicle on the server: its version moves on, so a form that loaded it is stale. */

@@ -73,6 +73,7 @@ function navigationRoute(id: string | null): string | null {
     return 'documents';
   if (id === 'policyNew' || id === 'policyDetail' || id === 'policyEdit' || id === 'policyRenew')
     return 'policies';
+  if (id === 'maintenanceOrder') return 'maintenance';
   return id;
 }
 
@@ -269,6 +270,9 @@ function Routes() {
         break;
       case 'maintenance':
         screen = <MaintenanceScreen />;
+        break;
+      case 'maintenanceOrder':
+        screen = <MaintenanceScreen orderId={match.params.id as string} />;
         break;
       case 'invitation':
         screen = (

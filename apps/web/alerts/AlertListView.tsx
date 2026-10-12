@@ -30,7 +30,8 @@ import {
 } from './labels';
 
 export interface AlertFilters {
-  readonly source: AlertSource | '';
+  /** `maintenance` is the in-app records of maintenance plans, listed apart from the derived expiry alerts. */
+  readonly source: AlertSource | 'maintenance' | '';
   readonly severity: AlertSeverity | '';
   readonly vehicleId: string;
 }
@@ -57,6 +58,11 @@ export interface AlertListViewProps {
   readonly vehicles: VehicleOptions | null;
   readonly filtersActive: boolean;
   readonly loadingMore?: boolean;
+  /** Offers the maintenance source in the filter and renders `children` (its records) after the list. */
+  readonly maintenanceSource?: boolean;
+  /** Shows only `children`: the maintenance source is selected and the expiry list does not apply. */
+  readonly hideList?: boolean;
+  readonly children?: React.ReactNode;
   readonly notice?: { readonly text: string; readonly severity: 'success' | 'error' } | null;
   readonly onFiltersChange: (filters: AlertFilters) => void;
   readonly onClear: () => void;
@@ -75,6 +81,9 @@ export function AlertListView({
   vehicles,
   filtersActive,
   loadingMore = false,
+  maintenanceSource = false,
+  hideList = false,
+  children,
   notice = null,
   onFiltersChange,
   onClear,
@@ -130,7 +139,7 @@ export function AlertListView({
             'source',
             'Origen',
             filters.source,
-            (value) => onFiltersChange({ ...filters, source: value as AlertSource | '' }),
+            (value) => onFiltersChange({ ...filters, source: value as AlertFilters['source'] }),
             <>
               <option value="">Todos los orígenes</option>
               {sourceOrder.map((source) => (
@@ -138,6 +147,7 @@ export function AlertListView({
                   {sourceChoiceLabels[source]}
                 </option>
               ))}
+              {maintenanceSource && <option value="maintenance">Mantenimiento</option>}
             </>,
           )}
           {select(
@@ -171,98 +181,105 @@ export function AlertListView({
             )}
         </FilterBar>
       </NoSubmit>
-      <ResourceView state={state} onRetry={onRetry}>
-        {(page) => {
-          if (page.items.length === 0)
-            return filtersActive ? (
-              <UiState kind="no-results" />
-            ) : (
-              <UiState
-                kind="empty"
-                title="Sin vencimientos pendientes"
-                description={`Ningún documento, seguro ni licencia vence en los próximos ${plural(page.windowDays)} y no hay vencidos.`}
-              />
-            );
-          const rows: Row[] = page.items.map((alert) => ({ ...alert, id: alert.key }));
-          return (
-            <>
-              <ScrollRegion label="Tabla de alertas">
-                <DataTable<Row>
-                  caption={`Alertas (${page.total})`}
-                  columns={[
-                    {
-                      key: 'typeCode',
-                      label: 'Registro',
-                      render: (_, row) => (
-                        <>
-                          <RouterLink
-                            to={alertRecordPath(row)}
-                            label={`Ver ${sourceLabels[row.source].toLowerCase()}: ${alertTitle(row)}`}
-                            sx={linkSx}
-                          >
-                            {alertTitle(row)}
-                          </RouterLink>
-                          <Typography variant="body2" color="text.secondary">
-                            {sourceLabels[row.source]}
-                          </Typography>
-                        </>
-                      ),
-                    },
-                    {
-                      key: 'vehicleId',
-                      label: 'Vehículo o conductor',
-                      render: (_, row) =>
-                        row.vehicleId === null ? (
-                          <Typography variant="body2">Conductor</Typography>
-                        ) : (
-                          <RouterLink
-                            to={`/flota/vehiculos/${encodeURIComponent(row.vehicleId)}`}
-                            label={`Vehículo ${names.get(row.vehicleId) ?? row.vehicleId}`}
-                            sx={linkSx}
-                          >
-                            {names.get(row.vehicleId) ?? 'Vehículo'}
-                          </RouterLink>
-                        ),
-                    },
-                    {
-                      key: 'dueOn',
-                      label: 'Vencimiento',
-                      render: (_, row) => (
-                        <>
-                          {formatDate(row.dueOn)}
-                          <Typography variant="body2" color="text.secondary">
-                            {expiryNote(row.daysToExpiry)}
-                          </Typography>
-                        </>
-                      ),
-                    },
-                    {
-                      key: 'severity',
-                      label: 'Estado',
-                      render: (value) => {
-                        const view = severityPresentation[value as AlertSeverity];
-                        return <StatusBadge label={view.label} tone={view.tone} />;
-                      },
-                    },
-                  ]}
-                  rows={rows}
-                />
-              </ScrollRegion>
-              {page.nextCursor && (
-                <Box>
-                  <Button
-                    variant="outlined"
-                    loading={loadingMore}
-                    onClick={() => onLoadMore(page.nextCursor as string)}
-                  >
-                    Cargar más alertas
-                  </Button>
-                </Box>
-              )}
-            </>
-          );
-        }}
-      </ResourceView>
+      {hideList ? (
+        children
+      ) : (
+        <>
+          <ResourceView state={state} onRetry={onRetry}>
+            {(page) => {
+              if (page.items.length === 0)
+                return filtersActive ? (
+                  <UiState kind="no-results" />
+                ) : (
+                  <UiState
+                    kind="empty"
+                    title="Sin vencimientos pendientes"
+                    description={`Ningún documento, seguro ni licencia vence en los próximos ${plural(page.windowDays)} y no hay vencidos.`}
+                  />
+                );
+              const rows: Row[] = page.items.map((alert) => ({ ...alert, id: alert.key }));
+              return (
+                <>
+                  <ScrollRegion label="Tabla de alertas">
+                    <DataTable<Row>
+                      caption={`Alertas (${page.total})`}
+                      columns={[
+                        {
+                          key: 'typeCode',
+                          label: 'Registro',
+                          render: (_, row) => (
+                            <>
+                              <RouterLink
+                                to={alertRecordPath(row)}
+                                label={`Ver ${sourceLabels[row.source].toLowerCase()}: ${alertTitle(row)}`}
+                                sx={linkSx}
+                              >
+                                {alertTitle(row)}
+                              </RouterLink>
+                              <Typography variant="body2" color="text.secondary">
+                                {sourceLabels[row.source]}
+                              </Typography>
+                            </>
+                          ),
+                        },
+                        {
+                          key: 'vehicleId',
+                          label: 'Vehículo o conductor',
+                          render: (_, row) =>
+                            row.vehicleId === null ? (
+                              <Typography variant="body2">Conductor</Typography>
+                            ) : (
+                              <RouterLink
+                                to={`/flota/vehiculos/${encodeURIComponent(row.vehicleId)}`}
+                                label={`Vehículo ${names.get(row.vehicleId) ?? row.vehicleId}`}
+                                sx={linkSx}
+                              >
+                                {names.get(row.vehicleId) ?? 'Vehículo'}
+                              </RouterLink>
+                            ),
+                        },
+                        {
+                          key: 'dueOn',
+                          label: 'Vencimiento',
+                          render: (_, row) => (
+                            <>
+                              {formatDate(row.dueOn)}
+                              <Typography variant="body2" color="text.secondary">
+                                {expiryNote(row.daysToExpiry)}
+                              </Typography>
+                            </>
+                          ),
+                        },
+                        {
+                          key: 'severity',
+                          label: 'Estado',
+                          render: (value) => {
+                            const view = severityPresentation[value as AlertSeverity];
+                            return <StatusBadge label={view.label} tone={view.tone} />;
+                          },
+                        },
+                      ]}
+                      rows={rows}
+                    />
+                  </ScrollRegion>
+                  {page.nextCursor && (
+                    <Box>
+                      <Button
+                        variant="outlined"
+                        loading={loadingMore}
+                        onClick={() => onLoadMore(page.nextCursor as string)}
+                      >
+                        Cargar más alertas
+                      </Button>
+                    </Box>
+                  )}
+                </>
+              );
+            }}
+          </ResourceView>
+          {children}
+        </>
+      )}
     </>
   );
 }

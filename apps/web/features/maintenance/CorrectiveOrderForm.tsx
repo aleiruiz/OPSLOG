@@ -4,18 +4,17 @@ import Card from '@mui/material/Card';
 import Stack from '@mui/material/Stack';
 import { Button, Field, FormSection } from '@opslog/ui';
 import type { BffWorkOrder } from '@opslog/contracts';
+import { VehiclePicker } from './VehiclePicker';
 import type { MaintenancePorts } from './ports';
 
 /** FR-102: a corrective order is registered by hand for a vehicle of the company. */
 export function CorrectiveOrderForm({
   ports,
-  vehicles,
   onCreated,
   onCancel,
   onExpired,
 }: {
   ports: MaintenancePorts;
-  vehicles: readonly string[];
   onCreated: (order: BffWorkOrder) => void;
   onCancel: () => void;
   onExpired: () => void;
@@ -60,18 +59,7 @@ export function CorrectiveOrderForm({
             {error}
           </Alert>
         )}
-        <Field
-          id="mnt-corrective-vehicle"
-          label="Vehículo"
-          required
-          value={vehicleId}
-          onChange={(event) => setVehicleId(event.target.value)}
-          description={
-            vehicles.length
-              ? `Por ejemplo: ${vehicles.slice(0, 3).join(', ')}`
-              : 'Identificador del vehículo.'
-          }
-        />
+        <VehiclePicker id="mnt-corrective-vehicle" value={vehicleId} onChange={setVehicleId} />
         <Field
           id="mnt-corrective-description"
           label="Descripción de la falla"

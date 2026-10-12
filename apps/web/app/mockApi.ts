@@ -197,6 +197,11 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
       warnings,
     ),
     ...createBulkControls(bulkStores),
+    setRolePermissions: (roleId: string, permissions: readonly Permission[]) => {
+      const index = roles.findIndex((role) => role.id === roleId);
+      const target = roles[index];
+      if (target) roles[index] = { ...target, permissions };
+    },
   };
 
   return {
