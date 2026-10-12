@@ -111,6 +111,7 @@ function failure(
   message: string,
   correlationId: string,
   field?: string,
+  missingRequirements?: readonly string[],
 ): BffResult<never> {
   // The shared ApiError type has no 405/413/415: those are caller bugs and read as a bad request.
   const normalized = KNOWN_STATUSES.includes(status) ? status : status >= 500 ? 500 : 400;
@@ -120,6 +121,7 @@ function failure(
     message,
     correlationId,
     ...(field === undefined ? {} : { fieldErrors: [{ field, code, message }] }),
+    ...(missingRequirements === undefined ? {} : { missingRequirements }),
   };
   return { ok: false, error };
 }
@@ -185,6 +187,7 @@ export function createBffClient(options: BffClientOptions = {}): BffClient {
           parsed.message,
           parsed.correlationId,
           parsed.field,
+          parsed.missingRequirements,
         );
       return failure(
         response.status,
