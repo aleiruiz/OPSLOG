@@ -186,7 +186,7 @@ test('a role without view_costs sees the closed order without any amount', async
 test('evidence requirement: configure, block, upload, complete and close with an assigned mechanic (G3 H3, MNT-QA-M3:89)', async ({
   page,
 }) => {
-  await a.member('viewer', 'e2e-mechanic-a');
+  const mechanicMember = await a.member('viewer', 'e2e-mechanic-a');
   await signIn(page, a, 'e2e-admin-a');
   const me = (await page.evaluate(async () => (await fetch('/api/auth/session')).json())) as {
     user: { id: string };
@@ -203,7 +203,8 @@ test('evidence requirement: configure, block, upload, complete and close with an
   await page.getByLabel('Nombre del mecánico').fill('Mecánica E2E');
   await pick(page, 'Vínculo', 'Interno (usuario de la empresa)');
   await page.getByRole('combobox', { name: 'Usuario de la empresa', exact: true }).click();
-  await page.getByRole('option', { name: /^Consulta · / }).click();
+  // Options are named by role and ordinal ("Consulta 2"), so the member is picked by its id.
+  await page.locator(`li[role="option"][data-value="${mechanicMember}"]`).click();
   await page.getByRole('button', { name: 'Agregar mecánico' }).click();
   await expect(page.getByRole('cell', { name: 'Mecánica E2E', exact: true })).toBeVisible();
 
@@ -212,12 +213,12 @@ test('evidence requirement: configure, block, upload, complete and close with an
   await page
     .getByRole('form', { name: 'Nueva orden correctiva' })
     .getByLabel(/^Vehículo/)
-    .fill(vehicleId);
+    .selectOption(vehicleId);
   await page.getByLabel('Descripción de la falla').fill('Ruido en frenos');
   await page.getByRole('button', { name: 'Registrar orden' }).click();
   await expect(page.getByLabel('Estado: Programada')).toBeVisible();
   await page.getByRole('button', { name: 'Asignar' }).click();
-  await page.getByLabel('Persona responsable (usuario)').fill(me.user.id);
+  await page.getByLabel('Persona responsable').selectOption(me.user.id);
   await pick(page, 'Mecánico', 'Mecánica E2E (interno)');
   await page.getByLabel('Fecha programada').fill(day(0));
   await submit(page, 'Asignar');
@@ -257,8 +258,8 @@ test('evidence requirement: configure, block, upload, complete and close with an
     blocked.getByText('Sube al menos una evidencia del trabajo (foto o documento).'),
   ).toBeVisible();
   await a.platform.pipeline.processScans();
+  // The order is deep-linked, so the reload reopens its detail.
   await page.reload();
-  await page.getByRole('button', { name: /Ruido en frenos/ }).click();
   await expect(page.getByText(/frenos\.pdf · Guardado/)).toBeVisible();
   await expect(page.getByLabel('Subir factura (PDF o imagen)')).toHaveCount(0);
   await page.getByRole('button', { name: 'Registrar término' }).click();
