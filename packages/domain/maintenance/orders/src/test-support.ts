@@ -13,7 +13,7 @@ export const FLEET: WorkOrderActor = {
 export const ADMIN: WorkOrderActor = {
   id: 'user-admin',
   subject: 'admin',
-  permissions: ['view', 'create', 'edit', 'view_costs', 'approve', 'reopen'],
+  permissions: ['view', 'create', 'edit', 'view_costs', 'incidents:approve', 'reopen'],
   mechanicIds: [],
 };
 export const EDITOR: WorkOrderActor = {

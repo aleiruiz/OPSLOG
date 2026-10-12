@@ -147,6 +147,7 @@ export {
   BFF_ALERT_SOURCES,
   BFF_ALERT_SEVERITIES,
   BFF_ALERT_RECIPIENT_ROLES,
+  BFF_MAINTENANCE_EVIDENCE_REQUIREMENTS,
 } from './bff/alerts.js';
 export type {
   BffAlertSource,
@@ -157,6 +158,8 @@ export type {
   BffAlertPage,
   BffAlertSettings,
   BffAlertSettingsInput,
+  BffMaintenanceEvidenceRequirement,
+  BffCloseCostThreshold,
 } from './bff/alerts.js';
 export { BFF_AREA_ACTIONS, BFF_AREA_FIELDS } from './bff/areas.js';
 export type {

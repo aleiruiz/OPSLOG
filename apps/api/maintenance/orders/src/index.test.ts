@@ -7,7 +7,7 @@ const TENANT = 'tenant-a';
 const sessions: Record<string, { subject: string; permissions: Permission[] }> = {
   admin: {
     subject: 'admin',
-    permissions: ['view', 'create', 'edit', 'view_costs', 'approve', 'reopen'],
+    permissions: ['view', 'create', 'edit', 'view_costs', 'incidents:approve', 'reopen'],
   },
   editor: { subject: 'editor', permissions: ['view', 'create', 'edit'] },
   mech: { subject: 'mech', permissions: ['view'] },

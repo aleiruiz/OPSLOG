@@ -36,7 +36,7 @@ export function availableCommands(
       if (fleet || assigned) commands.push('complete');
       break;
     case 'completed':
-      if (has(viewer, 'approve') && !order.closeApproval) commands.push('approve_close');
+      if (has(viewer, 'incidents:approve') && !order.closeApproval) commands.push('approve_close');
       if (fleet && has(viewer, 'view_costs')) commands.push('close');
       break;
     case 'closed':

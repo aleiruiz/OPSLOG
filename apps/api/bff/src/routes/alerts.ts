@@ -97,7 +97,18 @@ export const ALERT_ROUTES: readonly Route[] = [
     ),
   ),
   route('alerts.settings.update', async (ctx) => {
-    const input = body(ctx, ['version', 'expiryWindowDays', 'recipientRoles']);
+    const input = body(
+      ctx,
+      [
+        'version',
+        'expiryWindowDays',
+        'recipientRoles',
+        'maintenanceEvidence',
+        'closeCostThreshold',
+        'timeZone',
+      ],
+      ['version', 'expiryWindowDays', 'recipientRoles'],
+    );
     if (!input) return bad(ctx);
     const { version, ...settings } = input;
     return reply(

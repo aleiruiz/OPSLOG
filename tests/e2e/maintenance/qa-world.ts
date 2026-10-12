@@ -21,7 +21,7 @@ export const ACTORS = {
   admin: {
     id: 'user-admin',
     subject: 'admin',
-    permissions: ['view', 'create', 'edit', 'view_costs', 'approve', 'reopen'],
+    permissions: ['view', 'create', 'edit', 'view_costs', 'incidents:approve', 'reopen'],
     mechanicIds: [],
   },
   editor: {
@@ -33,7 +33,7 @@ export const ACTORS = {
   supervisor: {
     id: 'user-supervisor',
     subject: 'supervisor',
-    permissions: ['view', 'approve'],
+    permissions: ['view', 'incidents:approve'],
     mechanicIds: [],
   },
   viewer: { id: 'user-viewer', subject: 'viewer', permissions: ['view'], mechanicIds: [] },

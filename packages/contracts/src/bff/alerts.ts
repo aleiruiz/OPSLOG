@@ -59,6 +59,18 @@ export interface BffAlertPage extends Page<BffAlert> {
   readonly windowDays: number;
 }
 
+export type BffMaintenanceEvidenceRequirement = 'none' | 'evidence' | 'evidence_invoice';
+export const BFF_MAINTENANCE_EVIDENCE_REQUIREMENTS: readonly BffMaintenanceEvidenceRequirement[] = [
+  'none',
+  'evidence',
+  'evidence_invoice',
+];
+/** Exact amount in the currency's minor unit (digits) with its ISO 4217 code. */
+export interface BffCloseCostThreshold {
+  readonly amountMinor: string;
+  readonly currency: string;
+}
+
 /**
  * The company's alert settings. `version` is the concurrency token: 0 while the company has never
  * saved (the values are then the defaults: 30 days, administrators and editors).
@@ -66,6 +78,12 @@ export interface BffAlertPage extends Page<BffAlert> {
 export interface BffAlertSettings {
   readonly expiryWindowDays: number;
   readonly recipientRoles: readonly BffAlertRecipientRole[];
+  /** Evidence/invoice that completing and closing a maintenance order requires (default `none`). */
+  readonly maintenanceEvidence: BffMaintenanceEvidenceRequirement;
+  /** D20: when set, every closure needs a prior supervisor approval. `null` (default): none is asked. */
+  readonly closeCostThreshold: BffCloseCostThreshold | null;
+  /** IANA zone of the company; calendar days are computed in it (default `UTC`). */
+  readonly timeZone: string;
   readonly version: number;
   readonly updatedBy: string | null;
   readonly updatedAt: ISODateTime | null;
@@ -76,6 +94,10 @@ export interface BffAlertSettingsInput {
   readonly version: number;
   readonly expiryWindowDays: number;
   readonly recipientRoles: readonly BffAlertRecipientRole[];
+  /** A field that is left out keeps its stored value; `closeCostThreshold: null` clears the threshold. */
+  readonly maintenanceEvidence?: BffMaintenanceEvidenceRequirement;
+  readonly closeCostThreshold?: BffCloseCostThreshold | null;
+  readonly timeZone?: string;
 }
 
 /** Request and response types of the alerts routes. */

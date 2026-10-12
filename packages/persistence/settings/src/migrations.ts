@@ -1,4 +1,10 @@
-import { MigrationInterface, QueryRunner, Table, type TableColumnOptions } from 'typeorm';
+import {
+  MigrationInterface,
+  QueryRunner,
+  Table,
+  TableColumn,
+  type TableColumnOptions,
+} from 'typeorm';
 import { BINARY_COLLATION, SETTINGS_TABLES } from './entities.js';
 
 export const SETTINGS_MIGRATION_VERSION = '2026100600090';
@@ -69,5 +75,62 @@ export class CreateCompanySettings2026100600090 implements MigrationInterface {
 
   async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.dropTable(T.settings);
+  }
+}
+
+export const MAINTENANCE_SETTINGS_MIGRATION_VERSION = '2026101300010';
+
+/** Columns added by the maintenance settings slice; existing rows read the defaults (none, no D20 threshold, UTC). */
+export const MAINTENANCE_SETTINGS_COLUMNS: readonly TableColumnOptions[] = [
+  text('maintenance_evidence', 16, { default: "'none'" }),
+  { name: 'close_threshold_minor', type: 'bigint', unsigned: true, isNullable: true },
+  {
+    name: 'close_threshold_currency',
+    type: 'char',
+    length: '3',
+    collation: BINARY_COLLATION,
+    isNullable: true,
+  },
+  text('time_zone', 64, { default: "'UTC'" }),
+];
+
+export const MAINTENANCE_SETTINGS_CHECKS: readonly {
+  readonly table: string;
+  readonly name: string;
+  readonly expression: string;
+}[] = [
+  {
+    table: T.settings,
+    name: 'ck_settings_maintenance',
+    expression:
+      "((`maintenance_evidence` IN ('none','evidence','evidence_invoice') AND CHAR_LENGTH(TRIM(`time_zone`)) > 0 AND ((`close_threshold_minor` IS NULL) = (`close_threshold_currency` IS NULL)) AND (`close_threshold_minor` IS NULL OR `close_threshold_minor` > 0)) IS TRUE)",
+  },
+];
+
+/**
+ * Maintenance settings (G3 H3, D20, M4): evidence requirement, optional costly-closure threshold
+ * and the tenant IANA zone. A separate migration so the first slice stays reversible on its own.
+ */
+export class AddMaintenanceCompanySettings2026101300010 implements MigrationInterface {
+  name = 'AddMaintenanceCompanySettings2026101300010';
+
+  async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.addColumns(
+      T.settings,
+      MAINTENANCE_SETTINGS_COLUMNS.map((column) => new TableColumn(column)),
+    );
+    for (const check of MAINTENANCE_SETTINGS_CHECKS)
+      await queryRunner.query(
+        `ALTER TABLE \`${check.table}\` ADD CONSTRAINT \`${check.name}\` CHECK (${check.expression})`,
+      );
+  }
+
+  async down(queryRunner: QueryRunner): Promise<void> {
+    for (const check of MAINTENANCE_SETTINGS_CHECKS)
+      await queryRunner.query(`ALTER TABLE \`${check.table}\` DROP CHECK \`${check.name}\``);
+    await queryRunner.dropColumns(
+      T.settings,
+      MAINTENANCE_SETTINGS_COLUMNS.map((column) => column.name),
+    );
   }
 }

@@ -236,7 +236,7 @@ describe('work order detail', () => {
       ],
     });
     fake.state.approvalRequired = true;
-    view(['view', 'approve'], fake);
+    view(['view', 'incidents:approve'], fake);
     await screen.findByLabelText('Estado: Terminada');
     expect(screen.queryByRole('button', { name: 'Cerrar orden' })).toBeNull();
     press('Aprobar cierre');
@@ -257,7 +257,7 @@ describe('work order detail', () => {
       ok: false,
       error: { status: 409, code: 'invalid_transition', message: 'x', correlationId: 'c' },
     });
-    view(['view', 'approve'], fake);
+    view(['view', 'incidents:approve'], fake);
     await screen.findByLabelText('Estado: Terminada');
     press('Aprobar cierre');
     fireEvent.click(

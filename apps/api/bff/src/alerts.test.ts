@@ -329,6 +329,9 @@ describe('alert settings over HTTP', () => {
     expect(defaults.json).toEqual({
       expiryWindowDays: 30,
       recipientRoles: [...DEFAULT_RECIPIENT_ROLES],
+      maintenanceEvidence: 'none',
+      closeCostThreshold: null,
+      timeZone: 'UTC',
       version: 0,
       updatedBy: null,
       updatedAt: null,
@@ -372,11 +375,55 @@ describe('alert settings over HTTP', () => {
       full({ recipientRoles: ['root'] }),
       full({ recipientRoles: ['admin', 'admin'] }),
       full({ recipientRoles: 'admin' }),
+      full({ maintenanceEvidence: 'invoice' }),
+      full({ closeCostThreshold: { amountMinor: '-1', currency: 'MXN' } }),
+      full({ closeCostThreshold: { amountMinor: '5', currency: 'mxn' } }),
+      full({ timeZone: 'Mars/Olympus' }),
     ])
       expect((await adminA.send('PUT', S, { json })).status, JSON.stringify(json)).toBe(400);
     expect((await adminA.get(S)).json).toMatchObject({ version: 1, expiryWindowDays: 7 });
     expect((await adminA.send('POST', S, { json: full() })).status).toBe(405);
     expect((await adminA.send('DELETE', S)).status).toBe(405);
+  });
+
+  it('saves the maintenance evidence requirement, the D20 threshold and the zone, and keeps omitted ones', async () => {
+    const { adminA, adminB } = await fixture();
+    const saved = await adminA.send('PUT', S, {
+      json: full({
+        maintenanceEvidence: 'evidence_invoice',
+        closeCostThreshold: { amountMinor: '500000', currency: 'MXN' },
+        timeZone: 'America/Mexico_City',
+      }),
+    });
+    expect(saved.status).toBe(200);
+    expect(saved.json).toMatchObject({
+      maintenanceEvidence: 'evidence_invoice',
+      closeCostThreshold: { amountMinor: '500000', currency: 'MXN' },
+      timeZone: 'America/Mexico_City',
+    });
+    // The alert settings form does not send the maintenance fields: they are kept.
+    const alertsOnly = await adminA.send('PUT', S, {
+      json: full({ version: 1, expiryWindowDays: 9 }),
+    });
+    expect(alertsOnly.json).toMatchObject({
+      expiryWindowDays: 9,
+      maintenanceEvidence: 'evidence_invoice',
+      closeCostThreshold: { amountMinor: '500000', currency: 'MXN' },
+      timeZone: 'America/Mexico_City',
+    });
+    const cleared = await adminA.send('PUT', S, {
+      json: full({ version: 2, closeCostThreshold: null }),
+    });
+    expect(cleared.json).toMatchObject({
+      closeCostThreshold: null,
+      maintenanceEvidence: 'evidence_invoice',
+    });
+    // Another company keeps its defaults.
+    expect((await adminB.get(S)).json).toMatchObject({
+      maintenanceEvidence: 'none',
+      closeCostThreshold: null,
+      timeZone: 'UTC',
+    });
   });
 
   it('lets every role read but only the configuration permission write', async () => {

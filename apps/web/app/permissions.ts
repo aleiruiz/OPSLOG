@@ -15,4 +15,5 @@ export const permissionLabels: Record<Permission, string> = {
   approve: 'Aprobar solicitudes',
   reopen: 'Reabrir registros cerrados',
   'incidents:report': 'Reportar siniestros',
+  'incidents:approve': 'Aprobar cierres costosos y siniestros',
 };

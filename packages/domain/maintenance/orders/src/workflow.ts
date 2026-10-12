@@ -77,7 +77,7 @@ export function requireCommand(
     complete: fleet || assigned,
     work: fleet || (assigned && order.status === 'in_progress'),
     costs: fleet && can(actor, 'view_costs'),
-    approve_close: can(actor, 'approve'),
+    approve_close: can(actor, 'incidents:approve'),
     close: fleet && can(actor, 'view_costs'),
     cancel: fleet,
     reopen: can(actor, 'reopen'),

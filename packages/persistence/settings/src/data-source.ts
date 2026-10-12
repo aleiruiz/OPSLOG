@@ -1,7 +1,11 @@
 import 'reflect-metadata';
 import { DataSource, type DataSourceOptions } from 'typeorm';
 import { SETTINGS_ENTITIES } from './entities.js';
-import { CreateCompanySettings2026100600090, SETTINGS_MIGRATIONS_TABLE } from './migrations.js';
+import {
+  AddMaintenanceCompanySettings2026101300010,
+  CreateCompanySettings2026100600090,
+  SETTINGS_MIGRATIONS_TABLE,
+} from './migrations.js';
 import { AUDIT_ENTITIES } from '../../audit/src/index.js';
 
 export interface SettingsDatabaseConfig {
@@ -24,7 +28,7 @@ export const SETTINGS_RUNTIME_ACCOUNT = /^opslog_settings_[a-z0-9_]+$/i;
 const common = {
   type: 'mysql',
   entities: [...SETTINGS_ENTITIES, ...AUDIT_ENTITIES],
-  migrations: [CreateCompanySettings2026100600090],
+  migrations: [CreateCompanySettings2026100600090, AddMaintenanceCompanySettings2026101300010],
   migrationsTableName: SETTINGS_MIGRATIONS_TABLE,
   synchronize: false,
   migrationsRun: false,
@@ -32,6 +36,8 @@ const common = {
   logging: false,
   timezone: 'Z',
   charset: 'utf8mb4',
+  bigNumberStrings: true,
+  supportBigNumbers: true,
 } as const satisfies Partial<DataSourceOptions>;
 
 /** Runtime DataSource: restricted account, pooled, no schema changes, no query logging. */

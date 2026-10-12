@@ -8,7 +8,7 @@ import { byScheduledDate, matches } from './WorkOrdersScreen';
 import { availableCommands, canRecordCosts, canRecordWork, nextSteps } from './workflow';
 
 const fleet = {
-  permissions: ['view', 'create', 'edit', 'view_costs', 'approve', 'reopen'],
+  permissions: ['view', 'create', 'edit', 'view_costs', 'incidents:approve', 'reopen'],
   mechanicIds: [],
 };
 const editor = { permissions: ['view', 'create', 'edit'], mechanicIds: [] };
@@ -51,7 +51,10 @@ describe('maintenance model', () => {
       ),
     ).toEqual(['close']);
     expect(
-      availableCommands(at('completed'), { permissions: ['view', 'approve'], mechanicIds: [] }),
+      availableCommands(at('completed'), {
+        permissions: ['view', 'incidents:approve'],
+        mechanicIds: [],
+      }),
     ).toEqual(['approve_close']);
     expect(availableCommands(at('closed'), fleet)).toEqual(['reopen']);
     expect(availableCommands(at('closed'), editor)).toEqual([]);
