@@ -1,0 +1,14 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "../../../dist/tests/e2e/maintenance",
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["**/*.ts"],
+  "references": [
+    { "path": "../../../packages/persistence/maintenance/plans" },
+    { "path": "../fleet" },
+    { "path": "../../fixtures/maintenance" }
+  ]
+}

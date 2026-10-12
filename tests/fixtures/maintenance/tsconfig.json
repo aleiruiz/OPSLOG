@@ -1,0 +1,16 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "../../../dist/tests/fixtures/maintenance",
+    "types": ["node"]
+  },
+  "include": ["**/*.ts"],
+  "references": [
+    { "path": "../../../apps/api/composition" },
+    { "path": "../../../apps/worker/maintenance-plans" },
+    { "path": "../../../packages/persistence/audit" },
+    { "path": "../../../packages/persistence/maintenance/plans" },
+    { "path": "../../e2e/fleet" }
+  ]
+}

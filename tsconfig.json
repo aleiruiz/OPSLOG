@@ -55,6 +55,8 @@
     { "path": "./apps/worker/maintenance-plans" },
     { "path": "./apps/api/bff" },
     { "path": "./tests/integration/platform" },
-    { "path": "./tests/e2e/fleet" }
+    { "path": "./tests/e2e/fleet" },
+    { "path": "./tests/fixtures/maintenance" },
+    { "path": "./tests/e2e/maintenance" }
   ]
 }

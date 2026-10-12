@@ -258,6 +258,13 @@ async function startTenantDatabase(label: string): Promise<FleetTenantDatabase> 
         `GRANT EXECUTE ON PROCEDURE ${identifier(databaseName)}.\`opslog_append_local_audit_and_delivery\` TO '${account.username}'@'%'`,
       );
     }
+    // The maintenance worker commits alert/scan events through the durable tenant outbox.
+    await connection.query(
+      `GRANT SELECT ON ${identifier(databaseName)}.${identifier(AUDIT_TABLES.outbox)} TO '${runtime.maintenance.username}'@'%'`,
+    );
+    await connection.query(
+      `GRANT EXECUTE ON PROCEDURE ${identifier(databaseName)}.\`opslog_enqueue_tenant_outbox\` TO '${runtime.maintenance.username}'@'%'`,
+    );
 
     for (const account of [auditRuntime, auditRelay]) {
       await connection.query(`CREATE USER '${account.username}'@'%' IDENTIFIED BY ?`, [
@@ -286,6 +293,16 @@ async function startTenantDatabase(label: string): Promise<FleetTenantDatabase> 
     );
     await connection.query(
       `GRANT UPDATE ON ${table(AUDIT_TABLES.delivery)} TO '${auditRelay.username}'@'%'`,
+    );
+    // Durable outbox: the audit runtime enqueues/reads, the relay claims and settles deliveries.
+    await connection.query(
+      `GRANT SELECT ON ${table(AUDIT_TABLES.outbox)} TO '${auditRuntime.username}'@'%'`,
+    );
+    await connection.query(
+      `GRANT EXECUTE ON PROCEDURE ${identifier(databaseName)}.\`opslog_enqueue_tenant_outbox\` TO '${auditRuntime.username}'@'%'`,
+    );
+    await connection.query(
+      `GRANT SELECT, UPDATE (status, attempts, available_at, lease_until, fencing, worker_id, last_error, handler_completed) ON ${table(AUDIT_TABLES.outbox)} TO '${auditRelay.username}'@'%'`,
     );
 
     stores = await openFleetRuntimeStores({

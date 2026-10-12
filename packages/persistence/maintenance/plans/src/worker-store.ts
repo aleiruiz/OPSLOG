@@ -227,7 +227,8 @@ export class TypeOrmMaintenancePlanWorkerStore implements PlanScanStore {
       const kmReached = odometer.updatedAt !== null && targetKm !== null && odometer.km >= targetKm;
       const odometerReachedAt =
         kmReached && odometer.updatedAt !== null ? Date.parse(odometer.updatedAt) : Number.NaN;
-      const dateTargetAt = targetDate === null ? Number.NaN : Date.parse(`${targetDate}T00:00:00.000Z`);
+      const dateTargetAt =
+        targetDate === null ? Number.NaN : Date.parse(`${targetDate}T00:00:00.000Z`);
       const trigger =
         dateReached && kmReached
           ? odometerReachedAt < dateTargetAt
