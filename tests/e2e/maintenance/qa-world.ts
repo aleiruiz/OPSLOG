@@ -6,6 +6,9 @@ import {
 } from '../../../packages/domain/maintenance/orders/src/index.js';
 import type { MaintenancePlan } from '../../../packages/domain/maintenance/plans/src/index.js';
 import { TypeOrmMaintenancePlanStore } from '../../../packages/persistence/maintenance/plans/src/index.js';
+import { TypeOrmMechanicStore } from '../../../packages/persistence/maintenance/mechanics/src/index.js';
+import { createMechanicScope } from '../../../apps/api/composition/src/platform/mechanic-scope.js';
+import { WorkOrderApi } from '../../../apps/api/maintenance/orders/src/index.js';
 import { TypeOrmWorkOrderStore } from '../../../packages/persistence/maintenance/orders/src/index.js';
 import {
   adminUrl,
@@ -14,6 +17,8 @@ import {
 } from '../../../packages/persistence/maintenance/orders/src/test-support/mysql.js';
 
 export { adminUrl };
+/** Mechanic-only member (no fleet edit): reaches only orders of the mechanic linked to it (D9). */
+export const MECHANIC_MEMBER = { id: 'user-mech', subject: 'mech', permissions: ['view'] } as const;
 type DataSource = Awaited<ReturnType<WorkOrderTestDatabase['openOrders']>>;
 
 /** Synthetic actors of SPECS §5.4 / D9; permissions mirror the composition's grants. */
@@ -37,12 +42,6 @@ export const ACTORS = {
     mechanicIds: [],
   },
   viewer: { id: 'user-viewer', subject: 'viewer', permissions: ['view'], mechanicIds: [] },
-  mechanic: {
-    id: 'user-mech',
-    subject: 'mech',
-    permissions: ['view'],
-    mechanicIds: ['mechanic-a'],
-  },
 } satisfies Record<string, WorkOrderActor>;
 
 export const VEHICLE = 'synthetic-vehicle-a';
@@ -58,6 +57,17 @@ export interface MaintenanceWorld {
   readonly ordersSourceB: DataSource;
   readonly tenantA: string;
   readonly tenantB: string;
+  /** The linkage composed by the API (`createMechanicScope`) over the real mechanics stores. */
+  readonly scopeA: ReturnType<typeof createMechanicScope>;
+  /** The mechanic member as resolved through the real linkage on tenant A at startup. */
+  readonly mechanic: WorkOrderActor;
+  /** Resolves any member's actor through the real linkage (so deactivations are honoured). */
+  actorOf(
+    tenantId: string,
+    member: { id: string; subject: string; permissions: readonly string[] },
+  ): Promise<WorkOrderActor>;
+  /** The real WorkOrderApi (session -> real linkage -> service) for the given member subjects. */
+  api(options?: { side?: 'a' | 'b' }): WorkOrderApi;
   /** A work order service over the real MySQL store of tenant database A (or B). */
   service(options?: {
     approval?: boolean;
@@ -89,6 +99,8 @@ export async function startMaintenanceWorld(tag: string): Promise<MaintenanceWor
   const plansB = new TypeOrmMaintenancePlanStore(plansSourceB);
   const tenantA = randomUUID();
   const tenantB = randomUUID();
+  const scopeA = createMechanicScope(new TypeOrmMechanicStore(plansSourceA));
+  const scopeB = createMechanicScope(new TypeOrmMechanicStore(plansSourceB));
   for (const [tenant, mechanic] of [
     [tenantA, 'mechanic-a'],
     [tenantB, 'mechanic-b'],
@@ -103,18 +115,24 @@ export async function startMaintenanceWorld(tag: string): Promise<MaintenanceWor
       [tenant, mechanic],
     );
   }
+  await db.rows(
+    `INSERT INTO opslog_maintenance_mechanics (company_id,id,name,specialties,contact,kind,workshop_id,member_id,registered_by,active,created_at,updated_at) VALUES (?, 'mechanic-c', 'Mecánico C sintético', JSON_ARRAY(), NULL, 'internal', 'workshop-1', 'mech-c', 'user-admin', TRUE, NOW(6), NOW(6))`,
+    [tenantA],
+  );
   const refs = (
     tenantPlans: TypeOrmMaintenancePlanStore,
     approval: boolean,
   ): WorkOrderReferences => ({
     vehicleExists: async (_tenant, vehicleId) => vehicleId === VEHICLE,
-    isTenantMember: async (_tenant, memberId) => ['admin', 'editor', 'mech'].includes(memberId),
+    isTenantMember: async (_tenant, memberId) =>
+      ['admin', 'editor', 'mech', 'mech-c'].includes(memberId),
     workshop: async (_tenant, id) => (id === 'workshop-1' ? { active: true } : null),
     mechanic: async (tenantId, id) =>
       (tenantId === tenantA && id === 'mechanic-a') || (tenantId === tenantB && id === 'mechanic-b')
         ? { active: true, workshopId: 'workshop-1', memberId: 'mech' }
         : null,
-    mechanicIdsOfMember: async () => [],
+    mechanicIdsOfMember: (tenantId, memberId) =>
+      (tenantId === tenantB ? scopeB : scopeA).mechanicIdsOfMember(tenantId, memberId),
     scheduledOrder: async (tenantId, planId, orderId) => {
       const found = (await tenantPlans.listScheduledOrders(tenantId, planId).catch(() => [])).find(
         (order) => order.id === orderId,
@@ -144,7 +162,24 @@ export async function startMaintenanceWorld(tag: string): Promise<MaintenanceWor
     },
     closeApprovalRequired: async () => approval,
   });
-  return {
+  const actorOf: MaintenanceWorld['actorOf'] = async (tenantId, member) => {
+    const scope = tenantId === tenantB ? scopeB : scopeA;
+    return {
+      id: member.id,
+      subject: member.subject,
+      permissions: member.permissions,
+      mechanicIds: await scope.mechanicIdsOfMember(tenantId, member.subject),
+      mechanicLinked: await scope.mechanicLinked(tenantId, member.subject),
+    };
+  };
+  const mechanic = await actorOf(tenantA, MECHANIC_MEMBER);
+  const grants: Record<string, readonly string[]> = {
+    admin: ACTORS.admin.permissions,
+    editor: ACTORS.editor.permissions,
+    mech: MECHANIC_MEMBER.permissions,
+    'mech-c': ['view'],
+  };
+  const world: MaintenanceWorld = {
     db,
     plansA,
     plansA2,
@@ -154,6 +189,27 @@ export async function startMaintenanceWorld(tag: string): Promise<MaintenanceWor
     ordersSourceB,
     tenantA,
     tenantB,
+    scopeA,
+    mechanic,
+    actorOf,
+    api({ side = 'a' } = {}) {
+      const tenantId = side === 'b' ? tenantB : tenantA;
+      const scope = side === 'b' ? scopeB : scopeA;
+      return new WorkOrderApi({
+        orders: world.service({ side }),
+        authorize: async (token, correlationId) => ({
+          context: {
+            tenantId,
+            actor: { subject: token, kind: 'user' },
+            authorizationVersion: 1,
+            correlationId,
+          },
+          permissions: (grants[token] ?? []) as never,
+        }),
+        mechanicIdsOfMember: scope.mechanicIdsOfMember,
+        mechanicLinked: scope.mechanicLinked,
+      });
+    },
     service({ approval = false, clock = () => at('2026-10-12T12:00:00.000Z'), side = 'a' } = {}) {
       const source = side === 'a' ? ordersSourceA : side === 'a2' ? ordersSourceA2 : ordersSourceB;
       return new WorkOrderService(
@@ -180,4 +236,5 @@ export async function startMaintenanceWorld(tag: string): Promise<MaintenanceWor
     },
     close: () => db.close(),
   };
+  return world;
 }

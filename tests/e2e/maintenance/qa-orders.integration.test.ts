@@ -55,8 +55,8 @@ suite('work order acceptance on MySQL 8.4', () => {
       mechanicId: 'mechanic-a',
       scheduledDate: '2026-10-12',
     });
-    order = await service.start(t, ACTORS.mechanic, order.id, { version: order.version });
-    order = await service.updateWork(t, ACTORS.mechanic, order.id, {
+    order = await service.start(t, world.mechanic, order.id, { version: order.version });
+    order = await service.updateWork(t, world.mechanic, order.id, {
       version: order.version,
       tasks: [{ description: 'Diagnóstico y reparación' }],
       parts: [{ name: 'Balata', quantity: '2' }],
@@ -65,7 +65,7 @@ suite('work order acceptance on MySQL 8.4', () => {
       version: order.version,
       costs: [{ category: 'labor', amount: { amountMinor, currency: 'MXN' } }],
     });
-    return service.complete(t, ACTORS.mechanic, order.id, {
+    return service.complete(t, world.mechanic, order.id, {
       version: order.version,
       actualDate: '2026-10-12',
       actualKm: 1200,
@@ -149,12 +149,12 @@ suite('work order acceptance on MySQL 8.4', () => {
       mechanicId: 'mechanic-a',
       scheduledDate: '2026-10-12',
     });
-    order = await service.start(t, ACTORS.mechanic, order.id, { version: order.version });
-    order = await service.updateWork(t, ACTORS.mechanic, order.id, {
+    order = await service.start(t, world.mechanic, order.id, { version: order.version });
+    order = await service.updateWork(t, world.mechanic, order.id, {
       version: order.version,
       tasks: [{ description: 'Servicio' }],
     });
-    order = await service.complete(t, ACTORS.mechanic, order.id, {
+    order = await service.complete(t, world.mechanic, order.id, {
       version: order.version,
       actualDate: '2026-10-11',
       actualKm: 900,
@@ -370,7 +370,7 @@ suite('work order acceptance on MySQL 8.4', () => {
     const service = world.service();
     const order = await completed(service, '1000', 'Aislamiento');
     const other = {
-      ...ACTORS.mechanic,
+      ...world.mechanic,
       id: 'user-other',
       subject: 'other',
       mechanicIds: ['mechanic-z'],
@@ -401,11 +401,69 @@ suite('work order acceptance on MySQL 8.4', () => {
       [orderB.id],
     );
     expect(Number(leak?.total)).toBe(0);
-    expect(
-      (await service.list(world.tenantA, ACTORS.mechanic)).every(
-        (o) => o.mechanicId === 'mechanic-a',
-      ),
-    ).toBe(true);
+    // Positive, non-vacuous D9 assertions through the real member -> mechanic linkage on MySQL.
+    expect(world.mechanic.mechanicIds).toEqual(['mechanic-a']);
+    const mine = await service.list(world.tenantA, world.mechanic);
+    expect(mine.length).toBeGreaterThan(0);
+    expect(mine.every((o) => o.mechanicId === 'mechanic-a')).toBe(true);
+    expect(mine.map((o) => o.id)).toContain(order.id);
+    const all = await service.list(world.tenantA, ACTORS.admin);
+    expect(mine.length).toBeLessThan(all.length);
+    expect(mine.map((o) => o.id).sort()).toEqual(
+      all
+        .filter((o) => o.mechanicId === 'mechanic-a')
+        .map((o) => o.id)
+        .sort(),
+    );
+    expect((await service.get(world.tenantA, world.mechanic, order.id)).id).toBe(order.id);
+    expect(await service.list(world.tenantA, other)).toEqual([]);
+    // The same through the API composition: session subject -> real linkage -> service.
+    const api = world.api();
+    const listed = await api.list('mech', 'corr-d9');
+    expect(listed.value?.map((o) => o.id).sort()).toEqual(mine.map((o) => o.id).sort());
+    expect(listed.value?.every((o) => !('costs' in o))).toBe(true);
+    expect((await api.get('mech', 'corr-d9', order.id)).ok).toBe(true);
+    expect((await api.get('mech-c', 'corr-d9', order.id)).error?.status).toBe(404);
+    expect((await api.list('mech-c', 'corr-d9')).value).toEqual([]);
+  });
+
+  it('D9 fails closed (G3 L1): a deactivated mechanic link leaves the member with no orders, never all', async () => {
+    const service = world.service();
+    const t = world.tenantA;
+    const order = await completed(service, '1000', 'Vínculo desactivado');
+    const api = world.api();
+    const before = await api.list('mech-c', 'corr-l1');
+    expect(before.value).toEqual([]);
+    const reassigned = await service.get(t, ACTORS.admin, order.id);
+    expect(reassigned.mechanicId).toBe('mechanic-a');
+    expect((await api.list('mech', 'corr-l1')).value?.length).toBeGreaterThan(0);
+    await world.db.rows(
+      `UPDATE opslog_maintenance_mechanics SET active=FALSE WHERE company_id=? AND id='mechanic-c'`,
+      [t],
+    );
+    const actor = await world.actorOf(t, {
+      id: 'user-mech-c',
+      subject: 'mech-c',
+      permissions: ['view'],
+    });
+    expect(actor).toMatchObject({ mechanicIds: [], mechanicLinked: true });
+    expect(await service.list(t, actor)).toEqual([]);
+    expect(await code(service.get(t, actor, order.id))).toBe('not_found');
+    expect((await api.list('mech-c', 'corr-l1')).value).toEqual([]);
+    expect((await api.get('mech-c', 'corr-l1', order.id)).error?.status).toBe(404);
+    // Deactivating the assigned mechanic's own link does the same to its member.
+    await world.db.rows(
+      `UPDATE opslog_maintenance_mechanics SET active=FALSE WHERE company_id=? AND id='mechanic-a'`,
+      [t],
+    );
+    expect((await api.list('mech', 'corr-l1')).value).toEqual([]);
+    expect((await api.get('mech', 'corr-l1', order.id)).error?.status).toBe(404);
+    // A member with fleet edit is not scoped by mechanic records.
+    expect((await api.list('admin', 'corr-l1')).value?.length).toBeGreaterThan(0);
+    await world.db.rows(
+      `UPDATE opslog_maintenance_mechanics SET active=TRUE WHERE company_id=? AND id IN ('mechanic-a','mechanic-c')`,
+      [t],
+    );
   });
 
   it('rolls back business row, history and audit when the outbox write fails, emitting nothing', async () => {

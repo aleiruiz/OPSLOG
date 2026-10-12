@@ -15,6 +15,7 @@ import {
   type VehicleService,
 } from '../../../../../packages/domain/vehicles/src/index.js';
 import { WorkOrderApi } from '../../../maintenance/orders/src/index.js';
+import { createMechanicScope } from './mechanic-scope.js';
 import type { PlatformKernel } from './kernel.js';
 import type { PlatformAdapters } from './types.js';
 
@@ -45,10 +46,8 @@ export function buildWorkOrderApi(
   const mechanics = adapters.maintenanceMechanics ?? new InMemoryMechanicStore();
   const plans = adapters.maintenancePlans ?? new InMemoryMaintenancePlanStore();
   const schedule = plans as Partial<PlanScheduleReader>;
-  const mechanicIdsOfMember = async (tenantId: string, memberId: string) =>
-    (await mechanics.list(tenantId))
-      .filter((m) => m.active && m.kind === 'internal' && m.memberId === memberId)
-      .map((m) => m.id);
+  const scope = createMechanicScope(mechanics);
+  const { mechanicIdsOfMember } = scope;
   const refs: WorkOrderReferences = {
     vehicleExists: async (tenantId, vehicleId) => {
       const vehicle = await vehicleService.get(tenantId, vehicleId).catch((error: unknown) => {
@@ -101,5 +100,6 @@ export function buildWorkOrderApi(
       return { context, permissions: await kernel.access.resolvePermissions(context) };
     },
     mechanicIdsOfMember,
+    mechanicLinked: scope.mechanicLinked,
   });
 }

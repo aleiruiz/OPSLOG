@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { Permission } from '../../../../../packages/domain/identity/src/index.js';
-import { harness } from '../../../../../packages/domain/maintenance/orders/src/test-support.js';
+import {
+  EDITOR as EDITOR_ACTOR,
+  harness,
+} from '../../../../../packages/domain/maintenance/orders/src/test-support.js';
 import { WorkOrderApi } from './index.js';
 
 const TENANT = 'tenant-a';
@@ -133,5 +136,35 @@ describe('work order API', () => {
       status: 500,
       message: 'Request failed',
     });
+  });
+
+  it('fails closed: a member whose mechanic link is deactivated sees no orders, not all of them', async () => {
+    const h = harness();
+    const created = await h.service.createCorrective(TENANT, EDITOR_ACTOR, {
+      vehicleId: 'vehicle-1',
+      description: 'Frenos',
+    });
+    let linked = true;
+    const workOrders = new WorkOrderApi({
+      orders: h.service,
+      authorize: async (_token, correlationId) => ({
+        context: {
+          tenantId: TENANT,
+          actor: { subject: 'mech', kind: 'user' },
+          authorizationVersion: 1,
+          correlationId,
+        },
+        permissions: ['view'],
+      }),
+      mechanicIdsOfMember: async () => [],
+      mechanicLinked: async () => linked,
+    });
+    expect(await workOrders.list('mech', 'c1')).toMatchObject({ ok: true, value: [] });
+    expect(await workOrders.get('mech', 'c2', created.id)).toMatchObject({
+      ok: false,
+      error: { status: 404 },
+    });
+    linked = false;
+    expect(((await workOrders.list('mech', 'c3')).value ?? []).length).toBe(1);
   });
 });

@@ -110,14 +110,14 @@ suite('plan lifecycle (cancel, reopen, late close) on MySQL 8.4', () => {
       mechanicId: 'mechanic-a',
       scheduledDate: '2026-10-12',
     });
-    next = await s.start(t, ACTORS.mechanic, next.id, { version: next.version });
-    return s.updateWork(t, ACTORS.mechanic, next.id, {
+    next = await s.start(t, world.mechanic, next.id, { version: next.version });
+    return s.updateWork(t, world.mechanic, next.id, {
       version: next.version,
       tasks: [{ description: 'Servicio' }],
     });
   }
   const complete = (order: WorkOrder, actualDate: string, actualKm: number) =>
-    service().complete(world.tenantA, ACTORS.mechanic, order.id, {
+    service().complete(world.tenantA, world.mechanic, order.id, {
       version: order.version,
       actualDate,
       actualKm,
