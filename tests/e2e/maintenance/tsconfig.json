@@ -7,6 +7,8 @@
   },
   "include": ["**/*.ts"],
   "references": [
+    { "path": "../../../packages/domain/maintenance/plans" },
+    { "path": "../../../packages/domain/maintenance/orders" },
     { "path": "../../../packages/persistence/maintenance/plans" },
     { "path": "../../../packages/persistence/maintenance/orders" },
     { "path": "../../../packages/persistence/audit" },

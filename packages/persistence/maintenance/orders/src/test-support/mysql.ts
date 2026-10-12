@@ -63,6 +63,7 @@ export interface WorkOrderTestDatabase {
   openOrders(database?: 'a' | 'b'): Promise<DataSource>;
   openPlans(database?: 'a' | 'b'): Promise<DataSource>;
   rows<T>(sql: string, params?: unknown[]): Promise<T[]>;
+  rowsB<T>(sql: string, params?: unknown[]): Promise<T[]>;
   close(): Promise<void>;
 }
 
@@ -177,6 +178,11 @@ export async function startWorkOrderDatabase(tag: string): Promise<WorkOrderTest
     openPlans: (which = 'a') => open(createMaintenanceDataSource, which),
     async rows<T>(sql: string, params: unknown[] = []): Promise<T[]> {
       await admin.changeUser({ database: a.endpoint.database });
+      const [result] = await admin.query(sql, params);
+      return result as T[];
+    },
+    async rowsB<T>(sql: string, params: unknown[] = []): Promise<T[]> {
+      await admin.changeUser({ database: b.endpoint.database });
       const [result] = await admin.query(sql, params);
       return result as T[];
     },
