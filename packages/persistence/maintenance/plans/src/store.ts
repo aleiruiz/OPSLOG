@@ -10,6 +10,7 @@ import type {
   PlanStore,
   OdometerReading,
   PreventiveOrderClosedEvent,
+  PreventiveOrderLifecycleEvent,
   ScheduledMaintenanceOrder,
 } from '../../../../domain/maintenance/plans/src/index.js';
 import { MaintenancePlanError, targets } from '../../../../domain/maintenance/plans/src/index.js';
@@ -21,42 +22,8 @@ import {
   MaintenancePlanVersionEntity,
 } from './entities.js';
 import { appendMaintenanceAudit } from './audit.js';
+import { fromRow, toRow } from './plan-mapping.js';
 import { TypeOrmMaintenancePlanWorkerStore } from './worker-store.js';
-
-function fromRow(row: MaintenancePlanEntity): MaintenancePlan {
-  return {
-    id: row.id,
-    tenantId: row.tenantId,
-    vehicleId: row.vehicleId,
-    state: row.state as MaintenancePlan['state'],
-    ...(row.intervalDays === null ? {} : { intervalDays: row.intervalDays }),
-    ...(row.intervalKm === null ? {} : { intervalKm: row.intervalKm }),
-    ...(row.lastServiceDate === null ? {} : { lastServiceDate: row.lastServiceDate }),
-    ...(row.lastServiceKm === null ? {} : { lastServiceKm: row.lastServiceKm }),
-    defaultWorkshopId: row.defaultWorkshopId,
-    defaultMechanicId: row.defaultMechanicId,
-    version: row.version,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
-  };
-}
-function toRow(value: MaintenancePlan): Partial<MaintenancePlanEntity> {
-  return {
-    tenantId: value.tenantId,
-    id: value.id,
-    vehicleId: value.vehicleId,
-    state: value.state,
-    intervalDays: value.intervalDays ?? null,
-    intervalKm: value.intervalKm ?? null,
-    lastServiceDate: value.lastServiceDate ?? null,
-    lastServiceKm: value.lastServiceKm ?? null,
-    defaultWorkshopId: value.defaultWorkshopId ?? null,
-    defaultMechanicId: value.defaultMechanicId ?? null,
-    version: value.version,
-    createdAt: new Date(value.createdAt),
-    updatedAt: new Date(value.updatedAt),
-  };
-}
 
 export interface TypeOrmMaintenancePlanStoreOptions {
   readonly maxAttempts?: number;
@@ -257,5 +224,17 @@ export class TypeOrmMaintenancePlanStore implements PlanStore, PlanScanStore, Pl
   }
   public closePreventive(event: PreventiveOrderClosedEvent): Promise<void> {
     return this.workerStore.closePreventive(event);
+  }
+  public reopenPreventive(event: PreventiveOrderLifecycleEvent): Promise<void> {
+    return this.workerStore.reopenPreventive(event);
+  }
+  public cancelPreventive(event: PreventiveOrderLifecycleEvent): Promise<void> {
+    return this.workerStore.cancelPreventive(event);
+  }
+  public adoptPreventive(event: PreventiveOrderLifecycleEvent): Promise<void> {
+    return this.workerStore.adoptPreventive(event);
+  }
+  public baselineBeforeClosure(tenantId: string, planId: string, occurrenceId: string) {
+    return this.workerStore.baselineBeforeClosure(tenantId, planId, occurrenceId);
   }
 }

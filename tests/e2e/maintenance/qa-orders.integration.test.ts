@@ -184,53 +184,68 @@ suite('work order acceptance on MySQL 8.4', () => {
       version: closed.version,
       reason: 'Corrección de factura',
     });
+    // M1: the corrected re-close (earlier date, lower km than the first closure) is accepted.
     const again = await service.complete(t, ACTORS.admin, order.id, {
       version: reopened.version,
-      actualDate: '2026-10-11',
-      actualKm: 900,
+      actualDate: '2026-10-10',
+      actualKm: 800,
     });
     await service.close(t, ACTORS.admin, order.id, {
       version: again.version,
       vehicleStatus: 'active',
     });
-    const closures = await world.db.rows<{
+    const events = await world.db.rows<{
       event_id: string;
+      type: string;
       payload: Record<string, string | number>;
     }>(
-      `SELECT event_id, payload FROM ${AUDIT_TABLES.outbox} WHERE tenant_id=? AND type='maintenance.order.preventive_closed' AND entity_id=?`,
+      `SELECT event_id, type, payload FROM ${AUDIT_TABLES.outbox} WHERE tenant_id=? AND type IN ('maintenance.order.preventive_closed','maintenance.order.preventive_reopened') AND entity_id=? ORDER BY CAST(JSON_UNQUOTE(JSON_EXTRACT(payload,'$.version')) AS UNSIGNED)`,
       [t, order.id],
     );
-    expect(closures).toHaveLength(2);
-    for (const closure of [...closures, ...closures])
-      await world.plansA.closePreventive({
+    expect(events.map((e) => e.type.split('_').pop())).toEqual(['closed', 'reopened', 'closed']);
+    for (const event of [...events, ...events]) {
+      const p = event.payload;
+      const base = {
         tenantId: t,
-        eventId: closure.event_id,
-        planId: String(closure.payload['planId']),
-        occurrenceId: String(closure.payload['occurrenceId']),
-        orderId: String(closure.payload['orderId']),
-        kind: 'preventive',
-        completedAt: String(closure.payload['completedAt']),
-        actualDate: String(closure.payload['actualDate']),
-        actualKm: Number(closure.payload['actualKm']),
-      });
+        eventId: event.event_id,
+        planId: String(p['planId']),
+        occurrenceId: String(p['occurrenceId']),
+        orderId: String(p['orderId']),
+        version: Number(p['version']),
+      };
+      if (event.type.endsWith('_reopened')) await world.plansA.reopenPreventive(base);
+      else
+        await world.plansA.closePreventive({
+          ...base,
+          kind: 'preventive',
+          completedAt: String(p['completedAt']),
+          actualDate: String(p['actualDate']),
+          actualKm: Number(p['actualKm']),
+        });
+    }
+    // closure (v2) -> reopen restores the baseline (v3) -> corrected re-close (v4), applied once.
     expect(await world.plansA.get(t, plan.id)).toMatchObject({
-      version: 2,
-      lastServiceDate: '2026-10-11',
-      lastServiceKm: 900,
+      version: 4,
+      lastServiceDate: '2026-10-10',
+      lastServiceKm: 800,
     });
     await world.plansA.scan(t, plan.id, at('2026-11-10T00:00:00Z'), {
-      km: 900,
+      km: 800,
       updatedAt: '2026-11-10T00:00:00Z',
     });
     await world.plansA.scan(t, plan.id, at('2026-11-10T01:00:00Z'), {
-      km: 900,
+      km: 800,
       updatedAt: '2026-11-10T01:00:00Z',
     });
-    const occurrences = await world.db.rows<{ sequence: number }>(
-      `SELECT sequence FROM ${MAINTENANCE_TABLES.occurrences} WHERE company_id=? AND plan_id=? ORDER BY sequence`,
+    const occurrences = await world.db.rows<{ sequence: number; target_date: string }>(
+      `SELECT sequence, target_date FROM ${MAINTENANCE_TABLES.occurrences} WHERE company_id=? AND plan_id=? ORDER BY sequence`,
       [t, plan.id],
     );
-    expect(occurrences.map((o) => o.sequence)).toEqual([1, 2]);
+    // The next target moved from 2026-11-10 (first closure) to 2026-11-09 (corrected closure).
+    expect(occurrences.map((o) => [o.sequence, o.target_date])).toEqual([
+      [1, '2026-10-01'],
+      [2, '2026-11-09'],
+    ]);
   });
 
   it('D20: when configured every close needs a prior approval regardless of cost; without it a high cost closes', async () => {

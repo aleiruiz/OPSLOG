@@ -1,7 +1,7 @@
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 import { MAINTENANCE_TABLES as T } from './entities.js';
 
-export const MAINTENANCE_MIGRATION_VERSION = '2026101200010';
+export const MAINTENANCE_MIGRATION_VERSION = '2026101300010';
 export const MAINTENANCE_MIGRATIONS_TABLE = 'opslog_maintenance_migrations';
 
 /** ORM migration for maintenance plans, immutable snapshots, catalogs, occurrences, orders and alerts. */
@@ -88,5 +88,20 @@ export class CreateMaintenancePlans2026101200010 implements MigrationInterface {
     await queryRunner.dropTable(T.plans);
     await queryRunner.dropTable(T.mechanics);
     await queryRunner.dropTable(T.workshops);
+  }
+}
+
+/** G3 H1/M1: per-event idempotency, closure plan version and adoption mark on occurrences. */
+export class AddOccurrenceLifecycle2026101300010 implements MigrationInterface {
+  public name = 'AddOccurrenceLifecycle2026101300010';
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(
+      `ALTER TABLE \`${T.occurrences}\` ADD COLUMN applied_version INT UNSIGNED NOT NULL DEFAULT 0, ADD COLUMN closure_plan_version INT UNSIGNED NULL, ADD COLUMN adopted_at DATETIME(6) NULL`,
+    );
+  }
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(
+      `ALTER TABLE \`${T.occurrences}\` DROP COLUMN adopted_at, DROP COLUMN closure_plan_version, DROP COLUMN applied_version`,
+    );
   }
 }

@@ -7,11 +7,11 @@ import type {
   PlanEvaluation,
   PlanScanStore,
   PreventiveOrderClosedEvent,
+  PreventiveOrderLifecycleEvent,
 } from '../../../../domain/maintenance/plans/src/index.js';
 import {
   MaintenancePlanError,
   evaluatePlan,
-  isValidDateOnly,
   targets,
 } from '../../../../domain/maintenance/plans/src/index.js';
 import { MAINTENANCE_RUNTIME_ACCOUNT } from './data-source.js';
@@ -20,45 +20,17 @@ import {
   MaintenanceOccurrenceEntity,
   MaintenanceOrderSchema,
   MaintenancePlanEntity,
-  MaintenancePlanVersionEntity,
 } from './entities.js';
 import { MySqlTenantOutboxStore } from '../../../audit/src/index.js';
 import { appendMaintenanceAudit } from './audit.js';
-
-function fromRow(row: MaintenancePlanEntity): MaintenancePlan {
-  return {
-    id: row.id,
-    tenantId: row.tenantId,
-    vehicleId: row.vehicleId,
-    state: row.state as MaintenancePlan['state'],
-    ...(row.intervalDays === null ? {} : { intervalDays: row.intervalDays }),
-    ...(row.intervalKm === null ? {} : { intervalKm: row.intervalKm }),
-    ...(row.lastServiceDate === null ? {} : { lastServiceDate: row.lastServiceDate }),
-    ...(row.lastServiceKm === null ? {} : { lastServiceKm: row.lastServiceKm }),
-    defaultWorkshopId: row.defaultWorkshopId,
-    defaultMechanicId: row.defaultMechanicId,
-    version: row.version,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
-  };
-}
-function toRow(value: MaintenancePlan): Partial<MaintenancePlanEntity> {
-  return {
-    tenantId: value.tenantId,
-    id: value.id,
-    vehicleId: value.vehicleId,
-    state: value.state,
-    intervalDays: value.intervalDays ?? null,
-    intervalKm: value.intervalKm ?? null,
-    lastServiceDate: value.lastServiceDate ?? null,
-    lastServiceKm: value.lastServiceKm ?? null,
-    defaultWorkshopId: value.defaultWorkshopId ?? null,
-    defaultMechanicId: value.defaultMechanicId ?? null,
-    version: value.version,
-    createdAt: new Date(value.createdAt),
-    updatedAt: new Date(value.updatedAt),
-  };
-}
+import { fromRow } from './plan-mapping.js';
+import {
+  applyAdopted,
+  applyCancel,
+  applyClosure,
+  applyReopen,
+  baselineBeforeClosure,
+} from './lifecycle.js';
 
 export class TypeOrmMaintenancePlanWorkerStore implements PlanScanStore {
   private readonly outbox: MySqlTenantOutboxStore;
@@ -186,11 +158,16 @@ export class TypeOrmMaintenancePlanWorkerStore implements PlanScanStore {
       const plan = fromRow(row);
       if (plan.state !== 'active') return [];
       const occurrences = manager.getRepository(MaintenanceOccurrenceEntity);
-      const latest = await occurrences.findOne({
+      const last = await occurrences.findOne({
         where: { tenantId, planId },
         order: { sequence: 'DESC' },
       });
-      if (latest && latest.state !== 'completed' && latest.state !== 'closed') {
+      // A completed, closed or cancelled occurrence frees the plan: only a scheduled one blocks it.
+      const latest = await occurrences.findOne({
+        where: { tenantId, planId, state: 'scheduled' },
+        order: { sequence: 'DESC' },
+      });
+      if (latest) {
         const currentTargets = { targetDate: latest.targetDate, targetKm: latest.targetKm };
         const today = now.toISOString().slice(0, 10);
         const passed =
@@ -221,7 +198,7 @@ export class TypeOrmMaintenancePlanWorkerStore implements PlanScanStore {
         await this.persistAlert(manager, tenantId, plan, overdue, latest.id);
         return [overdue];
       }
-      const sequence = (latest?.sequence ?? 0) + 1;
+      const sequence = (last?.sequence ?? 0) + 1;
       const { targetDate, targetKm } = targets(plan);
       const dateReached = targetDate !== null && now.toISOString().slice(0, 10) >= targetDate;
       const kmReached = odometer.updatedAt !== null && targetKm !== null && odometer.km >= targetKm;
@@ -316,78 +293,20 @@ export class TypeOrmMaintenancePlanWorkerStore implements PlanScanStore {
     });
   }
 
-  public async closePreventive(event: PreventiveOrderClosedEvent): Promise<void> {
-    if (event.kind === 'corrective') return;
-    if (
-      !isValidDateOnly(event.actualDate) ||
-      !Number.isInteger(event.actualKm) ||
-      event.actualKm < 0 ||
-      Number.isNaN(Date.parse(event.completedAt))
-    )
-      throw new MaintenancePlanError('invalid_input');
-    await this.transaction(async (manager) => {
-      const planRepo = manager.getRepository(MaintenancePlanEntity);
-      const planRow = await planRepo.findOne({
-        where: { tenantId: event.tenantId, id: event.planId },
-        lock: { mode: 'pessimistic_write' },
-      });
-      if (!planRow) throw new MaintenancePlanError('not_found');
-      const occurrenceRepo = manager.getRepository(MaintenanceOccurrenceEntity);
-      const occurrence = await occurrenceRepo.findOne({
-        where: {
-          tenantId: event.tenantId,
-          id: event.occurrenceId,
-          planId: event.planId,
-          orderId: event.orderId,
-        },
-        lock: { mode: 'pessimistic_write' },
-      });
-      if (!occurrence) throw new MaintenancePlanError('not_found');
-      if (occurrence.state === 'completed' || occurrence.state === 'closed') return;
-      const plan = fromRow(planRow);
-      if (plan.lastServiceKm !== undefined && event.actualKm < plan.lastServiceKm)
-        throw new MaintenancePlanError('odometer_decrease');
-      const completedAt = new Date(event.completedAt);
-      await occurrenceRepo.update(
-        { tenantId: event.tenantId, id: occurrence.id, state: occurrence.state },
-        { state: 'completed', completedAt, actualDate: event.actualDate, actualKm: event.actualKm },
-      );
-      await manager
-        .getRepository(MaintenanceOrderSchema)
-        .update(
-          { tenantId: event.tenantId, id: event.orderId, occurrenceId: occurrence.id },
-          { status: 'completed' },
-        );
-      const next: MaintenancePlan = {
-        ...plan,
-        lastServiceDate: event.actualDate,
-        lastServiceKm: event.actualKm,
-        version: plan.version + 1,
-        updatedAt: completedAt.toISOString(),
-      };
-      const changed = await planRepo.update(
-        { tenantId: event.tenantId, id: event.planId, version: plan.version },
-        toRow(next),
-      );
-      if (changed.affected !== 1) throw new MaintenancePlanError('stale_version');
-      await manager.getRepository(MaintenancePlanVersionEntity).insert({
-        tenantId: event.tenantId,
-        planId: event.planId,
-        version: next.version,
-        snapshot: next,
-        actorId: 'worker-maintenance-plans',
-        createdAt: completedAt,
-      });
-      await appendMaintenanceAudit(manager, {
-        tenantId: event.tenantId,
-        entityType: 'maintenance_plan',
-        entityId: event.planId,
-        actorId: 'worker-maintenance-plans',
-        actorKind: 'system',
-        action: 'maintenance.plan.advanced',
-        occurredAt: next.updatedAt,
-        revision: String(next.version),
-      });
-    });
+  public closePreventive(event: PreventiveOrderClosedEvent): Promise<void> {
+    if (event.kind === 'corrective') return Promise.resolve();
+    return this.transaction((manager) => applyClosure(manager, event));
+  }
+  public reopenPreventive(event: PreventiveOrderLifecycleEvent): Promise<void> {
+    return this.transaction((manager) => applyReopen(manager, event));
+  }
+  public cancelPreventive(event: PreventiveOrderLifecycleEvent): Promise<void> {
+    return this.transaction((manager) => applyCancel(manager, event));
+  }
+  public adoptPreventive(event: PreventiveOrderLifecycleEvent): Promise<void> {
+    return this.transaction((manager) => applyAdopted(manager, event));
+  }
+  public baselineBeforeClosure(tenantId: string, planId: string, occurrenceId: string) {
+    return baselineBeforeClosure(this.dataSource.manager, tenantId, planId, occurrenceId);
   }
 }

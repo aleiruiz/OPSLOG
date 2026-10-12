@@ -97,13 +97,17 @@ export abstract class WorkOrderServiceBase {
     };
   }
 
-  protected async insert(actor: WorkOrderActor, order: WorkOrder): Promise<WorkOrder> {
+  protected async insert(
+    actor: WorkOrderActor,
+    order: WorkOrder,
+    extra: readonly WorkOrderEvent[] = [],
+  ): Promise<WorkOrder> {
     const created = await this.store.apply({
       order,
       expectedVersion: null,
       transition: this.timeline(order, 'create', null, actor, null, null),
       auditAction: 'maintenance.work_order.created',
-      events: [this.event(WORK_ORDER_CREATED_EVENT, order)],
+      events: [this.event(WORK_ORDER_CREATED_EVENT, order), ...extra],
     });
     if (!created) throw new WorkOrderError('duplicate');
     return order;

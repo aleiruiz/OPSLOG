@@ -66,6 +66,12 @@ export class MaintenanceOccurrenceEntity {
   completedAt!: Date | null;
   actualDate!: string | null;
   actualKm!: number | null;
+  /** Highest order version of a close/reopen/cancel event already applied (per-event idempotency). */
+  appliedVersion!: number;
+  /** Plan version created by the applied closure; null when the closure did not move the baseline. */
+  closurePlanVersion!: number | null;
+  /** Set once the scheduled order became a work order; adopted occurrences are never superseded. */
+  adoptedAt!: Date | null;
 }
 export class MaintenanceScheduledOrderEntity {
   tenantId!: string;
@@ -208,6 +214,14 @@ export const MaintenanceOccurrenceSchema = new EntitySchema<MaintenanceOccurrenc
     completedAt: { ...date('completed_at', true) },
     actualDate: { name: 'actual_date', type: 'char', length: 10, collation: bin, nullable: true },
     actualKm: { name: 'actual_km', type: 'int', unsigned: true, nullable: true },
+    appliedVersion: { name: 'applied_version', type: 'int', unsigned: true, default: 0 },
+    closurePlanVersion: {
+      name: 'closure_plan_version',
+      type: 'int',
+      unsigned: true,
+      nullable: true,
+    },
+    adoptedAt: { ...date('adopted_at', true) },
   },
   uniques: [
     { name: 'uq_maintenance_occurrence_sequence', columns: ['tenantId', 'planId', 'sequence'] },
