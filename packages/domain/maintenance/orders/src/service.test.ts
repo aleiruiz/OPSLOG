@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { WorkOrderError } from './errors.js';
 import { validateWorkOrderEvent } from './events.js';
-import { workOrderView } from './views.js';
+import { transitionView, workOrderView } from './views.js';
 import { TRANSITIONS } from './workflow.js';
 import {
   ADMIN,
@@ -671,5 +671,26 @@ describe('work order workflow', () => {
         events: [],
       }),
     ).toBe(false);
+  });
+
+  it('publishes timeline entries without the tenant and rejects invalid kilometers', async () => {
+    const { h, order } = await assigned();
+    const [created] = await h.service.history(TENANT, FLEET, order.id);
+    expect(created && transitionView(created)).not.toHaveProperty('tenantId');
+    const started = await h.service.start(TENANT, FLEET, order.id, { version: 2 });
+    const worked = await h.service.updateWork(TENANT, FLEET, order.id, {
+      version: started.version,
+      tasks: [{ description: 'x' }],
+    });
+    for (const actualKm of [-1, 1.5, 10_000_000])
+      expect(
+        await code(
+          h.service.complete(TENANT, FLEET, order.id, {
+            version: worked.version,
+            actualDate: '2026-10-12',
+            actualKm,
+          }),
+        ),
+      ).toBe('invalid_input');
   });
 });

@@ -85,7 +85,3 @@ export function closureVehicleStatus(value: unknown): string {
     ? (value as string)
     : invalid();
 }
-export function bool(value: unknown, fallback: boolean): boolean {
-  if (value === undefined) return fallback;
-  return typeof value === 'boolean' ? value : invalid();
-}
