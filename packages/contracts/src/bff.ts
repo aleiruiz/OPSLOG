@@ -18,6 +18,8 @@ import type { AreasRouteTypes } from './bff/areas.js';
 import { AREAS_ROUTES } from './bff/areas.js';
 import type { MaintenanceRouteTypes } from './bff/maintenance.js';
 import { MAINTENANCE_ROUTES } from './bff/maintenance.js';
+import type { WorkOrderRouteTypes } from './bff/work-orders.js';
+import { WORK_ORDER_ROUTES } from './bff/work-orders.js';
 import type { BffRouteDefinition } from './bff/shared.js';
 
 /**
@@ -180,6 +182,18 @@ export type {
   BffMaintenanceMechanic,
   BffMaintenanceMechanicInput,
 } from './bff/maintenance.js';
+export type {
+  BffMoney,
+  BffWorkOrder,
+  BffWorkOrderCommand,
+  BffWorkOrderCost,
+  BffWorkOrderCostsInput,
+  BffWorkOrderPart,
+  BffWorkOrderStatus,
+  BffWorkOrderTransition,
+  BffWorkOrderTransitionInput,
+  BffWorkOrderWorkInput,
+} from './bff/work-orders.js';
 
 /** Request and response types of every route. Keys are route ids. */
 export interface BffRouteTypes
@@ -192,7 +206,8 @@ export interface BffRouteTypes
     ImportsRouteTypes,
     AlertsRouteTypes,
     AreasRouteTypes,
-    MaintenanceRouteTypes {}
+    MaintenanceRouteTypes,
+    WorkOrderRouteTypes {}
 
 export type BffRouteId = keyof BffRouteTypes;
 
@@ -207,6 +222,7 @@ export const BFF_ROUTES = {
   ...ALERTS_ROUTES,
   ...AREAS_ROUTES,
   ...MAINTENANCE_ROUTES,
+  ...WORK_ORDER_ROUTES,
 } as const satisfies Record<BffRouteId, BffRouteDefinition>;
 
 type Parts<K extends BffRouteId> = Omit<BffRouteTypes[K], 'response'>;

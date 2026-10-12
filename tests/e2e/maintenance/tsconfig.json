@@ -8,6 +8,8 @@
   "include": ["**/*.ts"],
   "references": [
     { "path": "../../../packages/persistence/maintenance/plans" },
+    { "path": "../../../packages/persistence/maintenance/orders" },
+    { "path": "../../../packages/persistence/audit" },
     { "path": "../fleet" },
     { "path": "../../fixtures/maintenance" }
   ]

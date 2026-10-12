@@ -69,6 +69,7 @@ export function errorResponse(
   correlationId: string,
   extra: Readonly<Record<string, string | readonly string[]>> = {},
   field?: string,
+  missingRequirements?: readonly string[],
 ): BffResponse {
   const { status, message } = ERRORS[code];
   const body: ErrorBody = {
@@ -77,6 +78,7 @@ export function errorResponse(
     message,
     correlationId,
     ...(field === undefined ? {} : { field }),
+    ...(missingRequirements === undefined ? {} : { missingRequirements }),
   };
   return respond(status, body, correlationId, extra);
 }

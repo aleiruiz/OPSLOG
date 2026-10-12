@@ -10,6 +10,7 @@ import { TypeOrmVehicleStore } from '../../../../../packages/persistence/vehicle
 import { InMemoryMaintenancePlanStore } from '../../../../../packages/domain/maintenance/plans/src/index.js';
 import { InMemoryWorkshopStore } from '../../../../../packages/domain/maintenance/workshops/src/index.js';
 import { InMemoryMechanicStore } from '../../../../../packages/domain/maintenance/mechanics/src/index.js';
+import { InMemoryWorkOrderStore } from '../../../../../packages/domain/maintenance/orders/src/index.js';
 
 export function hasPersistentBusinessStores(adapters: PlatformAdapters): boolean {
   return [
@@ -28,6 +29,8 @@ export function hasPersistentBusinessStores(adapters: PlatformAdapters): boolean
       (adapters.maintenanceWorkshops !== undefined &&
         !(adapters.maintenanceWorkshops instanceof InMemoryWorkshopStore)) ||
       (adapters.maintenanceMechanics !== undefined &&
-        !(adapters.maintenanceMechanics instanceof InMemoryMechanicStore)),
+        !(adapters.maintenanceMechanics instanceof InMemoryMechanicStore)) ||
+      (adapters.maintenanceOrders !== undefined &&
+        !(adapters.maintenanceOrders instanceof InMemoryWorkOrderStore)),
   ].some(Boolean);
 }

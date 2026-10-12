@@ -53,6 +53,7 @@ import type { InsuranceApi } from './insurance.js';
 import type { EmployeesApi } from './employees.js';
 import type { VehiclesApi } from './vehicles.js';
 import type { MaintenanceApi } from '../../maintenance/plans/src/index.js';
+import type { WorkOrderApi } from '../../maintenance/orders/src/index.js';
 import { buildDomainApis } from './platform/apis.js';
 import { acceptInvitation, inspectInvitation, inviteUser } from './platform/invitations.js';
 import { PlatformError, failure, success, type PlatformResponse } from './platform/errors.js';
@@ -114,6 +115,7 @@ export class Platform {
   public readonly companySettings: CompanySettingsApi;
   public readonly alerts: AlertsApi;
   public readonly maintenance: MaintenanceApi;
+  public readonly workOrders: WorkOrderApi;
   public readonly access: AccessDirectory;
   public readonly tenants: InMemoryTenantStore;
   public readonly audit: AuditStore;
@@ -231,6 +233,7 @@ export class Platform {
     this.companySettings = apis.companySettings;
     this.alerts = apis.alerts;
     this.maintenance = apis.maintenance;
+    this.workOrders = apis.workOrders;
     this.runtime = buildWorkerRuntime(
       this.kernel,
       this.pipeline,
