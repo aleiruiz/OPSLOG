@@ -57,6 +57,23 @@ const fake = createFakeMaintenancePorts({
       costs: [{ id: 'c1', category: 'labor', amount: { amountMinor: '125000', currency: 'MXN' } }],
     }),
   ],
+  alerts: [
+    {
+      id: 'alert-1',
+      planId: 'plan-1',
+      vehicleId: 'veh-001',
+      occurrence: 1,
+      planVersion: 3,
+      kind: 'upcoming',
+      trigger: 'odometer',
+      threshold: '500_km',
+      targetDate: null,
+      targetKm: 10400,
+      odometerLastUpdatedAt: '2026-10-10T12:00:00.000Z',
+      odometerAgeSeconds: 172800,
+      occurredAt: at,
+    },
+  ],
   plans: [
     {
       id: 'plan-1',
@@ -120,7 +137,14 @@ createRoot(document.getElementById('root')!).render(
         ports={fake.ports}
         permissions={grants[as] ?? []}
         userId={as === 'mechanic' ? 'u-mech' : 'u-fleet'}
-        members={[{ id: 'u-mech', label: 'Ana Mecánica (usuario)' }]}
+        members={[
+          { id: 'u-mech', label: 'Mecánico 1' },
+          { id: 'u-fleet', label: 'Responsable de flotilla 1' },
+        ]}
+        vehicles={[
+          { id: 'veh-001', label: 'ECO-001 · Toyota Hilux' },
+          { id: 'veh-002', label: 'ECO-002 · Nissan NP300' },
+        ]}
         initialView={as === 'mechanic' ? 'mine' : 'orders'}
         onExpired={() => undefined}
       />

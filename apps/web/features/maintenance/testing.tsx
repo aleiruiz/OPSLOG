@@ -4,15 +4,34 @@ import { CssBaseline, ThemeProvider } from '@mui/material';
 import { cleanup, render, type RenderResult } from '@testing-library/react';
 import { afterEach } from 'vitest';
 import { opslogTheme } from '@opslog/ui';
+import { DirectoryProvider, type MaintenanceDirectory } from './directory';
 
 afterEach(cleanup);
 
-/** Renders a maintenance view with the design system theme (no app shell). */
-export function renderView(node: React.ReactElement): RenderResult {
+export const VEHICLES = [
+  { id: 'veh-001', label: 'ECO-001 · Toyota Hilux' },
+  { id: 'veh-002', label: 'ECO-002 · Nissan NP300' },
+] as const;
+export const MEMBERS = [
+  { id: 'u-fleet', label: 'Responsable de flotilla 1' },
+  { id: 'u-admin', label: 'Administración 1' },
+] as const;
+export const TEST_DIRECTORY: MaintenanceDirectory = {
+  vehicles: VEHICLES,
+  vehiclesTruncated: false,
+  members: MEMBERS,
+  membersTruncated: false,
+};
+
+/** Renders a maintenance view with the design system theme (no app shell) and a people/vehicles directory. */
+export function renderView(
+  node: React.ReactElement,
+  directory: MaintenanceDirectory = TEST_DIRECTORY,
+): RenderResult {
   return render(
     <ThemeProvider theme={opslogTheme}>
       <CssBaseline />
-      {node}
+      <DirectoryProvider value={directory}>{node}</DirectoryProvider>
     </ThemeProvider>,
   );
 }

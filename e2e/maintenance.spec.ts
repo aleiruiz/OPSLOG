@@ -100,7 +100,7 @@ test.describe('maintenance: plans and catalog', () => {
   }) => {
     await open(page, 'admin');
     await page.getByRole('tab', { name: 'Planes' }).click();
-    await page.getByRole('button', { name: 'veh-001' }).click();
+    await page.getByRole('button', { name: 'ECO-001 · Toyota Hilux' }).click();
     await expect(page.getByText('Siguiente objetivo por fecha: 01/11/2026')).toBeVisible();
     await expectNoViolations(page);
     await page.getByRole('tab', { name: 'Talleres y mecánicos' }).click();
@@ -111,9 +111,66 @@ test.describe('maintenance: plans and catalog', () => {
   });
 });
 
+test.describe('maintenance: forms and editors pass axe with contrast', () => {
+  test('the corrective order form', async ({ page }) => {
+    await open(page, 'editor');
+    await page.getByRole('button', { name: 'Nueva orden correctiva' }).click();
+    const form = page.getByRole('form', { name: 'Nueva orden correctiva' });
+    await expect(form.getByLabel(/^Vehículo/)).toBeVisible();
+    await expectNoViolations(page);
+    // Its validation message is part of the page too.
+    await form.getByRole('button', { name: 'Registrar orden' }).click();
+    await expect(form.getByRole('alert')).toContainText('Indica el vehículo');
+    await expectNoViolations(page);
+  });
+
+  test('the work editor', async ({ page }) => {
+    await open(page, 'editor');
+    await page.getByRole('button', { name: 'Servicio de 10 000 km' }).click();
+    await page.getByRole('button', { name: 'Registrar trabajo' }).click();
+    await expect(page.getByRole('form', { name: 'Registrar trabajo' })).toBeVisible();
+    await page.getByRole('button', { name: 'Agregar refacción' }).click();
+    await expectNoViolations(page);
+  });
+
+  test('the cost editor', async ({ page }) => {
+    await open(page, 'admin');
+    await page.getByRole('button', { name: 'Servicio de 10 000 km' }).click();
+    await page.getByRole('button', { name: 'Registrar costos' }).click();
+    await expect(page.getByRole('form', { name: 'Registrar costos' })).toBeVisible();
+    await page.getByRole('button', { name: 'Agregar costo' }).click();
+    await expectNoViolations(page);
+    await page.getByLabel('Importe 2').fill('1.234');
+    await page.getByRole('button', { name: 'Guardar costos' }).click();
+    await expect(page.getByRole('alert')).toContainText('Revisa los importes');
+    await expectNoViolations(page);
+  });
+
+  test('the plan form, in create and in edit mode, and the plan alerts', async ({ page }) => {
+    await open(page, 'admin');
+    await page.getByRole('tab', { name: 'Planes' }).click();
+    await page.getByRole('button', { name: 'Nuevo plan' }).click();
+    await expect(page.getByRole('form', { name: 'Nuevo plan' })).toBeVisible();
+    await expectNoViolations(page);
+    await page
+      .getByRole('form', { name: 'Nuevo plan' })
+      .getByRole('button', { name: 'Cancelar' })
+      .click();
+    await page.getByRole('button', { name: 'ECO-001 · Toyota Hilux' }).click();
+    await expect(page.getByRole('table', { name: /^Alertas de ECO-001/ })).toContainText(
+      'Lectura del odómetro de hace 2 días',
+    );
+    await page.getByRole('button', { name: 'Editar plan' }).click();
+    const form = page.getByRole('form', { name: 'Editar plan' });
+    await expect(form).toContainText('Vehículo: ECO-001 · Toyota Hilux');
+    await expect(form.getByLabel('Cada cuántos días')).toHaveValue('30');
+    await expectNoViolations(page);
+  });
+});
+
 test.describe('maintenance in the web shell (mock API)', () => {
-  async function signIn(page: Page, subject: string) {
-    await page.goto('/web/flota/mantenimiento');
+  async function signIn(page: Page, subject: string, path = '/web/flota/mantenimiento') {
+    await page.goto(path);
     await expect(page.getByRole('heading', { name: 'Iniciar sesión', level: 1 })).toBeVisible();
     await page.getByRole('textbox', { name: /Cuenta de prueba/ }).fill(subject);
     await page.keyboard.press('Enter');
@@ -131,10 +188,62 @@ test.describe('maintenance in the web shell (mock API)', () => {
     await expectNoViolations(page);
   });
 
+  test('an order has its own address, and the browser back and forward buttons follow it', async ({
+    page,
+  }) => {
+    await signIn(page, 'cuenta-admin');
+    await page.getByRole('button', { name: 'Servicio de 10 000 km' }).click();
+    await expect(
+      page.getByRole('heading', { name: 'Servicio de 10 000 km', level: 1 }),
+    ).toBeVisible();
+    await expect(page).toHaveURL(/\/web\/flota\/mantenimiento\/ordenes\/wo-003$/);
+    await page.goBack();
+    await expect(page.getByRole('heading', { name: 'Órdenes de mantenimiento' })).toBeVisible();
+    await expect(page).toHaveURL(/\/web\/flota\/mantenimiento$/);
+    await page.goForward();
+    await expect(
+      page.getByRole('heading', { name: 'Servicio de 10 000 km', level: 1 }),
+    ).toBeVisible();
+  });
+
   test('a role without view_costs never receives amounts', async ({ page }) => {
     await signIn(page, 'cuenta-despacho');
     await page.getByRole('button', { name: 'Servicio de 10 000 km' }).click();
     await expect(page.getByText('Filtro de aceite · 1')).toBeVisible();
     expect(await page.content()).not.toMatch(/1,250|450\.50|MXN/);
+  });
+
+  test('the alerts area lists the maintenance records and passes axe with contrast', async ({
+    page,
+  }) => {
+    await signIn(page, 'cuenta-admin', '/web/flota/alertas');
+    await expect(page.getByRole('table', { name: 'Alertas de mantenimiento (2)' })).toContainText(
+      'Lectura del odómetro de hace 2 días',
+    );
+    await expectNoViolations(page);
+  });
+});
+
+test.describe('maintenance in the web shell: my orders on a phone', () => {
+  test.use({ viewport: { width: 360, height: 780 } });
+
+  test('the mechanic’s own orders fit 360 px inside the shell, without horizontal scroll', async ({
+    page,
+  }) => {
+    await page.goto('/web/flota/mantenimiento');
+    await page.getByRole('textbox', { name: /Cuenta de prueba/ }).fill('cuenta-mecanico');
+    await page.keyboard.press('Enter');
+    await page.getByRole('tab', { name: 'Mis órdenes' }).click();
+    await expect(page.getByRole('heading', { name: 'Mis órdenes', level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Frenos rechinan', level: 2 })).toBeVisible();
+    await expect(page.getByText('Servicio de 10 000 km')).toHaveCount(0);
+    const overflow = () =>
+      page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(await overflow()).toBeLessThanOrEqual(0);
+    await expectNoViolations(page);
+    await page.getByRole('button', { name: 'Abrir para iniciar trabajo' }).click();
+    await expect(page.getByRole('heading', { name: 'Frenos rechinan', level: 1 })).toBeVisible();
+    expect(await overflow()).toBeLessThanOrEqual(0);
+    await expectNoViolations(page);
   });
 });

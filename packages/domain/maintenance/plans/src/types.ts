@@ -66,6 +66,38 @@ export interface PlanScheduleReader {
   ): Promise<readonly ScheduledMaintenanceOrder[]>;
 }
 
+/** An in-app alert persisted by the plans worker; `vehicleId` is the plan's vehicle. */
+export interface PlanAlertRecord {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly planId: string;
+  readonly vehicleId: string;
+  readonly occurrence: number;
+  readonly planVersion: number;
+  readonly kind: AlertKind;
+  readonly trigger: Trigger;
+  readonly threshold: Threshold;
+  readonly targetDate: string | null;
+  readonly targetKm: number | null;
+  readonly odometerLastUpdatedAt: string | null;
+  readonly odometerAgeSeconds: number | null;
+  readonly occurredAt: string;
+}
+export interface PlanAlertQuery {
+  readonly planId?: string;
+  readonly vehicleId?: string;
+  readonly limit: number;
+  readonly offset: number;
+}
+export interface PlanAlertPage {
+  readonly items: readonly PlanAlertRecord[];
+  readonly total: number;
+}
+export interface PlanAlertReader {
+  /** Newest first (`occurredAt`, then id); every selector includes the tenant. */
+  listAlerts(tenantId: string, query: PlanAlertQuery): Promise<PlanAlertPage>;
+}
+
 export interface OdometerReading {
   readonly km: number;
   /** Null means M2 has no persisted reading timestamp yet; km targets must not advance on it. */

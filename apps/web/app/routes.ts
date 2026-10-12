@@ -44,7 +44,8 @@ export interface RouteDefinition {
     | 'employeeEdit'
     | 'alerts'
     | 'alertSettings'
-    | 'maintenance';
+    | 'maintenance'
+    | 'maintenanceOrder';
   readonly pattern: string;
   readonly title: string;
   readonly access: RouteAccess;
@@ -271,6 +272,13 @@ export const routes: readonly RouteDefinition[] = [
     title: 'Mantenimiento',
     access: { permission: 'view' },
     nav: { group: 'Flota', label: 'Mantenimiento' },
+  },
+  // One order of the maintenance area, linkable and closed with the browser's back button.
+  {
+    id: 'maintenanceOrder',
+    pattern: '/flota/mantenimiento/ordenes/:id',
+    title: 'Orden de mantenimiento',
+    access: { permission: 'view' },
   },
   {
     id: 'imports',

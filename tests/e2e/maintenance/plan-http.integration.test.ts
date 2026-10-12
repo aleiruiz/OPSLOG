@@ -153,6 +153,57 @@ suite('maintenance plans through composed HTTP and MySQL', () => {
     expect(
       (await fleet.adminA.get(`/api/v1/maintenance/plans/${planAId}/schedule`)).text,
     ).not.toContain(fleet.tenantA);
+
+    // M2 (G3): the in-app alert records the worker persisted are listed through the typed route.
+    const listed = await fleet.adminA.get('/api/v1/maintenance/alerts');
+    expect(listed.status, listed.text).toBe(200);
+    expect(listed.json).toMatchObject({
+      total: 2,
+      nextCursor: null,
+      sort: { field: 'occurredAt', direction: 'desc' },
+    });
+    expect(listed.text).not.toContain(fleet.tenantA);
+    const items = listed.json.items as Record<string, unknown>[];
+    expect(items).toHaveLength(2);
+    expect(items.find((item) => item['planId'] === planAId)).toMatchObject({
+      vehicleId: vehicleOdometer,
+      kind: 'due',
+      trigger: 'odometer',
+      threshold: 'target',
+      targetKm: 10,
+      odometerAgeSeconds: expect.any(Number),
+    });
+    expect(items.find((item) => item['planId'] === datePlanId)).toMatchObject({
+      vehicleId: vehicleDate,
+      kind: 'due',
+      trigger: 'date',
+      targetDate: '2026-10-06',
+      odometerAgeSeconds: null,
+    });
+    const byPlan = await fleet.adminA.get(`/api/v1/maintenance/alerts?planId=${datePlanId}`);
+    expect(byPlan.json).toMatchObject({ total: 1, items: [{ planId: datePlanId }] });
+    const byVehicle = await fleet.adminA.get(
+      `/api/v1/maintenance/alerts?vehicleId=${vehicleOdometer}`,
+    );
+    expect(byVehicle.json).toMatchObject({ total: 1, items: [{ planId: planAId }] });
+    // Read-only roles see what the plans catalog already shows them; tenant B sees none of A's.
+    expect((await fleet.viewerA.get('/api/v1/maintenance/alerts')).json).toMatchObject({
+      total: 2,
+    });
+    expect((await fleet.adminB.get('/api/v1/maintenance/alerts')).json).toMatchObject({
+      total: 0,
+      items: [],
+    });
+    expect((await fleet.adminB.get(`/api/v1/maintenance/alerts?planId=${planAId}`)).status).toBe(
+      404,
+    );
+    expect(
+      (await fleet.adminB.get(`/api/v1/maintenance/alerts?vehicleId=${vehicleOdometer}`)).json,
+    ).toMatchObject({ total: 0 });
+    expect((await fleet.adminA.get('/api/v1/maintenance/alerts', { cookies: false })).status).toBe(
+      401,
+    );
+    expect((await fleet.adminA.get('/api/v1/maintenance/alerts?limit=7')).status).toBe(400);
   }, 60_000);
 
   it('rejects unauthenticated, unauthorized, malformed, and foreign-tenant plan requests without writes', async () => {

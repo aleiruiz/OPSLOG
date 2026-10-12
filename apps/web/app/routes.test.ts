@@ -40,6 +40,17 @@ describe('route matching', () => {
     );
   });
 
+  it('resolves one maintenance order at its own address, outside the navigation', () => {
+    expect(resolveRoute('/flota/mantenimiento')?.route.id).toBe('maintenance');
+    expect(resolveRoute('/flota/mantenimiento/ordenes/wo-1')).toMatchObject({
+      route: { id: 'maintenanceOrder', access: { permission: 'view' } },
+      params: { id: 'wo-1' },
+    });
+    expect(resolveRoute('/flota/mantenimiento/ordenes/a%2Fb')?.params).toEqual({ id: 'a/b' });
+    expect(resolveRoute('/flota/mantenimiento/ordenes')).toBeNull();
+    expect(routes.find((route) => route.id === 'maintenanceOrder')?.nav).toBeUndefined();
+  });
+
   it('resolves the document and policy screens, with "nuevo"/"nueva" taking precedence over the id', () => {
     expect(resolveRoute('/flota/documentos')?.route.id).toBe('documents');
     expect(resolveRoute('/flota/documentos/nuevo')?.route.id).toBe('documentNew');
