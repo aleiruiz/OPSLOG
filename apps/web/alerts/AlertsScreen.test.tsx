@@ -101,6 +101,17 @@ describe('alert list', () => {
     expect(exact('Estado')).toHaveValue('');
   });
 
+  it('says the totals cover the whole fleet when the list is filtered by origin', async () => {
+    await list();
+    await screen.findByRole('button', { name: /^Vencidos 12/ });
+    const note = /Los totales son de toda la flota/;
+    expect(screen.queryByText(note)).toBeNull();
+    set('Origen', 'insurance_policy');
+    expect(await screen.findByText(note)).toBeInTheDocument();
+    set('Origen', '');
+    await waitFor(() => expect(screen.queryByText(note)).toBeNull());
+  });
+
   it('leaves the summary out when its totals cannot be read', async () => {
     const api = createMockApi();
     const real = api.alerts.list.bind(api.alerts);

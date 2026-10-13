@@ -1,17 +1,18 @@
 import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
 import React from 'react';
 import {
   Button,
+  DescriptionList,
   Field,
   Notifications,
   PageHeader,
+  Panel,
   StatusBadge,
   Timeline,
   UiState,
 } from '@opslog/ui';
 import { NoSubmit, ResourceView, type ResourceState } from '../app/resource';
-import { RouterLink } from '../app/router';
+import { BackLink } from '../app/BackLink';
 import type { ImportEvent, ImportJob, ImportOutcome, ImportRow } from '../app/types';
 import { ImportRowsTable } from './ImportRowsTable';
 import { ImportNotFound, importsPath } from './ImportMessages';
@@ -58,7 +59,6 @@ export interface ImportDetailViewProps {
   readonly onRetry: () => void;
 }
 
-const linkSx = { color: 'primary.main', textDecoration: 'underline' } as const;
 const number = (value: number) => new Intl.NumberFormat('es-MX').format(value);
 
 /** Success message of the last change; kept focusable so the result is announced and reachable. */
@@ -86,30 +86,7 @@ function Summary({ job }: { job: ImportJob }) {
     ['Terminó', job.finishedAt === null ? 'En curso' : formatDateTime(job.finishedAt)],
     ['Por', job.createdBy],
   ];
-  return (
-    <Box
-      component="dl"
-      sx={{
-        display: 'grid',
-        gridTemplateColumns: { xs: '1fr', sm: 'minmax(160px, 220px) 1fr' },
-        columnGap: 3,
-        rowGap: { xs: 0.5, sm: 1.5 },
-        m: 0,
-        maxWidth: 720,
-      }}
-    >
-      {rows.map(([label, value]) => (
-        <React.Fragment key={label}>
-          <Typography component="dt" variant="body2" color="text.secondary">
-            {label}
-          </Typography>
-          <Typography component="dd" variant="body1" sx={{ m: 0, mb: { xs: 1.5, sm: 0 } }}>
-            {value}
-          </Typography>
-        </React.Fragment>
-      ))}
-    </Box>
-  );
+  return <DescriptionList columns={3} items={rows.map(([label, value]) => ({ label, value }))} />;
 }
 
 function LoadMore({
@@ -145,14 +122,10 @@ function Report({
 }) {
   const uid = React.useId();
   return (
-    <Box component="section" aria-labelledby="report-title" sx={{ mt: 4 }}>
-      <Typography id="report-title" component="h2" variant="h2" sx={{ mb: 1 }}>
-        Informe por fila
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Muestra la fila, el resultado, el motivo y las columnas con problema. Nunca el contenido de
-        las celdas.
-      </Typography>
+    <Panel
+      title="Informe por fila"
+      description="Muestra la fila, el resultado, el motivo y las columnas con problema. Nunca el contenido de las celdas."
+    >
       {job.invalidRows > 0 && onDownloadErrors && (
         <Box sx={{ mb: 2 }}>
           <Button variant="outlined" loading={downloadingErrors} onClick={onDownloadErrors}>
@@ -168,7 +141,7 @@ function Report({
         </Box>
       )}
       <NoSubmit>
-        <Box sx={{ maxWidth: 320, mb: 2 }}>
+        <Box sx={{ maxWidth: 320 }}>
           <Field
             id={`${uid}-outcome`}
             label="Resultado"
@@ -221,17 +194,14 @@ function Report({
           )
         }
       </ResourceView>
-    </Box>
+    </Panel>
   );
 }
 
 function History({ props }: { props: PagedProps<HistoryPage> }) {
   const { state } = props;
   return (
-    <Box component="section" aria-labelledby="history-title" sx={{ mt: 4 }}>
-      <Typography id="history-title" component="h2" variant="h2" sx={{ mb: 1 }}>
-        Historial de la importación
-      </Typography>
+    <Panel title="Historial de la importación">
       {state.status === 'ready' ? (
         <>
           <Timeline
@@ -265,7 +235,7 @@ function History({ props }: { props: PagedProps<HistoryPage> }) {
           {() => null}
         </ResourceView>
       )}
-    </Box>
+    </Panel>
   );
 }
 
@@ -283,15 +253,12 @@ export function ImportDetailView({
   if (state.status === 'error' && state.error.status === 404) return <ImportNotFound />;
   return (
     <>
-      <Box sx={{ mb: 2 }}>
-        <RouterLink to={importsPath} sx={linkSx}>
-          Volver a importaciones
-        </RouterLink>
-      </Box>
+      <BackLink to={importsPath}>Volver a importaciones</BackLink>
       <ResourceView state={state} onRetry={onRetry}>
         {(job) => (
           <>
             <PageHeader
+              eyebrow="Flota"
               title={`Importación de ${entityLabel(job.entity).toLowerCase()}`}
               description={`${modeLabel(job.mode)} · ${formatDateTime(job.createdAt)}`}
             />
@@ -317,10 +284,9 @@ export function ImportDetailView({
                 />
               </Box>
             )}
-            <Typography component="h2" variant="h2" sx={{ mb: 2 }}>
-              Resumen
-            </Typography>
-            <Summary job={job} />
+            <Panel title="Resumen">
+              <Summary job={job} />
+            </Panel>
             <Report
               job={job}
               props={rows}

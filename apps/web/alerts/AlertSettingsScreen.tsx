@@ -1,5 +1,6 @@
+import Box from '@mui/material/Box';
 import React from 'react';
-import { PageHeader } from '@opslog/ui';
+import { PageHeader, Panel } from '@opslog/ui';
 import { ResourceView, useResource } from '../app/resource';
 import type { AlertSettings, ApiError } from '../app/types';
 import { useSession } from '../auth/session';
@@ -137,6 +138,7 @@ export function AlertSettingsScreen() {
   return (
     <>
       <PageHeader
+        eyebrow="Configuración"
         title="Ajustes de alertas"
         description={
           can('manage_config')
@@ -144,17 +146,21 @@ export function AlertSettingsScreen() {
             : 'Días de anticipación y roles a los que se dirigen las alertas de vencimiento.'
         }
       />
-      <ResourceView state={state} onRetry={reload}>
-        {(settings) => (
-          <Editor
-            key={generation}
-            settings={settings}
-            setSettings={setData}
-            reload={reload}
-            draft={draft}
-          />
-        )}
-      </ResourceView>
+      <Box sx={{ maxWidth: 760 }}>
+        <Panel>
+          <ResourceView state={state} onRetry={reload}>
+            {(settings) => (
+              <Editor
+                key={generation}
+                settings={settings}
+                setSettings={setData}
+                reload={reload}
+                draft={draft}
+              />
+            )}
+          </ResourceView>
+        </Panel>
+      </Box>
     </>
   );
 }

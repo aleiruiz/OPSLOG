@@ -144,6 +144,7 @@ export function AlertsScreen() {
         <AlertStats
           data={summary}
           severity={filters.severity}
+          narrowed={filters.source !== '' || filters.vehicleId !== ''}
           onSelect={(severity) => setFilters({ ...filters, severity })}
         />
       }

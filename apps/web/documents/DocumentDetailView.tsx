@@ -1,16 +1,22 @@
+import ArchiveOutlined from '@mui/icons-material/ArchiveOutlined';
+import AutorenewOutlined from '@mui/icons-material/AutorenewOutlined';
+import EditOutlined from '@mui/icons-material/EditOutlined';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import React from 'react';
 import {
   Button,
+  DescriptionList,
   ConfirmDialog,
   Notifications,
   opslogTokens,
   PageHeader,
+  Panel,
   StatusBadge,
   Timeline,
   UiState,
 } from '@opslog/ui';
+import { BackLink } from '../app/BackLink';
 import { ResourceView, type ResourceState } from '../app/resource';
 import { RouterButton, RouterLink } from '../app/router';
 import type { Document, DocumentRevision } from '../app/types';
@@ -63,7 +69,12 @@ export interface DocumentDetailViewProps {
   readonly onArchiveErrorAction: () => void;
 }
 
-const linkSx = { color: 'primary.main', textDecoration: 'underline' } as const;
+const linkSx = {
+  color: 'primary.main',
+  fontWeight: 500,
+  textDecoration: 'underline',
+  textUnderlineOffset: '3px',
+} as const;
 
 function Mono({ children }: { children: React.ReactNode }) {
   return (
@@ -112,30 +123,7 @@ function Detail({ document, ownerName }: { document: Document; ownerName: string
     ['Notas', document.notes ?? '—'],
     ['Última actualización', formatDateTime(document.updatedAt)],
   ];
-  return (
-    <Box
-      component="dl"
-      sx={{
-        display: 'grid',
-        gridTemplateColumns: { xs: '1fr', sm: 'minmax(160px, 220px) 1fr' },
-        columnGap: 3,
-        rowGap: { xs: 0.5, sm: 1.5 },
-        m: 0,
-        maxWidth: 720,
-      }}
-    >
-      {rows.map(([label, value]) => (
-        <React.Fragment key={label}>
-          <Typography component="dt" variant="body2" color="text.secondary">
-            {label}
-          </Typography>
-          <Typography component="dd" variant="body1" sx={{ m: 0, mb: { xs: 1.5, sm: 0 } }}>
-            {value}
-          </Typography>
-        </React.Fragment>
-      ))}
-    </Box>
-  );
+  return <DescriptionList columns={3} items={rows.map(([label, value]) => ({ label, value }))} />;
 }
 
 function revisionTitle(entry: DocumentRevision): string {
@@ -154,10 +142,7 @@ function revisionDescription(entry: DocumentRevision): string {
 function History({ props }: { props: HistoryProps }) {
   const { state } = props;
   return (
-    <Box component="section" aria-labelledby="history-title" sx={{ mt: 4 }}>
-      <Typography id="history-title" component="h2" variant="h2" sx={{ mb: 1 }}>
-        Historial de revisiones
-      </Typography>
+    <Panel title="Historial de revisiones">
       {state.status === 'ready' ? (
         <>
           <Timeline
@@ -190,7 +175,7 @@ function History({ props }: { props: HistoryProps }) {
           {() => null}
         </ResourceView>
       )}
-    </Box>
+    </Panel>
   );
 }
 
@@ -211,29 +196,40 @@ export function DocumentDetailView({
   if (state.status === 'error' && state.error.status === 404) return <DocumentNotFound />;
   return (
     <>
-      <Box sx={{ mb: 2 }}>
-        <RouterLink to={documentsPath} sx={linkSx}>
-          Volver a documentos
-        </RouterLink>
-      </Box>
+      <BackLink to={documentsPath}>Volver a documentos</BackLink>
       <ResourceView state={state} onRetry={onRetry}>
         {(document) => (
           <>
             <PageHeader
+              eyebrow="Flota"
               title={document.title}
               description={`${typeLabel(document.ownerType, document.typeCode)}${ownerName ? ` · Vehículo ${ownerName}` : ''}`}
               actions={
                 <>
                   {can('edit') && isEditable(document) && (
                     <>
-                      <RouterButton to={`${documentPath(document.id)}/renovar`} variant="contained">
+                      <RouterButton
+                        to={`${documentPath(document.id)}/renovar`}
+                        variant="contained"
+                        startIcon={<AutorenewOutlined />}
+                      >
                         Renovar
                       </RouterButton>
-                      <RouterButton to={`${documentPath(document.id)}/editar`}>Editar</RouterButton>
+                      <RouterButton
+                        to={`${documentPath(document.id)}/editar`}
+                        startIcon={<EditOutlined />}
+                      >
+                        Editar
+                      </RouterButton>
                     </>
                   )}
                   {can('delete') && isEditable(document) && (
-                    <Button variant="outlined" color="error" onClick={onArchiveRequest}>
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      startIcon={<ArchiveOutlined />}
+                      onClick={onArchiveRequest}
+                    >
                       Archivar
                     </Button>
                   )}
@@ -250,10 +246,9 @@ export function DocumentDetailView({
                 />
               </Box>
             )}
-            <Typography component="h2" variant="h2" sx={{ mb: 2 }}>
-              Datos del documento
-            </Typography>
-            <Detail document={document} ownerName={ownerName} />
+            <Panel title="Datos del documento">
+              <Detail document={document} ownerName={ownerName} />
+            </Panel>
             <History props={history} />
             {archive.open && (
               <ConfirmDialog
