@@ -228,6 +228,12 @@ export interface WorkOrderReferences {
   closeApprovalRequired(tenantId: string): Promise<boolean>;
   /** IANA zone of the tenant: "today" and calendar dates of the order are computed in it (SPECS:184). */
   timeZone(tenantId: string): Promise<string>;
+  /**
+   * Optional (incidents, D11): whether an open incident that says the vehicle cannot operate holds
+   * the vehicle, so closing an order cannot return it to `active`. Absent, nothing changes. A read
+   * that fails is an error, never "free".
+   */
+  vehicleBlocks?(tenantId: string, vehicleId: string): Promise<boolean>;
   /** Evidence and invoice the tenant requires before completing and closing (default: none). */
   fileRequirements(tenantId: string): Promise<WorkOrderFileRequirements>;
   /** The record of a file of the files module, tenant-scoped; null when it is unknown for the tenant. */

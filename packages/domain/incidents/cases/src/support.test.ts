@@ -43,6 +43,12 @@ describe('views', () => {
     expect(incidentView(incident, REPORTER).editableFields).toEqual([]);
     expect(vehicleProposal({ ...incident, status: 'closed' })).toBeNull();
     expect(vehicleProposal({ ...incident, vehicleOperable: true })).toBeNull();
+    expect(vehicleProposal({ ...incident, totalLoss: true })).toEqual({
+      suggestedStatus: 'decommissioned',
+      reason: `Pérdida total, siniestro ${incident.folio}`,
+    });
+    expect(vehicleProposal({ ...incident, totalLoss: true, status: 'closed' })).toBeNull();
+    expect(vehicleProposal({ ...incident, vehicleOperable: true, totalLoss: false })).toBeNull();
     expect(editableFields('repair')).toEqual(['severity', 'description', 'damage', 'location']);
     expect(editableFields('cancelled')).toEqual([]);
     const [entry] = await service.history(TENANT_A, MANAGER, incident.id);

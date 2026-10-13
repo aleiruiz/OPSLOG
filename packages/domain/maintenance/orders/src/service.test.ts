@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { WorkOrderService } from './service.js';
 import { WorkOrderError } from './errors.js';
 import { validateWorkOrderEvent } from './events.js';
 import { transitionView, workOrderView } from './views.js';
@@ -536,6 +537,54 @@ describe('work order workflow', () => {
       vehicleStatus: 'in_maintenance',
     });
     expect(closed.vehicleStatusDecision).toBe('in_maintenance');
+  });
+
+  it('never returns the vehicle to active while an open incident holds it, and only when the port is connected (case 14)', async () => {
+    const { h, order } = await completed();
+    let held = true;
+    const connected = new WorkOrderService(
+      h.store,
+      { ...h.refs, vehicleBlocks: async () => held },
+      { now: () => h.clock.now },
+    );
+    expect(
+      await code(
+        connected.close(TENANT, ADMIN, order.id, {
+          version: order.version,
+          vehicleStatus: 'active',
+        }),
+      ),
+    ).toBe('missing_requirements:noOpenIncidentHoldingVehicle');
+    // Any other decision is not asked about the incidents.
+    held = false;
+    const closed = await connected.close(TENANT, ADMIN, order.id, {
+      version: order.version,
+      vehicleStatus: 'active',
+    });
+    expect(closed.vehicleStatusDecision).toBe('active');
+    // A port that cannot answer is an error, never "free".
+    const { h: other, order: second } = await completed();
+    const broken = new WorkOrderService(
+      other.store,
+      {
+        ...other.refs,
+        vehicleBlocks: async () => {
+          throw new Error('incidents unavailable');
+        },
+      },
+      { now: () => other.clock.now },
+    );
+    await expect(
+      broken.close(TENANT, ADMIN, second.id, { version: second.version, vehicleStatus: 'active' }),
+    ).rejects.toThrow('incidents unavailable');
+    expect(
+      (
+        await broken.close(TENANT, ADMIN, second.id, {
+          version: second.version,
+          vehicleStatus: 'in_maintenance',
+        })
+      ).status,
+    ).toBe('closed');
   });
 
   it('emits the preventive closure once per close and preserves the closed facts on reopen', async () => {

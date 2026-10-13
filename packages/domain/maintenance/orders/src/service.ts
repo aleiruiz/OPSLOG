@@ -256,7 +256,17 @@ export class WorkOrderService extends IdempotentCommands {
         (other) => other.id !== order.id,
       );
       // Returning to active never ignores another open workshop episode (SPECS §5.3).
-      missing({ noOtherOpenWorkshopOrders: others.length === 0 });
+      missing({
+        noOtherOpenWorkshopOrders: others.length === 0,
+        ...(this.refs.vehicleBlocks
+          ? {
+              noOpenIncidentHoldingVehicle: !(await this.refs.vehicleBlocks(
+                tenantId,
+                order.vehicleId,
+              )),
+            }
+          : {}),
+      });
     }
     const closedAt = this.now().toISOString();
     const extra: WorkOrderEvent[] =
