@@ -11,6 +11,7 @@ export * from './ports.js';
 export {
   assertEditable,
   assertEventTime,
+  assertNotTerminal,
   editableFields,
   vehicleProposal,
   type VehicleProposal,

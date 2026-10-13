@@ -16,8 +16,14 @@ export function editableFields(status: IncidentStatus): readonly WritableKey[] {
   return LIMITED;
 }
 
+/** Closed and cancelled cases accept no write of any package (SPECS §6.2): the shared state guard (409). */
+export function assertNotTerminal(status: IncidentStatus): void {
+  if (TERMINAL_STATUSES.includes(status)) throw new IncidentError('invalid_transition');
+}
+
 /** A write outside the matrix is a state conflict (409), not a bad input. */
 export function assertEditable(status: IncidentStatus, keys: readonly string[]): void {
+  assertNotTerminal(status);
   const allowed = editableFields(status);
   if (keys.some((key) => !(allowed as readonly string[]).includes(key)))
     throw new IncidentError('invalid_transition');

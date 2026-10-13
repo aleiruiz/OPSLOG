@@ -97,7 +97,7 @@ export interface Incident {
   readonly updatedBy: string;
 }
 
-/** Timeline commands of this package; INC-WORKFLOW adds the state commands. */
+/** Timeline commands that keep the status (edits and children); the state commands are INC-WORKFLOW's. */
 export const INCIDENT_TIMELINE_COMMANDS = [
   'create',
   'update',
@@ -107,6 +107,8 @@ export const INCIDENT_TIMELINE_COMMANDS = [
   'third_party_removed',
   'evidence_attached',
   'evidence_detached',
+  'insurance_updated',
+  'resolution_updated',
 ] as const;
 export type IncidentTimelineCommand = (typeof INCIDENT_TIMELINE_COMMANDS)[number];
 
@@ -135,6 +137,10 @@ export interface IncidentTransition extends NewIncidentTransition {
 /** Outbox events of this module. Payloads are allowlisted before persistence. */
 export const INCIDENT_CREATED_EVENT = 'incident.created';
 export const INCIDENT_UPDATED_EVENT = 'incident.updated';
+/** INC-WORKFLOW events (SPECS §7): one per state command, with ids, the version and the status only. */
+export const INCIDENT_STATUS_CHANGED_EVENT = 'incident.status_changed';
+export const INCIDENT_ASSIGNED_EVENT = 'incident.assigned';
+export const INCIDENT_CANCELLED_EVENT = 'incident.cancelled';
 export interface IncidentEvent {
   readonly type: string;
   readonly payload: Readonly<Record<string, string | number>>;
