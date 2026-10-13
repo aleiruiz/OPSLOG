@@ -343,4 +343,34 @@ describe('IncidentApi', () => {
     });
     expect(JSON.stringify(view)).not.toContain(`user-${SUBJECT}`);
   });
+
+  it('adds the SLA block of the cases that have one, in one call for a whole list, and none without a provider', async () => {
+    const calls: string[][] = [];
+    const block = {
+      cycle: 1,
+      state: 'on_track' as const,
+      startedAt: null,
+      deadline: null,
+      targetDays: null,
+      elapsedPercent: 0,
+      resolvedAt: null,
+      previousCycles: [],
+    };
+    const { api } = world({
+      sla: {
+        forIncidents: async (_tenant, cases) => {
+          calls.push(cases.map((c) => c.id));
+          return new Map(cases.filter((c) => c.id === 'incident-1').map((c) => [c.id, block]));
+        },
+      },
+    });
+    const first = await api.create('manager', 'c1', draft);
+    await api.create('manager', 'c2', draft);
+    expect(first.value?.sla).toEqual(block);
+    const list = await api.list('manager', 'c3', {});
+    expect(list.value?.items.map((item) => item.sla)).toEqual([undefined, block]);
+    expect(calls.at(-1)).toHaveLength(2);
+    const plain = world();
+    expect((await plain.api.create('manager', 'c4', draft)).value).not.toHaveProperty('sla');
+  });
 });

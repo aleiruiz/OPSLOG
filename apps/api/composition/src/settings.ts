@@ -4,6 +4,7 @@ import {
   type CloseCostThreshold,
   type CompanySettings,
   type IncidentReportPhoto,
+  type IncidentSlaDays,
   type MaintenanceEvidenceRequirement,
   type SettingsService,
 } from '../../../../packages/domain/settings/src/index.js';
@@ -66,6 +67,8 @@ export interface CompanySettingsView {
   readonly closeCostThreshold: CloseCostThreshold | null;
   readonly timeZone: string;
   readonly incidentReportPhoto: IncidentReportPhoto;
+  readonly incidentSlaDays: IncidentSlaDays;
+  readonly incidentInactivityDays: number;
   /** 0 while the company has never saved (the values are then the defaults). */
   readonly version: number;
   readonly updatedBy: string | null;
@@ -111,6 +114,8 @@ const viewOf = (settings: CompanySettings): CompanySettingsView => ({
   closeCostThreshold: settings.closeCostThreshold,
   timeZone: settings.timeZone,
   incidentReportPhoto: settings.incidentReportPhoto,
+  incidentSlaDays: settings.incidentSlaDays,
+  incidentInactivityDays: settings.incidentInactivityDays,
   version: settings.version,
   updatedBy: settings.updatedBy,
   updatedAt: settings.updatedAt,

@@ -26,6 +26,8 @@ const settings = (tenant: string, over: Partial<CompanySettings> = {}): CompanyS
   maintenanceEvidence: 'none',
   closeCostThreshold: null,
   incidentReportPhoto: 'photo_or_justification',
+  incidentSlaDays: { critical: 7, high: 15, medium: 30, low: 45 },
+  incidentInactivityDays: 5,
   timeZone: 'UTC',
   version: 1,
   updatedBy: ACTOR,
@@ -130,6 +132,11 @@ suite('persistent settings store on MySQL', () => {
         'six roles': { recipient_roles: 'admin,editor,viewer,auditor,pii_reader,admin' },
         'unknown evidence requirement': { maintenance_evidence: 'invoice' },
         'unknown report photo mode': { incident_report_photo: 'none' },
+        'SLA days zero': { incident_sla_critical: 0 },
+        'SLA days above 365': { incident_sla_high: 366 },
+        'SLA low zero': { incident_sla_low: 0 },
+        'inactivity zero': { incident_inactivity_days: 0 },
+        'inactivity above 60': { incident_inactivity_days: 61 },
         'blank zone': { time_zone: '  ' },
         'threshold without currency': { close_threshold_minor: 100 },
         'currency without threshold': { close_threshold_currency: 'MXN' },
@@ -200,6 +207,8 @@ suite('persistent settings store on MySQL', () => {
         maintenanceEvidence: 'evidence_invoice',
         closeCostThreshold: { amountMinor: '999999999999999', currency: 'MXN' },
         incidentReportPhoto: 'photo_required',
+        incidentSlaDays: { critical: 1, high: 365, medium: 2, low: 3 },
+        incidentInactivityDays: 60,
         timeZone: 'America/Mexico_City',
       });
       expect(await storeA.insert(value)).toBe(true);
@@ -210,6 +219,8 @@ suite('persistent settings store on MySQL', () => {
         maintenanceEvidence: 'none',
         closeCostThreshold: null,
         incidentReportPhoto: 'photo_or_justification',
+        incidentSlaDays: { critical: 7, high: 15, medium: 30, low: 45 },
+        incidentInactivityDays: 5,
         timeZone: 'UTC',
       });
     });

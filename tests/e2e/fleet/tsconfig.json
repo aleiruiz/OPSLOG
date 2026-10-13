@@ -26,6 +26,7 @@
     { "path": "../../../packages/persistence/incidents/workflow" },
     { "path": "../../../packages/persistence/incidents/repairs" },
     { "path": "../../../packages/persistence/incidents/costs" },
+    { "path": "../../../packages/persistence/incidents/sla" },
     { "path": "../../../packages/platform/pii" }
   ]
 }

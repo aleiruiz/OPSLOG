@@ -24,6 +24,11 @@ export class SettingsEntity {
   closeThresholdCurrency!: string | null;
   timeZone!: string;
   incidentReportPhoto!: string;
+  incidentSlaCritical!: number;
+  incidentSlaHigh!: number;
+  incidentSlaMedium!: number;
+  incidentSlaLow!: number;
+  incidentInactivityDays!: number;
   version!: number;
   updatedBy!: string;
   updatedAt!: Date;
@@ -74,6 +79,11 @@ export const SettingsEntitySchema = new EntitySchema<SettingsEntity>({
       length: 24,
       collation: BINARY_COLLATION,
     },
+    incidentSlaCritical: { name: 'incident_sla_critical', type: 'smallint', unsigned: true },
+    incidentSlaHigh: { name: 'incident_sla_high', type: 'smallint', unsigned: true },
+    incidentSlaMedium: { name: 'incident_sla_medium', type: 'smallint', unsigned: true },
+    incidentSlaLow: { name: 'incident_sla_low', type: 'smallint', unsigned: true },
+    incidentInactivityDays: { name: 'incident_inactivity_days', type: 'tinyint', unsigned: true },
     version: { type: 'int', unsigned: true },
     updatedBy: { name: 'updated_by', type: 'varchar', length: 64, collation: BINARY_COLLATION },
     updatedAt: { name: 'updated_at', type: 'datetime', precision: 6 },

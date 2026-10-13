@@ -746,6 +746,10 @@ describe('typed client against the real BFF', () => {
       ok: true,
       value: { items: [] },
     });
+    expect(await client.call('incidents.alerts.list', { query: { limit: 25 } })).toMatchObject({
+      ok: true,
+      value: { items: [] },
+    });
     expect(await client.call('incidents.costs.get', { params: flow })).toMatchObject({
       ok: true,
       value: { lines: [], totals: [] },
@@ -1009,6 +1013,8 @@ describe('typed client against the real BFF', () => {
         maintenanceEvidence: 'none',
         closeCostThreshold: null,
         incidentReportPhoto: 'photo_or_justification',
+        incidentSlaDays: { critical: 7, high: 15, medium: 30, low: 45 },
+        incidentInactivityDays: 5,
         timeZone: 'UTC',
         version: 0,
         updatedBy: null,

@@ -18,6 +18,7 @@ export function buildDownstreamApis(
   services: IncidentServices,
   pii: PiiCipher,
   files: WorkOrderFileSupport,
+  environment?: string,
 ) {
   const defaults = withMaintenanceDefaults(adapters);
   const stores = incidentStores(defaults);
@@ -39,6 +40,6 @@ export function buildDownstreamApis(
           (await stores.repairs.linkOfOrder(tenantId, orderId))?.incidentId ?? null,
         ),
     ),
-    ...buildIncidentApis(kernel, defaults, services, pii, files, stores),
+    ...buildIncidentApis(kernel, defaults, services, pii, files, stores, environment),
   };
 }

@@ -57,6 +57,8 @@ import type { WorkOrderApi } from '../../maintenance/orders/src/index.js';
 import type { IncidentApi } from '../../incidents/cases/src/index.js';
 import type { IncidentChildApi } from '../../incidents/third-parties/src/index.js';
 import type { IncidentCostApi } from '../../incidents/costs/src/index.js';
+import type { IncidentSlaApi } from '../../incidents/sla/src/index.js';
+import type { IncidentSlaModule } from './platform/incident-sla-apis.js';
 import type { IncidentRepairApi } from '../../incidents/repairs/src/index.js';
 import type { IncidentWorkflowApi } from '../../incidents/workflow/src/index.js';
 import { buildDomainApis } from './platform/apis.js';
@@ -115,6 +117,10 @@ export class Platform {
   public readonly incidentWorkflow: IncidentWorkflowApi;
   public readonly incidentRepairs: IncidentRepairApi;
   public readonly incidentCosts: IncidentCostApi;
+  /** The notices of the incident SLA (`GET /incidents/alerts`). */
+  public readonly incidentSla: IncidentSlaApi;
+  /** SLA scan, delivery and mail port: what the worker runs; `enqueueScan` queues a scan job. */
+  public readonly incidentSlaModule: IncidentSlaModule;
   public readonly access: AccessDirectory;
   public readonly tenants: InMemoryTenantStore;
   public readonly audit: AuditStore;
@@ -221,11 +227,12 @@ export class Platform {
       ...(adapters.fileSagaJournal ? { journal: adapters.fileSagaJournal } : {}),
       now: this.now,
     });
-    const apis = buildDomainApis(this.kernel, adapters, {
-      records: this.records,
-      pipeline: this.pipeline,
-      files: this.files,
-    });
+    const apis = buildDomainApis(
+      this.kernel,
+      adapters,
+      { records: this.records, pipeline: this.pipeline, files: this.files },
+      options.environment ?? process.env['OPSLOG_ENV'],
+    );
     this.vehicles = apis.vehicles;
     this.areas = apis.areas;
     this.employees = apis.employees;
@@ -242,12 +249,15 @@ export class Platform {
     this.incidentWorkflow = apis.incidentWorkflow;
     this.incidentRepairs = apis.incidentRepairs;
     this.incidentCosts = apis.incidentCosts;
+    this.incidentSla = apis.incidentSla.api;
+    this.incidentSlaModule = apis.incidentSla;
     this.runtime = buildWorkerRuntime(
       this.kernel,
       this.pipeline,
       options.worker,
       adapters.auditRelay,
       apis.maintenancePlanWorker,
+      apis.incidentSla,
     );
   }
 

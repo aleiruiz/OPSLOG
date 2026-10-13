@@ -1,4 +1,5 @@
 import type { ISODateTime, Page } from '../index.js';
+import type { BffIncidentSla } from './incident-sla.js';
 import type { BffRouteDefinition } from './shared.js';
 
 /** Incident states (SPECS §6.2). Ids are English snake_case; Spanish labels belong to the web layer. */
@@ -205,6 +206,8 @@ export interface BffIncident {
   readonly editableFields: readonly BffIncidentField[];
   /** State commands the caller's permission and the current state allow now; their requirements are in `next-steps`. */
   readonly allowedCommands: readonly BffIncidentCommand[];
+  /** The calculated SLA (INC-SLA); absent when the case has none. */
+  readonly sla?: BffIncidentSla;
 }
 
 /** Draft (FR-110): the vehicle and the type are enough; every other field may be missing. */

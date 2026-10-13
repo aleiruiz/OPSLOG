@@ -26,6 +26,8 @@ import type { IncidentChildRouteTypes } from './bff/incident-children.js';
 import { INCIDENT_CHILD_ROUTES } from './bff/incident-children.js';
 import type { IncidentCostRouteTypes } from './bff/incident-costs.js';
 import { INCIDENT_COST_ROUTES } from './bff/incident-costs.js';
+import type { IncidentSlaRouteTypes } from './bff/incident-sla.js';
+import { INCIDENT_SLA_ROUTES } from './bff/incident-sla.js';
 import type { IncidentWorkflowRouteTypes } from './bff/incident-workflow.js';
 import { INCIDENT_WORKFLOW_ROUTES } from './bff/incident-workflow.js';
 import type { BffRouteDefinition } from './bff/shared.js';
@@ -178,6 +180,7 @@ export type {
   BffMaintenanceEvidenceRequirement,
   BffCloseCostThreshold,
   BffIncidentReportPhoto,
+  BffIncidentSlaDays,
 } from './bff/alerts.js';
 export { BFF_AREA_ACTIONS, BFF_AREA_FIELDS } from './bff/areas.js';
 export type {
@@ -275,6 +278,20 @@ export type {
   BffRepairUnlink,
   BffRepairUnlinkInput,
 } from './bff/incident-costs.js';
+export {
+  BFF_INCIDENT_ALERT_KINDS,
+  BFF_INCIDENT_ALERT_PAGE_SIZES,
+  BFF_INCIDENT_SLA_STATES,
+} from './bff/incident-sla.js';
+export type {
+  BffIncidentAlert,
+  BffIncidentAlertKind,
+  BffIncidentAlertPage,
+  BffIncidentAlertsQuery,
+  BffIncidentSla,
+  BffIncidentSlaPreviousCycle,
+  BffIncidentSlaState,
+} from './bff/incident-sla.js';
 export { BFF_INCIDENT_IDEMPOTENCY_REQUIRED_COMMANDS } from './bff/incident-workflow.js';
 export type {
   BffIncidentTransitionInput,
@@ -328,7 +345,8 @@ export interface BffRouteTypes
     IncidentRouteTypes,
     IncidentChildRouteTypes,
     IncidentWorkflowRouteTypes,
-    IncidentCostRouteTypes {}
+    IncidentCostRouteTypes,
+    IncidentSlaRouteTypes {}
 
 export type BffRouteId = keyof BffRouteTypes;
 
@@ -348,6 +366,7 @@ export const BFF_ROUTES = {
   ...INCIDENT_CHILD_ROUTES,
   ...INCIDENT_WORKFLOW_ROUTES,
   ...INCIDENT_COST_ROUTES,
+  ...INCIDENT_SLA_ROUTES,
 } as const satisfies Record<BffRouteId, BffRouteDefinition>;
 
 type Parts<K extends BffRouteId> = Omit<BffRouteTypes[K], 'response'>;

@@ -20,6 +20,11 @@ import type { IncidentRepairStore } from '../../../../../packages/domain/inciden
 import type { IncidentClosures } from '../../../../../packages/domain/incidents/workflow/src/index.js';
 import type { IncidentChildStore } from '../../../../../packages/domain/incidents/third-parties/src/index.js';
 import type { WorkOrderStore } from '../../../../../packages/domain/maintenance/orders/src/index.js';
+import type {
+  AlertAddresses,
+  IncidentAlertMailer,
+  IncidentSlaStore,
+} from '../../../../../packages/domain/incidents/sla/src/index.js';
 import type { PiiCipher } from '../../../../../packages/platform/pii/src/index.js';
 import type {
   AreaResourceCounter,
@@ -84,6 +89,16 @@ export interface PlatformAdapters {
   readonly incidentRepairs?: IncidentRepairStore;
   readonly incidentCosts?: IncidentCostStore;
   /**
+   * Persistent SLA of the incidents (`packages/persistence/incidents/sla`): cycles, notices and
+   * deliveries; the notice and its outbox event commit together. In memory by default. It travels
+   * with the five stores above.
+   */
+  readonly incidentSla?: IncidentSlaStore;
+  /** The mail adapter of the SLA notices. Without one, outside production, a test sink records them. */
+  readonly incidentAlertMailer?: IncidentAlertMailer;
+  /** Where a member's address lives; read at send time. Defaults to a reserved, undeliverable address. */
+  readonly incidentAlertAddresses?: AlertAddresses;
+  /**
    * Personal-data protection (SPECS D23): envelope encryption plus blind indexes. Defaults to the
    * local development KMS with a random per-process key, which refuses production-mode
    * configurations; a deployment with real data must inject a cipher over a real KMS adapter.
@@ -109,6 +124,8 @@ export interface PlatformOptions {
   /** HMAC secret for download grants, at least 32 characters. */
   readonly grantSecret: string;
   readonly now?: () => Date;
+  /** `production` requires a real mail adapter. Defaults to `OPSLOG_ENV`. */
+  readonly environment?: string;
   readonly adapters?: PlatformAdapters;
   readonly pipeline?: Omit<PipelineOptions, 'now'>;
   readonly worker?: { readonly leaseMs?: number; readonly maxAttempts?: number };

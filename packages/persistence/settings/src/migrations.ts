@@ -182,3 +182,55 @@ export class AddIncidentCompanySettings2026101500030 implements MigrationInterfa
     );
   }
 }
+
+export const INCIDENT_SLA_SETTINGS_MIGRATION_VERSION = '2026101700040';
+
+/** Existing rows read the D17 targets (7/15/30/45 days) and N = 5. */
+export const INCIDENT_SLA_SETTINGS_COLUMNS: readonly TableColumnOptions[] = [
+  { name: 'incident_sla_critical', type: 'smallint', unsigned: true, default: 7 },
+  { name: 'incident_sla_high', type: 'smallint', unsigned: true, default: 15 },
+  { name: 'incident_sla_medium', type: 'smallint', unsigned: true, default: 30 },
+  { name: 'incident_sla_low', type: 'smallint', unsigned: true, default: 45 },
+  { name: 'incident_inactivity_days', type: 'tinyint', unsigned: true, default: 5 },
+];
+
+export const INCIDENT_SLA_SETTINGS_CHECKS: readonly {
+  readonly table: string;
+  readonly name: string;
+  readonly expression: string;
+}[] = [
+  {
+    table: T.settings,
+    name: 'ck_settings_incident_sla',
+    expression:
+      '((`incident_sla_critical` BETWEEN 1 AND 365 AND `incident_sla_high` BETWEEN 1 AND 365 AND `incident_sla_medium` BETWEEN 1 AND 365 AND `incident_sla_low` BETWEEN 1 AND 365 AND `incident_inactivity_days` BETWEEN 1 AND 60) IS TRUE)',
+  },
+];
+
+/**
+ * Incident SLA settings (INC-SLA, M4, SPECS D17): days per severity and the days without movement.
+ * An expand migration in its own step; the defaults keep every existing company on the D17 targets.
+ */
+export class AddIncidentSlaCompanySettings2026101700040 implements MigrationInterface {
+  name = 'AddIncidentSlaCompanySettings2026101700040';
+
+  async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.addColumns(
+      T.settings,
+      INCIDENT_SLA_SETTINGS_COLUMNS.map((column) => new TableColumn(column)),
+    );
+    for (const check of INCIDENT_SLA_SETTINGS_CHECKS)
+      await queryRunner.query(
+        `ALTER TABLE \`${check.table}\` ADD CONSTRAINT \`${check.name}\` CHECK (${check.expression})`,
+      );
+  }
+
+  async down(queryRunner: QueryRunner): Promise<void> {
+    for (const check of INCIDENT_SLA_SETTINGS_CHECKS)
+      await queryRunner.query(`ALTER TABLE \`${check.table}\` DROP CHECK \`${check.name}\``);
+    await queryRunner.dropColumns(
+      T.settings,
+      INCIDENT_SLA_SETTINGS_COLUMNS.map((column) => column.name),
+    );
+  }
+}

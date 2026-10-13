@@ -23,6 +23,8 @@ const settings = (tenant: string, over: Partial<CompanySettings> = {}): CompanyS
   maintenanceEvidence: 'none',
   closeCostThreshold: null,
   incidentReportPhoto: 'photo_or_justification',
+  incidentSlaDays: { critical: 7, high: 15, medium: 30, low: 45 },
+  incidentInactivityDays: 5,
   timeZone: 'UTC',
   version: 1,
   updatedBy: ACTOR,
@@ -174,8 +176,28 @@ describe('maintenance settings columns', () => {
     expect(await store.find(A)).toEqual(strict);
   });
 
+  it('round-trips the incident SLA days per severity and the days without movement', async () => {
+    const { db, store } = setup();
+    const tuned = settings(A, {
+      incidentSlaDays: { critical: 3, high: 10, medium: 100, low: 365 },
+      incidentInactivityDays: 60,
+    });
+    expect(await store.insert(tuned)).toBe(true);
+    expect(db.committed()[0]).toMatchObject({
+      incidentSlaCritical: 3,
+      incidentSlaHigh: 10,
+      incidentSlaMedium: 100,
+      incidentSlaLow: 365,
+      incidentInactivityDays: 60,
+    });
+    expect(await store.find(A)).toEqual(tuned);
+  });
+
   it.each([
     { incidentReportPhoto: 'none' },
+    { incidentSlaCritical: 0 },
+    { incidentSlaLow: 366 },
+    { incidentInactivityDays: 61 },
     { maintenanceEvidence: 'invoice' },
     { timeZone: 'Mars/Olympus' },
     { closeThresholdMinor: '10', closeThresholdCurrency: null },
@@ -184,6 +206,10 @@ describe('maintenance settings columns', () => {
     const { db, store } = setup();
     db.seed({
       ...settings(A),
+      incidentSlaCritical: 7,
+      incidentSlaHigh: 15,
+      incidentSlaMedium: 30,
+      incidentSlaLow: 45,
       closeThresholdMinor: null,
       closeThresholdCurrency: null,
       recipientRoles: 'admin',

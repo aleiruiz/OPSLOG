@@ -4,7 +4,7 @@ import {
   type BffWorld,
   type Browser,
 } from '../../../apps/api/bff/src/test-support.js';
-import type { Platform } from '../../../apps/api/composition/src/index.js';
+import type { Platform, PlatformAdapters } from '../../../apps/api/composition/src/index.js';
 import { EnvelopePiiCipher, LocalDevKms } from '../../../packages/platform/pii/src/index.js';
 import type { FleetDatabase } from './mysql.js';
 
@@ -49,7 +49,11 @@ class PreProvisionedTenantStore extends InMemoryTenantStore {
 
 let sequence = 0;
 
-export async function startFleetWorld(database: FleetDatabase): Promise<FleetWorld> {
+export async function startFleetWorld(
+  database: FleetDatabase,
+  /** Test doubles that replace one adapter of a company's composition (for example the mail port). */
+  extra: { readonly a?: PlatformAdapters; readonly b?: PlatformAdapters } = {},
+): Promise<FleetWorld> {
   const tenantsA = new PreProvisionedTenantStore('Empresa Sintética A');
   const tenantsB = new PreProvisionedTenantStore('Empresa Sintética B');
   database.tenantA.runtime.bindTenant(tenantsA.tenantId);
@@ -58,6 +62,7 @@ export async function startFleetWorld(database: FleetDatabase): Promise<FleetWor
     adapters: {
       tenants: tenantsA,
       ...database.tenantA.runtime.adapters,
+      ...extra.a,
       pii: new EnvelopePiiCipher(LocalDevKms.ephemeral('test')),
     },
   });
@@ -65,6 +70,7 @@ export async function startFleetWorld(database: FleetDatabase): Promise<FleetWor
     adapters: {
       tenants: tenantsB,
       ...database.tenantB.runtime.adapters,
+      ...extra.b,
       pii: new EnvelopePiiCipher(LocalDevKms.ephemeral('test')),
     },
   });

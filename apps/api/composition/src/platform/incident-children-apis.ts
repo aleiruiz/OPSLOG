@@ -43,6 +43,7 @@ import {
 } from './incident-apis.js';
 import type { PlatformKernel } from './kernel.js';
 import { buildIncidentCostApis, costPorts, repairOrderReader } from './incident-cost-apis.js';
+import { buildIncidentSla } from './incident-sla-apis.js';
 import { createMechanicScope } from './mechanic-scope.js';
 import type { PlatformAdapters } from './types.js';
 import { UPLOAD_REJECTIONS, type WorkOrderFileSupport } from './work-order-apis.js';
@@ -63,10 +64,11 @@ export function incidentStores(adapters: PlatformAdapters): {
     adapters.incidentClosures,
     adapters.incidentRepairs,
     adapters.incidentCosts,
+    adapters.incidentSla,
   ];
   if (injected.some(Boolean) && !injected.every(Boolean))
     throw new Error(
-      'adapters.incidents, incidentChildren, incidentClosures, incidentRepairs and incidentCosts must be injected together',
+      'adapters.incidents, incidentChildren, incidentClosures, incidentRepairs, incidentCosts and incidentSla must be injected together',
     );
   const store = adapters.incidents ?? new InMemoryIncidentStore();
   return {
@@ -190,7 +192,9 @@ export function buildIncidentApis(
   pii: PiiCipher,
   support: WorkOrderFileSupport,
   stores: ReturnType<typeof incidentStores> = incidentStores(adapters),
+  environment?: string,
 ): IncidentDomainApis {
+  const sla = buildIncidentSla(kernel, adapters, services, stores.store, environment);
   const evidence = evidenceFacts(stores.children, incidentFiles(support));
   const orders = repairOrderReader(adapters);
   const cost = costPorts(stores.repairs, stores.costs, orders);
@@ -211,9 +215,10 @@ export function buildIncidentApis(
     cost,
   });
   return {
-    incidents: buildIncidentApi(kernel, adapters, services, stores.store),
+    incidents: buildIncidentApi(kernel, adapters, services, stores.store, sla.reader),
     incidentChildren: buildIncidentChildApi(kernel, adapters, stores, pii, support, ports),
     incidentWorkflow: buildIncidentWorkflowApi(kernel, adapters, services, stores.store, ports),
     ...buildIncidentCostApis(kernel, adapters, services, stores, orders, evidence, cost.ledger),
+    incidentSla: sla,
   };
 }

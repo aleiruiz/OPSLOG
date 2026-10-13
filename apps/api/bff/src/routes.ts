@@ -13,6 +13,7 @@ import { AREA_ROUTES } from './routes/areas.js';
 import { MAINTENANCE_ROUTES } from './routes/maintenance.js';
 import { MAINTENANCE_ALERT_ROUTES } from './routes/maintenance-alerts.js';
 import { WORK_ORDER_ROUTES } from './routes/work-orders.js';
+import { INCIDENT_SLA_ROUTES } from './routes/incident-sla.js';
 import { INCIDENT_ROUTES } from './routes/incidents.js';
 import { INCIDENT_CHILD_ROUTES } from './routes/incident-children.js';
 import { INCIDENT_COST_ROUTES } from './routes/incident-costs.js';
@@ -35,6 +36,8 @@ export const ROUTES: readonly Route[] = [
   ...MAINTENANCE_ROUTES,
   ...MAINTENANCE_ALERT_ROUTES,
   ...WORK_ORDER_ROUTES,
+  // The literal `alerts` segment goes before `incidents/:incidentId`: the first match wins.
+  ...INCIDENT_SLA_ROUTES,
   ...INCIDENT_ROUTES,
   ...INCIDENT_CHILD_ROUTES,
   ...INCIDENT_WORKFLOW_ROUTES,

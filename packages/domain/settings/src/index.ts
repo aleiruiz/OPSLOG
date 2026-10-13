@@ -3,6 +3,15 @@ import {
   requireOpaqueId,
   requireVersion,
 } from '../../documents/src/index.js';
+import {
+  DEFAULT_INCIDENT_INACTIVITY_DAYS,
+  DEFAULT_INCIDENT_SLA_DAYS,
+  parseIncidentInactivityDays,
+  parseIncidentSlaDays,
+  type IncidentSlaDays,
+} from './incident-sla.js';
+
+export * from './incident-sla.js';
 
 /**
  * Company settings (FLT-SETTINGS, first slice): the two parameters the base expiry alerts need,
@@ -94,6 +103,10 @@ export interface CompanySettings {
   readonly timeZone: string;
   /** Photo evidence that reporting an incident requires. */
   readonly incidentReportPhoto: IncidentReportPhoto;
+  /** D17: target in calendar days per severity of the incident SLA (default 7/15/30/45). */
+  readonly incidentSlaDays: IncidentSlaDays;
+  /** Days without movement before a case is flagged; escalated at twice that (default 5). */
+  readonly incidentInactivityDays: number;
   /** Optimistic concurrency token: 0 while the company has never saved, then 1, +1 on every change. */
   readonly version: number;
   /** `user-<subject>` of the last writer; `null` for the defaults. */
@@ -125,6 +138,8 @@ export function defaultSettings(tenantId: string): CompanySettings {
     closeCostThreshold: null,
     timeZone: DEFAULT_TIME_ZONE,
     incidentReportPhoto: 'photo_or_justification',
+    incidentSlaDays: DEFAULT_INCIDENT_SLA_DAYS,
+    incidentInactivityDays: DEFAULT_INCIDENT_INACTIVITY_DAYS,
     version: 0,
     updatedBy: null,
     updatedAt: null,
@@ -138,6 +153,8 @@ export const OPTIONAL_SETTINGS_FIELDS = [
   'closeCostThreshold',
   'timeZone',
   'incidentReportPhoto',
+  'incidentSlaDays',
+  'incidentInactivityDays',
 ] as const;
 
 export interface SettingsData {
@@ -148,6 +165,8 @@ export interface SettingsData {
   readonly closeCostThreshold?: CloseCostThreshold | null;
   readonly timeZone?: string;
   readonly incidentReportPhoto?: IncidentReportPhoto;
+  readonly incidentSlaDays?: IncidentSlaDays;
+  readonly incidentInactivityDays?: number;
 }
 
 function parseThreshold(value: unknown): CloseCostThreshold | null {
@@ -204,6 +223,19 @@ export function parseSettings(input: unknown): SettingsData {
   if (zone !== undefined && !isValidTimeZone(zone)) return invalid();
   const photo = fields['incidentReportPhoto'];
   if (photo !== undefined && !isIncidentReportPhoto(photo)) return invalid();
+  const slaDays =
+    fields['incidentSlaDays'] === undefined
+      ? null
+      : parseIncidentSlaDays(fields['incidentSlaDays']);
+  const inactivity =
+    fields['incidentInactivityDays'] === undefined
+      ? null
+      : parseIncidentInactivityDays(fields['incidentInactivityDays']);
+  if (
+    (fields['incidentSlaDays'] !== undefined && slaDays === null) ||
+    (fields['incidentInactivityDays'] !== undefined && inactivity === null)
+  )
+    return invalid();
   return {
     expiryWindowDays: days,
     recipientRoles: normalizeRoles(roles),
@@ -213,6 +245,8 @@ export function parseSettings(input: unknown): SettingsData {
       : { closeCostThreshold: parseThreshold(fields['closeCostThreshold']) }),
     ...(zone === undefined ? {} : { timeZone: zone }),
     ...(photo === undefined ? {} : { incidentReportPhoto: photo }),
+    ...(slaDays === null ? {} : { incidentSlaDays: slaDays }),
+    ...(inactivity === null ? {} : { incidentInactivityDays: inactivity }),
   };
 }
 
@@ -321,6 +355,8 @@ export class SettingsService {
           : data.closeCostThreshold,
       timeZone: data.timeZone ?? current.timeZone,
       incidentReportPhoto: data.incidentReportPhoto ?? current.incidentReportPhoto,
+      incidentSlaDays: data.incidentSlaDays ?? current.incidentSlaDays,
+      incidentInactivityDays: data.incidentInactivityDays ?? current.incidentInactivityDays,
       version: version + 1,
       updatedBy: actorId,
       updatedAt: now.toISOString(),

@@ -17,12 +17,17 @@ import {
   type VehicleService,
 } from '../../../../../packages/domain/vehicles/src/index.js';
 import { allowedCommands } from '../../../../../packages/domain/incidents/workflow/src/index.js';
-import { IncidentApi, type IncidentLabels } from '../../../incidents/cases/src/index.js';
+import {
+  IncidentApi,
+  type IncidentLabels,
+  type IncidentSlaViews,
+} from '../../../incidents/cases/src/index.js';
 import type { IncidentWorkflowApi } from '../../../incidents/workflow/src/index.js';
 import type { IncidentCostApi } from '../../../incidents/costs/src/index.js';
 import type { IncidentRepairApi } from '../../../incidents/repairs/src/index.js';
 import type { IncidentChildApi } from '../../../incidents/third-parties/src/index.js';
 import { ROLE_LABELS } from '../directory.js';
+import type { IncidentSlaModule } from './incident-sla-apis.js';
 import type { PlatformKernel } from './kernel.js';
 import { InMemoryMechanicStore } from '../../../../../packages/domain/maintenance/mechanics/src/index.js';
 import { createMechanicScope } from './mechanic-scope.js';
@@ -51,6 +56,8 @@ export interface IncidentDomainApis {
   readonly incidentWorkflow: IncidentWorkflowApi;
   readonly incidentRepairs: IncidentRepairApi;
   readonly incidentCosts: IncidentCostApi;
+  /** The SLA of the incidents: its API, reader, scan, delivery and mail port. */
+  readonly incidentSla: IncidentSlaModule;
 }
 
 export interface IncidentServices {
@@ -160,6 +167,7 @@ export function buildIncidentApi(
   adapters: PlatformAdapters,
   services: IncidentServices,
   store: IncidentStore,
+  sla?: IncidentSlaViews,
 ): IncidentApi {
   const scope = createMechanicScope(adapters.maintenanceMechanics ?? new InMemoryMechanicStore());
   return new IncidentApi({
@@ -171,6 +179,7 @@ export function buildIncidentApi(
     mechanicLinked: scope.mechanicLinked,
     labels: incidentLabels(kernel, services),
     allowedCommands,
+    ...(sla ? { sla } : {}),
     // A refused access is audited like any other denied attempt; the audit trail has no payload.
     deny: (context, action, entityId, correlationId) =>
       kernel.auditNow(kernel.userActor(context), action, 'incident', entityId, correlationId),

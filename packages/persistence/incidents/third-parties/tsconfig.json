@@ -9,6 +9,7 @@
     "src/**/*.ts",
     "../repairs/src/entities.ts",
     "../costs/src/entities.ts",
+    "../sla/src/entities.ts",
     "../cases/src/**/*.ts",
     "../workflow/src/entities.ts",
     "../../../domain/incidents/cases/src/**/*.ts",
