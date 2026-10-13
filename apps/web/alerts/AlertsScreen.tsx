@@ -57,6 +57,8 @@ export function AlertsScreen() {
 
   // Totals by status for the summary cards: best effort, read once the list itself has loaded so the
   // list stays the first request of the screen.
+  const expire = React.useRef(markExpired);
+  expire.current = markExpired;
   const [totals, setTotals] = React.useState<AlertsSummaryData | null | undefined>(undefined);
   // Totals do not depend on the filters: read them once, the first time the list is ready.
   const listReady = first.state.status === 'ready' || totals !== undefined;
@@ -64,12 +66,19 @@ export function AlertsScreen() {
     if (!listReady) return;
     let cancelled = false;
     void loadAlertsSummary(ports).then((result) => {
-      if (!cancelled) setTotals(result.ok ? result.value : null);
+      if (cancelled) return;
+      if (!result.ok && result.error.status === 401) expire.current();
+      setTotals(result.ok ? result.value : null);
     });
     return () => {
       cancelled = true;
     };
   }, [ports, listReady]);
+  // The list itself failed (error, no access, session over): no cards waiting on totals that never come.
+  const summary =
+    totals === undefined && first.state.status !== 'ready' && first.state.status !== 'loading'
+      ? null
+      : totals;
 
   const [extra, setExtra] = React.useState<{ items: Alert[]; cursor: string | null } | null>(null);
   const [loadingMore, setLoadingMore] = React.useState(false);
@@ -131,7 +140,7 @@ export function AlertsScreen() {
       hideList={maintenanceOnly}
       summary={
         <AlertStats
-          data={totals}
+          data={summary}
           severity={filters.severity}
           onSelect={(severity) => setFilters({ ...filters, severity })}
         />

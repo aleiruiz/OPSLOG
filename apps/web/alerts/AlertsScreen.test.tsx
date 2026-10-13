@@ -117,6 +117,26 @@ describe('alert list', () => {
     );
   });
 
+  it('drops the summary when the list itself fails, and expires the session on a 401 from the totals', async () => {
+    const api = createMockApi();
+    api.controls.failNext('listAlerts');
+    await list({ api });
+    await screen.findByRole('heading', { name: 'No pudimos cargar la información' });
+    expect(screen.queryByRole('region', { name: 'Resumen de vencimientos' })).toBeNull();
+
+    const other = createMockApi();
+    const real = other.alerts.list.bind(other.alerts);
+    vi.spyOn(other.alerts, 'list').mockImplementation((query) =>
+      query?.severity === undefined
+        ? real(query)
+        : Promise.resolve({ ok: false, error: { status: 401 } } as Awaited<
+            ReturnType<typeof real>
+          >),
+    );
+    await list({ api: other });
+    expect(await screen.findByRole('group', { name: 'Sesión expirada' })).toBeInTheDocument();
+  });
+
   it('loads further pages with the cursor and keeps them until a filter changes', async () => {
     const api = createMockApi();
     const spy = vi.spyOn(api.alerts, 'list');
