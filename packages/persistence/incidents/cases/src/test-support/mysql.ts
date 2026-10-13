@@ -59,7 +59,23 @@ export interface IncidentTestDatabase {
 }
 
 /** Two disposable tenant-exclusive databases (A and B), each with its own restricted runtime user. */
-export async function startIncidentDatabase(tag: string): Promise<IncidentTestDatabase> {
+export interface IncidentDatabaseExtension {
+  /** Migrations of a later module of the incidents, run after the cases with the owner account. */
+  readonly migrate?: (owner: {
+    readonly host: string;
+    readonly port: number;
+    readonly database: string;
+    readonly username: string;
+    readonly password: string;
+  }) => Promise<void>;
+  /** Runtime grants of that module. */
+  readonly grants?: readonly { table: string; privileges: string }[];
+}
+
+export async function startIncidentDatabase(
+  tag: string,
+  extension: IncidentDatabaseExtension = {},
+): Promise<IncidentTestDatabase> {
   const suffix = `${Date.now()}_${process.pid}_${randomBytes(4).toString('hex')}`;
   const cfg = adminConfig(adminUrl as string);
   const admin = await mysql.createConnection({ ...cfg, database: 'mysql' });
@@ -114,7 +130,8 @@ export async function startIncidentDatabase(tag: string): Promise<IncidentTestDa
     } finally {
       await migration.destroy();
     }
-    for (const grant of INCIDENT_GRANTS)
+    await extension.migrate?.(owner);
+    for (const grant of [...INCIDENT_GRANTS, ...(extension.grants ?? [])])
       await admin.query(
         `GRANT ${grant.privileges} ON ${identifier(database)}.${identifier(grant.table)} TO '${runtime.user}'@'%'`,
       );

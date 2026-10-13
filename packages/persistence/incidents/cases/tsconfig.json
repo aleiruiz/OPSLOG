@@ -8,6 +8,7 @@
   "include": [
     "src/**/*.ts",
     "../third-parties/src/**/*.ts",
+    "../workflow/src/entities.ts",
     "../../../domain/incidents/third-parties/src/**/*.ts",
     "../../../platform/pii/src/**/*.ts",
     "../../../domain/incidents/cases/src/**/*.ts",

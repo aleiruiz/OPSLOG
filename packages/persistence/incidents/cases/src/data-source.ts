@@ -5,6 +5,7 @@ import {
   CreateIncidentChildren2026101500020,
   INCIDENT_CHILD_ENTITIES,
 } from '../../third-parties/src/index.js';
+import { INCIDENT_WORKFLOW_ENTITIES } from '../../workflow/src/entities.js';
 import { INCIDENT_ENTITIES } from './entities.js';
 import { CreateIncidentCases2026101500010, INCIDENT_MIGRATIONS_TABLE } from './migrations.js';
 
@@ -22,7 +23,12 @@ export interface IncidentDatabaseConfig {
 export const INCIDENT_RUNTIME_ACCOUNT = /^opslog_incidents_[a-z0-9_]+$/i;
 const common = {
   type: 'mysql',
-  entities: [...INCIDENT_ENTITIES, ...INCIDENT_CHILD_ENTITIES, ...AUDIT_ENTITIES],
+  entities: [
+    ...INCIDENT_ENTITIES,
+    ...INCIDENT_CHILD_ENTITIES,
+    ...INCIDENT_WORKFLOW_ENTITIES,
+    ...AUDIT_ENTITIES,
+  ],
   // Ordered by version: the cases first, then their third parties and evidence (PR 2).
   migrations: [CreateIncidentCases2026101500010, CreateIncidentChildren2026101500020],
   migrationsTableName: INCIDENT_MIGRATIONS_TABLE,

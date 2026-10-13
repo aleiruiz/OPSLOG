@@ -15,6 +15,7 @@
     { "path": "./packages/domain/incidents/cases" },
     { "path": "./packages/domain/incidents/third-parties" },
     { "path": "./packages/domain/incidents/workflow" },
+    { "path": "./packages/persistence/incidents/workflow" },
     { "path": "./packages/persistence/maintenance/plans" },
     { "path": "./packages/persistence/maintenance/workshops" },
     { "path": "./packages/persistence/maintenance/mechanics" },
