@@ -1,10 +1,10 @@
-import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import React from 'react';
 import { Button, FormSection, PageHeader, UiState } from '@opslog/ui';
 import type { InvitationPreview, Result } from '../app/types';
 import { useRouter } from '../app/router';
 import { OidcHintField, useHintMissing } from './OidcHintField';
+import { AuthLayout } from './AuthLayout';
 import { useSession } from './session';
 
 type Preview =
@@ -56,7 +56,7 @@ export function InvitationScreen({
     );
   if (preview.status === 'unavailable')
     return (
-      <Box sx={{ maxWidth: 440, mx: 'auto', p: 3 }}>
+      <AuthLayout>
         <PageHeader title="Aceptar invitación" />
         <UiState
           kind="expired"
@@ -65,7 +65,7 @@ export function InvitationScreen({
           actionLabel="Ir a iniciar sesión"
           onAction={() => router.navigate('/iniciar-sesion', { replace: true })}
         />
-      </Box>
+      </AuthLayout>
     );
 
   const submit = async (event: React.FormEvent) => {
@@ -88,7 +88,7 @@ export function InvitationScreen({
   };
 
   return (
-    <Box sx={{ maxWidth: 440, mx: 'auto', p: 3 }}>
+    <AuthLayout>
       <PageHeader
         title="Aceptar invitación"
         description={`Te invitaron a ${preview.preview.companyName} con el rol ${preview.preview.roleLabel}.`}
@@ -124,6 +124,6 @@ export function InvitationScreen({
           </Typography>
         </FormSection>
       </form>
-    </Box>
+    </AuthLayout>
   );
 }

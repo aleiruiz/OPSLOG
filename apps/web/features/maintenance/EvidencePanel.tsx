@@ -174,8 +174,12 @@ export function EvidencePanel({
               typography: 'button',
               cursor: busy ? 'default' : 'pointer',
               opacity: busy ? 0.6 : 1,
-              '&:hover': { borderColor: 'primary.main', color: 'primary.main' },
-              '&:focus-within': { outline: 2, outlineColor: 'primary.main', outlineOffset: 2 },
+              '&:hover': busy ? {} : { borderColor: 'primary.main', color: 'primary.main' },
+              '&:has(input:focus-visible)': {
+                outline: 2,
+                outlineColor: 'primary.main',
+                outlineOffset: 2,
+              },
             }}
           >
             <UploadFileOutlined aria-hidden="true" fontSize="small" />
@@ -186,6 +190,9 @@ export function EvidencePanel({
                 position: 'absolute',
                 width: 1,
                 height: 1,
+                m: '-1px',
+                p: 0,
+                border: 0,
                 overflow: 'hidden',
                 clip: 'rect(0 0 0 0)',
                 whiteSpace: 'nowrap',

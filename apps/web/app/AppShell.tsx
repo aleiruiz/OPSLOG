@@ -1,5 +1,4 @@
 import CloseIcon from '@mui/icons-material/Close';
-import LocalShippingOutlined from '@mui/icons-material/LocalShippingOutlined';
 import LogoutIcon from '@mui/icons-material/Logout';
 import MenuIcon from '@mui/icons-material/Menu';
 import Box from '@mui/material/Box';
@@ -10,9 +9,10 @@ import { Button, opslogTokens } from '@opslog/ui';
 import type { Permission, SessionInfo } from './types';
 import { useRouter } from './router';
 import { routes, isAllowed, type NavGroup, type RouteDefinition } from './routes';
+import { BrandMark } from './BrandMark';
 import { ShellNavigation } from './ShellNavigation';
 
-const { colors, layout, typography } = opslogTokens;
+const { colors, layout } = opslogTokens;
 
 const navGroups: readonly NavGroup[] = ['Inicio', 'Plantilla', 'Flota', 'Configuración'];
 
@@ -160,32 +160,7 @@ export function AppShell({
             width: { md: layout.sidebarWidth - 24 },
           }}
         >
-          <Box
-            aria-hidden="true"
-            sx={{
-              width: 28,
-              height: 28,
-              borderRadius: '8px',
-              bgcolor: colors.primary,
-              color: colors.surface,
-              display: 'grid',
-              placeItems: 'center',
-            }}
-          >
-            <LocalShippingOutlined sx={{ fontSize: 18 }} />
-          </Box>
-          <Typography
-            component="p"
-            sx={{
-              display: { xs: 'none', sm: 'block' },
-              fontFamily: typography.monoFamily,
-              fontWeight: 600,
-              fontSize: 16,
-              letterSpacing: '0.04em',
-            }}
-          >
-            OPSLOG
-          </Typography>
+          <BrandMark />
         </Box>
         <Box
           role="group"

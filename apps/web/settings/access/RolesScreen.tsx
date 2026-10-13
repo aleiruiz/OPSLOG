@@ -8,7 +8,9 @@ import {
   Field,
   FormSection,
   Notifications,
+  opslogTokens,
   PageHeader,
+  Panel,
   StatusBadge,
   UiState,
 } from '@opslog/ui';
@@ -18,6 +20,8 @@ import { ResourceView, useResource } from '../../app/resource';
 import type { RoleSummary } from '../../app/types';
 import { DraftNotice, useServerDraft } from '../../auth/drafts';
 import { useSession } from '../../auth/session';
+
+const { colors } = opslogTokens;
 
 interface RoleRow extends RoleSummary {
   actions: string;
@@ -33,6 +37,7 @@ export function RolesScreen() {
   return (
     <>
       <PageHeader
+        eyebrow="Configuración"
         title="Roles"
         description="Las plantillas del sistema no se pueden editar; crea una copia personalizada."
       />
@@ -48,35 +53,41 @@ export function RolesScreen() {
           const rows: RoleRow[] = roles.map((role) => ({ ...role, actions: role.id }));
           return (
             <>
-              <ScrollRegion label="Tabla de roles">
-                <DataTable<RoleRow>
-                  caption="Roles de la empresa"
-                  columns={[
-                    { key: 'name', label: 'Rol' },
-                    {
-                      key: 'kind',
-                      label: 'Tipo',
-                      render: (value) =>
-                        value === 'system' ? (
-                          <StatusBadge label="Plantilla del sistema" tone="neutral" />
-                        ) : (
-                          <StatusBadge label="Personalizado" tone="success" />
+              <Panel title="Roles de la empresa" flush>
+                <ScrollRegion label="Tabla de roles">
+                  <DataTable<RoleRow>
+                    caption="Roles de la empresa"
+                    columns={[
+                      { key: 'name', label: 'Rol' },
+                      {
+                        key: 'kind',
+                        label: 'Tipo',
+                        render: (value) =>
+                          value === 'system' ? (
+                            <StatusBadge label="Plantilla del sistema" tone="neutral" />
+                          ) : (
+                            <StatusBadge label="Personalizado" tone="success" />
+                          ),
+                      },
+                      { key: 'memberCount', label: 'Personas' },
+                      {
+                        key: 'actions',
+                        label: 'Acciones',
+                        render: (_, row) => (
+                          <Button
+                            size="small"
+                            aria-label={`Ver ${row.name}`}
+                            onClick={() => setSelectedId(row.id)}
+                          >
+                            Ver
+                          </Button>
                         ),
-                    },
-                    { key: 'memberCount', label: 'Personas' },
-                    {
-                      key: 'actions',
-                      label: 'Acciones',
-                      render: (_, row) => (
-                        <Button size="small" onClick={() => setSelectedId(row.id)}>
-                          {`Ver ${row.name}`}
-                        </Button>
-                      ),
-                    },
-                  ]}
-                  rows={rows}
-                />
-              </ScrollRegion>
+                      },
+                    ]}
+                    rows={rows}
+                  />
+                </ScrollRegion>
+              </Panel>
               {selected && (
                 <RoleDetail
                   key={selected.id}
@@ -105,7 +116,18 @@ function RoleDetail({
 }) {
   const [tab, setTab] = React.useState('permissions');
   return (
-    <Box component="section" aria-label={`Detalle de ${role.name}`} sx={{ mt: 3 }}>
+    <Box
+      component="section"
+      aria-label={`Detalle de ${role.name}`}
+      sx={{
+        bgcolor: colors.surface,
+        border: `1px solid ${colors.border}`,
+        borderRadius: `${opslogTokens.shape.cardRadius}px`,
+        boxShadow: opslogTokens.shadow.card,
+        p: { xs: 2, sm: 2.5 },
+        mb: 3,
+      }}
+    >
       <Typography component="h2" variant="h2" sx={{ mb: 1 }}>
         {role.name}
       </Typography>

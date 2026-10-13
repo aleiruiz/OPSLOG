@@ -1,3 +1,4 @@
+import Box from '@mui/material/Box';
 import React from 'react';
 import {
   Button,
@@ -6,6 +7,7 @@ import {
   FormSection,
   Notifications,
   PageHeader,
+  Panel,
   StatusBadge,
   UiState,
 } from '@opslog/ui';
@@ -36,9 +38,19 @@ export function TenantAdminScreen() {
   const { state, reload } = useResource(() => ports.tenant.getCompanySettings(), [ports]);
   return (
     <>
-      <PageHeader title="Empresa" description="Datos de la empresa y política de acceso." />
+      <PageHeader
+        eyebrow="Configuración"
+        title="Empresa"
+        description="Datos de la empresa y política de acceso."
+      />
       <ResourceView state={state} onRetry={reload}>
-        {(settings) => <CompanyForm settings={settings} />}
+        {(settings) => (
+          <Box sx={{ maxWidth: 760 }}>
+            <Panel>
+              <CompanyForm settings={settings} />
+            </Panel>
+          </Box>
+        )}
       </ResourceView>
     </>
   );
@@ -186,7 +198,12 @@ function CompanyForm({ settings }: { settings: CompanySettings }) {
             onCancel={() => setConfirming(false)}
           />
         ) : (
-          <Button type="submit" variant="contained" loading={submitting}>
+          <Button
+            type="submit"
+            variant="contained"
+            loading={submitting}
+            sx={{ alignSelf: 'flex-start' }}
+          >
             Guardar cambios
           </Button>
         )}
