@@ -243,6 +243,7 @@ export function PolicyForm({
           <Box ref={alertRef} tabIndex={-1} sx={{ outline: 'none' }}>
             {alert.severity === 'error' ? (
               <UiState
+                layout="banner"
                 kind="error"
                 title={alert.title ?? copy[mode].failure}
                 description={alert.message}
@@ -308,6 +309,7 @@ export function PolicyForm({
           >
             {vehicles && vehicles.items.length === 0 ? (
               <UiState
+                layout="banner"
                 kind="empty"
                 title="Aún no hay vehículos"
                 description="Registra un vehículo antes de agregar su póliza."

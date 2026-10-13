@@ -204,6 +204,7 @@ export function EmployeeForm({
           <Box ref={alertRef} tabIndex={-1} sx={{ outline: 'none' }}>
             {alert.severity === 'error' ? (
               <UiState
+                layout="banner"
                 kind="error"
                 title={alert.title ?? 'No pudimos guardar el empleado'}
                 description={alert.message}

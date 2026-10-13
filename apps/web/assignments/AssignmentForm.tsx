@@ -203,6 +203,7 @@ export function AssignmentForm({
           <Box ref={alertRef} tabIndex={-1} sx={{ outline: 'none' }}>
             {alert.severity === 'error' ? (
               <UiState
+                layout="banner"
                 kind="error"
                 title={alert.title ?? copy[mode].failure}
                 description={alert.message}
@@ -268,6 +269,7 @@ export function AssignmentForm({
             >
               {vehicles && vehicleChoices.length === 0 ? (
                 <UiState
+                  layout="banner"
                   kind="empty"
                   title="No hay vehículos disponibles"
                   description="Registra un vehículo activo antes de asignarle un conductor."
@@ -282,6 +284,7 @@ export function AssignmentForm({
               )}
               {drivers && driverChoices.length === 0 ? (
                 <UiState
+                  layout="banner"
                   kind="empty"
                   title="No hay conductores disponibles"
                   description="Registra o activa un conductor antes de asignarlo."

@@ -27,6 +27,8 @@ export type UiStateProps = {
   description?: string;
   actionLabel?: string;
   onAction?: () => void;
+  /** `banner` keeps any state inline (inside forms); by default the kind decides. */
+  layout?: 'auto' | 'banner';
 };
 const copy: Record<
   UiStateKind,
@@ -102,14 +104,23 @@ const tones = {
  * blocks centred in their card; other states (form validation, expired, closed, success) stay
  * banners next to the content they describe.
  */
-export function UiState({ kind, title, description, actionLabel, onAction }: UiStateProps) {
+export function UiState({
+  kind,
+  title,
+  description,
+  actionLabel,
+  onAction,
+  layout = 'auto',
+}: UiStateProps) {
   const state = copy[kind];
   const action = actionLabel && onAction && (
     <Button onClick={onAction} variant="outlined" size="small">
       {actionLabel}
     </Button>
   );
-  const block = kind === 'loading' || (kind in blockIcons && (kind !== 'error' || action));
+  const block =
+    layout === 'auto' &&
+    (kind === 'loading' || (kind in blockIcons && (kind !== 'error' || action)));
   if (block) {
     const tone = tones[state.severity];
     return (
