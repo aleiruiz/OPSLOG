@@ -41,7 +41,9 @@ export function EmployeesScreen() {
   const [notice, setNotice] = React.useState<{ text: string; severity: 'error' } | null>(null);
   // Bumped whenever the first page or the filters change: a page requested before that is stale.
   const generation = React.useRef(0);
-  React.useEffect(() => {
+  // A layout effect: the reset must land before the page can be clicked, or a "load more"
+  // started right after the first page arrives is discarded as stale.
+  React.useLayoutEffect(() => {
     generation.current += 1;
     setExtra(null);
     setNotice(null);

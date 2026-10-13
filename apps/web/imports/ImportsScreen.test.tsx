@@ -79,6 +79,26 @@ describe('import history', () => {
     expect(rowsOf()).toHaveLength(25);
   });
 
+  it('keeps a failed next page when "load more" is clicked before the first page effects run', async () => {
+    const api = createMockApi();
+    api.controls.failNext('listImports');
+    await list({ api });
+    const retry = await screen.findByRole('button', { name: 'Reintentar' });
+    // Click "load more" from a mutation observer: right after the first page commits,
+    // before its passive effects flush.
+    const observer = new MutationObserver(() => {
+      const button = screen.queryByRole('button', { name: 'Cargar más importaciones' });
+      if (button === null) return;
+      observer.disconnect();
+      api.controls.failNext('listImports');
+      button.click();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    fireEvent.click(retry);
+    expect(await screen.findByText('No pudimos cargar más importaciones.')).toBeInTheDocument();
+    expect(rowsOf()).toHaveLength(25);
+  });
+
   it('opens the detail of a job', async () => {
     await list();
     const table = await screen.findByRole('table');
