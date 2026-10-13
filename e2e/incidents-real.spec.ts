@@ -208,6 +208,27 @@ async function configureThreshold(page: Page) {
   await expect(page.getByText('Configuración guardada.')).toBeVisible();
 }
 
+/** Seeds a company-borne expense through the INC-COSTS port; the threshold in these journeys is 1000.00 MXN. */
+async function seedCompanyCost(tenant: RealTenant, path: string, amountMinor: string) {
+  const id = path.split('/').pop() as string;
+  const token = await adminToken(tenant, 'e2e-admin-a');
+  const [row] = await tenant.database.rows<{ version: number }>(
+    `SELECT version FROM ${INCIDENTS} WHERE company_id = ? AND id = ?`,
+    [tenant.tenantId, id],
+  );
+  const saved = await tenant.platform.incidentCosts.update(
+    token,
+    `e2e-costs-${id}`,
+    id,
+    {
+      version: row?.version,
+      lines: [{ kind: 'expense', category: 'towing', amount: { amountMinor, currency: 'MXN' } }],
+    },
+    `e2e-costs-key-${id}-${amountMinor}`,
+  );
+  expect(JSON.stringify(saved)).toContain('"ok":true');
+}
+
 test('workflow with D20: assign, review, resolve, supervisor approval, close and reopen', async ({
   page,
 }) => {
@@ -230,6 +251,10 @@ test('workflow with D20: assign, review, resolve, supervisor approval, close and
     .getByRole('region', { name: 'Continuar sin aseguradora' })
     .getByRole('button', { name: 'Continuar sin aseguradora' })
     .click();
+  await expect(status(page, 'Sin aseguradora')).toBeVisible();
+  // The company bears 1000.01 MXN, one cent above the threshold, so D20 asks for an approval.
+  await seedCompanyCost(a, path, '100001');
+  await page.reload();
   await expect(status(page, 'Sin aseguradora')).toBeVisible();
 
   // What is missing to resolve comes from the server, in plain Spanish.
@@ -364,6 +389,8 @@ test('US-033: rejection with its letter, appeal, and the cost assumption waits f
   await expect(status(page, 'Rechazado por la aseguradora')).toBeVisible();
 
   // Assumption (D20): with the threshold configured the supervisor approves before the case can go on.
+  await seedCompanyCost(a, path, '100001');
+  await page.reload();
   await page.getByRole('tab', { name: 'Resumen' }).click();
   await page.getByLabel('Resumen de la resolución').fill('La empresa asume el costo');
   await page.getByLabel('Estado en que queda el vehículo').selectOption('active');
@@ -385,6 +412,39 @@ test('US-033: rejection with its letter, appeal, and the cost assumption waits f
   await expect(page.getByText('Aprobar asunción del costo: listo.')).toBeVisible();
   await page.getByRole('button', { name: 'Marcar como resuelto' }).click();
   await expect(status(page, 'Resuelto')).toBeVisible();
+});
+
+test('D20 acceptance 6: a cost at or below the threshold needs no approval and close is offered directly', async ({
+  page,
+}) => {
+  await configureThreshold(page);
+  const { path } = await reportedCase(page, 'Rozadura en el costado');
+  await page.getByRole('button', { name: 'Asignar responsable' }).click();
+  await page.getByLabel(/Persona responsable/).selectOption({ label: 'Tú' });
+  await submit(page, 'Asignar responsable', 'Asignar');
+  await page.getByRole('button', { name: 'Iniciar revisión' }).click();
+  await page.getByRole('button', { name: 'Continuar sin aseguradora' }).click();
+  await page.getByLabel(/Por qué el caso sigue sin aseguradora/).fill('Daño menor sin póliza');
+  await page
+    .getByRole('region', { name: 'Continuar sin aseguradora' })
+    .getByRole('button', { name: 'Continuar sin aseguradora' })
+    .click();
+  await expect(status(page, 'Sin aseguradora')).toBeVisible();
+  // Exactly the threshold (1000.00 MXN): equal does not ask.
+  await seedCompanyCost(a, path, '100000');
+  await page.reload();
+  await page.getByLabel('Resumen de la resolución').fill('Se repara con cargo a la empresa');
+  await page.getByLabel('Estado en que queda el vehículo').selectOption('active');
+  await page.getByLabel('¿La empresa asume el costo?').selectOption('yes');
+  await page.getByRole('button', { name: 'Guardar resolución' }).click();
+  await expect(page.getByText('Resolución guardada.')).toBeVisible();
+  await page.getByRole('button', { name: 'Marcar como resuelto' }).click();
+  await expect(status(page, 'Resuelto')).toBeVisible();
+  await expect(actions(page)).not.toContainText('necesita la aprobación de una persona supervisora');
+  await expect(page.getByRole('button', { name: 'Aprobar cierre' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Cerrar caso' })).toBeVisible();
+  await page.getByRole('button', { name: 'Cerrar caso' }).click();
+  await expect(status(page, 'Cerrado')).toBeVisible();
 });
 
 /** A draft in another tenant, made through its own screens: only its id matters. */
@@ -456,7 +516,7 @@ test('permissions: view-only has no buttons, the fleet editor cannot start cases
   await expectNoViolations(page);
 
   // Auditor: no incidents:view, so no entry in the navigation and the address says so.
-  await switchTo(page, a, 'e2e-auditor-a', '/dashboard');
+  await switchTo(page, a, 'e2e-auditor-a', '/');
   await expect(page.getByRole('navigation').getByRole('link', { name: 'Siniestros' })).toHaveCount(
     0,
   );
