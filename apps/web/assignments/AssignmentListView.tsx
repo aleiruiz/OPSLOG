@@ -1,3 +1,4 @@
+import AddOutlined from '@mui/icons-material/AddOutlined';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import React from 'react';
@@ -8,6 +9,7 @@ import {
   FilterBar,
   Notifications,
   PageHeader,
+  Panel,
   StatusBadge,
   UiState,
 } from '@opslog/ui';
@@ -70,7 +72,12 @@ export interface AssignmentListViewProps {
   readonly onLoadMore: (cursor: string) => void;
 }
 
-const linkSx = { color: 'primary.main', textDecoration: 'underline' } as const;
+const linkSx = {
+  color: 'primary.main',
+  fontWeight: 500,
+  textDecoration: 'underline',
+  textUnderlineOffset: '3px',
+} as const;
 
 /** Assignment list: filters, cursor-paginated table and every data state (SPECS §8). With a status filter off it is the history. */
 export function AssignmentListView({
@@ -112,14 +119,21 @@ export function AssignmentListView({
     </Field>
   );
 
+  const ready = state.status === 'ready' ? state.data : null;
+
   return (
     <>
       <PageHeader
+        eyebrow="Flota"
         title="Asignaciones"
         description="Quién conduce cada vehículo. Filtra por vehículo o por conductor para ver su asignación vigente y su historial."
         actions={
           can('create') ? (
-            <RouterButton to={`${assignmentsPath}/nueva`} variant="contained">
+            <RouterButton
+              to={`${assignmentsPath}/nueva`}
+              variant="contained"
+              startIcon={<AddOutlined />}
+            >
               Nueva asignación
             </RouterButton>
           ) : undefined
@@ -131,191 +145,197 @@ export function AssignmentListView({
         />
       )}
       <NoSubmit>
-        <FilterBar onClear={onClear}>
-          {select(
-            'status',
-            'Estado',
-            filters.status,
-            (value) => onFiltersChange({ ...filters, status: value as AssignmentStatus | '' }),
-            <>
-              <option value="">Vigentes e historial</option>
-              {statusOrder.map((status) => (
-                <option key={status} value={status}>
-                  {statusFilterLabels[status]}
-                </option>
-              ))}
-            </>,
-          )}
-          {vehicles &&
-            select(
-              'vehicle',
-              'Vehículo',
-              filters.vehicleId,
-              (value) => onFiltersChange({ ...filters, vehicleId: value }),
+        <Panel>
+          <FilterBar onClear={onClear}>
+            {select(
+              'status',
+              'Estado',
+              filters.status,
+              (value) => onFiltersChange({ ...filters, status: value as AssignmentStatus | '' }),
               <>
-                <option value="">Todos los vehículos</option>
-                {vehicles.items.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.label}
+                <option value="">Vigentes e historial</option>
+                {statusOrder.map((status) => (
+                  <option key={status} value={status}>
+                    {statusFilterLabels[status]}
                   </option>
                 ))}
               </>,
             )}
-          {drivers &&
-            select(
-              'driver',
-              'Conductor',
-              filters.employeeId,
-              (value) => onFiltersChange({ ...filters, employeeId: value }),
+            {vehicles &&
+              select(
+                'vehicle',
+                'Vehículo',
+                filters.vehicleId,
+                (value) => onFiltersChange({ ...filters, vehicleId: value }),
+                <>
+                  <option value="">Todos los vehículos</option>
+                  {vehicles.items.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.label}
+                    </option>
+                  ))}
+                </>,
+              )}
+            {drivers &&
+              select(
+                'driver',
+                'Conductor',
+                filters.employeeId,
+                (value) => onFiltersChange({ ...filters, employeeId: value }),
+                <>
+                  <option value="">Todos los conductores</option>
+                  {drivers.items.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.label}
+                    </option>
+                  ))}
+                </>,
+              )}
+            {select(
+              'type',
+              'Tipo',
+              filters.type,
+              (value) => onFiltersChange({ ...filters, type: value as AssignmentType | '' }),
               <>
-                <option value="">Todos los conductores</option>
-                {drivers.items.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.label}
+                <option value="">Todos los tipos</option>
+                {typeOrder.map((type) => (
+                  <option key={type} value={type}>
+                    {typeLabels[type]}
                   </option>
                 ))}
               </>,
             )}
-          {select(
-            'type',
-            'Tipo',
-            filters.type,
-            (value) => onFiltersChange({ ...filters, type: value as AssignmentType | '' }),
-            <>
-              <option value="">Todos los tipos</option>
-              {typeOrder.map((type) => (
-                <option key={type} value={type}>
-                  {typeLabels[type]}
-                </option>
-              ))}
-            </>,
-          )}
-        </FilterBar>
+          </FilterBar>
+        </Panel>
       </NoSubmit>
-      <ResourceView state={state} onRetry={onRetry}>
-        {(page) => {
-          if (page.items.length === 0)
-            return filtersActive ? (
-              <UiState kind="no-results" />
-            ) : (
-              <UiState
-                kind="empty"
-                title="Aún no hay asignaciones"
-                description={
-                  can('create')
-                    ? 'Asigna el primer conductor a un vehículo de tu flota.'
-                    : 'Cuando se asignen conductores aparecerán aquí.'
-                }
-              />
-            );
-          const rows: Row[] = page.items.map((assignment) => ({
-            ...assignment,
-            actions: assignment.id,
-          }));
-          return (
-            <>
-              <ScrollRegion label="Tabla de asignaciones">
-                <DataTable<Row>
-                  caption={`Asignaciones (${page.total})`}
-                  columns={[
-                    {
-                      key: 'vehicleId',
-                      label: 'Vehículo',
-                      render: (_, row) => (
-                        <RouterLink
-                          to={`/flota/vehiculos/${encodeURIComponent(row.vehicleId)}`}
-                          label={`Vehículo ${vehicleNames.get(row.vehicleId) ?? row.vehicleId}`}
-                          sx={linkSx}
-                        >
-                          {vehicleNames.get(row.vehicleId) ?? 'Vehículo'}
-                        </RouterLink>
-                      ),
-                    },
-                    {
-                      key: 'employeeId',
-                      label: 'Conductor',
-                      render: (_, row) => (
-                        <RouterLink
-                          to={`/plantilla/empleados/${encodeURIComponent(row.employeeId)}`}
-                          label={`Conductor ${driverNames.get(row.employeeId) ?? row.employeeId}`}
-                          sx={linkSx}
-                        >
-                          {driverNames.get(row.employeeId) ?? 'Conductor'}
-                        </RouterLink>
-                      ),
-                    },
-                    { key: 'type', label: 'Tipo', render: (value) => typeLabel(String(value)) },
-                    {
-                      key: 'startedAt',
-                      label: 'Inicio',
-                      render: (value) => formatDateTime(String(value)),
-                    },
-                    {
-                      key: 'endedAt',
-                      label: 'Fin',
-                      render: (_, row) =>
-                        row.endedAt === null ? (
-                          '—'
-                        ) : (
-                          <>
-                            {formatDateTime(row.endedAt)}
-                            {row.endKind && (
-                              <Typography variant="body2" color="text.secondary">
-                                {endKindLabels[row.endKind]}
-                              </Typography>
-                            )}
-                          </>
-                        ),
-                    },
-                    {
-                      key: 'current',
-                      label: 'Estado',
-                      render: (_, row) => {
-                        const view = statusPresentation[isCurrent(row) ? 'current' : 'ended'];
-                        return <StatusBadge label={view.label} tone={view.tone} />;
-                      },
-                    },
-                    {
-                      key: 'actions',
-                      label: 'Acciones',
-                      render: (_, row) => (
-                        <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+      <Panel title="Registro de asignaciones" flush={ready !== null && ready.items.length > 0}>
+        <ResourceView state={state} onRetry={onRetry}>
+          {(page) => {
+            if (page.items.length === 0)
+              return filtersActive ? (
+                <UiState kind="no-results" />
+              ) : (
+                <UiState
+                  kind="empty"
+                  title="Aún no hay asignaciones"
+                  description={
+                    can('create')
+                      ? 'Asigna el primer conductor a un vehículo de tu flota.'
+                      : 'Cuando se asignen conductores aparecerán aquí.'
+                  }
+                />
+              );
+            const rows: Row[] = page.items.map((assignment) => ({
+              ...assignment,
+              actions: assignment.id,
+            }));
+            return (
+              <>
+                <ScrollRegion label="Tabla de asignaciones">
+                  <DataTable<Row>
+                    caption={`Asignaciones (${page.total})`}
+                    columns={[
+                      {
+                        key: 'vehicleId',
+                        label: 'Vehículo',
+                        render: (_, row) => (
                           <RouterLink
-                            to={assignmentPath(row.id)}
-                            label={`Ver asignación de ${driverNames.get(row.employeeId) ?? 'conductor'} en ${vehicleNames.get(row.vehicleId) ?? 'vehículo'}`}
+                            to={`/flota/vehiculos/${encodeURIComponent(row.vehicleId)}`}
+                            label={`Vehículo ${vehicleNames.get(row.vehicleId) ?? row.vehicleId}`}
                             sx={linkSx}
                           >
-                            Ver
+                            {vehicleNames.get(row.vehicleId) ?? 'Vehículo'}
                           </RouterLink>
-                          {can('edit') && isCurrent(row) && (
+                        ),
+                      },
+                      {
+                        key: 'employeeId',
+                        label: 'Conductor',
+                        render: (_, row) => (
+                          <RouterLink
+                            to={`/plantilla/empleados/${encodeURIComponent(row.employeeId)}`}
+                            label={`Conductor ${driverNames.get(row.employeeId) ?? row.employeeId}`}
+                            sx={linkSx}
+                          >
+                            {driverNames.get(row.employeeId) ?? 'Conductor'}
+                          </RouterLink>
+                        ),
+                      },
+                      { key: 'type', label: 'Tipo', render: (value) => typeLabel(String(value)) },
+                      {
+                        key: 'startedAt',
+                        label: 'Inicio',
+                        render: (value) => formatDateTime(String(value)),
+                      },
+                      {
+                        key: 'endedAt',
+                        label: 'Fin',
+                        render: (_, row) =>
+                          row.endedAt === null ? (
+                            '—'
+                          ) : (
+                            <>
+                              {formatDateTime(row.endedAt)}
+                              {row.endKind && (
+                                <Typography variant="body2" color="text.secondary">
+                                  {endKindLabels[row.endKind]}
+                                </Typography>
+                              )}
+                            </>
+                          ),
+                      },
+                      {
+                        key: 'current',
+                        label: 'Estado',
+                        render: (_, row) => {
+                          const view = statusPresentation[isCurrent(row) ? 'current' : 'ended'];
+                          return <StatusBadge label={view.label} tone={view.tone} />;
+                        },
+                      },
+                      {
+                        key: 'actions',
+                        label: 'Acciones',
+                        render: (_, row) => (
+                          <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
                             <RouterLink
-                              to={`${assignmentPath(row.id)}/cerrar`}
-                              label={`Cerrar asignación de ${driverNames.get(row.employeeId) ?? 'conductor'} en ${vehicleNames.get(row.vehicleId) ?? 'vehículo'}`}
+                              to={assignmentPath(row.id)}
+                              label={`Ver asignación de ${driverNames.get(row.employeeId) ?? 'conductor'} en ${vehicleNames.get(row.vehicleId) ?? 'vehículo'}`}
                               sx={linkSx}
                             >
-                              Cerrar
+                              Ver
                             </RouterLink>
-                          )}
-                        </Box>
-                      ),
-                    },
-                  ]}
-                  rows={rows}
-                />
-              </ScrollRegion>
-              {page.nextCursor && (
-                <Button
-                  variant="outlined"
-                  loading={loadingMore}
-                  onClick={() => onLoadMore(page.nextCursor as string)}
-                >
-                  Cargar más asignaciones
-                </Button>
-              )}
-            </>
-          );
-        }}
-      </ResourceView>
+                            {can('edit') && isCurrent(row) && (
+                              <RouterLink
+                                to={`${assignmentPath(row.id)}/cerrar`}
+                                label={`Cerrar asignación de ${driverNames.get(row.employeeId) ?? 'conductor'} en ${vehicleNames.get(row.vehicleId) ?? 'vehículo'}`}
+                                sx={linkSx}
+                              >
+                                Cerrar
+                              </RouterLink>
+                            )}
+                          </Box>
+                        ),
+                      },
+                    ]}
+                    rows={rows}
+                  />
+                </ScrollRegion>
+                {page.nextCursor && (
+                  <Box sx={{ px: { xs: 2, sm: 2.5 }, pb: 2 }}>
+                    <Button
+                      variant="outlined"
+                      loading={loadingMore}
+                      onClick={() => onLoadMore(page.nextCursor as string)}
+                    >
+                      Cargar más asignaciones
+                    </Button>
+                  </Box>
+                )}
+              </>
+            );
+          }}
+        </ResourceView>
+      </Panel>
     </>
   );
 }

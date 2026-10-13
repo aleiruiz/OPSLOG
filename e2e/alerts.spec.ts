@@ -82,8 +82,9 @@ test.describe('alerts: list, filters and links', () => {
 
   test('summarises the alerts on the home page and links to the list', async ({ page }) => {
     await signIn(page, '/');
-    await expect(page.getByText('12 vencidos')).toBeVisible();
-    await expect(page.getByText('22 por vencer en 30 días')).toBeVisible();
+    const summary = page.getByRole('region', { name: 'Vencimientos' });
+    await expect(summary).toContainText(/Vencidos\s*12\s*Requieren renovación/);
+    await expect(summary).toContainText(/Por vencer\s*22\s*En los próximos 30 días/);
     await expectNoViolations(page);
     await page
       .getByRole('region', { name: 'Vencimientos' })

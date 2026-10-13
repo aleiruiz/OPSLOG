@@ -1,3 +1,4 @@
+import Box from '@mui/material/Box';
 import React from 'react';
 import { NextStepPanel, PageHeader } from '@opslog/ui';
 import { AlertsSummary } from '../alerts/AlertsSummary';
@@ -19,11 +20,23 @@ export function HomeScreen({
   return (
     <>
       <PageHeader
+        eyebrow={session.company.name}
         title="Inicio"
         description={`Esta es la cuenta de ${session.company.name} con el rol ${session.roleLabel}.`}
       />
-      <NextStepPanel title="Siguiente paso" steps={steps} />
-      {can('view') && <AlertsSummary />}
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 2fr) minmax(280px, 1fr)' },
+          alignItems: 'start',
+          gap: 2,
+          // The cards of the grid are spaced by the gap, not by their own margin.
+          '& > *': { mb: 0 },
+        }}
+      >
+        {can('view') && <AlertsSummary />}
+        <NextStepPanel title="Siguiente paso" steps={steps} />
+      </Box>
     </>
   );
 }

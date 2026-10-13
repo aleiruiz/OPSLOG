@@ -79,6 +79,18 @@ export function AppShell({
   const firstRender = React.useRef(true);
   // On narrow screens the navigation is a menu that opens under the top bar.
   const [menuOpen, setMenuOpen] = React.useState(false);
+  const menuButton = React.useRef<HTMLButtonElement>(null);
+  // Escape closes the open menu and returns focus to its button, as with any disclosure.
+  React.useEffect(() => {
+    if (!menuOpen) return undefined;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setMenuOpen(false);
+      menuButton.current?.focus();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [menuOpen]);
   // Moving between screens would otherwise leave keyboard focus on a link that may have disappeared.
   React.useEffect(() => {
     setMenuOpen(false);
@@ -128,6 +140,7 @@ export function AppShell({
         }}
       >
         <Button
+          ref={menuButton}
           variant="text"
           size="small"
           aria-expanded={menuOpen}

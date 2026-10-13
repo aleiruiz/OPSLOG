@@ -26,7 +26,7 @@ describe('alert screens in jsdom', () => {
 
   it('has no detectable violations on the home summary', async () => {
     const { container } = await renderApp({ path: '/' });
-    await screen.findByText('12 vencidos');
+    await screen.findByRole('link', { name: 'Ver alertas' });
     expect(await violations(container)).toEqual([]);
   });
 

@@ -12,8 +12,10 @@ import {
   NextStepPanel,
   Notifications,
   PageHeader,
+  DescriptionList,
   Panel,
   SeverityBadge,
+  StatCard,
   Timeline,
   UploadQueue,
   Wizard,
@@ -113,6 +115,52 @@ describe('Panel', () => {
     expect(screen.getByRole('heading', { level: 3, name: 'Detalle' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Solo acción' })).toBeInTheDocument();
     expect(screen.getByText('sin encabezado')).toBeInTheDocument();
+  });
+});
+
+describe('StatCard and DescriptionList', () => {
+  it('shows a total, a loading placeholder, and toggles as a quick filter', () => {
+    const onToggle = vi.fn();
+    const { rerender } = render(
+      <StatCard label="Vencidos" value={undefined} hint="Requieren renovación" tone="danger" />,
+    );
+    expect(screen.getByText('Cargando…')).toBeInTheDocument();
+    expect(screen.queryByRole('button')).toBeNull();
+    rerender(
+      <StatCard
+        label="Vencidos"
+        value={12}
+        hint="Requieren renovación"
+        tone="danger"
+        icon={<span>!</span>}
+        pressed
+        onToggle={onToggle}
+      />,
+    );
+    const toggle = screen.getByRole('button', { name: /Vencidos/ });
+    expect(toggle).toHaveTextContent('Vencidos12Requieren renovación');
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(toggle);
+    expect(onToggle).toHaveBeenCalledTimes(1);
+    rerender(
+      <StatCard label="Vencidos" value={undefined} hint="x" tone="danger" onToggle={onToggle} />,
+    );
+    expect(screen.getByRole('button', { name: /Vencidos/ })).toBeDisabled();
+  });
+
+  it('renders each label and value as a description term and its details', () => {
+    render(
+      <DescriptionList
+        items={[
+          { label: 'Placa', value: 'ABC-123' },
+          { label: 'Estado', value: <b>Activo</b> },
+        ]}
+      />,
+    );
+    const terms = screen.getAllByRole('term').map((term) => term.textContent);
+    const details = screen.getAllByRole('definition').map((item) => item.textContent);
+    expect(terms).toEqual(['Placa', 'Estado']);
+    expect(details).toEqual(['ABC-123', 'Activo']);
   });
 });
 
