@@ -17,6 +17,7 @@ import {
 import { ImportValidationPanel, type ValidationResult } from './ImportValidationPanel';
 import { columnLabel, entityLabels } from './labels';
 import { MAX_CSV_LENGTH, MAX_ROWS, IMPORT_ENTITIES, templateOf } from './rules';
+import { formCardSx } from '../app/formCard';
 
 export type { FormAlert, ValidationResult };
 
@@ -136,7 +137,7 @@ export function ImportForm({
 
   return (
     <form onSubmit={submit} noValidate aria-label="Nueva importación">
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, maxWidth: 840 }}>
+      <Box sx={{ ...formCardSx, maxWidth: 840 }}>
         {alert && (
           <Box ref={alertRef} tabIndex={-1} sx={{ outline: 'none' }}>
             {alert.severity === 'error' ? (

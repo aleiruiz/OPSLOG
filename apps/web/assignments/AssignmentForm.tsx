@@ -23,6 +23,7 @@ import {
 } from './formModel';
 import { formatDateTime, typeLabel, typeLabels, typeOrder } from './labels';
 import { assignableVehicleStatus } from './rules';
+import { formCardSx } from '../app/formCard';
 
 export type { FormAlert };
 
@@ -197,7 +198,7 @@ export function AssignmentForm({
 
   return (
     <form onSubmit={submit} noValidate aria-label={copy[mode].label}>
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, maxWidth: 720 }}>
+      <Box sx={formCardSx}>
         {alert && (
           <Box ref={alertRef} tabIndex={-1} sx={{ outline: 'none' }}>
             {alert.severity === 'error' ? (

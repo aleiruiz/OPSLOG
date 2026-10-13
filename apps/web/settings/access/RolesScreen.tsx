@@ -8,7 +8,6 @@ import {
   Field,
   FormSection,
   Notifications,
-  opslogTokens,
   PageHeader,
   Panel,
   StatusBadge,
@@ -20,8 +19,6 @@ import { ResourceView, useResource } from '../../app/resource';
 import type { RoleSummary } from '../../app/types';
 import { DraftNotice, useServerDraft } from '../../auth/drafts';
 import { useSession } from '../../auth/session';
-
-const { colors } = opslogTokens;
 
 interface RoleRow extends RoleSummary {
   actions: string;
@@ -53,7 +50,7 @@ export function RolesScreen() {
           const rows: RoleRow[] = roles.map((role) => ({ ...role, actions: role.id }));
           return (
             <>
-              <Panel title="Roles de la empresa" flush>
+              <Panel flush>
                 <ScrollRegion label="Tabla de roles">
                   <DataTable<RoleRow>
                     caption="Roles de la empresa"
@@ -116,21 +113,7 @@ function RoleDetail({
 }) {
   const [tab, setTab] = React.useState('permissions');
   return (
-    <Box
-      component="section"
-      aria-label={`Detalle de ${role.name}`}
-      sx={{
-        bgcolor: colors.surface,
-        border: `1px solid ${colors.border}`,
-        borderRadius: `${opslogTokens.shape.cardRadius}px`,
-        boxShadow: opslogTokens.shadow.card,
-        p: { xs: 2, sm: 2.5 },
-        mb: 3,
-      }}
-    >
-      <Typography component="h2" variant="h2" sx={{ mb: 1 }}>
-        {role.name}
-      </Typography>
+    <Panel title={role.name} label={`Detalle de ${role.name}`}>
       <DetailTabs
         value={tab}
         onChange={setTab}
@@ -155,7 +138,7 @@ function RoleDetail({
           },
         ]}
       />
-    </Box>
+    </Panel>
   );
 }
 

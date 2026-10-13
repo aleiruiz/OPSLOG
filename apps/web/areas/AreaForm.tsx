@@ -17,6 +17,7 @@ import { count } from './labels';
 import type { FormAlert } from './messages';
 import { MAX_RESPONSIBLES } from './rules';
 import type { ParentChoice } from './tree';
+import { formCardSx } from '../app/formCard';
 
 export type { FormAlert };
 
@@ -140,7 +141,7 @@ export function AreaForm({
 
   return (
     <form onSubmit={submit} noValidate aria-label={titles[mode]}>
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, maxWidth: 720 }}>
+      <Box sx={formCardSx}>
         {alert && (
           <Box ref={alertRef} tabIndex={-1} sx={{ outline: 'none' }}>
             {alert.severity === 'error' ? (

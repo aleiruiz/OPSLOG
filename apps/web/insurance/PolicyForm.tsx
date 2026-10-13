@@ -16,6 +16,7 @@ import {
 } from './formModel';
 import { coverageLabel, coverageLabels } from './labels';
 import { COVERAGE_TYPES } from './rules';
+import { formCardSx } from '../app/formCard';
 
 export type { FormAlert };
 
@@ -237,7 +238,7 @@ export function PolicyForm({
 
   return (
     <form onSubmit={submit} noValidate aria-label={copy[mode].label}>
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, maxWidth: 720 }}>
+      <Box sx={formCardSx}>
         {alert && (
           <Box ref={alertRef} tabIndex={-1} sx={{ outline: 'none' }}>
             {alert.severity === 'error' ? (

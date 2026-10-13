@@ -47,11 +47,11 @@ export function FormSection({
 }) {
   return (
     <Box component="fieldset" sx={{ border: 0, p: 0, m: 0 }}>
-      <Typography component="legend" variant="h6">
+      <Typography component="legend" variant="h6" sx={{ p: 0, mb: description ? 0.5 : 2 }}>
         {title}
       </Typography>
       {description && (
-        <Typography color="text.secondary" variant="body2" sx={{ mb: 2 }}>
+        <Typography color="text.secondary" variant="body2" sx={{ mb: 2.5 }}>
           {description}
         </Typography>
       )}

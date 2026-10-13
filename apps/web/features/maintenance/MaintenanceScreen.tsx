@@ -2,7 +2,7 @@ import React from 'react';
 import { useRouter } from '../../app/router';
 import { loadVehicleOptions, type VehicleOptions } from '../../app/vehicleOptions';
 import { useSession } from '../../auth/session';
-import type { MemberOption } from './CatalogScreen';
+import type { MemberOption } from './CatalogForms';
 import { MaintenanceArea } from './MaintenanceArea';
 import { loadMemberOptions } from './members';
 

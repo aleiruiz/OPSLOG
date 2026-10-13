@@ -4,7 +4,8 @@ import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import { UiState } from '@opslog/ui';
 import type { BffMaintenanceMechanic, BffMaintenanceWorkshop } from '@opslog/contracts';
-import { CatalogScreen, type MemberOption } from './CatalogScreen';
+import type { MemberOption } from './CatalogForms';
+import { CatalogScreen } from './CatalogScreen';
 import { MaintenanceSettingsScreen } from './MaintenanceSettingsScreen';
 import {
   DirectoryProvider,

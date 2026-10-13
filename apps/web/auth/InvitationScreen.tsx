@@ -49,10 +49,17 @@ export function InvitationScreen({
     };
   }, [ports, token, attempt]);
 
-  if (preview.status === 'loading') return <UiState kind="loading" />;
+  if (preview.status === 'loading')
+    return (
+      <AuthLayout>
+        <UiState kind="loading" />
+      </AuthLayout>
+    );
   if (preview.status === 'error')
     return (
-      <UiState kind="error" actionLabel="Reintentar" onAction={() => setAttempt((n) => n + 1)} />
+      <AuthLayout>
+        <UiState kind="error" actionLabel="Reintentar" onAction={() => setAttempt((n) => n + 1)} />
+      </AuthLayout>
     );
   if (preview.status === 'unavailable')
     return (

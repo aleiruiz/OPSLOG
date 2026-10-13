@@ -15,6 +15,7 @@ import {
   type VehicleFormValues,
 } from './formModel';
 import { maxModelYear, todayOf } from './rules';
+import { formCardSx } from '../app/formCard';
 
 export interface FormAlert {
   /** Errors use the recoverable-error state (with an optional action); the others are plain notices. */
@@ -139,7 +140,7 @@ export function VehicleForm({
       noValidate
       aria-label={mode === 'create' ? 'Nuevo vehículo' : 'Editar vehículo'}
     >
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, maxWidth: 720 }}>
+      <Box sx={formCardSx}>
         {alert && (
           <Box ref={alertRef} tabIndex={-1} sx={{ outline: 'none' }}>
             {alert.severity === 'error' ? (

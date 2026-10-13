@@ -15,6 +15,7 @@ import {
 import { DOCUMENT_TYPES, typeInfo } from './rules';
 import type { Document } from '../app/types';
 import { ownerTypeLabels, typeLabel } from './labels';
+import { formCardSx } from '../app/formCard';
 
 export interface FormAlert {
   /** Errors use the recoverable-error state (with an optional action); the others are plain notices. */
@@ -208,7 +209,7 @@ export function DocumentForm({
 
   return (
     <form onSubmit={submit} noValidate aria-label={copy[mode].label}>
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, maxWidth: 720 }}>
+      <Box sx={formCardSx}>
         {alert && (
           <Box ref={alertRef} tabIndex={-1} sx={{ outline: 'none' }}>
             {alert.severity === 'error' ? (
