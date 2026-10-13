@@ -440,7 +440,9 @@ test('D20 acceptance 6: a cost at or below the threshold needs no approval and c
   await expect(page.getByText('Resolución guardada.')).toBeVisible();
   await page.getByRole('button', { name: 'Marcar como resuelto' }).click();
   await expect(status(page, 'Resuelto')).toBeVisible();
-  await expect(actions(page)).not.toContainText('necesita la aprobación de una persona supervisora');
+  await expect(actions(page)).not.toContainText(
+    'necesita la aprobación de una persona supervisora',
+  );
   await expect(page.getByRole('button', { name: 'Aprobar cierre' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Cerrar caso' })).toBeVisible();
   await page.getByRole('button', { name: 'Cerrar caso' }).click();
