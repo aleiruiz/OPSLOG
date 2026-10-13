@@ -7,7 +7,7 @@ import type {
   BffIncidentInsuranceInput,
   BffIncidentNextStep,
 } from '@opslog/contracts';
-import { useIncidentEnv } from './env';
+import { useIncidentEnv } from './context';
 import { describeError, isStale } from './errors';
 import { COMMAND_LABELS } from './labels';
 import {

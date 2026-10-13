@@ -2,7 +2,7 @@ import React from 'react';
 import { DescriptionList, Panel } from '@opslog/ui';
 import type { BffIncidentResolutionInput } from '@opslog/contracts';
 import { DateTime } from './DateTime';
-import { useIncidentEnv } from './env';
+import { useIncidentEnv } from './context';
 import type { SubmitOutcome } from './EventForm';
 import { VEHICLE_DECISION_LABELS, YES_NO } from './labels';
 import { canEditResolution } from './model';

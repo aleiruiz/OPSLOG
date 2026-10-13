@@ -26,7 +26,7 @@ import type {
 import { RouterButton, RouterLink, linkSx, useRouter } from '../../app/router';
 import { ScrollRegion } from '../../app/ScrollRegion';
 import { errorKind } from '../maintenance/useResult';
-import { useIncidentEnv } from './env';
+import { useIncidentEnv } from './context';
 import { mayStartIncident } from './model';
 import { OPEN_STATUSES, SEVERITY_LABELS, STATUS_LABELS, STATUS_TONES, TYPE_LABELS } from './labels';
 import { incidentPath, newIncidentPath, incidentsPath } from './paths';

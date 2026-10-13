@@ -8,7 +8,7 @@ import type {
   BffThirdPartyPatch,
 } from '@opslog/contracts';
 import { Button, ConfirmDialog, InlineAlert, Panel, UiState } from '@opslog/ui';
-import { useIncidentEnv } from './env';
+import { useIncidentEnv } from './context';
 import { describeError } from './errors';
 import type { SubmitOutcome } from './EventForm';
 import { KIND_LABELS } from './labels';

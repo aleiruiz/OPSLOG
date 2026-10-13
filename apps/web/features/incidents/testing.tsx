@@ -6,7 +6,7 @@ import { afterEach, vi } from 'vitest';
 import { opslogTheme } from '@opslog/ui';
 import { RouterProvider, useRouter } from '../../app/router';
 import { DirectoryProvider } from '../maintenance/directory';
-import { IncidentEnvProvider, type IncidentEnv } from './env';
+import { IncidentEnvProvider, type IncidentEnv } from './context';
 import { IncidentDetail } from './IncidentDetail';
 import { createFakeIncidentPorts, type FakeIncidentOptions } from './fakePorts';
 

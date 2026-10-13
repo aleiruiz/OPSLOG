@@ -3,7 +3,7 @@ import Typography from '@mui/material/Typography';
 import { Button, DescriptionList, InlineAlert, Panel, SeverityBadge } from '@opslog/ui';
 import type { BffIncident } from '@opslog/contracts';
 import { DateTime } from './DateTime';
-import { useIncidentEnv } from './env';
+import { useIncidentEnv } from './context';
 import { EventForm, type SubmitOutcome } from './EventForm';
 import type { EventFields } from './eventEdits';
 import { TYPE_LABELS, YES_NO, ZONE_LABELS } from './labels';

@@ -2,7 +2,7 @@ import React from 'react';
 import Typography from '@mui/material/Typography';
 import type { BffIncident, BffIncidentInsuranceInput } from '@opslog/contracts';
 import { DescriptionList, Field, InlineAlert, Panel } from '@opslog/ui';
-import { useIncidentEnv } from './env';
+import { useIncidentEnv } from './context';
 import type { SubmitOutcome } from './EventForm';
 import { INSURER_RESULT_LABELS } from './labels';
 import { canEditInsurance } from './model';

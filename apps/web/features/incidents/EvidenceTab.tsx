@@ -6,7 +6,7 @@ import { BFF_EVIDENCE_CATEGORIES, BFF_EVIDENCE_STAGES } from '@opslog/contracts'
 import type { BffEvidenceCategory, BffEvidenceStage, BffIncidentEvidence } from '@opslog/contracts';
 import { Button, FileButton, Field, InlineAlert, Panel, UiState, UploadQueue } from '@opslog/ui';
 import { errorKind } from '../maintenance/useResult';
-import { useIncidentEnv } from './env';
+import { useIncidentEnv } from './context';
 import { describeError } from './errors';
 import { EvidenceList } from './EvidenceList';
 import { CATEGORY_LABELS, STAGE_LABELS } from './labels';

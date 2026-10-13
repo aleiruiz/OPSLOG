@@ -1,6 +1,6 @@
 import { Panel, Timeline, UiState } from '@opslog/ui';
 import { errorKind } from '../maintenance/useResult';
-import { useIncidentEnv } from './env';
+import { useIncidentEnv } from './context';
 import { changedFieldsText, timelineTitle } from './labels';
 import { formatDateTime } from './time';
 import { useLive } from './useLive';

@@ -2,7 +2,7 @@ import React from 'react';
 import Typography from '@mui/material/Typography';
 import { Button, ConfirmDialog, InlineAlert, Panel } from '@opslog/ui';
 import type { BffIncident } from '@opslog/contracts';
-import { useIncidentEnv } from './env';
+import { useIncidentEnv } from './context';
 import { describeError } from './errors';
 import { VEHICLE_DECISION_LABELS } from './labels';
 import type { VehicleDecision } from './types';
