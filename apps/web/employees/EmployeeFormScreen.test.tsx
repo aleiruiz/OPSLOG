@@ -9,6 +9,7 @@ import {
   screen,
   type,
   waitFor,
+  findSessionExpired,
 } from '../app/test/utils';
 import { makeEmployeeDetail } from './fixtures';
 
@@ -206,7 +207,7 @@ describe('create employee', () => {
     fillBasics();
     api.controls.failNext('createEmployee', 401);
     click('Crear empleado');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     type('Cuenta de prueba', demoSubjects.admin);
     click('Continuar');
     await screen.findByRole('form', { name: 'Nuevo empleado' });
@@ -425,7 +426,7 @@ describe('edit employee', () => {
     type('Puesto', 'Mi cambio');
     api.controls.failNext('updateEmployee', 401);
     click('Guardar cambios');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     api.controls.changeEmployeeExternally('emp-001', { position: 'Cambio ajeno' });
     type('Cuenta de prueba', demoSubjects.admin);
     click('Continuar');
@@ -442,7 +443,7 @@ describe('edit employee', () => {
     type('Puesto', 'Mi cambio');
     api.controls.failNext('updateEmployee', 401);
     click('Guardar cambios');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     type('Cuenta de prueba', demoSubjects.admin);
     click('Continuar');
     await screen.findByRole('form', { name: 'Editar empleado' });

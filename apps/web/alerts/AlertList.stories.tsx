@@ -7,6 +7,7 @@ import {
   type AlertListData,
   type AlertListViewProps,
 } from './AlertListView';
+import { AlertStats } from './AlertStats';
 import { demoAlerts, makeAlert } from './fixtures';
 import { Frame, noop } from './storyFrame';
 
@@ -54,6 +55,21 @@ const view = (props: Partial<AlertListViewProps> = {}) => (
 );
 
 export const Default = { render: () => view() };
+export const WithSummary = {
+  render: () =>
+    view({
+      summary: (
+        <AlertStats
+          data={{ expired: 12, expiring: 22, windowDays: 30 }}
+          severity="expired"
+          onSelect={noop}
+        />
+      ),
+    }),
+};
+export const SummaryLoading = {
+  render: () => view({ summary: <AlertStats data={undefined} severity="" onSelect={noop} /> }),
+};
 export const LastPage = { render: () => view({ state: page({ total: 8, nextCursor: null }) }) };
 export const LoadingMore = { render: () => view({ loadingMore: true }) };
 export const LoadMoreFailed = {

@@ -7,6 +7,8 @@ import { DirectoryProvider, type MaintenanceDirectory } from '../features/mainte
 import { MaintenanceAlertsPanel } from '../features/maintenance/MaintenanceAlertsPanel';
 import { UiState } from '@opslog/ui';
 import { AlertListView, noFilters, type AlertFilters, type AlertListData } from './AlertListView';
+import { AlertStats } from './AlertStats';
+import { loadAlertsSummary, type AlertsSummaryData } from './AlertsSummary';
 
 const PAGE_SIZE = 25;
 const emptyPage = {
@@ -52,6 +54,31 @@ export function AlertsScreen() {
       cancelled = true;
     };
   }, [ports]);
+
+  // Totals by status for the summary cards: best effort, read once the list itself has loaded so the
+  // list stays the first request of the screen.
+  const expire = React.useRef(markExpired);
+  expire.current = markExpired;
+  const [totals, setTotals] = React.useState<AlertsSummaryData | null | undefined>(undefined);
+  // Totals do not depend on the filters: read them once, the first time the list is ready.
+  const listReady = first.state.status === 'ready' || totals !== undefined;
+  React.useEffect(() => {
+    if (!listReady) return;
+    let cancelled = false;
+    void loadAlertsSummary(ports).then((result) => {
+      if (cancelled) return;
+      if (!result.ok && result.error.status === 401) expire.current();
+      setTotals(result.ok ? result.value : null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [ports, listReady]);
+  // The list itself failed (error, no access, session over): no cards waiting on totals that never come.
+  const summary =
+    totals === undefined && first.state.status !== 'ready' && first.state.status !== 'loading'
+      ? null
+      : totals;
 
   const [extra, setExtra] = React.useState<{ items: Alert[]; cursor: string | null } | null>(null);
   const [loadingMore, setLoadingMore] = React.useState(false);
@@ -111,6 +138,13 @@ export function AlertsScreen() {
     <AlertListView
       maintenanceSource
       hideList={maintenanceOnly}
+      summary={
+        <AlertStats
+          data={summary}
+          severity={filters.severity}
+          onSelect={(severity) => setFilters({ ...filters, severity })}
+        />
+      }
       state={state}
       filters={filters}
       vehicles={vehicles}
@@ -130,6 +164,7 @@ export function AlertsScreen() {
             title="Alertas de mantenimiento"
             headingLevel={2}
             showVehicle
+            framed
             emptyText="No hay alertas de mantenimiento. Aparecen cuando un plan se acerca a su fecha o kilometraje."
             onExpired={markExpired}
           />

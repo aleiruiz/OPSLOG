@@ -10,6 +10,7 @@ import {
   type,
   waitFor,
   within,
+  findSessionExpired,
 } from '../app/test/utils';
 import type { InsurancePolicy, Result } from '../app/types';
 import { demoPolicies, makePolicy } from './fixtures';
@@ -214,7 +215,7 @@ describe('policy history', () => {
     await screen.findByText('Revisión 30 · Vigente');
     api.controls.failNext('policyHistory', 401);
     click('Cargar más historial');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
   });
 
   it('ignores a page that arrives after the history was reloaded', async () => {
@@ -345,7 +346,7 @@ describe('archive confirmation', () => {
     const { dialog } = await openArchiveDialog();
     api.controls.expireSession();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Archivar póliza' }));
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     expect(screen.queryByRole('dialog')).toBeNull();
     type('Cuenta de prueba', demoSubjects.admin);
     click('Continuar');

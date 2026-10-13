@@ -100,16 +100,19 @@ export function RouterButton({
   to,
   children,
   variant = 'outlined',
+  startIcon,
 }: {
   to: string;
   children: React.ReactNode;
   variant?: 'contained' | 'outlined' | 'text';
+  startIcon?: React.ReactNode;
 }) {
   const router = useRouter();
   return (
     <Button
       href={`${router.basename}${to}`}
       variant={variant}
+      {...(startIcon === undefined ? {} : { startIcon })}
       onClick={(event: React.MouseEvent<HTMLElement>) => {
         if (event.defaultPrevented || event.button !== 0) return;
         if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;

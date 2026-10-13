@@ -11,6 +11,7 @@ import {
   screen,
   type,
   waitFor,
+  findSessionExpired,
 } from '../../app/test/utils';
 import { UsersScreen } from './UsersScreen';
 
@@ -179,7 +180,7 @@ describe('UsersScreen', () => {
     await screen.findByLabelText('Enlace de invitación');
     api.controls.expireSession();
     type('Buscar por identificador, rol o estado', 'x');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     await waitFor(() => expect(screen.queryByLabelText('Enlace de invitación')).toBeNull());
   });
 

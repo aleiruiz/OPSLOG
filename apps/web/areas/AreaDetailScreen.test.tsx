@@ -1,7 +1,16 @@
 import { act } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { createMockApi, type MockApi } from '../app/mockApi';
-import { click, deferred, fireEvent, renderApp, screen, waitFor, within } from '../app/test/utils';
+import {
+  click,
+  deferred,
+  fireEvent,
+  renderApp,
+  screen,
+  waitFor,
+  within,
+  findSessionExpired,
+} from '../app/test/utils';
 import { makeVehicle } from '../vehicles/fixtures';
 
 async function open(id: string, options: Parameters<typeof renderApp>[0] = {}) {
@@ -225,7 +234,7 @@ describe('area detail: history', () => {
     await open('area-norte', { api });
     api.controls.failNext('areaHistory', 401);
     click('Cargar más historial');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
   });
 
   it('shows the history section on its own when it fails, with a retry', async () => {
@@ -380,7 +389,7 @@ describe('area detail: deactivate', () => {
     const dialog = await openDeactivate(api, 'area-sur-mer', 'Desactivar el área Mérida');
     api.controls.expireSession();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Desactivar área' }));
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 });

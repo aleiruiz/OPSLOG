@@ -3,7 +3,7 @@ import { join, relative, resolve } from 'node:path';
 import axe from 'axe-core';
 import { describe, expect, it, vi } from 'vitest';
 import { demoSubjects } from './mockApi';
-import { click, renderApp, screen, type, waitFor } from './test/utils';
+import { click, renderApp, screen, type, waitFor, findSessionExpired } from './test/utils';
 
 // vitest runs test files with __dirname set to the file's directory (jsdom has no file: import.meta.url).
 const webRoot = resolve(__dirname, '..');
@@ -128,7 +128,7 @@ describe('accessibility in jsdom (rules that do not need layout)', () => {
     await screen.findByDisplayValue('Transportes Demo SA');
     api.controls.expireSession();
     type('Nombre de la empresa', 'x');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     expect(await violations(container)).toEqual([]);
   });
 });

@@ -73,26 +73,29 @@ export function AlertsSummaryView({
   );
 }
 
-/** Home summary of expiry alerts. Two cheap reads (one row each): only the totals are used. Requires `view`. */
+/** Totals of expired and expiring alerts. Two cheap reads (one page each): only the totals are used. */
+export async function loadAlertsSummary(
+  ports: ReturnType<typeof useSession>['ports'],
+): Promise<Result<AlertsSummaryData>> {
+  const [expired, expiring] = await Promise.all([
+    ports.alerts.list({ limit: 25, severity: 'expired' }),
+    ports.alerts.list({ limit: 25, severity: 'expiring' }),
+  ]);
+  if (!expired.ok) return expired;
+  if (!expiring.ok) return expiring;
+  return {
+    ok: true,
+    value: {
+      expired: expired.value.total,
+      expiring: expiring.value.total,
+      windowDays: expiring.value.windowDays,
+    },
+  };
+}
+
+/** Home summary of expiry alerts. Requires `view`. */
 export function AlertsSummary() {
   const { ports } = useSession();
-  const { state, reload } = useResource<AlertsSummaryData>(async (): Promise<
-    Result<AlertsSummaryData>
-  > => {
-    const [expired, expiring] = await Promise.all([
-      ports.alerts.list({ limit: 25, severity: 'expired' }),
-      ports.alerts.list({ limit: 25, severity: 'expiring' }),
-    ]);
-    if (!expired.ok) return expired;
-    if (!expiring.ok) return expiring;
-    return {
-      ok: true,
-      value: {
-        expired: expired.value.total,
-        expiring: expiring.value.total,
-        windowDays: expiring.value.windowDays,
-      },
-    };
-  }, [ports]);
+  const { state, reload } = useResource<AlertsSummaryData>(() => loadAlertsSummary(ports), [ports]);
   return <AlertsSummaryView state={state} onRetry={reload} />;
 }

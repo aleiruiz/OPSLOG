@@ -1,39 +1,61 @@
 import { describe, expect, it } from 'vitest';
 import { opslogTheme } from './theme';
-import { opslogTokens } from './tokens';
+import { opslogTokens, statusColors } from './tokens';
+
+const channel = (value: number) => {
+  const unit = value / 255;
+  return unit <= 0.03928 ? unit / 12.92 : ((unit + 0.055) / 1.055) ** 2.4;
+};
+const luminance = (hex: string) => {
+  const [r, g, b] = [1, 3, 5].map((index) => channel(parseInt(hex.slice(index, index + 2), 16)));
+  return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+};
+const ratio = (a: string, b: string) => {
+  const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (light! + 0.05) / (dark! + 0.05);
+};
 
 describe('design tokens', () => {
-  it('follows the SPECS §8 type and spacing scales', () => {
-    expect(opslogTokens.typography.sizes).toEqual({ body: 14, h1: 22, h2: 16 });
+  it('follows the ADR-0013 type scale and the SPECS §8 spacing scale', () => {
+    expect(opslogTokens.typography.sizes).toEqual({ body: 14, small: 12, h1: 24, h2: 18, h3: 16 });
     expect(opslogTokens.spacingScale).toEqual([4, 8, 12, 16, 24, 32, 48]);
     expect(opslogTokens.typography.fontFamily).toContain('IBM Plex Sans');
     expect(opslogTokens.typography.monoFamily).toContain('IBM Plex Mono');
   });
   it('feeds the Material UI theme', () => {
-    expect(opslogTheme.typography.h1.fontSize).toBe('22px');
-    expect(opslogTheme.typography.h2.fontSize).toBe('16px');
+    expect(opslogTheme.typography.h1.fontSize).toBe('24px');
+    expect(opslogTheme.typography.h2.fontSize).toBe('18px');
+    expect(opslogTheme.typography.h6.fontSize).toBe('16px');
     expect(opslogTheme.spacing(1)).toBe('8px');
   });
   it('keeps input borders at 3:1 against surface and page background (WCAG 1.4.11)', () => {
-    const channel = (value: number) => {
-      const unit = value / 255;
-      return unit <= 0.03928 ? unit / 12.92 : ((unit + 0.055) / 1.055) ** 2.4;
-    };
-    const luminance = (hex: string) => {
-      const [r, g, b] = [1, 3, 5].map((index) =>
-        channel(parseInt(hex.slice(index, index + 2), 16)),
-      );
-      return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
-    };
-    const ratio = (a: string, b: string) => {
-      const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-      return (light! + 0.05) / (dark! + 0.05);
-    };
     const { inputBorder, surface, background } = opslogTokens.colors;
     expect(ratio(inputBorder, surface)).toBeGreaterThanOrEqual(3);
     expect(ratio(inputBorder, background)).toBeGreaterThanOrEqual(3);
     expect(opslogTheme.components?.MuiOutlinedInput?.styleOverrides).toMatchObject({
       notchedOutline: { borderColor: inputBorder },
     });
+  });
+  it('keeps text and status pairs at WCAG AA (4.5:1)', () => {
+    const c = opslogTokens.colors;
+    const pairs: [string, string][] = [
+      [c.text, c.background],
+      [c.textSecondary, c.background],
+      [c.textSecondary, c.surfaceSubtle],
+      [c.textMuted, c.surface],
+      [c.navigationText, c.navigation],
+      [c.navigationGroup, c.navigation],
+      [c.navigationActiveText, c.navigationActive],
+      [c.primary, c.surface],
+      [c.surface, c.primary],
+      ...Object.values(statusColors).map(
+        (tone) => [tone.foreground, tone.background] as [string, string],
+      ),
+    ];
+    for (const [foreground, background] of pairs)
+      expect(
+        ratio(foreground, background),
+        `${foreground} on ${background}`,
+      ).toBeGreaterThanOrEqual(4.5);
   });
 });

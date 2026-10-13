@@ -11,6 +11,7 @@ import {
   type,
   waitFor,
   within,
+  findSessionExpired,
 } from '../app/test/utils';
 import { demoVehicles } from './fixtures';
 import { VehiclesScreen } from './VehiclesScreen';
@@ -198,7 +199,7 @@ describe('vehicle list', () => {
     expect(await screen.findByRole('heading', { name: 'No tienes acceso' })).toBeInTheDocument();
     api.controls.expireSession();
     set('Estado', 'inactive');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     expect(
       await screen.findByRole('heading', { name: 'Datos no disponibles' }),
     ).toBeInTheDocument();
@@ -215,7 +216,7 @@ describe('vehicle list', () => {
     expect(await screen.findByText('No pudimos cargar más vehículos.')).toBeInTheDocument();
     api.controls.failNext('listVehicles', 401);
     click('Cargar más vehículos');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
   });
 
   it('ignores a further page that arrives after the filters changed', async () => {

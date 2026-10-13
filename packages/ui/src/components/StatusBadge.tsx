@@ -1,3 +1,4 @@
+import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
@@ -20,8 +21,22 @@ export function StatusBadge({ label, tone, description, severity }: StatusBadgeP
   return (
     <Stack direction="row" alignItems="center" spacing={1} aria-label={accessibleLabel}>
       <Chip
+        size="small"
         label={label}
-        sx={{ color: colors.foreground, bgcolor: colors.background, fontWeight: 600 }}
+        icon={
+          <Box
+            component="span"
+            aria-hidden="true"
+            sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: colors.foreground }}
+          />
+        }
+        sx={{
+          color: colors.foreground,
+          bgcolor: colors.background,
+          fontWeight: 600,
+          pl: 0.5,
+          '& .MuiChip-icon': { ml: 0.5, mr: -0.25 },
+        }}
       />
       {severity && (
         <Typography component="span" variant="body2" color="text.secondary">

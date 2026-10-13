@@ -12,6 +12,7 @@ import {
   NextStepPanel,
   Notifications,
   PageHeader,
+  Panel,
   SeverityBadge,
   Timeline,
   UploadQueue,
@@ -57,7 +58,7 @@ describe('layout and display components', () => {
           <span>otro</span>
         </FormSection>
         <PageHeader title="Título" description="Descripción" actions={<button>Acción</button>} />
-        <PageHeader title="Solo título" />
+        <PageHeader title="Solo título" eyebrow="Flota" />
         <SeverityBadge severity="low" />
         <SeverityBadge severity="critical" />
         <Timeline
@@ -73,12 +74,45 @@ describe('layout and display components', () => {
     );
     expect(screen.getByRole('heading', { level: 1, name: 'Título' })).toBeInTheDocument();
     expect(screen.getByText('Acción')).toBeInTheDocument();
+    expect(screen.getByText('Flota')).toBeInTheDocument();
     expect(screen.getByLabelText('Severidad: Baja')).toBeInTheDocument();
     expect(screen.getByLabelText('Severidad: Crítica')).toBeInTheDocument();
     expect(screen.getByText('Evento sintético')).toBeInTheDocument();
     expect(screen.getByLabelText('Siguiente paso')).toBeInTheDocument();
     expect(screen.getByLabelText('Propio')).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Notificaciones' })).toHaveTextContent('Hecho');
+  });
+});
+
+describe('Panel', () => {
+  it('names the card after its title and renders header, toolbar and content', () => {
+    render(
+      <>
+        <Panel
+          title="Registros"
+          description="Ordenados por fecha"
+          actions={<button>Nuevo</button>}
+          toolbar={<span>filtros</span>}
+          flush
+        >
+          <span>tabla</span>
+        </Panel>
+        <Panel title="Detalle" headingLevel={3}>
+          <span>contenido</span>
+        </Panel>
+        <Panel actions={<button>Solo acción</button>} />
+        <Panel>
+          <span>sin encabezado</span>
+        </Panel>
+      </>,
+    );
+    const card = screen.getByRole('region', { name: 'Registros' });
+    expect(card).toHaveTextContent('Ordenados por fecha');
+    expect(card).toHaveTextContent('filtros');
+    expect(card).toHaveTextContent('tabla');
+    expect(screen.getByRole('heading', { level: 3, name: 'Detalle' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Solo acción' })).toBeInTheDocument();
+    expect(screen.getByText('sin encabezado')).toBeInTheDocument();
   });
 });
 

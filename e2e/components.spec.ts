@@ -78,13 +78,14 @@ test.describe('OPSLOG UI components in a real browser', () => {
     await expect(page.locator('body')).toMatchAriaSnapshot({ name: 'gallery.aria.yml' });
   });
 
-  test('applies the SPECS type scale to rendered text', async ({ page }) => {
+  test('applies the ADR-0013 type scale to rendered text', async ({ page }) => {
     const size = (selector: string) =>
       page
         .locator(selector)
         .first()
         .evaluate((node) => getComputedStyle(node).fontSize);
-    expect(await size('h1')).toBe('22px');
+    expect(await size('h1')).toBe('24px');
+    // The gallery's first h2 uses a section-level variant (h5): every variant below H2 is 16px.
     expect(await size('h2')).toBe('16px');
     expect(await size('body')).toBe('14px');
     expect(
@@ -146,7 +147,7 @@ test.describe('OPSLOG UI components in a real browser', () => {
 // One axe pass over all the stories grew past its 120 s budget under load, so the scan is split into
 // fixed groups of consecutive stories (each its own test, run in parallel) plus one test for the page
 // itself. Together they cover every story and every page-level rule the single pass covered.
-const STORY_COUNT = 357; // Foundations: StatusBadge, UiState, the base components and each feature's stories.
+const STORY_COUNT = 359; // Foundations: StatusBadge, UiState, the base components and each feature's stories.
 const STORY_GROUPS = 8;
 const STORIES_PER_GROUP = Math.ceil(STORY_COUNT / STORY_GROUPS);
 const WCAG = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];

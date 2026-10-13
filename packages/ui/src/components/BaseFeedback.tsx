@@ -155,7 +155,7 @@ export function Notifications({
   messages: { id: string; text: string; severity: 'info' | 'success' | 'warning' | 'error' }[];
 }) {
   return (
-    <Stack role="region" aria-label="Notificaciones" spacing={1}>
+    <Stack role="region" aria-label="Notificaciones" spacing={1} sx={{ my: 2 }}>
       {messages.map((message) => (
         <Alert key={message.id} severity={message.severity}>
           {message.text}

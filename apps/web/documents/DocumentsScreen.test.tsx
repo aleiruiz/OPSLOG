@@ -10,6 +10,7 @@ import {
   type,
   waitFor,
   within,
+  findSessionExpired,
 } from '../app/test/utils';
 import { demoDocuments, makeDocument } from './fixtures';
 
@@ -224,7 +225,7 @@ describe('document list', () => {
     expect(await screen.findByRole('heading', { name: 'No tienes acceso' })).toBeInTheDocument();
     api.controls.expireSession();
     set('Estado', 'expired');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     type('Cuenta de prueba', demoSubjects.admin);
     click('Continuar');
     await screen.findByRole('table', { name: /Documentos/ });
@@ -238,7 +239,7 @@ describe('document list', () => {
     expect(await screen.findByText('No pudimos cargar más documentos.')).toBeInTheDocument();
     api.controls.failNext('listDocuments', 401);
     click('Cargar más documentos');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
   });
 
   it('ignores a further page that arrives after the filters changed', async () => {

@@ -10,6 +10,7 @@ import {
   type,
   waitFor,
   within,
+  findSessionExpired,
 } from '../app/test/utils';
 import type { Result, Vehicle } from '../app/types';
 import { demoVehicles, makeVehicle } from './fixtures';
@@ -248,7 +249,7 @@ describe('archive confirmation', () => {
     const { dialog } = await openArchiveDialog();
     api.controls.expireSession();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Archivar vehículo' }));
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     expect(screen.queryByRole('dialog')).toBeNull();
     type('Cuenta de prueba', demoSubjects.admin);
     click('Continuar');

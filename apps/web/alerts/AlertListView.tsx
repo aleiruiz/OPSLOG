@@ -1,3 +1,4 @@
+import TuneOutlined from '@mui/icons-material/TuneOutlined';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import React from 'react';
@@ -8,6 +9,7 @@ import {
   FilterBar,
   Notifications,
   PageHeader,
+  Panel,
   StatusBadge,
   UiState,
 } from '@opslog/ui';
@@ -63,6 +65,8 @@ export interface AlertListViewProps {
   /** Shows only `children`: the maintenance source is selected and the expiry list does not apply. */
   readonly hideList?: boolean;
   readonly children?: React.ReactNode;
+  /** Totals by status shown under the header (the screen loads them; stories pass a fixed one). */
+  readonly summary?: React.ReactNode;
   readonly notice?: { readonly text: string; readonly severity: 'success' | 'error' } | null;
   readonly onFiltersChange: (filters: AlertFilters) => void;
   readonly onClear: () => void;
@@ -70,7 +74,12 @@ export interface AlertListViewProps {
   readonly onLoadMore: (cursor: string) => void;
 }
 
-const linkSx = { color: 'primary.main', textDecoration: 'underline' } as const;
+const linkSx = {
+  color: 'primary.main',
+  fontWeight: 500,
+  textDecoration: 'underline',
+  textUnderlineOffset: '3px',
+} as const;
 
 const plural = (count: number) => `${count} ${count === 1 ? 'día' : 'días'}`;
 
@@ -84,6 +93,7 @@ export function AlertListView({
   maintenanceSource = false,
   hideList = false,
   children,
+  summary,
   notice = null,
   onFiltersChange,
   onClear,
@@ -116,6 +126,7 @@ export function AlertListView({
   return (
     <>
       <PageHeader
+        eyebrow="Flota"
         title="Alertas"
         description={
           ready
@@ -123,160 +134,169 @@ export function AlertListView({
             : 'Documentos de vehículo, seguros y licencias por vencer o vencidos.'
         }
         actions={
-          <RouterButton to={alertSettingsPath} variant="outlined">
+          <RouterButton to={alertSettingsPath} variant="outlined" startIcon={<TuneOutlined />}>
             Ajustes de alertas
           </RouterButton>
         }
       />
+      {summary}
       {notice && (
         <Notifications
           messages={[{ id: 'notice', text: notice.text, severity: notice.severity }]}
         />
       )}
       <NoSubmit>
-        <FilterBar onClear={onClear}>
-          {select(
-            'source',
-            'Origen',
-            filters.source,
-            (value) => onFiltersChange({ ...filters, source: value as AlertFilters['source'] }),
-            <>
-              <option value="">Todos los orígenes</option>
-              {sourceOrder.map((source) => (
-                <option key={source} value={source}>
-                  {sourceChoiceLabels[source]}
-                </option>
-              ))}
-              {maintenanceSource && <option value="maintenance">Mantenimiento</option>}
-            </>,
-          )}
-          {select(
-            'severity',
-            'Estado',
-            filters.severity,
-            (value) => onFiltersChange({ ...filters, severity: value as AlertSeverity | '' }),
-            <>
-              <option value="">Todos los estados</option>
-              {severityOrder.map((severity) => (
-                <option key={severity} value={severity}>
-                  {severityPresentation[severity].label}
-                </option>
-              ))}
-            </>,
-          )}
-          {vehicles &&
-            select(
-              'vehicle',
-              'Vehículo',
-              filters.vehicleId,
-              (value) => onFiltersChange({ ...filters, vehicleId: value }),
+        <Panel>
+          <FilterBar onClear={onClear}>
+            {select(
+              'source',
+              'Origen',
+              filters.source,
+              (value) => onFiltersChange({ ...filters, source: value as AlertFilters['source'] }),
               <>
-                <option value="">Todos los vehículos</option>
-                {vehicles.items.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.label}
+                <option value="">Todos los orígenes</option>
+                {sourceOrder.map((source) => (
+                  <option key={source} value={source}>
+                    {sourceChoiceLabels[source]}
+                  </option>
+                ))}
+                {maintenanceSource && <option value="maintenance">Mantenimiento</option>}
+              </>,
+            )}
+            {select(
+              'severity',
+              'Estado',
+              filters.severity,
+              (value) => onFiltersChange({ ...filters, severity: value as AlertSeverity | '' }),
+              <>
+                <option value="">Todos los estados</option>
+                {severityOrder.map((severity) => (
+                  <option key={severity} value={severity}>
+                    {severityPresentation[severity].label}
                   </option>
                 ))}
               </>,
             )}
-        </FilterBar>
+            {vehicles &&
+              select(
+                'vehicle',
+                'Vehículo',
+                filters.vehicleId,
+                (value) => onFiltersChange({ ...filters, vehicleId: value }),
+                <>
+                  <option value="">Todos los vehículos</option>
+                  {vehicles.items.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.label}
+                    </option>
+                  ))}
+                </>,
+              )}
+          </FilterBar>
+        </Panel>
       </NoSubmit>
       {hideList ? (
         children
       ) : (
         <>
-          <ResourceView state={state} onRetry={onRetry}>
-            {(page) => {
-              if (page.items.length === 0)
-                return filtersActive ? (
-                  <UiState kind="no-results" />
-                ) : (
-                  <UiState
-                    kind="empty"
-                    title="Sin vencimientos pendientes"
-                    description={`Ningún documento, seguro ni licencia vence en los próximos ${plural(page.windowDays)} y no hay vencidos.`}
-                  />
-                );
-              const rows: Row[] = page.items.map((alert) => ({ ...alert, id: alert.key }));
-              return (
-                <>
-                  <ScrollRegion label="Tabla de alertas">
-                    <DataTable<Row>
-                      caption={`Alertas (${page.total})`}
-                      columns={[
-                        {
-                          key: 'typeCode',
-                          label: 'Registro',
-                          render: (_, row) => (
-                            <>
-                              <RouterLink
-                                to={alertRecordPath(row)}
-                                label={`Ver ${sourceLabels[row.source].toLowerCase()}: ${alertTitle(row)}`}
-                                sx={linkSx}
-                              >
-                                {alertTitle(row)}
-                              </RouterLink>
-                              <Typography variant="body2" color="text.secondary">
-                                {sourceLabels[row.source]}
-                              </Typography>
-                            </>
-                          ),
-                        },
-                        {
-                          key: 'vehicleId',
-                          label: 'Vehículo o conductor',
-                          render: (_, row) =>
-                            row.vehicleId === null ? (
-                              <Typography variant="body2">Conductor</Typography>
-                            ) : (
-                              <RouterLink
-                                to={`/flota/vehiculos/${encodeURIComponent(row.vehicleId)}`}
-                                label={`Vehículo ${names.get(row.vehicleId) ?? row.vehicleId}`}
-                                sx={linkSx}
-                              >
-                                {names.get(row.vehicleId) ?? 'Vehículo'}
-                              </RouterLink>
-                            ),
-                        },
-                        {
-                          key: 'dueOn',
-                          label: 'Vencimiento',
-                          render: (_, row) => (
-                            <>
-                              {formatDate(row.dueOn)}
-                              <Typography variant="body2" color="text.secondary">
-                                {expiryNote(row.daysToExpiry)}
-                              </Typography>
-                            </>
-                          ),
-                        },
-                        {
-                          key: 'severity',
-                          label: 'Estado',
-                          render: (value) => {
-                            const view = severityPresentation[value as AlertSeverity];
-                            return <StatusBadge label={view.label} tone={view.tone} />;
-                          },
-                        },
-                      ]}
-                      rows={rows}
+          <Panel
+            title="Documentos, seguros y licencias"
+            description="Ordenados por fecha de vencimiento."
+            flush={ready !== null && ready.items.length > 0}
+          >
+            <ResourceView state={state} onRetry={onRetry}>
+              {(page) => {
+                if (page.items.length === 0)
+                  return filtersActive ? (
+                    <UiState kind="no-results" />
+                  ) : (
+                    <UiState
+                      kind="empty"
+                      title="Sin vencimientos pendientes"
+                      description={`Ningún documento, seguro ni licencia vence en los próximos ${plural(page.windowDays)} y no hay vencidos.`}
                     />
-                  </ScrollRegion>
-                  {page.nextCursor && (
-                    <Box>
-                      <Button
-                        variant="outlined"
-                        loading={loadingMore}
-                        onClick={() => onLoadMore(page.nextCursor as string)}
-                      >
-                        Cargar más alertas
-                      </Button>
-                    </Box>
-                  )}
-                </>
-              );
-            }}
-          </ResourceView>
+                  );
+                const rows: Row[] = page.items.map((alert) => ({ ...alert, id: alert.key }));
+                return (
+                  <>
+                    <ScrollRegion label="Tabla de alertas">
+                      <DataTable<Row>
+                        caption={`Alertas (${page.total})`}
+                        columns={[
+                          {
+                            key: 'typeCode',
+                            label: 'Registro',
+                            render: (_, row) => (
+                              <>
+                                <RouterLink
+                                  to={alertRecordPath(row)}
+                                  label={`Ver ${sourceLabels[row.source].toLowerCase()}: ${alertTitle(row)}`}
+                                  sx={linkSx}
+                                >
+                                  {alertTitle(row)}
+                                </RouterLink>
+                                <Typography variant="body2" color="text.secondary">
+                                  {sourceLabels[row.source]}
+                                </Typography>
+                              </>
+                            ),
+                          },
+                          {
+                            key: 'vehicleId',
+                            label: 'Vehículo o conductor',
+                            render: (_, row) =>
+                              row.vehicleId === null ? (
+                                <Typography variant="body2">Conductor</Typography>
+                              ) : (
+                                <RouterLink
+                                  to={`/flota/vehiculos/${encodeURIComponent(row.vehicleId)}`}
+                                  label={`Vehículo ${names.get(row.vehicleId) ?? row.vehicleId}`}
+                                  sx={linkSx}
+                                >
+                                  {names.get(row.vehicleId) ?? 'Vehículo'}
+                                </RouterLink>
+                              ),
+                          },
+                          {
+                            key: 'dueOn',
+                            label: 'Vencimiento',
+                            render: (_, row) => (
+                              <>
+                                {formatDate(row.dueOn)}
+                                <Typography variant="body2" color="text.secondary">
+                                  {expiryNote(row.daysToExpiry)}
+                                </Typography>
+                              </>
+                            ),
+                          },
+                          {
+                            key: 'severity',
+                            label: 'Estado',
+                            render: (value) => {
+                              const view = severityPresentation[value as AlertSeverity];
+                              return <StatusBadge label={view.label} tone={view.tone} />;
+                            },
+                          },
+                        ]}
+                        rows={rows}
+                      />
+                    </ScrollRegion>
+                    {page.nextCursor && (
+                      <Box sx={{ px: { xs: 2, sm: 2.5 }, pb: 2 }}>
+                        <Button
+                          variant="outlined"
+                          loading={loadingMore}
+                          onClick={() => onLoadMore(page.nextCursor as string)}
+                        >
+                          Cargar más alertas
+                        </Button>
+                      </Box>
+                    )}
+                  </>
+                );
+              }}
+            </ResourceView>
+          </Panel>
           {children}
         </>
       )}
