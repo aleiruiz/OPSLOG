@@ -20,6 +20,7 @@ import type {
   VehicleProposal,
   WritableKey,
 } from '../../../../../packages/domain/incidents/cases/src/index.js';
+import type { IncidentSlaView } from '../../../../../packages/domain/incidents/sla/src/index.js';
 
 export type IncidentApiErrorCode =
   | 'unauthorized'
@@ -132,6 +133,8 @@ export interface IncidentView {
   readonly editableFields: readonly WritableKey[];
   /** State commands the caller's permission and the current state allow now (not their requirements). */
   readonly allowedCommands: readonly IncidentCommand[];
+  /** The calculated SLA (INC-SLA); present only when the deployment provides it. */
+  readonly sla?: IncidentSlaView;
 }
 export interface IncidentTimelineEntry {
   readonly sequence: number;
@@ -166,8 +169,17 @@ export interface IncidentLabels {
   member(tenantId: string, actorId: string): Promise<string>;
 }
 
+/** The calculated SLA of cases, read on demand (INC-SLA); optional so the module stands alone. */
+export interface IncidentSlaViews {
+  forIncidents(
+    tenantId: string,
+    cases: readonly Incident[],
+  ): Promise<ReadonlyMap<string, IncidentSlaView>>;
+}
+
 export interface IncidentApiDeps {
   readonly incidents: IncidentService;
+  readonly sla?: IncidentSlaViews;
   /** Authenticates the session and returns its effective grants (never from the request). */
   readonly authorize: (
     token: string,

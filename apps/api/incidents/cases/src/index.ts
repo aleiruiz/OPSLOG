@@ -32,8 +32,26 @@ export class IncidentApi {
     );
   }
 
-  private view(incident: Incident, actor: IncidentActor, names: Names): Promise<IncidentView> {
-    return toView(incident, actor, names, this.deps.allowedCommands?.(incident, actor));
+  /** The view of each case, with the SLA block of those that have one when the deployment provides it. */
+  private async views(
+    tenantId: string,
+    cases: readonly Incident[],
+    actor: IncidentActor,
+    names: Names,
+  ): Promise<IncidentView[]> {
+    const sla = await this.deps.sla?.forIncidents(tenantId, cases);
+    return Promise.all(
+      cases.map(async (incident) => {
+        const view = await toView(
+          incident,
+          actor,
+          names,
+          this.deps.allowedCommands?.(incident, actor),
+        );
+        const block = sla?.get(incident.id);
+        return block ? { ...view, sla: block } : view;
+      }),
+    );
   }
 
   private one(
@@ -42,9 +60,10 @@ export class IncidentApi {
     entityId: string,
     work: (tenantId: string, actor: IncidentActor) => Promise<Incident>,
   ): Promise<IncidentApiResponse<IncidentView>> {
-    return this.run(token, correlationId, entityId, async (tenantId, actor, names) =>
-      this.view(await work(tenantId, actor), actor, names),
-    );
+    return this.run(token, correlationId, entityId, async (tenantId, actor, names) => {
+      const [view] = await this.views(tenantId, [await work(tenantId, actor)], actor, names);
+      return view as IncidentView;
+    });
   }
 
   public list(
@@ -55,11 +74,7 @@ export class IncidentApi {
     return this.run(token, correlationId, 'list', async (tenantId, actor, names) => {
       const page = await this.deps.incidents.list(tenantId, actor, query);
       return {
-        items: await Promise.all(
-          page.items.map((incident) =>
-            toView(incident, actor, names, this.deps.allowedCommands?.(incident, actor)),
-          ),
-        ),
+        items: await this.views(tenantId, page.items, actor, names),
         total: page.total,
         tenantId,
       };

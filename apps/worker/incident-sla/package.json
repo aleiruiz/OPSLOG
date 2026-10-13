@@ -1,0 +1,8 @@
+{
+  "name": "@opslog/worker-incident-sla",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:unit": "vitest run"
+  }
+}
