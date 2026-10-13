@@ -30,6 +30,7 @@ import {
 } from '../../../packages/persistence/incidents/cases/src/index.js';
 import { INCIDENT_REPAIR_TABLES } from '../../../packages/persistence/incidents/repairs/src/index.js';
 import { INCIDENT_COST_TABLES } from '../../../packages/persistence/incidents/costs/src/index.js';
+import { INCIDENT_SLA_TABLES } from '../../../packages/persistence/incidents/sla/src/index.js';
 import { INCIDENT_WORKFLOW_TABLES } from '../../../packages/persistence/incidents/workflow/src/index.js';
 import { INCIDENT_CHILD_TABLES } from '../../../packages/persistence/incidents/third-parties/src/index.js';
 import {
@@ -132,6 +133,9 @@ const grants = {
     { table: INCIDENT_COST_TABLES.estimates, privileges: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] },
     { table: INCIDENT_COST_TABLES.snapshots, privileges: ['SELECT', 'INSERT'] },
     { table: INCIDENT_COST_TABLES.approvals, privileges: ['SELECT', 'INSERT', 'DELETE'] },
+    { table: INCIDENT_SLA_TABLES.cycles, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
+    { table: INCIDENT_SLA_TABLES.alerts, privileges: ['SELECT', 'INSERT'] },
+    { table: INCIDENT_SLA_TABLES.deliveries, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
   ],
 } satisfies Record<string, readonly Grant[]>;
 

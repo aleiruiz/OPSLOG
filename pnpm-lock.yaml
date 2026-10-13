@@ -105,6 +105,8 @@ importers:
 
   apps/api/incidents/repairs: {}
 
+  apps/api/incidents/sla: {}
+
   apps/api/incidents/third-parties: {}
 
   apps/api/incidents/workflow: {}
@@ -173,6 +175,8 @@ importers:
   apps/worker/base: {}
 
   apps/worker/composition: {}
+
+  apps/worker/incident-sla: {}
 
   apps/worker/maintenance-plans: {}
 
@@ -398,6 +402,18 @@ importers:
         version: 1.1.1(babel-plugin-macros@3.1.0)(mysql2@3.22.0(@types/node@22.15.21))(supports-color@7.2.0)
 
   packages/persistence/incidents/repairs:
+    dependencies:
+      mysql2:
+        specifier: 3.22.0
+        version: 3.22.0(@types/node@22.15.21)
+      reflect-metadata:
+        specifier: 0.2.2
+        version: 0.2.2
+      typeorm:
+        specifier: 1.1.1
+        version: 1.1.1(babel-plugin-macros@3.1.0)(mysql2@3.22.0(@types/node@22.15.21))(supports-color@7.2.0)
+
+  packages/persistence/incidents/sla:
     dependencies:
       mysql2:
         specifier: 3.22.0

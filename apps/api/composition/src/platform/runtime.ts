@@ -7,6 +7,7 @@ import { ROLE_PERMISSIONS } from '../access.js';
 import { ACTOR_PREFIX, type PlatformKernel } from './kernel.js';
 import type { PlatformOptions } from './types.js';
 import type { MaintenancePlanWorker } from '../../../../../packages/domain/maintenance/plans/src/index.js';
+import { registerIncidentSlaHandlers } from '../../../../worker/incident-sla/src/index.js';
 import { registerMaintenancePlanHandlers } from '../../../../worker/maintenance-plans/src/index.js';
 
 /** Worker runtime over the platform's outbox, tenants and pipeline; the actor's current role gates each job. */
@@ -16,6 +17,7 @@ export function buildWorkerRuntime(
   worker: PlatformOptions['worker'],
   auditRelay?: { runBatch(max?: number): Promise<number> },
   maintenancePlans?: MaintenancePlanWorker,
+  incidentSla?: Parameters<typeof registerIncidentSlaHandlers>[1],
 ): WorkerRuntime {
   const runtime = createWorkerRuntime({
     outbox: kernel.outbox,
@@ -39,5 +41,6 @@ export function buildWorkerRuntime(
     ...worker,
   });
   if (maintenancePlans) registerMaintenancePlanHandlers(runtime.worker, maintenancePlans);
+  if (incidentSla) registerIncidentSlaHandlers(runtime.worker, incidentSla);
   return runtime;
 }

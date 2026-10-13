@@ -24,6 +24,12 @@ import {
   createIncidentCostsMigrationDataSource,
   runIncidentCostsMigrations,
 } from '../../../../packages/persistence/incidents/costs/src/index.js';
+import {
+  INCIDENT_SLA_MIGRATION_VERSION,
+  TypeOrmIncidentSlaStore,
+  createIncidentSlaMigrationDataSource,
+  runIncidentSlaMigrations,
+} from '../../../../packages/persistence/incidents/sla/src/index.js';
 import { TypeOrmIncidentChildStore } from '../../../../packages/persistence/incidents/third-parties/src/index.js';
 
 type Endpoint = Pick<IncidentDatabaseConfig, 'host' | 'port' | 'database'>;
@@ -61,6 +67,13 @@ export function incidentMigrationSteps(endpoint: Endpoint, migrator: Account) {
       source: createIncidentCostsMigrationDataSource({ ...endpoint, ...migrator }),
       run: runIncidentCostsMigrations,
     },
+    // Cycles, notices and deliveries of the SLA, after the cases they point to.
+    {
+      name: 'incident-sla',
+      version: INCIDENT_SLA_MIGRATION_VERSION,
+      source: createIncidentSlaMigrationDataSource({ ...endpoint, ...migrator }),
+      run: runIncidentSlaMigrations,
+    },
   ] as const;
 }
 
@@ -83,5 +96,7 @@ export function incidentRuntimeAdapters(source: ReturnType<typeof createIncident
     // Links and cost lines join the transaction of the case the same way.
     incidentRepairs: new TypeOrmIncidentRepairStore(source, incidents),
     incidentCosts: new TypeOrmIncidentCostStore(source, incidents),
+    // A notice and its outbox event commit together; deliveries are claimed under a lease.
+    incidentSla: new TypeOrmIncidentSlaStore(source),
   };
 }

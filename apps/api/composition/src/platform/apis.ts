@@ -73,6 +73,7 @@ export function buildDomainApis(
   kernel: PlatformKernel,
   adapters: PlatformAdapters,
   files: WorkOrderFileSupport,
+  environment?: string,
 ): DomainApis {
   const vehicleStore = adapters.vehicles ?? new InMemoryVehicleStore();
   const vehicleAuditInTransaction =
@@ -403,6 +404,7 @@ export function buildDomainApis(
       },
       pii,
       files,
+      environment,
     ),
   };
 }

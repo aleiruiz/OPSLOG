@@ -746,6 +746,10 @@ describe('typed client against the real BFF', () => {
       ok: true,
       value: { items: [] },
     });
+    expect(await client.call('incidents.alerts.list', { query: { limit: 25 } })).toMatchObject({
+      ok: true,
+      value: { items: [] },
+    });
     expect(await client.call('incidents.costs.get', { params: flow })).toMatchObject({
       ok: true,
       value: { lines: [], totals: [] },
