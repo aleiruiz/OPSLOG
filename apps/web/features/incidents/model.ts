@@ -55,11 +55,15 @@ export function stepViews(steps: readonly BffIncidentNextStep[]): readonly StepV
   }));
 }
 
+const isApproval = (command: IncidentCommand): boolean =>
+  command === 'approve_close' || command === 'approve_assumption';
+
 /** Lines for `NextStepPanel`: what each command still lacks, in Spanish (never raw ids). */
 export function missingLines(views: readonly StepView[]): string[] {
-  return views.flatMap((view) =>
-    view.missing.map((id) => `${view.label}: ${requirementLabel(id)}`),
-  );
+  // An approval the caller cannot give yet is not a step to complete: it never reads as "Falta para continuar".
+  return views
+    .filter((view) => !isApproval(view.command))
+    .flatMap((view) => view.missing.map((id) => `${view.label}: ${requirementLabel(id)}`));
 }
 
 export type ApprovalKind = 'assumption' | 'close';
@@ -77,11 +81,14 @@ export function approvalsToOffer(
 ): readonly ApprovalKind[] {
   const offers: ApprovalKind[] = [];
   const has = (command: IncidentCommand) => views.some((view) => view.command === command);
+  // An approval command that lists its own missing requirements is not available: never offer it.
+  const ready = (command: IncidentCommand) =>
+    views.some((view) => view.command === command && view.missing.length === 0);
   const lists = (id: string) => views.some((view) => view.missing.includes(id));
-  if (has('approve_close') && incident.resolution.closeApproval === null) {
+  if (ready('approve_close') && incident.resolution.closeApproval === null) {
     if (lists('close_approval') || !has('close')) offers.push('close');
   }
-  if (has('approve_assumption') && incident.insurance.assumptionApproval === null) {
+  if (ready('approve_assumption') && incident.insurance.assumptionApproval === null) {
     const carriers = views.some((view) => view.command === 'repair' || view.command === 'resolve');
     if (lists('assumption_approval') || !carriers) offers.push('assumption');
   }

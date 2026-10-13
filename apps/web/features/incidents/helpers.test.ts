@@ -186,6 +186,20 @@ describe('model', () => {
       ),
     ).toEqual([]);
   });
+
+  it('never offers an approval that lists its own missing requirements, nor shows it as pending work', () => {
+    const blocked = stepViews([
+      { command: 'close', missingRequirements: [] },
+      { command: 'approve_close', missingRequirements: ['resolution_summary'] },
+      { command: 'approve_assumption', missingRequirements: ['resolution_summary'] },
+    ]);
+    expect(approvalsToOffer(baseIncident({ status: 'resolved' }), blocked)).toEqual([]);
+    expect(missingLines(blocked)).toEqual([]);
+    const noAssumption = stepViews([
+      { command: 'approve_assumption', missingRequirements: ['insurer_decision'] },
+    ]);
+    expect(approvalsToOffer(baseIncident({ status: 'no_insurance' }), noAssumption)).toEqual([]);
+  });
 });
 
 describe('paths and draft edits', () => {
