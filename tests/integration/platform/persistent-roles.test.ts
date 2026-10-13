@@ -156,7 +156,9 @@ describe('role directory wiring', () => {
     const memory = new RoleDirectory(undefined, catalog);
     expect(memory.catalog).toBe(catalog);
     expect(await memory.setMemberRole('t', 'i', 'admin')).toBe(true);
-    expect(await memory.find('t', 'viewer')).toMatchObject({ permissions: ['view'] });
+    expect(await memory.find('t', 'viewer')).toMatchObject({
+      permissions: ['view', 'incidents:view'],
+    });
     expect(await memory.find('t', 'custom-x')).toBeUndefined();
   });
 });
@@ -341,7 +343,7 @@ describe('membership roles written through setRole', () => {
     const again = await world.signIn('subject-auditor', a.tenantId);
     expect((await platform.sessionDetails(again.token, corr())).value).toMatchObject({
       roleId: 'editor',
-      permissions: ['view', 'create', 'edit'],
+      permissions: ['view', 'create', 'edit', 'incidents:view'],
     });
     // Changing to the same role is accepted and changes nothing.
     expect((await platform.changeRole(a.admin.token, corr(), pendingId, 'editor')).ok).toBe(true);

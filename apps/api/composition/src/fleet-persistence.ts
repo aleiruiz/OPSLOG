@@ -65,6 +65,11 @@ import {
   maintenanceMigrationSteps,
   maintenanceRuntimeAdapters,
 } from './maintenance-source.js';
+import {
+  createIncidentRuntimeSource,
+  incidentMigrationSteps,
+  incidentRuntimeAdapters,
+} from './incident-source.js';
 
 type FleetDataSource = ReturnType<typeof createAreasMigrationDataSource>;
 
@@ -95,6 +100,7 @@ export interface FleetRuntimeCredentials extends FleetDatabaseEndpoint {
     readonly imports: { readonly username: string; readonly password: string };
     readonly files: { readonly username: string; readonly password: string };
     readonly maintenance: { readonly username: string; readonly password: string };
+    readonly incidents: { readonly username: string; readonly password: string };
     readonly auditRuntime: { readonly username: string; readonly password: string };
     readonly auditRelay: { readonly username: string; readonly password: string };
   };
@@ -190,6 +196,10 @@ export function createFleetMigrationModules(
       { host: credentials.host, port: credentials.port, database: credentials.database },
       credentials.maintenanceMigrator,
     ).map((step) => migrationModule(step.name, step.version, step.source, step.run)),
+    ...incidentMigrationSteps(
+      { host: credentials.host, port: credentials.port, database: credentials.database },
+      { username: credentials.username, password: credentials.password },
+    ).map((step) => migrationModule(step.name, step.version, step.source, step.run)),
   ];
 }
 
@@ -255,6 +265,7 @@ export interface FleetRuntimeStores {
       | 'maintenanceWorkshops'
       | 'maintenanceMechanics'
       | 'maintenanceOrders'
+      | 'incidents'
     >
   >;
   readonly audit: NonNullable<PlatformAdapters['audit']>;
@@ -313,7 +324,8 @@ export async function openFleetRuntimeStores(
     ...credentials.accounts.files,
   });
   const maintenance = createMaintenanceRuntimeSources(endpoint, credentials.accounts.maintenance);
-  sources.push(maintenance.plans, maintenance.orders);
+  const incidentSource = createIncidentRuntimeSource(endpoint, credentials.accounts.incidents);
+  sources.push(maintenance.plans, maintenance.orders, incidentSource);
   const initialized: FleetDataSource[] = [];
   let auditRuntimeInitialized = false;
   let auditRelayInitialized = false;
@@ -365,6 +377,7 @@ export async function openFleetRuntimeStores(
         settings: new TypeOrmSettingsStore(sources[6] as FleetDataSource),
         imports: new TypeOrmImportStore(sources[7] as FleetDataSource),
         ...maintenanceRuntimeAdapters(maintenance),
+        ...incidentRuntimeAdapters(incidentSource),
         get records() {
           if (!fileStore) throw new Error('fleet file runtime must be bound to a tenant first');
           return fileStore;

@@ -10,6 +10,7 @@ export const ROLE_LABELS: Readonly<Record<RoleName, string>> = {
   viewer: 'Consulta',
   auditor: 'Auditoría',
   pii_reader: 'Lectura de datos personales',
+  incident_manager: 'Responsable de siniestros',
 };
 
 export type MfaPolicy = 'disabled' | 'optional' | 'required';

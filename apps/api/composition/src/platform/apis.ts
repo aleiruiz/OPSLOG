@@ -53,11 +53,11 @@ import {
   withMaintenanceDefaults,
   type WorkOrderFileSupport,
 } from './work-order-apis.js';
-import type { WorkOrderApi } from '../../../maintenance/orders/src/index.js';
+import { buildIncidentApi, type IncidentDomainApis } from './incident-apis.js';
 import type { MaintenanceApi } from '../../../maintenance/plans/src/index.js';
 import type { MaintenancePlanWorker } from '../../../../../packages/domain/maintenance/plans/src/index.js';
 
-export interface DomainApis {
+export interface DomainApis extends IncidentDomainApis {
   readonly vehicles: VehiclesApi;
   readonly areas: AreasApi;
   readonly employees: EmployeesApi;
@@ -69,7 +69,7 @@ export interface DomainApis {
   readonly alerts: AlertsApi;
   readonly maintenance: MaintenanceApi;
   readonly maintenancePlanWorker?: MaintenancePlanWorker;
-  readonly workOrders: WorkOrderApi;
+  readonly workOrders: ReturnType<typeof buildWorkOrderApi>;
 }
 
 /** Wires the domain services and their HTTP-facing APIs over the adapters (in-memory by default). */
@@ -227,8 +227,9 @@ export function buildDomainApis(
             correlationId,
           ),
   });
+  const assignmentStore = adapters.assignments ?? new InMemoryAssignmentStore();
   const assignments = new AssignmentsApi({
-    service: new AssignmentService(adapters.assignments ?? new InMemoryAssignmentStore(), {
+    service: new AssignmentService(assignmentStore, {
       now: kernel.now,
       // BR-014: the vehicle must be live and neither inactive nor decommissioned, and the
       // employee a driver that is active and not archived, both of the same tenant. Unknown,
@@ -414,5 +415,12 @@ export function buildDomainApis(
       settingsService,
       files,
     ),
+    incidents: buildIncidentApi(kernel, maintenanceAdapters, {
+      vehicles: vehicleService,
+      employees: employeeService,
+      assignments: assignmentStore,
+      policies: policyStore,
+      settings: settingsService,
+    }),
   };
 }

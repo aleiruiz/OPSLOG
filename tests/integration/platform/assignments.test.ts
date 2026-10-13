@@ -55,6 +55,7 @@ async function fixture(w: World): Promise<Fixture> {
     viewer: await w.member(a.admin, 'viewer', 'subject-viewer-a'),
     auditor: await w.member(a.admin, 'auditor', 'subject-auditor-a'),
     pii_reader: await w.member(a.admin, 'pii_reader', 'subject-pii-a'),
+    incident_manager: await w.member(a.admin, 'incident_manager', 'subject-incident-a'),
   } as const;
   const sideOf = async (session: Session): Promise<Side> => {
     const area = ok(await w.platform.areas.create(session.token, corr(), { name: 'Flota' })).id;
@@ -336,6 +337,7 @@ const ROLE_GRANTS: Readonly<Record<RoleName, readonly string[]>> = {
   viewer: ['view'],
   auditor: ['view'],
   pii_reader: ['view', 'create', 'view_pii'],
+  incident_manager: ['view'],
 };
 
 type Run = (

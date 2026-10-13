@@ -4,7 +4,13 @@ import type {
   TenantContext,
 } from '../../../../packages/domain/identity/src/index.js';
 
-export type RoleName = 'admin' | 'editor' | 'viewer' | 'auditor' | 'pii_reader';
+export type RoleName =
+  | 'admin'
+  | 'editor'
+  | 'viewer'
+  | 'auditor'
+  | 'pii_reader'
+  | 'incident_manager';
 
 /** Synthetic role templates for the composition; the real catalog belongs to the roles slice. */
 export const ROLE_PERMISSIONS: Readonly<Record<RoleName, readonly Permission[]>> = {
@@ -21,13 +27,29 @@ export const ROLE_PERMISSIONS: Readonly<Record<RoleName, readonly Permission[]>>
     'view_audit',
     'approve',
     'reopen',
+    'incidents:view',
+    'incidents:create',
+    'incidents:edit',
     'incidents:report',
     'incidents:approve',
+    'incidents:close',
+    'incidents:reopen',
+    'incidents:view_costs',
   ],
-  editor: ['view', 'create', 'edit'],
-  viewer: ['view'],
+  // Siniestros tiene permisos propios (ADR-0014): la flotilla solo consulta.
+  editor: ['view', 'create', 'edit', 'incidents:view'],
+  viewer: ['view', 'incidents:view'],
   auditor: ['view', 'view_audit'],
   pii_reader: ['view', 'create', 'view_pii'],
+  incident_manager: [
+    'view',
+    'incidents:view',
+    'incidents:create',
+    'incidents:edit',
+    'incidents:report',
+    'incidents:close',
+    'incidents:view_costs',
+  ],
 };
 
 export const isRoleName = (value: unknown): value is RoleName =>
