@@ -57,7 +57,7 @@ function world(over: Partial<IncidentApiDeps> = {}) {
     ...over,
   });
   sessions.set('manager', { tenantId: TENANT_A, permissions: [...ALL] });
-  return { api, sessions, denials, refs };
+  return { api, sessions, denials, refs, store };
 }
 const draft = { vehicleId: VEHICLE, type: 'collision' };
 
@@ -77,8 +77,9 @@ describe('IncidentApi', () => {
       createdBy: { id: SUBJECT, displayName: 'Responsable de siniestros' },
       responsible: null,
       reportedBy: null,
-      insurance: null,
-      resolution: null,
+      insurance: { claimNumber: null, insurerResult: null, assumptionApproval: null },
+      resolution: { resolutionSummary: null, closeApproval: null, closedBy: null },
+      allowedCommands: [],
       coverage: { status: 'unknown', policy: null, alert: null },
       vehicleProposal: { suggestedStatus: 'out_of_service' },
     });
@@ -292,5 +293,54 @@ describe('IncidentApi', () => {
     expect(denials).toEqual([
       { action: 'incident.access_denied', entityId: 'unknown', tenantId: TENANT_B },
     ]);
+  });
+
+  it('shows the process blocks with names for who approved and the commands the caller may run', async () => {
+    const { api, sessions, store } = world({
+      allowedCommands: (incident) => (incident.status === 'draft' ? ['report'] : []),
+    });
+    sessions.set('manager', { tenantId: TENANT_A, permissions: [...ALL] });
+    const created = (await api.create('manager', 'c', draft)).value as { id: string };
+    expect((await api.get('manager', 'c', created.id)).value?.allowedCommands).toEqual(['report']);
+    const stored = (await store.get(TENANT_A, created.id)) as Parameters<
+      typeof store.apply
+    >[0]['incident'];
+    const approval = { by: `user-${SUBJECT}`, at: '2026-10-13T10:00:00.000Z' };
+    await store.apply({
+      incident: {
+        ...stored,
+        status: 'resolved',
+        version: 2,
+        claimNumber: 'REP-1',
+        insurerReportedOn: '2026-10-12',
+        costAssumed: true,
+        assumptionApproval: approval,
+        closeApproval: approval,
+        closedBy: `user-${SUBJECT}`,
+        closedAt: '2026-10-13T11:00:00.000Z',
+      },
+      expectedVersion: 1,
+      folioYear: null,
+      transitions: [],
+      auditActions: [],
+      events: [],
+    });
+    const view = (await api.get('manager', 'c', created.id)).value;
+    expect(view?.allowedCommands).toEqual([]);
+    expect(view?.insurance).toMatchObject({
+      claimNumber: 'REP-1',
+      insurerReportedOn: '2026-10-12',
+      costAssumed: true,
+      assumptionApproval: {
+        by: { id: SUBJECT, displayName: 'Responsable de siniestros' },
+        at: approval.at,
+      },
+    });
+    expect(view?.resolution).toMatchObject({
+      closeApproval: { by: { id: SUBJECT } },
+      closedBy: { id: SUBJECT, displayName: 'Responsable de siniestros' },
+      closedAt: '2026-10-13T11:00:00.000Z',
+    });
+    expect(JSON.stringify(view)).not.toContain(`user-${SUBJECT}`);
   });
 });

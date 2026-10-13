@@ -322,6 +322,21 @@ function writes(f: Fixture): [string, string, unknown?][] {
       '/api/v1/incidents/00000000-0000-4000-8000-000000000001/evidence/00000000-0000-4000-8000-000000000002/detach',
       { version: 1 },
     ],
+    [
+      'POST',
+      '/api/v1/incidents/00000000-0000-4000-8000-000000000001/transitions',
+      { command: 'cancel', version: 1, reason: 'Duplicado' },
+    ],
+    [
+      'PUT',
+      '/api/v1/incidents/00000000-0000-4000-8000-000000000001/insurance',
+      { version: 1, claimNumber: 'REP-1' },
+    ],
+    [
+      'PUT',
+      '/api/v1/incidents/00000000-0000-4000-8000-000000000001/resolution',
+      { version: 1, resolutionSummary: 'Resuelto' },
+    ],
   ];
 }
 

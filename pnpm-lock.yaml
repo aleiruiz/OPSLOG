@@ -103,6 +103,8 @@ importers:
 
   apps/api/incidents/third-parties: {}
 
+  apps/api/incidents/workflow: {}
+
   apps/api/maintenance/orders: {}
 
   apps/api/maintenance/plans: {}
@@ -195,6 +197,8 @@ importers:
   packages/domain/incidents/cases: {}
 
   packages/domain/incidents/third-parties: {}
+
+  packages/domain/incidents/workflow: {}
 
   packages/domain/insurance: {}
 

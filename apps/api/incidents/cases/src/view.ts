@@ -4,11 +4,13 @@ import {
   type Incident,
   type IncidentActor,
   type IncidentSuggestions,
+  type IncidentCommand,
   type IncidentTransition,
 } from '../../../../../packages/domain/incidents/cases/src/index.js';
 import type {
   CoverageAlert,
   IncidentLabels,
+  ApprovalView,
   IncidentSuggestionsView,
   IncidentTimelineEntry,
   IncidentView,
@@ -51,19 +53,31 @@ class Names {
 export const namesFor = (tenantId: string, labels: IncidentLabels) => new Names(tenantId, labels);
 export type { Names };
 
+async function approvalOf(
+  approval: Incident['closeApproval'],
+  names: Names,
+): Promise<ApprovalView | null> {
+  return approval ? { by: await names.person(approval.by), at: approval.at } : null;
+}
+
 export async function toView(
   incident: Incident,
   actor: IncidentActor,
   names: Names,
+  allowedCommands: readonly IncidentCommand[] = [],
 ): Promise<IncidentView> {
   const rest = incidentView(incident, actor);
-  const [vehicle, driver, createdBy, responsible, reportedBy] = await Promise.all([
-    names.vehicle(incident.vehicleId),
-    incident.driverId ? names.driver(incident.driverId) : null,
-    names.person(incident.createdBy),
-    incident.responsibleId ? names.person(incident.responsibleId) : null,
-    incident.reportedBy ? names.person(incident.reportedBy) : null,
-  ]);
+  const [vehicle, driver, createdBy, responsible, reportedBy, closedBy, assumption, close] =
+    await Promise.all([
+      names.vehicle(incident.vehicleId),
+      incident.driverId ? names.driver(incident.driverId) : null,
+      names.person(incident.createdBy),
+      incident.responsibleId ? names.person(incident.responsibleId) : null,
+      incident.reportedBy ? names.person(incident.reportedBy) : null,
+      incident.closedBy ? names.person(incident.closedBy) : null,
+      approvalOf(incident.assumptionApproval, names),
+      approvalOf(incident.closeApproval, names),
+    ]);
   return {
     id: rest.id,
     folio: rest.folio,
@@ -95,8 +109,29 @@ export async function toView(
       alert: alertOf(rest.coverageStatus),
     },
     vehicleProposal: rest.vehicleProposal,
-    insurance: null,
-    resolution: null,
+    insurance: {
+      insurerName: rest.insurerName,
+      claimNumber: rest.claimNumber,
+      adjusterName: rest.adjusterName,
+      adjusterContact: rest.adjusterContact,
+      insurerReportedOn: rest.insurerReportedOn,
+      insurerResult: rest.insurerResult,
+      rejectionReason: rest.rejectionReason,
+      appealNote: rest.appealNote,
+      noInsuranceReason: rest.noInsuranceReason,
+      costAssumed: rest.costAssumed,
+      assumptionApproval: assumption,
+    },
+    resolution: {
+      resolutionSummary: rest.resolutionSummary,
+      totalLoss: rest.totalLoss,
+      vehicleStatusDecision: rest.vehicleStatusDecision,
+      resolvedAt: rest.resolvedAt,
+      closeApproval: close,
+      closedAt: rest.closedAt,
+      closedBy,
+      cancelReason: rest.cancelReason,
+    },
     reportedAt: rest.reportedAt,
     createdAt: rest.createdAt,
     updatedAt: rest.updatedAt,
@@ -104,6 +139,7 @@ export async function toView(
     responsible,
     reportedBy,
     editableFields: rest.editableFields,
+    allowedCommands,
   };
 }
 

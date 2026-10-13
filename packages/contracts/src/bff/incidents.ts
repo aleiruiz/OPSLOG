@@ -47,6 +47,26 @@ export const BFF_DAMAGE_ZONES = [
   'other',
 ] as const;
 export type BffDamageZone = (typeof BFF_DAMAGE_ZONES)[number];
+/** State commands (SPECS §6.2). `POST /api/v1/incidents/:incidentId/transitions` takes one of them as `command`. */
+export const BFF_INCIDENT_COMMANDS = [
+  'report',
+  'assign',
+  'review',
+  'insure',
+  'no_insurance',
+  'reject',
+  'appeal',
+  'approve_assumption',
+  'repair',
+  'resolve',
+  'approve_close',
+  'close',
+  'reopen',
+  'cancel',
+] as const;
+export type BffIncidentCommand = (typeof BFF_INCIDENT_COMMANDS)[number];
+export const BFF_INSURER_RESULTS = ['pending', 'accepted', 'partial', 'rejected'] as const;
+export type BffInsurerResult = (typeof BFF_INSURER_RESULTS)[number];
 export const BFF_INCIDENT_SORT_FIELDS = ['occurredAt', 'createdAt', 'severity', 'folio'] as const;
 export type BffIncidentSortField = (typeof BFF_INCIDENT_SORT_FIELDS)[number];
 
@@ -93,6 +113,48 @@ export type BffIncidentField =
   | 'noPhotoJustification'
   | 'policyId';
 
+/** A D20 approval: who gave it (with the name the screens show) and when. */
+export interface BffIncidentApproval {
+  readonly by: BffIncidentPerson;
+  readonly at: ISODateTime;
+}
+/** Process data of the insurer. Visible with `incidents:view`; it carries no amounts. */
+export interface BffIncidentInsurance {
+  readonly insurerName: string | null;
+  readonly claimNumber: string | null;
+  readonly adjusterName: string | null;
+  readonly adjusterContact: string | null;
+  /** Calendar day in the company's time zone. */
+  readonly insurerReportedOn: string | null;
+  readonly insurerResult: BffInsurerResult | null;
+  readonly rejectionReason: string | null;
+  readonly appealNote: string | null;
+  /** The decision to go on without the insurer. The screens never say the company lacks legal coverage. */
+  readonly noInsuranceReason: string | null;
+  readonly costAssumed: boolean | null;
+  readonly assumptionApproval: BffIncidentApproval | null;
+}
+export interface BffIncidentResolution {
+  readonly resolutionSummary: string | null;
+  readonly totalLoss: boolean | null;
+  /** One of `BFF_VEHICLE_STATUS_DECISIONS`. Recorded, never applied by the case (D11). */
+  readonly vehicleStatusDecision: string | null;
+  readonly resolvedAt: ISODateTime | null;
+  readonly closeApproval: BffIncidentApproval | null;
+  readonly closedAt: ISODateTime | null;
+  readonly closedBy: BffIncidentPerson | null;
+  readonly cancelReason: string | null;
+}
+export const BFF_VEHICLE_STATUS_DECISIONS = [
+  'active',
+  'restricted',
+  'in_maintenance',
+  'out_of_service',
+  'inactive',
+  'decommissioned',
+] as const;
+export type BffVehicleStatusDecision = (typeof BFF_VEHICLE_STATUS_DECISIONS)[number];
+
 export interface BffIncident {
   readonly id: string;
   readonly folio: string;
@@ -128,9 +190,8 @@ export interface BffIncident {
     readonly suggestedStatus: 'out_of_service';
     readonly reason: string;
   } | null;
-  /** Insurer data and resolution arrive with INC-WORKFLOW; `null` until then. */
-  readonly insurance: null;
-  readonly resolution: null;
+  readonly insurance: BffIncidentInsurance;
+  readonly resolution: BffIncidentResolution;
   readonly reportedAt: ISODateTime | null;
   readonly createdAt: ISODateTime;
   readonly updatedAt: ISODateTime;
@@ -139,6 +200,8 @@ export interface BffIncident {
   readonly reportedBy: BffIncidentPerson | null;
   /** Fields the caller may change in the current state; empty when the case is read-only for them. */
   readonly editableFields: readonly BffIncidentField[];
+  /** State commands the caller's permission and the current state allow now; their requirements are in `next-steps`. */
+  readonly allowedCommands: readonly BffIncidentCommand[];
 }
 
 /** Draft (FR-110): the vehicle and the type are enough; every other field may be missing. */

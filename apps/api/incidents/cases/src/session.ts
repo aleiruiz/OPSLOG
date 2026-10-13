@@ -15,6 +15,8 @@ export const STATUS: Readonly<Record<IncidentApiErrorCode, number>> = {
   rule_violation: 422,
   duplicate: 409,
   idempotency_conflict: 409,
+  idempotency_key_required: 400,
+  missing_requirements: 422,
   internal_error: 500,
 };
 const KNOWN = new Set<string>(Object.keys(STATUS));
@@ -44,6 +46,9 @@ export function fail(error: unknown): IncidentApiResponse<never> {
         ? { fieldErrors: error.fieldErrors }
         : {}),
       ...(error instanceof IncidentError && error.rule ? { rule: error.rule } : {}),
+      ...(error instanceof IncidentError && error.missingRequirements.length > 0
+        ? { missingRequirements: error.missingRequirements }
+        : {}),
     },
   };
 }

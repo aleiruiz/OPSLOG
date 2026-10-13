@@ -5,17 +5,21 @@ import {
   type IncidentStore,
 } from '../../../../../packages/domain/incidents/cases/src/index.js';
 import {
-  EvidenceService,
   IdentityVault,
   InMemoryIncidentChildStore,
   ThirdPartyService,
   type IncidentChildStore,
   type IncidentFiles,
 } from '../../../../../packages/domain/incidents/third-parties/src/index.js';
+import {
+  FAIL_CLOSED_REPAIRS,
+  GuardedEvidenceService,
+} from '../../../../../packages/domain/incidents/workflow/src/index.js';
 import { InMemoryMechanicStore } from '../../../../../packages/domain/maintenance/mechanics/src/index.js';
 import type { PiiCipher } from '../../../../../packages/platform/pii/src/index.js';
 import { IncidentChildApi } from '../../../incidents/third-parties/src/index.js';
 import { ROLE_LABELS } from '../directory.js';
+import { buildIncidentWorkflowApi, evidenceFacts } from './incident-workflow-apis.js';
 import {
   UNKNOWN_MEMBER_LABEL,
   buildIncidentApi,
@@ -105,7 +109,17 @@ export function buildIncidentChildApi(
       new IdentityVault(pii),
       options,
     ),
-    evidence: new EvidenceService(stores.store, stores.children, incidentFiles(support), options),
+    // Unlinking the budget that stands for "an order or a budget" is refused while in repair (ADR-0014).
+    evidence: new GuardedEvidenceService(
+      stores.store,
+      stores.children,
+      incidentFiles(support),
+      {
+        evidence: evidenceFacts(stores.children, incidentFiles(support)),
+        repairs: FAIL_CLOSED_REPAIRS,
+      },
+      options,
+    ),
     authorize: async (token, correlationId) => {
       const context = await kernel.authorize(token, correlationId, []);
       return { context, permissions: await kernel.access.resolvePermissions(context) };
@@ -147,5 +161,12 @@ export function buildIncidentApis(
   return {
     incidents: buildIncidentApi(kernel, adapters, services, stores.store),
     incidentChildren: buildIncidentChildApi(kernel, adapters, stores, pii, support),
+    incidentWorkflow: buildIncidentWorkflowApi(
+      kernel,
+      adapters,
+      services,
+      stores.store,
+      evidenceFacts(stores.children, incidentFiles(support)),
+    ),
   };
 }

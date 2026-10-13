@@ -56,8 +56,10 @@ describe('incident contract', () => {
       'incidents.create',
       'incidents.get',
       'incidents.list',
+      'incidents.nextSteps',
       'incidents.suggestions',
       'incidents.timeline',
+      'incidents.transition',
       'incidents.update',
     ]);
     expect(BFF_ROUTES['incidents.update'].method).toBe('PATCH');
