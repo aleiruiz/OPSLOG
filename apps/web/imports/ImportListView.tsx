@@ -1,3 +1,5 @@
+import AddOutlined from '@mui/icons-material/AddOutlined';
+import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import React from 'react';
 import {
@@ -7,6 +9,7 @@ import {
   FilterBar,
   Notifications,
   PageHeader,
+  Panel,
   StatusBadge,
   UiState,
 } from '@opslog/ui';
@@ -50,7 +53,12 @@ export interface ImportListViewProps {
   readonly onLoadMore: (cursor: string) => void;
 }
 
-const linkSx = { color: 'primary.main', textDecoration: 'underline' } as const;
+const linkSx = {
+  color: 'primary.main',
+  fontWeight: 500,
+  textDecoration: 'underline',
+  textUnderlineOffset: '3px',
+} as const;
 
 /** Import history: filters, cursor-paginated table of jobs and every data state (SPECS §8, S27). */
 export function ImportListView({
@@ -86,14 +94,21 @@ export function ImportListView({
     </Field>
   );
 
+  const ready = state.status === 'ready' ? state.data : null;
+
   return (
     <>
       <PageHeader
+        eyebrow="Flota"
         title="Importaciones"
         description="Alta masiva de vehículos y empleados desde un archivo CSV: valida primero, importa después y consulta aquí qué pasó con cada fila."
         actions={
           can('create') ? (
-            <RouterButton to={`${importsPath}/nueva`} variant="contained">
+            <RouterButton
+              to={`${importsPath}/nueva`}
+              variant="contained"
+              startIcon={<AddOutlined />}
+            >
               Nueva importación
             </RouterButton>
           ) : undefined
@@ -105,117 +120,123 @@ export function ImportListView({
         />
       )}
       <NoSubmit>
-        <FilterBar onClear={onClear}>
-          {select(
-            'entity',
-            'Qué se importó',
-            filters.entity,
-            (value) => onFiltersChange({ ...filters, entity: value as ImportEntity | '' }),
-            <>
-              <option value="">Vehículos y empleados</option>
-              {(Object.keys(entityLabels) as ImportEntity[]).map((entity) => (
-                <option key={entity} value={entity}>
-                  {entityLabels[entity]}
-                </option>
-              ))}
-            </>,
-          )}
-          {select(
-            'status',
-            'Estado',
-            filters.status,
-            (value) => onFiltersChange({ ...filters, status: value as ImportStatus | '' }),
-            <>
-              <option value="">Todos los estados</option>
-              {statusOrder.map((status) => (
-                <option key={status} value={status}>
-                  {statusPresentation[status].label}
-                </option>
-              ))}
-            </>,
-          )}
-        </FilterBar>
+        <Panel>
+          <FilterBar onClear={onClear}>
+            {select(
+              'entity',
+              'Qué se importó',
+              filters.entity,
+              (value) => onFiltersChange({ ...filters, entity: value as ImportEntity | '' }),
+              <>
+                <option value="">Vehículos y empleados</option>
+                {(Object.keys(entityLabels) as ImportEntity[]).map((entity) => (
+                  <option key={entity} value={entity}>
+                    {entityLabels[entity]}
+                  </option>
+                ))}
+              </>,
+            )}
+            {select(
+              'status',
+              'Estado',
+              filters.status,
+              (value) => onFiltersChange({ ...filters, status: value as ImportStatus | '' }),
+              <>
+                <option value="">Todos los estados</option>
+                {statusOrder.map((status) => (
+                  <option key={status} value={status}>
+                    {statusPresentation[status].label}
+                  </option>
+                ))}
+              </>,
+            )}
+          </FilterBar>
+        </Panel>
       </NoSubmit>
-      <ResourceView state={state} onRetry={onRetry}>
-        {(page) => {
-          if (page.items.length === 0)
-            return filtersActive ? (
-              <UiState kind="no-results" />
-            ) : (
-              <UiState
-                kind="empty"
-                title="Aún no hay importaciones"
-                description={
-                  can('create')
-                    ? 'Valida un archivo CSV para empezar. Las validaciones también quedan en el historial.'
-                    : 'Cuando se importen archivos aparecerán aquí.'
-                }
-              />
-            );
-          return (
-            <>
-              <ScrollRegion label="Tabla de importaciones">
-                <DataTable<ImportJob>
-                  caption={`Importaciones (${page.total})`}
-                  columns={[
-                    {
-                      key: 'createdAt',
-                      label: 'Fecha',
-                      render: (_, row) => (
-                        <RouterLink
-                          to={importPath(row.id)}
-                          label={`Importación de ${entityLabel(row.entity).toLowerCase()} del ${formatDateTime(row.createdAt)}`}
-                          sx={linkSx}
-                        >
-                          {formatDateTime(row.createdAt)}
-                        </RouterLink>
-                      ),
-                    },
-                    {
-                      key: 'entity',
-                      label: 'Qué',
-                      render: (value) => entityLabel(String(value)),
-                    },
-                    { key: 'mode', label: 'Modo', render: (value) => modeLabel(String(value)) },
-                    {
-                      key: 'status',
-                      label: 'Estado',
-                      render: (value) => {
-                        const view = statusPresentation[value as ImportStatus];
-                        return <StatusBadge label={view.label} tone={view.tone} />;
-                      },
-                    },
-                    {
-                      key: 'totalRows',
-                      label: 'Filas',
-                      render: (_, row) => (
-                        <>
-                          {row.totalRows}
-                          <Typography variant="body2" color="text.secondary">
-                            {row.validRows} válidas · {row.invalidRows} con error ·{' '}
-                            {row.importedRows} importadas
-                          </Typography>
-                        </>
-                      ),
-                    },
-                    { key: 'createdBy', label: 'Por' },
-                  ]}
-                  rows={[...page.items]}
+      <Panel title="Historial de importaciones" flush={ready !== null && ready.items.length > 0}>
+        <ResourceView state={state} onRetry={onRetry}>
+          {(page) => {
+            if (page.items.length === 0)
+              return filtersActive ? (
+                <UiState kind="no-results" />
+              ) : (
+                <UiState
+                  kind="empty"
+                  title="Aún no hay importaciones"
+                  description={
+                    can('create')
+                      ? 'Valida un archivo CSV para empezar. Las validaciones también quedan en el historial.'
+                      : 'Cuando se importen archivos aparecerán aquí.'
+                  }
                 />
-              </ScrollRegion>
-              {page.nextCursor && (
-                <Button
-                  variant="outlined"
-                  loading={loadingMore}
-                  onClick={() => onLoadMore(page.nextCursor as string)}
-                >
-                  Cargar más importaciones
-                </Button>
-              )}
-            </>
-          );
-        }}
-      </ResourceView>
+              );
+            return (
+              <>
+                <ScrollRegion label="Tabla de importaciones">
+                  <DataTable<ImportJob>
+                    caption={`Importaciones (${page.total})`}
+                    columns={[
+                      {
+                        key: 'createdAt',
+                        label: 'Fecha',
+                        render: (_, row) => (
+                          <RouterLink
+                            to={importPath(row.id)}
+                            label={`Importación de ${entityLabel(row.entity).toLowerCase()} del ${formatDateTime(row.createdAt)}`}
+                            sx={linkSx}
+                          >
+                            {formatDateTime(row.createdAt)}
+                          </RouterLink>
+                        ),
+                      },
+                      {
+                        key: 'entity',
+                        label: 'Qué',
+                        render: (value) => entityLabel(String(value)),
+                      },
+                      { key: 'mode', label: 'Modo', render: (value) => modeLabel(String(value)) },
+                      {
+                        key: 'status',
+                        label: 'Estado',
+                        render: (value) => {
+                          const view = statusPresentation[value as ImportStatus];
+                          return <StatusBadge label={view.label} tone={view.tone} />;
+                        },
+                      },
+                      {
+                        key: 'totalRows',
+                        label: 'Filas',
+                        render: (_, row) => (
+                          <>
+                            {row.totalRows}
+                            <Typography variant="body2" color="text.secondary">
+                              {row.validRows} válidas · {row.invalidRows} con error ·{' '}
+                              {row.importedRows} importadas
+                            </Typography>
+                          </>
+                        ),
+                      },
+                      { key: 'createdBy', label: 'Por' },
+                    ]}
+                    rows={[...page.items]}
+                  />
+                </ScrollRegion>
+                {page.nextCursor && (
+                  <Box sx={{ px: { xs: 2, sm: 2.5 }, pb: 2 }}>
+                    <Button
+                      variant="outlined"
+                      loading={loadingMore}
+                      onClick={() => onLoadMore(page.nextCursor as string)}
+                    >
+                      Cargar más importaciones
+                    </Button>
+                  </Box>
+                )}
+              </>
+            );
+          }}
+        </ResourceView>
+      </Panel>
     </>
   );
 }

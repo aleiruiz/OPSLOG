@@ -1,3 +1,4 @@
+import AddOutlined from '@mui/icons-material/AddOutlined';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import React from 'react';
@@ -9,6 +10,7 @@ import {
   Notifications,
   opslogTokens,
   PageHeader,
+  Panel,
   StatusBadge,
   UiState,
 } from '@opslog/ui';
@@ -74,7 +76,12 @@ export interface PolicyListViewProps {
   readonly onLoadMore: (cursor: string) => void;
 }
 
-const linkSx = { color: 'primary.main', textDecoration: 'underline' } as const;
+const linkSx = {
+  color: 'primary.main',
+  fontWeight: 500,
+  textDecoration: 'underline',
+  textUnderlineOffset: '3px',
+} as const;
 
 /** Policy list: filters, cursor-paginated table and every data state (SPECS §8). */
 export function PolicyListView({
@@ -113,14 +120,21 @@ export function PolicyListView({
     </Field>
   );
 
+  const ready = state.status === 'ready' ? state.data : null;
+
   return (
     <>
       <PageHeader
+        eyebrow="Flota"
         title="Seguros"
         description="Pólizas de seguro de tus vehículos: consulta, alta, renovación y archivado."
         actions={
           can('create') ? (
-            <RouterButton to={`${policiesPath}/nueva`} variant="contained">
+            <RouterButton
+              to={`${policiesPath}/nueva`}
+              variant="contained"
+              startIcon={<AddOutlined />}
+            >
               Nueva póliza
             </RouterButton>
           ) : undefined
@@ -132,200 +146,206 @@ export function PolicyListView({
         />
       )}
       <NoSubmit>
-        <FilterBar onClear={onClear}>
-          {select(
-            'status',
-            'Estado',
-            filters.status,
-            (value) => onFiltersChange({ ...filters, status: value as PolicyStatus | '' }),
-            <>
-              <option value="">Todos los estados</option>
-              {statusOrder.map((status) => (
-                <option key={status} value={status}>
-                  {statusPresentation[status].label}
-                </option>
-              ))}
-            </>,
-          )}
-          {vehicles &&
-            select(
-              'vehicle',
-              'Vehículo',
-              filters.vehicleId,
-              (value) => onFiltersChange({ ...filters, vehicleId: value }),
+        <Panel>
+          <FilterBar onClear={onClear}>
+            {select(
+              'status',
+              'Estado',
+              filters.status,
+              (value) => onFiltersChange({ ...filters, status: value as PolicyStatus | '' }),
               <>
-                <option value="">Todos los vehículos</option>
-                {vehicles.items.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.label}
+                <option value="">Todos los estados</option>
+                {statusOrder.map((status) => (
+                  <option key={status} value={status}>
+                    {statusPresentation[status].label}
                   </option>
                 ))}
               </>,
             )}
-          {select(
-            'coverage',
-            'Cobertura',
-            filters.coverageType,
-            (value) => onFiltersChange({ ...filters, coverageType: value as CoverageType | '' }),
-            <>
-              <option value="">Todas las coberturas</option>
-              {COVERAGE_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {coverageLabels[type]}
-                </option>
-              ))}
-            </>,
-          )}
-          <Field
-            id={`${uid}-covers-on`}
-            label="Vigente a la fecha"
-            type="date"
-            InputLabelProps={{ shrink: true }}
-            value={filters.coversOn}
-            onChange={(event) => onFiltersChange({ ...filters, coversOn: event.target.value })}
-            error={Boolean(dateError)}
-            helperText={dateError ?? 'Pólizas que cubren ese día, extremos incluidos.'}
-          />
-          {select(
-            'archived',
-            'Archivadas',
-            filters.includeArchived ? 'true' : 'false',
-            (value) => onFiltersChange({ ...filters, includeArchived: value === 'true' }),
-            <>
-              <option value="false">Ocultar archivadas</option>
-              <option value="true">Incluir archivadas</option>
-            </>,
-          )}
-        </FilterBar>
-      </NoSubmit>
-      <ResourceView state={state} onRetry={onRetry}>
-        {(page) => {
-          if (page.items.length === 0)
-            return filtersActive ? (
-              <UiState kind="no-results" />
-            ) : (
-              <UiState
-                kind="empty"
-                title="Aún no hay pólizas"
-                description={
-                  can('create')
-                    ? 'Registra la primera póliza de seguro de tu flota.'
-                    : 'Cuando se registren pólizas aparecerán aquí.'
-                }
-              />
-            );
-          const rows: Row[] = page.items.map((policy) => ({ ...policy, actions: policy.id }));
-          return (
-            <>
-              <ScrollRegion label="Tabla de pólizas">
-                <DataTable<Row>
-                  caption={`Pólizas (${page.total})`}
-                  columns={[
-                    {
-                      key: 'insurer',
-                      label: 'Aseguradora',
-                      render: (_, row) => (
-                        <>
-                          <RouterLink to={policyPath(row.id)} sx={linkSx}>
-                            {row.insurer}
-                          </RouterLink>
-                          {row.archivedAt !== null && (
-                            <StatusBadge label="Archivada" tone="neutral" />
-                          )}
-                        </>
-                      ),
-                    },
-                    {
-                      key: 'policyNumber',
-                      label: 'Póliza',
-                      render: (value) => (
-                        <Typography
-                          component="span"
-                          variant="body2"
-                          sx={{ fontFamily: opslogTokens.typography.monoFamily }}
-                        >
-                          {String(value)}
-                        </Typography>
-                      ),
-                    },
-                    {
-                      key: 'vehicleId',
-                      label: 'Vehículo',
-                      render: (_, row) => (
-                        <RouterLink
-                          to={`/flota/vehiculos/${encodeURIComponent(row.vehicleId)}`}
-                          label={`Vehículo ${names.get(row.vehicleId) ?? row.vehicleId}`}
-                          sx={linkSx}
-                        >
-                          {names.get(row.vehicleId) ?? 'Vehículo'}
-                        </RouterLink>
-                      ),
-                    },
-                    {
-                      key: 'coverageType',
-                      label: 'Cobertura',
-                      render: (value) => coverageLabel(String(value)),
-                    },
-                    {
-                      key: 'endsOn',
-                      label: 'Vigencia',
-                      render: (_, row) => (
-                        <>
-                          {formatDate(row.startsOn)} – {formatDate(row.endsOn)}
-                          <Typography variant="body2" color="text.secondary">
-                            {notStarted(row) ? 'Aún no inicia' : expiryNote(row.daysToExpiry)}
-                          </Typography>
-                        </>
-                      ),
-                    },
-                    {
-                      key: 'status',
-                      label: 'Estado',
-                      render: (value) => {
-                        const view = statusPresentation[value as PolicyStatus];
-                        return <StatusBadge label={view.label} tone={view.tone} />;
-                      },
-                    },
-                    {
-                      key: 'actions',
-                      label: 'Acciones',
-                      render: (_, row) =>
-                        can('edit') && isEditable(row) ? (
-                          <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
-                            <RouterLink
-                              to={`${policyPath(row.id)}/editar`}
-                              label={`Editar ${row.policyNumber}`}
-                              sx={linkSx}
-                            >
-                              Editar
-                            </RouterLink>
-                            <RouterLink
-                              to={`${policyPath(row.id)}/renovar`}
-                              label={`Renovar ${row.policyNumber}`}
-                              sx={linkSx}
-                            >
-                              Renovar
-                            </RouterLink>
-                          </Box>
-                        ) : null,
-                    },
-                  ]}
-                  rows={rows}
-                />
-              </ScrollRegion>
-              {page.nextCursor && (
-                <Button
-                  variant="outlined"
-                  loading={loadingMore}
-                  onClick={() => onLoadMore(page.nextCursor as string)}
-                >
-                  Cargar más pólizas
-                </Button>
+            {vehicles &&
+              select(
+                'vehicle',
+                'Vehículo',
+                filters.vehicleId,
+                (value) => onFiltersChange({ ...filters, vehicleId: value }),
+                <>
+                  <option value="">Todos los vehículos</option>
+                  {vehicles.items.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.label}
+                    </option>
+                  ))}
+                </>,
               )}
-            </>
-          );
-        }}
-      </ResourceView>
+            {select(
+              'coverage',
+              'Cobertura',
+              filters.coverageType,
+              (value) => onFiltersChange({ ...filters, coverageType: value as CoverageType | '' }),
+              <>
+                <option value="">Todas las coberturas</option>
+                {COVERAGE_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {coverageLabels[type]}
+                  </option>
+                ))}
+              </>,
+            )}
+            <Field
+              id={`${uid}-covers-on`}
+              label="Vigente a la fecha"
+              type="date"
+              InputLabelProps={{ shrink: true }}
+              value={filters.coversOn}
+              onChange={(event) => onFiltersChange({ ...filters, coversOn: event.target.value })}
+              error={Boolean(dateError)}
+              helperText={dateError ?? 'Pólizas que cubren ese día, extremos incluidos.'}
+            />
+            {select(
+              'archived',
+              'Archivadas',
+              filters.includeArchived ? 'true' : 'false',
+              (value) => onFiltersChange({ ...filters, includeArchived: value === 'true' }),
+              <>
+                <option value="false">Ocultar archivadas</option>
+                <option value="true">Incluir archivadas</option>
+              </>,
+            )}
+          </FilterBar>
+        </Panel>
+      </NoSubmit>
+      <Panel title="Pólizas" flush={ready !== null && ready.items.length > 0}>
+        <ResourceView state={state} onRetry={onRetry}>
+          {(page) => {
+            if (page.items.length === 0)
+              return filtersActive ? (
+                <UiState kind="no-results" />
+              ) : (
+                <UiState
+                  kind="empty"
+                  title="Aún no hay pólizas"
+                  description={
+                    can('create')
+                      ? 'Registra la primera póliza de seguro de tu flota.'
+                      : 'Cuando se registren pólizas aparecerán aquí.'
+                  }
+                />
+              );
+            const rows: Row[] = page.items.map((policy) => ({ ...policy, actions: policy.id }));
+            return (
+              <>
+                <ScrollRegion label="Tabla de pólizas">
+                  <DataTable<Row>
+                    caption={`Pólizas (${page.total})`}
+                    columns={[
+                      {
+                        key: 'insurer',
+                        label: 'Aseguradora',
+                        render: (_, row) => (
+                          <>
+                            <RouterLink to={policyPath(row.id)} sx={linkSx}>
+                              {row.insurer}
+                            </RouterLink>
+                            {row.archivedAt !== null && (
+                              <StatusBadge label="Archivada" tone="neutral" />
+                            )}
+                          </>
+                        ),
+                      },
+                      {
+                        key: 'policyNumber',
+                        label: 'Póliza',
+                        render: (value) => (
+                          <Typography
+                            component="span"
+                            variant="body2"
+                            sx={{ fontFamily: opslogTokens.typography.monoFamily }}
+                          >
+                            {String(value)}
+                          </Typography>
+                        ),
+                      },
+                      {
+                        key: 'vehicleId',
+                        label: 'Vehículo',
+                        render: (_, row) => (
+                          <RouterLink
+                            to={`/flota/vehiculos/${encodeURIComponent(row.vehicleId)}`}
+                            label={`Vehículo ${names.get(row.vehicleId) ?? row.vehicleId}`}
+                            sx={linkSx}
+                          >
+                            {names.get(row.vehicleId) ?? 'Vehículo'}
+                          </RouterLink>
+                        ),
+                      },
+                      {
+                        key: 'coverageType',
+                        label: 'Cobertura',
+                        render: (value) => coverageLabel(String(value)),
+                      },
+                      {
+                        key: 'endsOn',
+                        label: 'Vigencia',
+                        render: (_, row) => (
+                          <>
+                            {formatDate(row.startsOn)} – {formatDate(row.endsOn)}
+                            <Typography variant="body2" color="text.secondary">
+                              {notStarted(row) ? 'Aún no inicia' : expiryNote(row.daysToExpiry)}
+                            </Typography>
+                          </>
+                        ),
+                      },
+                      {
+                        key: 'status',
+                        label: 'Estado',
+                        render: (value) => {
+                          const view = statusPresentation[value as PolicyStatus];
+                          return <StatusBadge label={view.label} tone={view.tone} />;
+                        },
+                      },
+                      {
+                        key: 'actions',
+                        label: 'Acciones',
+                        render: (_, row) =>
+                          can('edit') && isEditable(row) ? (
+                            <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                              <RouterLink
+                                to={`${policyPath(row.id)}/editar`}
+                                label={`Editar ${row.policyNumber}`}
+                                sx={linkSx}
+                              >
+                                Editar
+                              </RouterLink>
+                              <RouterLink
+                                to={`${policyPath(row.id)}/renovar`}
+                                label={`Renovar ${row.policyNumber}`}
+                                sx={linkSx}
+                              >
+                                Renovar
+                              </RouterLink>
+                            </Box>
+                          ) : null,
+                      },
+                    ]}
+                    rows={rows}
+                  />
+                </ScrollRegion>
+                {page.nextCursor && (
+                  <Box sx={{ px: { xs: 2, sm: 2.5 }, pb: 2 }}>
+                    <Button
+                      variant="outlined"
+                      loading={loadingMore}
+                      onClick={() => onLoadMore(page.nextCursor as string)}
+                    >
+                      Cargar más pólizas
+                    </Button>
+                  </Box>
+                )}
+              </>
+            );
+          }}
+        </ResourceView>
+      </Panel>
     </>
   );
 }

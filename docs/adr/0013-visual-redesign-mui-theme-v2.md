@@ -51,8 +51,8 @@ Cada fase es un PR pequeño con su revisión de código, capturas antes/después
 | Fase | Alcance | Estado |
 |---|---|---|
 | 0 — Piloto | Tema v2, shell, componentes base y **Alertas** (tarjetas de resumen, filtros y tablas en tarjetas). Como el tema y los componentes son compartidos, todas las pantallas cambian de aspecto ya en esta fase. | Fusionada (PR #99) |
-| 1 — Inicio y Flota | Inicio (resumen con `StatCard`), Vehículos (lista y ficha), Asignaciones. Añade `DescriptionList` (datos de una ficha) y `BackLink`; Escape cierra el menú móvil. | En curso |
-| 2 — Cumplimiento | Documentos, Seguros (lista y ficha), Ajustes de alertas, Importaciones. | |
+| 1 — Inicio y Flota | Inicio (resumen con `StatCard`), Vehículos (lista y ficha), Asignaciones. Añade `DescriptionList` (datos de una ficha) y `BackLink`; Escape cierra el menú móvil. | Fusionada (PR #102) |
+| 2 — Cumplimiento | Documentos, Seguros (lista y ficha), Ajustes de alertas, Importaciones. Alertas avisa que sus totales son de toda la flota cuando la lista está filtrada. | En curso |
 | 3 — Plantilla | Empleados (lista, ficha, formulario), Áreas (árbol). | |
 | 4 — Mantenimiento | Planes, órdenes, talleres, «Mis órdenes» en móvil. | |
 | 5 — Configuración y acceso | Empresa, Usuarios, Roles, inicio de sesión, invitación, sesión expirada. | |

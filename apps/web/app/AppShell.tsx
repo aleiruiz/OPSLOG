@@ -84,7 +84,7 @@ export function AppShell({
   React.useEffect(() => {
     if (!menuOpen) return undefined;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
       setMenuOpen(false);
       menuButton.current?.focus();
     };

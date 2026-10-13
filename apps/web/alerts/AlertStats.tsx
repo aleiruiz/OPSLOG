@@ -1,6 +1,7 @@
 import ErrorOutline from '@mui/icons-material/ErrorOutline';
 import ScheduleOutlined from '@mui/icons-material/ScheduleOutlined';
 import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
 import React from 'react';
 import { StatCard } from '@opslog/ui';
 import type { AlertSeverity } from '../app/types';
@@ -15,47 +16,54 @@ const days = (count: number) => `${count} ${count === 1 ? 'día' : 'días'}`;
 export function AlertStats({
   data,
   severity,
+  narrowed = false,
   onSelect,
 }: {
   /** `undefined` while loading, `null` when the totals are not available. */
   data: AlertsSummaryData | null | undefined;
   severity: AlertSeverity | '';
+  /** The list is filtered by origin or vehicle: the totals still count the whole fleet, so say so. */
+  narrowed?: boolean;
   onSelect: (severity: AlertSeverity | '') => void;
 }) {
   if (data === null) return null;
   const toggle = (value: AlertSeverity) => () => onSelect(severity === value ? '' : value);
   return (
-    <Box
-      component="section"
-      aria-label="Resumen de vencimientos"
-      sx={{
-        display: 'grid',
-        gridTemplateColumns: {
-          xs: 'repeat(2, minmax(0, 1fr))',
-          lg: 'repeat(2, minmax(0, 320px))',
-        },
-        gap: 2,
-        mb: 3,
-      }}
-    >
-      <StatCard
-        label="Vencidos"
-        value={data?.expired}
-        hint="Requieren renovación"
-        tone="danger"
-        icon={<ErrorOutline fontSize="small" />}
-        pressed={severity === 'expired'}
-        onToggle={toggle('expired')}
-      />
-      <StatCard
-        label="Por vencer"
-        value={data?.expiring}
-        hint={data ? `En los próximos ${days(data.windowDays)}` : ''}
-        tone="warning"
-        icon={<ScheduleOutlined fontSize="small" />}
-        pressed={severity === 'expiring'}
-        onToggle={toggle('expiring')}
-      />
+    <Box component="section" aria-label="Resumen de vencimientos" sx={{ mb: 3 }}>
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: {
+            xs: 'repeat(2, minmax(0, 1fr))',
+            lg: 'repeat(2, minmax(0, 320px))',
+          },
+          gap: 2,
+        }}
+      >
+        <StatCard
+          label="Vencidos"
+          value={data?.expired}
+          hint="Requieren renovación"
+          tone="danger"
+          icon={<ErrorOutline fontSize="small" />}
+          pressed={severity === 'expired'}
+          onToggle={toggle('expired')}
+        />
+        <StatCard
+          label="Por vencer"
+          value={data?.expiring}
+          hint={data ? `En los próximos ${days(data.windowDays)}` : ''}
+          tone="warning"
+          icon={<ScheduleOutlined fontSize="small" />}
+          pressed={severity === 'expiring'}
+          onToggle={toggle('expiring')}
+        />
+      </Box>
+      {narrowed && (
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+          Los totales son de toda la flota; no aplican los filtros de origen ni de vehículo.
+        </Typography>
+      )}
     </Box>
   );
 }

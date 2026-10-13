@@ -1,16 +1,22 @@
+import ArchiveOutlined from '@mui/icons-material/ArchiveOutlined';
+import AutorenewOutlined from '@mui/icons-material/AutorenewOutlined';
+import EditOutlined from '@mui/icons-material/EditOutlined';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import React from 'react';
 import {
   Button,
+  DescriptionList,
   ConfirmDialog,
   Notifications,
   opslogTokens,
   PageHeader,
+  Panel,
   StatusBadge,
   Timeline,
   UiState,
 } from '@opslog/ui';
+import { BackLink } from '../app/BackLink';
 import { ResourceView, type ResourceState } from '../app/resource';
 import { RouterButton, RouterLink } from '../app/router';
 import type { Deductible, InsurancePolicy, InsurancePolicyRevision } from '../app/types';
@@ -64,7 +70,12 @@ export interface PolicyDetailViewProps {
   readonly onArchiveErrorAction: () => void;
 }
 
-const linkSx = { color: 'primary.main', textDecoration: 'underline' } as const;
+const linkSx = {
+  color: 'primary.main',
+  fontWeight: 500,
+  textDecoration: 'underline',
+  textUnderlineOffset: '3px',
+} as const;
 
 function Mono({ children }: { children: React.ReactNode }) {
   return (
@@ -122,30 +133,7 @@ function Detail({ policy, vehicleName }: { policy: InsurancePolicy; vehicleName:
     ['Notas de cobertura', policy.coverageNotes ?? '—'],
     ['Última actualización', formatDateTime(policy.updatedAt)],
   ];
-  return (
-    <Box
-      component="dl"
-      sx={{
-        display: 'grid',
-        gridTemplateColumns: { xs: '1fr', sm: 'minmax(160px, 220px) 1fr' },
-        columnGap: 3,
-        rowGap: { xs: 0.5, sm: 1.5 },
-        m: 0,
-        maxWidth: 720,
-      }}
-    >
-      {rows.map(([label, value]) => (
-        <React.Fragment key={label}>
-          <Typography component="dt" variant="body2" color="text.secondary">
-            {label}
-          </Typography>
-          <Typography component="dd" variant="body1" sx={{ m: 0, mb: { xs: 1.5, sm: 0 } }}>
-            {value}
-          </Typography>
-        </React.Fragment>
-      ))}
-    </Box>
-  );
+  return <DescriptionList columns={3} items={rows.map(([label, value]) => ({ label, value }))} />;
 }
 
 function revisionDescription(entry: InsurancePolicyRevision): string {
@@ -161,10 +149,7 @@ function revisionDescription(entry: InsurancePolicyRevision): string {
 function History({ props }: { props: HistoryProps }) {
   const { state } = props;
   return (
-    <Box component="section" aria-labelledby="history-title" sx={{ mt: 4 }}>
-      <Typography id="history-title" component="h2" variant="h2" sx={{ mb: 1 }}>
-        Historial de revisiones
-      </Typography>
+    <Panel title="Historial de revisiones">
       {state.status === 'ready' ? (
         <>
           <Timeline
@@ -197,7 +182,7 @@ function History({ props }: { props: HistoryProps }) {
           {() => null}
         </ResourceView>
       )}
-    </Box>
+    </Panel>
   );
 }
 
@@ -218,29 +203,40 @@ export function PolicyDetailView({
   if (state.status === 'error' && state.error.status === 404) return <PolicyNotFound />;
   return (
     <>
-      <Box sx={{ mb: 2 }}>
-        <RouterLink to={policiesPath} sx={linkSx}>
-          Volver a seguros
-        </RouterLink>
-      </Box>
+      <BackLink to={policiesPath}>Volver a seguros</BackLink>
       <ResourceView state={state} onRetry={onRetry}>
         {(policy) => (
           <>
             <PageHeader
+              eyebrow="Flota"
               title={`Póliza ${policy.policyNumber}`}
               description={`${policy.insurer} · ${coverageLabel(policy.coverageType)}${vehicleName ? ` · Vehículo ${vehicleName}` : ''}`}
               actions={
                 <>
                   {can('edit') && isEditable(policy) && (
                     <>
-                      <RouterButton to={`${policyPath(policy.id)}/renovar`} variant="contained">
+                      <RouterButton
+                        to={`${policyPath(policy.id)}/renovar`}
+                        variant="contained"
+                        startIcon={<AutorenewOutlined />}
+                      >
                         Renovar
                       </RouterButton>
-                      <RouterButton to={`${policyPath(policy.id)}/editar`}>Editar</RouterButton>
+                      <RouterButton
+                        to={`${policyPath(policy.id)}/editar`}
+                        startIcon={<EditOutlined />}
+                      >
+                        Editar
+                      </RouterButton>
                     </>
                   )}
                   {can('delete') && isEditable(policy) && (
-                    <Button variant="outlined" color="error" onClick={onArchiveRequest}>
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      startIcon={<ArchiveOutlined />}
+                      onClick={onArchiveRequest}
+                    >
                       Archivar
                     </Button>
                   )}
@@ -257,10 +253,9 @@ export function PolicyDetailView({
                 />
               </Box>
             )}
-            <Typography component="h2" variant="h2" sx={{ mb: 2 }}>
-              Datos de la póliza
-            </Typography>
-            <Detail policy={policy} vehicleName={vehicleName} />
+            <Panel title="Datos de la póliza">
+              <Detail policy={policy} vehicleName={vehicleName} />
+            </Panel>
             <History props={history} />
             {archive.open && (
               <ConfirmDialog

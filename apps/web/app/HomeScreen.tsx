@@ -32,6 +32,8 @@ export function HomeScreen({
           gap: 2,
           // The cards of the grid are spaced by the gap, not by their own margin.
           '& > *': { mb: 0 },
+          // Without the summary (no permission or an expired session) the next step stays narrow.
+          '&:has(> :only-child)': { gridTemplateColumns: 'minmax(0, 720px)' },
         }}
       >
         {can('view') && <AlertsSummary />}
