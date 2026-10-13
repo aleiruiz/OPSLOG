@@ -1,11 +1,91 @@
 name: quality
 on:
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: quality-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
-  quality:
+  # Decides which suites the change can affect (tools/ci/changed-scope.mjs). Documentation-only
+  # changes skip the product suites; an unknown change set runs everything.
+  changes:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 5
+    outputs:
+      product: ${{ steps.scope.outputs.product }}
+      integration: ${{ steps.scope.outputs.integration }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: { persist-credentials: false, fetch-depth: 0 }
+      - id: scope
+        env:
+          # Pull requests: the merge commit against its first parent (the base tip). Pushes: the
+          # previous tip. Manual runs pass no base, so everything runs.
+          BASE: ${{ github.event_name == 'pull_request' && 'HEAD^1' || github.event.before }}
+        run: node tools/ci/changed-scope.mjs "$BASE" HEAD >> "$GITHUB_OUTPUT"
+
+  # Prose only: the gates documentation can break (frozen baselines, secrets, formatting).
+  docs:
+    needs: changes
+    if: needs.changes.outputs.product != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: { persist-credentials: false }
+      - uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2 # v4.0.0
+        with: { version: 11.25.0 }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: { node-version: 22.13.0 }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm baseline:check && pnpm leak:scan && pnpm format:check
+
+  static:
+    needs: changes
+    if: needs.changes.outputs.product == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: { persist-credentials: false }
+      # Offline secret scan of tracked files (SPECS §9.2); no third-party action, no network.
+      - run: node tests/harness/leak-scan.mjs
+      - uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2 # v4.0.0
+        with: { version: 11.25.0 }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: { node-version: 22.13.0 }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --audit-level high
+      - run: pnpm baseline:check && pnpm lint && pnpm format:check
+      - run: pnpm typecheck && pnpm build
+      - run: pnpm --filter @opslog/ui typecheck # also type-checks packages/ui/.storybook
+
+  unit:
+    needs: changes
+    if: needs.changes.outputs.product == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: { persist-credentials: false }
+      - uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2 # v4.0.0
+        with: { version: 11.25.0 }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: { node-version: 22.13.0 }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck # workspace packages resolve to their tsc -b output
+      - run: pnpm test:unit
+
+  # MySQL suites; they exercise server code only, so web-only changes skip them.
+  integration:
+    needs: changes
+    if: needs.changes.outputs.integration == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       mysql:
         # Pin the MySQL 8.4.11 linux/amd64 manifest used by the maintenance integration suite.
@@ -18,29 +98,66 @@ jobs:
           --health-interval=10s --health-timeout=5s --health-retries=10
     env:
       OPSLOG_TEST_MYSQL_ADMIN_URL: mysql://root@127.0.0.1:3306/mysql
-    permissions:
-      contents: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with: { persist-credentials: false }
-      # Offline secret scan of tracked files (SPECS §9.2); no third-party action, no network.
-      - run: node tests/harness/leak-scan.mjs
       - uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2 # v4.0.0
         with: { version: 11.25.0 }
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with: { node-version: 22.13.0 }
       - run: pnpm install --frozen-lockfile
-      - run: pnpm audit --audit-level high
-      - run: pnpm quality
-      - run: pnpm --filter @opslog/ui typecheck # also type-checks packages/ui/.storybook
+      - run: pnpm typecheck
+      - run: pnpm test:integration
+
+  # Browser journeys run against both the mock and the real API, so any product change runs them.
+  e2e:
+    needs: changes
+    if: needs.changes.outputs.product == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mysql:
+        # Pin the MySQL 8.4.11 linux/amd64 manifest used by the maintenance integration suite.
+        image: mirror.gcr.io/library/mysql:8.4.11@sha256:80f4933e3835f9dc4d35a28ec500d7986cb4414e6c6821c5461239cb7beb8995
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    env:
+      OPSLOG_TEST_MYSQL_ADMIN_URL: mysql://root@127.0.0.1:3306/mysql
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: { persist-credentials: false }
+      - uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2 # v4.0.0
+        with: { version: 11.25.0 }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: { node-version: 22.13.0 }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e
-      # Storybook must still build (offline). Pixel snapshots are no longer a CI gate (ADR-0013): run
-      # `pnpm test:visual` locally, and `pnpm test:visual:update` when a change is meant to look different.
-      - run: pnpm storybook:build
+      # Storybook pixel snapshots (`pnpm test:visual`) are not a CI gate; the owner asked to drop them.
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: playwright-test-results
           path: test-results/**
           if-no-files-found: ignore
+
+  # The required check. Passes when every job the change needed passed; skipped jobs count as
+  # not needed. Keep this job's name: the protect-main ruleset requires `quality`.
+  quality:
+    needs: [changes, docs, static, unit, integration, e2e]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | jq -e '
+            .changes.result == "success" and
+            ([.[] | .result] | all(. == "success" or . == "skipped"))
+          ' > /dev/null || { echo "$RESULTS" | jq 'map_values(.result)'; exit 1; }

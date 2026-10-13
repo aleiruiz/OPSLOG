@@ -62,9 +62,9 @@ M4 (siniestros) sigue en pausa por indicación del propietario; cuando se reanud
 
 ## Regresión visual fuera del CI
 
-El 2026-10-13 (01:13 UTC) el propietario pidió «sacar las snapshots de los targets de quality». Desde este PR:
+El 2026-10-13 (01:13 UTC) el propietario pidió «sacar las snapshots de los targets de quality». Desde entonces:
 
-- El workflow `quality` ya no ejecuta `pnpm test:visual`. Sigue construyendo Storybook (`pnpm storybook:build`), así que una story rota sigue fallando el CI.
+- El workflow `quality` ya no ejecuta `pnpm test:visual` (aplicado en el PR #100, que reorganizó el CI). Las stories siguen pasando por el typecheck de `packages/ui` (incluido `.storybook`) y por el escaneo de accesibilidad de `e2e/components.spec.ts`.
 - `pnpm quality` no incluía las snapshots y no cambia.
 - Las capturas y los comandos `pnpm test:visual` y `pnpm test:visual:update` se conservan como herramienta local para comparar antes y después de un cambio visual.
 - Esto modifica la verificación de ADR-0010 (regresión visual como gate de CI) por decisión del propietario. SPECS §9.1 sigue pidiendo regresión visual: queda cubierta de forma local, no como bloqueo del CI.
