@@ -21,6 +21,8 @@ export {
   ConfirmWithReason,
   UploadQueue,
   Notifications,
+  Panel,
+  StatCard,
 } from './components/BaseComponents';
 export { ConfirmDialog } from './components/ConfirmDialog';
 export type { ConfirmDialogProps } from './components/ConfirmDialog';

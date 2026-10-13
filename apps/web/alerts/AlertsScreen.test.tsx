@@ -83,6 +83,40 @@ describe('alert list', () => {
     expect(document.title).toBe('Alertas · Transportes Demo SA · OPSLOG');
   });
 
+  it('summarises the totals by status, and filters the list from those cards', async () => {
+    await list();
+    await screen.findByRole('table', { name: 'Alertas (34)' });
+    const expired = await screen.findByRole('button', { name: /^Vencidos 12/ });
+    const expiring = screen.getByRole('button', { name: /^Por vencer 22 En los próximos 30 días/ });
+    expect(expired).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(expired);
+    await screen.findByRole('table', { name: 'Alertas (12)' });
+    expect(exact('Estado')).toHaveValue('expired');
+    expect(expired).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(expiring);
+    await screen.findByRole('table', { name: 'Alertas (22)' });
+    fireEvent.click(screen.getByRole('button', { name: /^Por vencer/ }));
+    await screen.findByRole('table', { name: 'Alertas (34)' });
+    expect(exact('Estado')).toHaveValue('');
+  });
+
+  it('leaves the summary out when its totals cannot be read', async () => {
+    const api = createMockApi();
+    const real = api.alerts.list.bind(api.alerts);
+    vi.spyOn(api.alerts, 'list').mockImplementation((query) =>
+      query?.severity === undefined
+        ? real(query)
+        : Promise.resolve({ ok: false, error: { status: 500 } } as Awaited<
+            ReturnType<typeof real>
+          >),
+    );
+    await list({ api });
+    await screen.findByRole('table', { name: 'Alertas (34)' });
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: 'Resumen de vencimientos' })).toBeNull(),
+    );
+  });
+
   it('loads further pages with the cursor and keeps them until a filter changes', async () => {
     const api = createMockApi();
     const spy = vi.spyOn(api.alerts, 'list');
@@ -125,7 +159,8 @@ describe('alert list', () => {
     set('Origen', 'maintenance');
     await screen.findByRole('table', { name: 'Alertas de mantenimiento (2)' });
     expect(screen.queryByRole('table', { name: expiryTable })).toBeNull();
-    expect(alerts).toHaveBeenCalledTimes(1);
+    // One read of the list; the other two are the totals of the summary cards (by status).
+    expect(alerts.mock.calls.filter(([query]) => query?.severity === undefined)).toHaveLength(1);
     await waitFor(() =>
       expect(within(exact('Vehículo')).getAllByRole('option').length).toBeGreaterThan(20),
     );

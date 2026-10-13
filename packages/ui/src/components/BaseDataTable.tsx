@@ -5,6 +5,7 @@ import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
+import { opslogTokens } from '../tokens';
 
 export type DataTableColumn<T> = {
   key: keyof T & string;
@@ -32,7 +33,17 @@ export function DataTable<T extends { id: string }>({
     );
   return (
     <Table aria-label={caption} size="small">
-      <caption style={{ textAlign: 'left', padding: 8 }}>{caption}</caption>
+      <caption
+        style={{
+          captionSide: 'bottom',
+          textAlign: 'left',
+          padding: '10px 16px',
+          color: opslogTokens.colors.textSecondary,
+          fontSize: opslogTokens.typography.sizes.small,
+        }}
+      >
+        {caption}
+      </caption>
       <TableHead>
         <TableRow>
           {selectable && (

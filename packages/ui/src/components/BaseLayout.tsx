@@ -20,10 +20,12 @@ export function FilterBar({
     <Stack
       component="form"
       direction={{ xs: 'column', sm: 'row' }}
-      spacing={2}
+      flexWrap="wrap"
+      gap={1.5}
       alignItems={{ sm: 'center' }}
       role="search"
       aria-label="Filtros"
+      sx={{ '& .MuiFormControl-root': { minWidth: { sm: 200 } } }}
     >
       {children}
       {onClear && (
@@ -37,10 +39,13 @@ export function FilterBar({
 export function PageHeader({
   title,
   description,
+  eyebrow,
   actions,
 }: {
   title: string;
   description?: string;
+  /** Small label above the title: the navigation group the screen belongs to. */
+  eyebrow?: string;
   actions?: React.ReactNode;
 }) {
   return (
@@ -48,17 +53,27 @@ export function PageHeader({
       component="header"
       direction={{ xs: 'column', sm: 'row' }}
       justifyContent="space-between"
+      alignItems={{ sm: 'flex-end' }}
       gap={2}
       sx={{ mb: 3 }}
     >
-      <Box>
+      <Box sx={{ minWidth: 0 }}>
+        {eyebrow && (
+          <Typography component="p" variant="overline" color="text.secondary">
+            {eyebrow}
+          </Typography>
+        )}
         <Typography component="h1" variant="h1">
           {title}
         </Typography>
-        {description && <Typography color="text.secondary">{description}</Typography>}
+        {description && (
+          <Typography color="text.secondary" sx={{ mt: 0.5, maxWidth: 760 }}>
+            {description}
+          </Typography>
+        )}
       </Box>
       {actions && (
-        <Stack direction="row" gap={1} flexWrap="wrap" sx={{ minWidth: 0 }}>
+        <Stack direction="row" gap={1} flexWrap="wrap" sx={{ minWidth: 0, flexShrink: 0 }}>
           {actions}
         </Stack>
       )}
