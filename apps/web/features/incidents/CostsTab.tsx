@@ -78,7 +78,8 @@ function CostsContent({
     }
     setBusy(true);
     setProblem(null);
-    const body = costsInput(incident.version, data.lines, edits);
+    // The version the lines were read at: a save over lines older than the case is refused, not merged.
+    const body = costsInput(data.version, data.lines, edits);
     const result = await sendKeyed(keys.current, [incident.id, 'costs', body], (key) =>
       env.ports.costs.update(incident.id, body, key),
     );

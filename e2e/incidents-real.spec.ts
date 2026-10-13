@@ -922,10 +922,12 @@ test('acceptance 11: link a new corrective order, costs by currency, the formula
 test('acceptance 11: a closed case keeps its cost summary per cycle, apart from later changes', async ({
   page,
 }) => {
+  // Serial dependency: the D20 journeys above close and reopen a case with a 1,000.01 MXN cost.
   const [reopened] = await a.database.rows<{ id: string }>(
     `SELECT id FROM ${INCIDENTS} WHERE company_id = ? AND status = 'reopened' ORDER BY created_at LIMIT 1`,
     [a.tenantId],
   );
+  expect(reopened).toBeDefined();
   await signIn(page, a, 'e2e-admin-a', `/incidents/${reopened?.id}`);
   await page.getByRole('tab', { name: 'Costos' }).click();
   const closing = page.getByRole('region', { name: 'Costos al cierre' }).last();
