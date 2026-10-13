@@ -69,6 +69,6 @@ M4 (siniestros) sigue en pausa por indicación del propietario; cuando se reanud
 
 ## Consecuencias
 
-- Las 768 capturas de regresión visual se regeneran en el piloto (todo cambia de aspecto); desde ahí cada fase solo regenera las suyas.
+- El piloto regenera 764 de las 768 capturas de regresión visual (todo cambia de aspecto) y añade 4 de las tarjetas de resumen; desde ahí cada fase solo regenera las suyas.
 - `e2e/components.spec.ts` comprueba la escala v2 (H1 24px).
 - Si el propietario no aprueba la dirección, este ADR se sustituye o se ajusta antes de fusionar el piloto.
