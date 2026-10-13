@@ -128,12 +128,11 @@ export class IncidentCostService extends IncidentWriteBase {
     this.requireEdit(actor);
     this.requireCosts(actor);
     const key = this.requiredKey(idempotencyKey);
-    const current = await this.costs.lines(tenantId, incident.id);
-    const update = parseCostsUpdate(input, new Set(current.map((line) => line.id)));
+    // A retry is recognised by its shape alone: the lines it names may have changed since it first ran.
     const keyed = {
       command: UPDATE,
       key,
-      hash: payloadHash(incident.id, UPDATE, update),
+      hash: payloadHash(incident.id, UPDATE, parseCostsUpdate(input, null)),
     };
     const replayed = async (stored: Incident): Promise<CostsResult> => ({
       incident: stored,
@@ -141,6 +140,8 @@ export class IncidentCostService extends IncidentWriteBase {
     });
     const twin = await this.replay(tenantId, actor, keyed);
     if (twin) return replayed(twin.response);
+    const current = await this.costs.lines(tenantId, incident.id);
+    const update = parseCostsUpdate(input, new Set(current.map((line) => line.id)));
     if (TERMINAL_STATUSES.includes(incident.status) || incident.status === 'draft')
       throw new IncidentError('invalid_transition');
     if (incident.version !== update.version) throw new IncidentError('stale_version');

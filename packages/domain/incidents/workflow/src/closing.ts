@@ -55,6 +55,8 @@ export function inTransaction(
   closure: IncidentClosure | null,
 ): IncidentExtraWrite | undefined {
   const { tenantId, id } = incident;
+  const stale = (kind: 'assumption' | 'close', tx: unknown) =>
+    ports.closureCosts.approvalStale({ tenantId, incidentId: id, kind }, tx);
   /** The orders as the transaction sees them: what `repair_orders_closed` and the snapshot rest on. */
   const guard = async (tx: unknown): Promise<readonly LinkedRepairOrder[] | null> => {
     if (command === 'approve_assumption' || command === 'approve_close') {
@@ -63,7 +65,10 @@ export function inTransaction(
       return null;
     }
     if (command === 'close') {
-      if ((await approvalNeeded(ports, tenantId, id, tx)) && incident.closeApproval === null)
+      if (
+        (await approvalNeeded(ports, tenantId, id, tx)) &&
+        (incident.closeApproval === null || (await stale('close', tx)))
+      )
         throw missing('close_approval');
       // The orders read before the transaction may have moved: judge and snapshot the ones it sees.
       const fresh = await ports.repairs.linkedOrders(tenantId, id, tx);
@@ -80,8 +85,8 @@ export function inTransaction(
     if (
       incident.status === 'insurance_rejected' &&
       (command === 'repair' || command === 'resolve') &&
-      incident.assumptionApproval === null &&
-      (await approvalNeeded(ports, tenantId, id, tx))
+      (await approvalNeeded(ports, tenantId, id, tx)) &&
+      (incident.assumptionApproval === null || (await stale('assumption', tx)))
     )
       throw missing('assumption_approval');
     return null;
@@ -95,6 +100,15 @@ export function inTransaction(
   return {
     run: async (tx) => {
       const orders = await guard(tx);
+      if (command === 'approve_assumption' || command === 'approve_close')
+        await ports.closureCosts.recordApproval(
+          {
+            tenantId,
+            incidentId: id,
+            kind: command === 'approve_assumption' ? 'assumption' : 'close',
+          },
+          tx,
+        );
       if (!closure) return true;
       // Snapshot of the costs first: the closure row is the last thing written.
       await ports.closureCosts.snapshot(

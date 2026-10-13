@@ -3,7 +3,14 @@ import type {
   IncidentMutation,
   IncidentStore,
 } from '../../cases/src/index.js';
-import type { CostChange, CostLine, CostSnapshot, IncidentCostStore, Money } from './ports.js';
+import type {
+  ApprovalKind,
+  CostChange,
+  CostLine,
+  CostSnapshot,
+  IncidentCostStore,
+  Money,
+} from './ports.js';
 
 const scope = (tenantId: string, incidentId: string) =>
   `${tenantId.length}:${tenantId}${incidentId}`;
@@ -12,6 +19,7 @@ const scope = (tenantId: string, incidentId: string) =>
 export class InMemoryIncidentCostStore implements IncidentCostStore {
   private readonly lineRows = new Map<string, CostLine[]>();
   private readonly estimates = new Map<string, Money>();
+  private readonly approvals = new Map<string, Money[]>();
   private readonly closed = new Map<string, CostSnapshot[]>();
   public constructor(private readonly base: IncidentStore) {}
 
@@ -25,6 +33,23 @@ export class InMemoryIncidentCostStore implements IncidentCostStore {
 
   public async snapshots(tenantId: string, incidentId: string): Promise<readonly CostSnapshot[]> {
     return structuredClone(this.closed.get(scope(tenantId, incidentId)) ?? []);
+  }
+
+  public async approval(
+    tenantId: string,
+    incidentId: string,
+    kind: ApprovalKind,
+  ): Promise<readonly Money[] | null> {
+    return structuredClone(this.approvals.get(`${kind}:${scope(tenantId, incidentId)}`) ?? null);
+  }
+
+  public async saveApproval(
+    tenantId: string,
+    incidentId: string,
+    kind: ApprovalKind,
+    borne: readonly Money[],
+  ): Promise<void> {
+    this.approvals.set(`${kind}:${scope(tenantId, incidentId)}`, structuredClone([...borne]));
   }
 
   public async saveSnapshot(snapshot: CostSnapshot): Promise<void> {

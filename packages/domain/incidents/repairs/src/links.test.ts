@@ -504,15 +504,11 @@ describe('races between commands of the same case', () => {
     ).toHaveLength(1);
   });
 
-  it('finds the links that hold any of some orders, per tenant', async () => {
+  it('finds the link of an order, per tenant', async () => {
     const world = setup();
     world.orders.add('o1');
     const incident = await caseIn(world, 'under_review');
     await link(world, incident, 'o1');
-    expect((await world.links.linksOfOrders(TENANT_A, ['o1', 'zz'])).map((l) => l.orderId)).toEqual(
-      ['o1'],
-    );
-    expect(await world.links.linksOfOrders(TENANT_B, ['o1'])).toEqual([]);
     expect((await world.links.linkOfOrder(TENANT_A, 'o1'))?.incidentId).toBe(incident.id);
     expect(await world.links.linkOfOrder(TENANT_B, 'o1')).toBeNull();
   });

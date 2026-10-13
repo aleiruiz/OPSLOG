@@ -20,6 +20,7 @@ import { FAIL_CLOSED_COSTS, FAIL_CLOSED_REPAIRS, FAIL_CLOSED_TOTALS } from './fa
 import {
   InMemoryIncidentClosures,
   type ClosureCostsRequest,
+  type ApprovalCostsRequest,
   type IncidentClosureCosts,
 } from './closures.js';
 import type {
@@ -118,9 +119,18 @@ export class FakeBlocks implements IncidentVehicleBlocks {
 export class FakeClosureCosts implements IncidentClosureCosts {
   public readonly taken: ClosureCostsRequest[] = [];
   public fail = false;
+  public readonly approved: ApprovalCostsRequest[] = [];
+  /** The approval no longer covers the costs. */
+  public stale = false;
   public async snapshot(request: ClosureCostsRequest): Promise<void> {
     if (this.fail) throw new Error('cost snapshot failed');
     this.taken.push(request);
+  }
+  public async recordApproval(request: ApprovalCostsRequest): Promise<void> {
+    this.approved.push(request);
+  }
+  public async approvalStale(): Promise<boolean> {
+    return this.stale;
   }
 }
 export class FakeSettings implements WorkflowSettings {

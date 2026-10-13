@@ -25,6 +25,8 @@ export interface Facts {
   readonly assumptionApprovalRequired?: boolean;
   /** D20 asks for an approval of the closure now (final costs against the threshold). */
   readonly closeApprovalRequired?: boolean;
+  /** The standing approval no longer covers the costs (they grew after it was given). */
+  readonly approvalStale?: boolean;
   /** The company configured a D20 threshold, so there is something to approve. */
   readonly thresholdConfigured?: boolean;
   /** The state the last `resolve` came from: the route the closing cycle took (`null`: unknown). */
@@ -86,7 +88,8 @@ function assumption(incident: Incident, facts: Facts): Checks {
     // The approval can only be recorded after a rejection, so it is asked for there and only there.
     ...when(status === 'insurance_rejected', {
       assumption_approval:
-        facts.assumptionApprovalRequired !== true || incident.assumptionApproval !== null,
+        facts.assumptionApprovalRequired !== true ||
+        (incident.assumptionApproval !== null && facts.approvalStale !== true),
     }),
   };
 }
@@ -142,7 +145,9 @@ function close(incident: Incident, facts: Facts): Checks {
       repairs?.available === true
         ? activeOrders(repairs).every((order) => order.status === 'closed')
         : origin !== 'repair',
-    close_approval: facts.closeApprovalRequired === false || incident.closeApproval !== null,
+    close_approval:
+      facts.closeApprovalRequired === false ||
+      (incident.closeApproval !== null && facts.approvalStale !== true),
   };
 }
 

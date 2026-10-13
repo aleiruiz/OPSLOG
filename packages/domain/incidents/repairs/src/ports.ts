@@ -49,8 +49,6 @@ export interface IncidentRepairStore {
   links(tenantId: string, incidentId: string, tx?: unknown): Promise<readonly RepairLink[]>;
   /** The link of an order in the tenant, whichever case holds it. */
   linkOfOrder(tenantId: string, orderId: string): Promise<RepairLink | null>;
-  /** Links of the cases of the tenant that hold any of the orders (vehicle holds, D11). */
-  linksOfOrders(tenantId: string, orderIds: readonly string[]): Promise<readonly RepairLink[]>;
   /**
    * Writes the incident mutation (version CAS, timeline, audit, outbox) and the link change in one
    * transaction. `applied: false` on a stale version, a taken idempotency key or an order that is

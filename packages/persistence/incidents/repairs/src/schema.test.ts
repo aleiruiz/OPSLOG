@@ -99,7 +99,6 @@ describe('incident repair links schema', () => {
     affected = 0;
     expect(await store.apply({} as never, unlink)).toEqual({ applied: false });
     expect(calls).toEqual(['insert', 'delete', 'delete']);
-    expect(await store.linksOfOrders('t', [])).toEqual([]);
     (source.options as { synchronize: boolean }).synchronize = true;
     expect(() => new TypeOrmIncidentRepairStore(source, base as never)).toThrow();
   });

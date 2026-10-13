@@ -4,6 +4,7 @@ export const INCIDENT_COST_TABLES = {
   lines: 'opslog_incident_cost_lines',
   estimates: 'opslog_incident_cost_estimates',
   snapshots: 'opslog_incident_cost_snapshots',
+  approvals: 'opslog_incident_cost_approvals',
 } as const;
 
 const bin = 'utf8mb4_0900_bin';
@@ -41,6 +42,12 @@ export class IncidentCostEstimateEntity {
   currency!: string;
   updatedAt!: Date;
   updatedBy!: string;
+}
+export class IncidentCostApprovalEntity {
+  tenantId!: string;
+  incidentId!: string;
+  kind!: string;
+  borne!: object;
 }
 export class IncidentCostSnapshotEntity {
   tenantId!: string;
@@ -95,7 +102,20 @@ export const IncidentCostSnapshotSchema = new EntitySchema<IncidentCostSnapshotE
   },
 });
 
+/** What the company bore when a D20 approval was given: the approval only covers up to it. */
+export const IncidentCostApprovalSchema = new EntitySchema<IncidentCostApprovalEntity>({
+  name: 'IncidentCostApprovalEntity',
+  target: IncidentCostApprovalEntity,
+  tableName: INCIDENT_COST_TABLES.approvals,
+  columns: {
+    ...key,
+    kind: { ...text('kind', 16), primary: true },
+    borne: { name: 'borne', type: 'json' },
+  },
+});
+
 export const INCIDENT_COST_ENTITIES = [
+  IncidentCostApprovalSchema,
   IncidentCostLineSchema,
   IncidentCostEstimateSchema,
   IncidentCostSnapshotSchema,

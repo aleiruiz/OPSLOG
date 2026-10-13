@@ -51,6 +51,8 @@ export interface CostChange {
   readonly at: string;
 }
 
+export type ApprovalKind = 'assumption' | 'close';
+
 export interface IncidentCostStore {
   /** Own lines in the order the caller gave them. `tx` joins the transaction of a command. */
   lines(tenantId: string, incidentId: string, tx?: unknown): Promise<readonly CostLine[]>;
@@ -59,6 +61,21 @@ export interface IncidentCostStore {
   snapshots(tenantId: string, incidentId: string): Promise<readonly CostSnapshot[]>;
   /** Joins the transaction of the closure; a second snapshot of the same cycle never replaces the first. */
   saveSnapshot(snapshot: CostSnapshot, tx: unknown): Promise<void>;
+  /** What the company bore (per currency) when the approval was given, or `null` if none was recorded. */
+  approval(
+    tenantId: string,
+    incidentId: string,
+    kind: ApprovalKind,
+    tx?: unknown,
+  ): Promise<readonly Money[] | null>;
+  /** Replaces the record of that kind, in the transaction of the approval. */
+  saveApproval(
+    tenantId: string,
+    incidentId: string,
+    kind: ApprovalKind,
+    borne: readonly Money[],
+    tx: unknown,
+  ): Promise<void>;
   /** The incident mutation (version CAS, timeline, audit, outbox) and the lines in one transaction. */
   apply(mutation: IncidentMutation, change: CostChange): Promise<IncidentApplyResult>;
 }

@@ -21,15 +21,6 @@ export class InMemoryIncidentRepairStore implements IncidentRepairStore {
     return found ? structuredClone(found) : null;
   }
 
-  public async linksOfOrders(
-    tenantId: string,
-    orderIds: readonly string[],
-  ): Promise<readonly RepairLink[]> {
-    return structuredClone(
-      this.rows.filter((row) => row.tenantId === tenantId && orderIds.includes(row.orderId)),
-    );
-  }
-
   private write(change: RepairChange): boolean {
     if (change.kind === 'link') {
       const { link } = change;

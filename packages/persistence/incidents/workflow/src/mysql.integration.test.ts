@@ -69,6 +69,10 @@ const refs: IncidentReferences = {
 class Costs implements IncidentClosureCosts {
   public fail = false;
   public readonly taken: string[] = [];
+  public async recordApproval() {}
+  public async approvalStale() {
+    return false;
+  }
   public async snapshot(request: { incidentId: string; cycle: number }) {
     if (this.fail) throw new Error('cost snapshot failed');
     this.taken.push(`${request.incidentId}:${request.cycle}`);

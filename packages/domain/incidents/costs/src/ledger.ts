@@ -1,4 +1,5 @@
 import type {
+  ApprovalCostsRequest,
   ClosureCostsRequest,
   CostPresence,
   CostTotals,
@@ -81,6 +82,33 @@ export class CostLedger implements IncidentCostPresence, IncidentCostTotals, Inc
         amountMinor: companyBorne,
       })),
     };
+  }
+
+  public async recordApproval(request: ApprovalCostsRequest, tx: unknown): Promise<void> {
+    const { totals } = await this.read(request.tenantId, request.incidentId, tx);
+    await this.costs.saveApproval(
+      request.tenantId,
+      request.incidentId,
+      request.kind,
+      totals.map(({ currency, companyBorne }) => ({ currency, amountMinor: companyBorne })),
+      tx,
+    );
+  }
+
+  public async approvalStale(request: ApprovalCostsRequest, tx?: unknown): Promise<boolean> {
+    const approved = await this.costs.approval(
+      request.tenantId,
+      request.incidentId,
+      request.kind,
+      tx,
+    );
+    // Nothing recorded: the approval cannot be shown to cover the costs.
+    if (approved === null) return true;
+    const { totals } = await this.read(request.tenantId, request.incidentId, tx);
+    return totals.some(({ currency, companyBorne }) => {
+      const covered = approved.find((money) => money.currency === currency);
+      return BigInt(companyBorne) > BigInt(covered?.amountMinor ?? '0');
+    });
   }
 
   public async snapshot(request: ClosureCostsRequest, tx: unknown): Promise<void> {

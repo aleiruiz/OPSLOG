@@ -124,4 +124,44 @@ describe('the cost ports of the workflow', () => {
     expect(await world.costs.snapshots(TENANT_B, incident.id)).toEqual([]);
     expect(closedOrders({ counted: [] })).toEqual([]);
   });
+
+  it('approval: covers the costs it saw, goes stale when any currency grows or a new one appears', async () => {
+    const world = setup();
+    world.orders.add('o1', { costs: [{ amountMinor: '600000', currency: 'MXN' }] });
+    const incident = await caseIn(world, 'repair');
+    const linked = await world.service.link(
+      TENANT_A,
+      ADMIN,
+      incident.id,
+      { version: incident.version, orderId: 'o1' },
+      linkKey(30),
+    );
+    const request = { tenantId: TENANT_A, incidentId: incident.id, kind: 'close' as const };
+    // Nothing recorded yet: it cannot be shown to cover anything.
+    expect(await world.ledger.approvalStale(request)).toBe(true);
+    await world.ledger.recordApproval(request, undefined);
+    expect(await world.ledger.approvalStale(request)).toBe(false);
+    expect(await world.ledger.approvalStale({ ...request, kind: 'assumption' })).toBe(true);
+    // Costs that shrink keep it standing; the same amount too.
+    world.orders.add('o1', { costs: [{ amountMinor: '500000', currency: 'MXN' }] });
+    expect(await world.ledger.approvalStale(request)).toBe(false);
+    // Growth in maintenance after the approval: stale.
+    world.orders.add('o1', { costs: [{ amountMinor: '600001', currency: 'MXN' }] });
+    expect(await world.ledger.approvalStale(request)).toBe(true);
+    world.orders.add('o1', { costs: [{ amountMinor: '600000', currency: 'MXN' }] });
+    expect(await world.ledger.approvalStale(request)).toBe(false);
+    // A new currency with a positive amount.
+    await world.costService.update(
+      TENANT_A,
+      ADMIN,
+      incident.id,
+      { version: linked.incident.version, lines: [line('expense', 'fine', '1', 'USD')] },
+      linkKey(31),
+    );
+    expect(await world.ledger.approvalStale(request)).toBe(true);
+    // Approving again records the new figures.
+    await world.ledger.recordApproval(request, undefined);
+    expect(await world.ledger.approvalStale(request)).toBe(false);
+    expect(await world.costs.approval(TENANT_B, incident.id, 'close')).toBeNull();
+  });
 });

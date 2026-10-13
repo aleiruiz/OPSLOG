@@ -100,6 +100,46 @@ describe('D20 by amount (case 8)', () => {
     expect((await run(world, approved, 'close')).status).toBe('closed');
   });
 
+  it('records what each approval covered, and asks again when the costs outgrow it (close and assumption)', async () => {
+    const world = setup();
+    world.settings.threshold = THRESHOLD;
+    borne(world, MXN('600000'));
+    const incident = await resolved(world);
+    const approved = await run(world, incident, 'approve_close');
+    expect(world.closureCosts.approved.map((a) => a.kind)).toEqual(['close']);
+    // Costs grew in maintenance after the approval: it no longer stands, in the steps and at the close.
+    world.closureCosts.stale = true;
+    const steps = await world.workflow.nextSteps(TENANT_A, ADMIN, approved.id);
+    expect(steps.find((step) => step.command === 'close')?.missingRequirements).toEqual([
+      'close_approval',
+    ]);
+    expect((await fail(run(world, approved, 'close'))).missingRequirements).toEqual([
+      'close_approval',
+    ]);
+    // Approving again is not a no-op now: it records the new figures.
+    const again = await run(world, approved, 'approve_close', {}, ADMIN, 'key-reapprove-close');
+    expect(again.version).toBe(approved.version + 1);
+    expect(world.closureCosts.approved).toHaveLength(2);
+    world.closureCosts.stale = false;
+    expect((await run(world, again, 'close')).status).toBe('closed');
+  });
+
+  it('the assumption approval also lapses when the costs outgrow it', async () => {
+    const world = setup();
+    world.settings.threshold = THRESHOLD;
+    world.evidence.add('invoice');
+    const created = await draft(world, { type: 'other' });
+    const rejected = await put(world, created, { ...FULL, status: 'insurance_rejected' });
+    borne(world, MXN('600000'));
+    const approved = await run(world, rejected, 'approve_assumption');
+    world.closureCosts.stale = true;
+    expect((await fail(run(world, approved, 'resolve'))).missingRequirements).toEqual([
+      'assumption_approval',
+    ]);
+    world.closureCosts.stale = false;
+    expect((await run(world, approved, 'resolve')).status).toBe('resolved');
+  });
+
   it('asks an approval for a cost in another currency, and drops the demand when recoveries bring it down', async () => {
     const world = setup();
     world.settings.threshold = THRESHOLD;

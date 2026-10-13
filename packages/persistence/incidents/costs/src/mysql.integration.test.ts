@@ -135,6 +135,7 @@ suite('incident costs and repair links on disposable MySQL 8.4', () => {
         { table: T.lines, privileges: 'SELECT, INSERT, DELETE' },
         { table: T.estimates, privileges: 'SELECT, INSERT, UPDATE, DELETE' },
         { table: T.snapshots, privileges: 'SELECT, INSERT' },
+        { table: T.approvals, privileges: 'SELECT, INSERT, DELETE' },
       ],
     });
     sourceA = await db.openIncidents('a');
@@ -488,6 +489,61 @@ suite('incident costs and repair links on disposable MySQL 8.4', () => {
       expect(approved.closeApproval).not.toBeNull();
       const changed = await put(w, approved, { lines: [expense('towing', '1002')] });
       expect(changed.incident.closeApproval).toBeNull();
+    } finally {
+      shared.threshold = null;
+    }
+  });
+
+  it('an approval lapses when the costs of the linked order grow in maintenance after it was given (D20)', async () => {
+    const w = world(sourceA);
+    shared.threshold = { amountMinor: '500000', currency: 'MXN' };
+    try {
+      const orderId = `order-${randomUUID()}`;
+      shared.orders.add(
+        orderId,
+        { costs: [{ amountMinor: '600000', currency: 'MXN' }], status: 'closed' },
+        tenantA,
+      );
+      const review = await underReview(w);
+      const linked = await w.links.link(
+        tenantA,
+        MANAGER,
+        review.id,
+        { version: review.version, orderId },
+        key(),
+      );
+      const filled = await w.process.updateResolution(tenantA, MANAGER, review.id, {
+        version: linked.incident.version,
+        resolutionSummary: 'Resuelto de forma sintética',
+        vehicleStatusDecision: 'restricted',
+      });
+      const resolvedNow = await w.workflow.execute(tenantA, MANAGER, review.id, {
+        command: 'resolve',
+        version: filled.version,
+      });
+      const command = (name: string, version: number) =>
+        w.workflow.execute(tenantA, MANAGER, review.id, { command: name, version }, key());
+      const approved = await command('approve_close', resolvedNow.version);
+      const [row] = await db.rows<{ borne: unknown }>(
+        `SELECT borne FROM ${T.approvals} WHERE company_id=? AND incident_id=? AND kind='close'`,
+        [tenantA, review.id],
+      );
+      expect(JSON.stringify(row?.borne)).toContain('600000');
+      // The order grows in maintenance after the approval; it is read live.
+      shared.orders.add(
+        orderId,
+        { costs: [{ amountMinor: '600001', currency: 'MXN' }], status: 'closed' },
+        tenantA,
+      );
+      const before = await snapshot(review.id);
+      await expect(command('close', approved.version)).rejects.toMatchObject({
+        code: 'missing_requirements',
+        missingRequirements: ['close_approval'],
+      });
+      expect(await snapshot(review.id)).toEqual(before);
+      const again = await command('approve_close', approved.version);
+      expect(again.version).toBe(approved.version + 1);
+      expect((await command('close', again.version)).status).toBe('closed');
     } finally {
       shared.threshold = null;
     }

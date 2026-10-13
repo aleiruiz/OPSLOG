@@ -131,6 +131,7 @@ const grants = {
     { table: INCIDENT_COST_TABLES.lines, privileges: ['SELECT', 'INSERT', 'DELETE'] },
     { table: INCIDENT_COST_TABLES.estimates, privileges: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] },
     { table: INCIDENT_COST_TABLES.snapshots, privileges: ['SELECT', 'INSERT'] },
+    { table: INCIDENT_COST_TABLES.approvals, privileges: ['SELECT', 'INSERT', 'DELETE'] },
   ],
 } satisfies Record<string, readonly Grant[]>;
 

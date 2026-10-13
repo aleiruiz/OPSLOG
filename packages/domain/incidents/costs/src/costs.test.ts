@@ -378,6 +378,24 @@ describe('PUT costs (FR-117, case 10)', () => {
     ).toHaveLength(2);
   });
 
+  it('recognises a retry even when the lines it names changed since it first ran', async () => {
+    const world = setup();
+    const incident = await caseIn(world, 'under_review');
+    const first = await put(world, incident, { lines: [line('expense', 'other', '1')] });
+    const [a] = first.costs.lines;
+    const body = { lines: [{ id: a?.id, ...line('expense', 'other', '2') }] };
+    const k = key();
+    const edited = await put(world, first.incident, body, ADMIN, k);
+    // Another edit drops that line; the lost-answer retry replays instead of failing on the old id.
+    const dropped = await put(world, edited.incident, { lines: [] });
+    expect(dropped.costs.lines).toEqual([]);
+    const retry = await put(world, first.incident, body, ADMIN, k);
+    expect(retry.incident.version).toBe(edited.incident.version);
+    // A first attempt naming an unknown line still fails on the id.
+    const unknown = { lines: [{ id: 'gone', ...line('expense', 'other', '2') }] };
+    expect((await fail(put(world, dropped.incident, unknown))).code).toBe('invalid_input');
+  });
+
   it('two different edits from the same version: the second is stale', async () => {
     const world = setup();
     const incident = await caseIn(world, 'under_review');

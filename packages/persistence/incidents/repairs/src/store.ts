@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { In, type DataSource, type EntityManager } from 'typeorm';
+import { type DataSource, type EntityManager } from 'typeorm';
 import type {
   IncidentApplyResult,
   IncidentMutation,
@@ -60,17 +60,6 @@ export class TypeOrmIncidentRepairStore implements IncidentRepairStore {
       .getRepository(IncidentRepairLinkSchema)
       .findOneBy({ tenantId, orderId });
     return row ? linkFrom(row) : null;
-  }
-
-  public async linksOfOrders(
-    tenantId: string,
-    orderIds: readonly string[],
-  ): Promise<readonly RepairLink[]> {
-    if (orderIds.length === 0) return [];
-    const rows = await this.dataSource
-      .getRepository(IncidentRepairLinkSchema)
-      .find({ where: { tenantId, orderId: In([...orderIds]) } });
-    return rows.map(linkFrom);
   }
 
   private async write(manager: EntityManager, change: RepairChange): Promise<boolean> {

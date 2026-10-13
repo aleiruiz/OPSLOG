@@ -47,8 +47,8 @@ describe('incident costs schema', () => {
     } as unknown as QueryRunner;
     const migration = new CreateIncidentCosts2026101700020();
     await migration.up(runner);
-    const [lines, estimates, snapshots] = statements as [string, string, string];
-    expect(statements).toHaveLength(3);
+    const [lines, estimates, snapshots, approvals] = statements as [string, string, string, string];
+    expect(statements).toHaveLength(4);
     expect(lines).toContain('PRIMARY KEY (company_id,incident_id,id)');
     expect(lines).toContain('amount_minor BIGINT UNSIGNED NOT NULL');
     expect(lines).toContain("kind = 'expense' AND category IN");
@@ -60,13 +60,16 @@ describe('incident costs schema', () => {
     expect(snapshots).toContain('PRIMARY KEY (company_id,incident_id,cycle)');
     expect(snapshots).toContain("JSON_TYPE(totals) = 'ARRAY'");
     expect(snapshots).toContain("JSON_TYPE(orders) = 'ARRAY'");
+    expect(approvals).toContain('PRIMARY KEY (company_id,incident_id,kind)');
+    expect(approvals).toContain("kind IN ('assumption','close')");
     expect(statements.join(' ').match(/REFERENCES `([a-z_]+)`/g)).toEqual(
-      Array(3).fill(`REFERENCES \`${INCIDENT_TABLES.incidents}\``),
+      Array(4).fill(`REFERENCES \`${INCIDENT_TABLES.incidents}\``),
     );
     expect(statements.join(' ')).not.toMatch(/FLOAT|DOUBLE|DECIMAL/i);
     for (const sql of statements) expect(sql).toContain('COLLATE=utf8mb4_0900_bin');
     await migration.down(runner);
-    expect(statements.slice(-3)).toEqual([
+    expect(statements.slice(-4)).toEqual([
+      `DROP ${INCIDENT_COST_TABLES.approvals}`,
       `DROP ${INCIDENT_COST_TABLES.snapshots}`,
       `DROP ${INCIDENT_COST_TABLES.estimates}`,
       `DROP ${INCIDENT_COST_TABLES.lines}`,

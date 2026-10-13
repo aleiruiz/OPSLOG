@@ -173,8 +173,22 @@ export class IncidentWorkflowService extends WorkflowBase {
         : null;
     if (command === 'assign' && responsible === incident.responsibleId) return incident;
     // Recording an approval that already stands changes nothing.
-    if (command === 'approve_assumption' && incident.assumptionApproval !== null) return incident;
-    if (command === 'approve_close' && incident.closeApproval !== null) return incident;
+    // A standing approval that still covers the costs is not recorded again; one they outgrew is.
+    const standing =
+      command === 'approve_assumption'
+        ? incident.assumptionApproval
+        : command === 'approve_close'
+          ? incident.closeApproval
+          : null;
+    if (
+      standing !== null &&
+      !(await this.ports.closureCosts.approvalStale({
+        tenantId,
+        incidentId: incident.id,
+        kind: command === 'approve_assumption' ? 'assumption' : 'close',
+      }))
+    )
+      return incident;
     const time = this.now().toISOString();
     const changes = effectOf(command, incident, {
       time,

@@ -51,10 +51,18 @@ export class CreateIncidentCosts2026101700020 implements MigrationInterface {
         CONSTRAINT ck_incident_cost_snapshot_totals CHECK (JSON_TYPE(totals) = 'ARRAY'),
         CONSTRAINT ck_incident_cost_snapshot_orders CHECK (JSON_TYPE(orders) = 'ARRAY')
       ) ${TABLE}`,
+      `CREATE TABLE \`${T.approvals}\` (
+        ${ids}, kind VARCHAR(16) ${BIN} NOT NULL, borne JSON NOT NULL,
+        PRIMARY KEY (company_id,incident_id,kind),
+        CONSTRAINT fk_incident_cost_approval_incident FOREIGN KEY (company_id,incident_id) REFERENCES \`${INCIDENTS_TABLE}\` (company_id,id),
+        CONSTRAINT ck_incident_cost_approval_kind CHECK (kind IN ('assumption','close')),
+        CONSTRAINT ck_incident_cost_approval_borne CHECK (JSON_TYPE(borne) = 'ARRAY')
+      ) ${TABLE}`,
     ];
     for (const statement of ddl) await queryRunner.query(statement);
   }
   public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.dropTable(T.approvals);
     await queryRunner.dropTable(T.snapshots);
     await queryRunner.dropTable(T.estimates);
     await queryRunner.dropTable(T.lines);

@@ -52,7 +52,7 @@ function line(
   issues: Issues,
   value: unknown,
   index: number,
-  known: ReadonlySet<string>,
+  known: ReadonlySet<string> | null,
 ): LineInput | undefined {
   const field = `lines[${index}]`;
   if (!isPlainObject(value)) return issues.add(field, 'invalid');
@@ -72,7 +72,8 @@ function line(
   let id: string | null = null;
   if (present(data, 'id')) {
     const wanted = idField(issues, `${field}.id`, data['id']);
-    if (typeof wanted === 'string' && !known.has(wanted)) issues.add(`${field}.id`, 'invalid');
+    if (typeof wanted === 'string' && known !== null && !known.has(wanted))
+      issues.add(`${field}.id`, 'invalid');
     else if (typeof wanted === 'string') id = wanted;
   }
   if (!kind || !category || !amount || note === undefined) return undefined;
@@ -80,7 +81,8 @@ function line(
 }
 
 /** `PUT costs`: replaces the lines (at most 50) and optionally sets or clears the initial estimate. */
-export function parseCostsUpdate(input: unknown, known: ReadonlySet<string>): CostsUpdate {
+/** `known === null` checks the shape only: enough to fingerprint a retry before the lines it refers to are compared. */
+export function parseCostsUpdate(input: unknown, known: ReadonlySet<string> | null): CostsUpdate {
   const issues = new Issues();
   const data = objectOf(input, ['version', 'lines', 'initialEstimate'], issues);
   if (!present(data, 'version')) issues.add('version', 'required');

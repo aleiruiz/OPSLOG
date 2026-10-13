@@ -6,6 +6,7 @@ import type {
   IncidentStore,
 } from '../../../../domain/incidents/cases/src/index.js';
 import type {
+  ApprovalKind,
   ClosedOrder,
   CostChange,
   CostLine,
@@ -15,6 +16,7 @@ import type {
   Money,
 } from '../../../../domain/incidents/costs/src/index.js';
 import {
+  IncidentCostApprovalSchema,
   IncidentCostEstimateSchema,
   IncidentCostLineSchema,
   IncidentCostSnapshotSchema,
@@ -106,6 +108,30 @@ export class TypeOrmIncidentCostStore implements IncidentCostStore {
       .getRepository(IncidentCostSnapshotSchema)
       .find({ where: { tenantId, incidentId }, order: { cycle: 'ASC' } });
     return rows.map(snapshotFrom);
+  }
+
+  public async approval(
+    tenantId: string,
+    incidentId: string,
+    kind: ApprovalKind,
+    tx?: unknown,
+  ): Promise<readonly Money[] | null> {
+    const row = await this.source(tx)
+      .getRepository(IncidentCostApprovalSchema)
+      .findOneBy({ tenantId, incidentId, kind });
+    return row ? json<Money[]>(row.borne) : null;
+  }
+
+  public async saveApproval(
+    tenantId: string,
+    incidentId: string,
+    kind: ApprovalKind,
+    borne: readonly Money[],
+    tx: unknown,
+  ): Promise<void> {
+    const repository = (tx as EntityManager).getRepository(IncidentCostApprovalSchema);
+    await repository.delete({ tenantId, incidentId, kind });
+    await repository.insert({ tenantId, incidentId, kind, borne: [...borne] });
   }
 
   public async saveSnapshot(snapshot: CostSnapshot, tx: unknown): Promise<void> {
