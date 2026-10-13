@@ -1,6 +1,6 @@
 # ADR-0013 — Rediseño visual: tema OPSLOG v2 sobre Material UI
 
-Estado: **propuesto; pendiente de que el propietario apruebe la dirección visual del piloto (Alertas).**
+Estado: **aceptado por el propietario el 2026-10-13 01:44 UTC** («si», en el hilo del proyecto, tras ver las capturas del piloto y los ajustes de espaciado).
 Fecha: 2026-10-13.
 Origen: instrucción directa del propietario en el hilo del proyecto (2026-10-13 00:11 UTC): «necesito un rediseño serio de este proyecto, hay demasiados problemas visuales… no tiene ningún tipo de appeal. Necesitamos usar algún design system, como Material UI, y básicamente rehacer la parte visual de todo el proyecto».
 
@@ -80,4 +80,3 @@ El 2026-10-13 (01:13 UTC) el propietario pidió «sacar las snapshots de los tar
 
 - El piloto regenera 764 de las 768 capturas de regresión visual (todo cambia de aspecto) y añade 4 de las tarjetas de resumen; desde ahí cada fase solo regenera las suyas.
 - `e2e/components.spec.ts` comprueba la escala v2 (H1 24px).
-- Si el propietario no aprueba la dirección, este ADR se sustituye o se ajusta antes de fusionar el piloto.
