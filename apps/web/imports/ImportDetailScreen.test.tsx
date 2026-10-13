@@ -1,6 +1,14 @@
+import { act } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { createMockApi } from '../app/mockApi';
 import { click, fireEvent, renderApp, screen, waitFor } from '../app/test/utils';
+
+/**
+ * Lets the effects of the last render run. A further page requested before the screen's reset effect
+ * has run is taken as belonging to an older list and dropped, which a slow CI runner can hit when the
+ * test clicks as soon as the table appears.
+ */
+const settle = () => act(async () => undefined);
 
 const open = (id: string, options: Parameters<typeof renderApp>[0] = {}) =>
   renderApp({ path: `/flota/importaciones/${id}`, ...options });
@@ -29,6 +37,7 @@ describe('import detail', () => {
     expect(await screen.findByText('No hay filas con este resultado')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Resultado'), { target: { value: '' } });
     await screen.findByRole('table', { name: /^Filas \(/ });
+    await settle();
     click('Cargar más filas');
     await waitFor(() =>
       expect(screen.queryByRole('button', { name: 'Cargar más filas' })).toBeNull(),
@@ -71,6 +80,7 @@ describe('import detail', () => {
     const api = createMockApi();
     await open('imp-001', { api });
     await screen.findByRole('table', { name: /^Filas \(/ });
+    await settle();
     api.controls.failNext('importRows');
     click('Cargar más filas');
     expect(await screen.findByText('No pudimos cargar más filas.')).toBeInTheDocument();
