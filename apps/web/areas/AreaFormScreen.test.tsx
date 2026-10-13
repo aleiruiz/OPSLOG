@@ -9,6 +9,7 @@ import {
   type,
   waitFor,
   within,
+  findSessionExpired,
 } from '../app/test/utils';
 
 async function create(
@@ -213,7 +214,7 @@ describe('create area', () => {
     addResponsible('dispatch');
     api.controls.expireSession();
     click('Crear área');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     expect(screen.queryByRole('heading', { name: 'No pudimos crear el área' })).toBeNull();
     type('Cuenta de prueba', demoSubjects.admin);
     click('Continuar');
@@ -368,7 +369,7 @@ describe('edit area', () => {
     type('Nombre', 'Mérida Centro');
     api.controls.expireSession();
     click('Guardar cambios');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     type('Cuenta de prueba', demoSubjects.admin);
     click('Continuar');
     await waitFor(() =>
@@ -386,7 +387,7 @@ describe('edit area', () => {
     type('Nombre', 'Mérida Centro');
     api.controls.expireSession();
     click('Guardar cambios');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     await api.auth.login(demoCredentials.admin);
     api.controls.changeAreaExternally('area-sur-mer', { name: 'Mérida Otra' });
     type('Cuenta de prueba', demoSubjects.admin);

@@ -11,6 +11,7 @@ import {
   screen,
   type,
   waitFor,
+  findSessionExpired,
 } from './test/utils';
 
 const accept = () => {
@@ -147,7 +148,7 @@ describe('shell: session, company and user', () => {
     await screen.findByRole('heading', { name: 'Inicio', level: 1 });
     api.controls.failNext('logout', 401);
     click('Cerrar sesión');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
   });
 });
 
@@ -338,7 +339,7 @@ describe('expired session', () => {
 
     api.controls.expireSession();
     type('Rol', 'role-viewer');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     await waitFor(() =>
       expect(screen.getByRole('group', { name: 'Sesión expirada' })).toHaveFocus(),
     );
@@ -364,7 +365,7 @@ describe('expired session', () => {
     await screen.findByRole('table', { name: /Usuarios/ });
     api.controls.expireSession();
     type('Buscar por identificador, rol o estado', 'admin');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     expect(
       await screen.findByRole('heading', { name: 'Datos no disponibles' }),
     ).toBeInTheDocument();
@@ -379,7 +380,7 @@ describe('expired session', () => {
     await findField('Nombre de la empresa');
     api.controls.expireSession();
     type('Nombre de la empresa', 'Otra razón social');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     type('Cuenta de prueba', 'cuenta-que-no-existe');
     click('Continuar');
     expect(
@@ -404,7 +405,7 @@ describe('expired session', () => {
     await findField('Nombre de la empresa');
     api.controls.expireSession();
     type('Nombre de la empresa', 'Pendiente de enviar');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     expect(screen.getByRole('navigation', { name: 'Principal', hidden: true })).toHaveAttribute(
       'inert',
     );

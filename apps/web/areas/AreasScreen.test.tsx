@@ -2,7 +2,7 @@ import { act } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { makeArea } from './fixtures';
 import { createMockApi } from '../app/mockApi';
-import { click, fireEvent, renderApp, screen, within } from '../app/test/utils';
+import { click, fireEvent, renderApp, screen, within, findSessionExpired } from '../app/test/utils';
 
 const item = (name: string | RegExp) => screen.getByRole('treeitem', { name });
 const names = () =>
@@ -237,7 +237,7 @@ describe('areas tree screen', () => {
     await screen.findByRole('tree');
     api.controls.expireSession();
     fireEvent.change(screen.getByLabelText('Estado'), { target: { value: 'true' } });
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     expect(screen.getByRole('heading', { name: 'Datos no disponibles' })).toBeInTheDocument();
   });
 

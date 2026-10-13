@@ -10,6 +10,7 @@ import {
   screen,
   type,
   waitFor,
+  findSessionExpired,
 } from '../app/test/utils';
 import type { ApiError, InsurancePolicy, Result } from '../app/types';
 import { makeVehicle } from '../vehicles/fixtures';
@@ -216,7 +217,7 @@ describe('create policy', () => {
     fillCreate();
     api.controls.expireSession();
     click('Crear póliza');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     expect(getField('Número de póliza')).toHaveValue('pol-77');
     type('Cuenta de prueba', demoSubjects.admin);
     click('Continuar');
@@ -385,14 +386,14 @@ describe('edit policy', () => {
     type('Aseguradora', 'Pendiente S.A.');
     api.controls.expireSession();
     click('Guardar cambios');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     type('Cuenta de prueba', demoSubjects.admin);
     click('Continuar');
     await waitFor(() => expect(getField('Aseguradora')).toHaveValue('Pendiente S.A.'));
     expect(screen.queryByText(/La póliza cambió desde que empezaste/)).toBeNull();
     api.controls.expireSession();
     click('Guardar cambios');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     api.controls.changePolicyExternally('pol-001', { insurer: 'Ajena S.A.' });
     type('Cuenta de prueba', demoSubjects.admin);
     click('Continuar');

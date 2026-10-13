@@ -9,6 +9,7 @@ import {
   screen,
   type,
   waitFor,
+  findSessionExpired,
 } from '../app/test/utils';
 import type { ApiError, Document, Result } from '../app/types';
 import { act } from '@testing-library/react';
@@ -165,7 +166,7 @@ describe('create document', () => {
     fillCreate();
     api.controls.expireSession();
     click('Crear documento');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     expect(getField('Título')).toHaveValue('Tarjeta 2026');
     type('Cuenta de prueba', demoSubjects.admin);
     click('Continuar');
@@ -350,7 +351,7 @@ describe('edit document', () => {
     type('Título', 'Título pendiente');
     api.controls.expireSession();
     click('Guardar cambios');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     type('Cuenta de prueba', demoSubjects.admin);
     click('Continuar');
     await waitFor(() =>
@@ -369,7 +370,7 @@ describe('edit document', () => {
     type('Título', 'Título pendiente');
     api.controls.expireSession();
     click('Guardar cambios');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     api.controls.changeDocumentExternally('doc-001', { title: 'Ajeno' });
     type('Cuenta de prueba', demoSubjects.admin);
     click('Continuar');

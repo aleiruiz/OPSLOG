@@ -10,6 +10,7 @@ import {
   screen,
   type,
   waitFor,
+  findSessionExpired,
 } from '../app/test/utils';
 import type { ApiError, Result } from '../app/types';
 import { makeVehicle } from '../vehicles/fixtures';
@@ -313,7 +314,7 @@ describe('assign a driver', () => {
     fill();
     api.controls.expireSession();
     click('Crear asignación');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     expect(getField('Motivo de la asignación')).toHaveValue('Ruta de prueba');
     type('Cuenta de prueba', demoSubjects.admin);
     click('Continuar');
@@ -529,7 +530,7 @@ describe('close an assignment', () => {
     type('Motivo del cierre', 'Mi motivo');
     api.controls.expireSession();
     click('Cerrar asignación');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     expect(getField('Motivo del cierre')).toHaveValue('Mi motivo');
   });
 });

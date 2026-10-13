@@ -1,7 +1,16 @@
 import { act } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { createMockApi, demoSubjects } from '../app/mockApi';
-import { click, deferred, getField, renderApp, screen, type, waitFor } from '../app/test/utils';
+import {
+  click,
+  deferred,
+  getField,
+  renderApp,
+  screen,
+  type,
+  waitFor,
+  findSessionExpired,
+} from '../app/test/utils';
 import type { ApiError, Result, Vehicle } from '../app/types';
 import { demoVehicles, makeVehicle } from './fixtures';
 import { describeFailure } from './VehicleFormScreen';
@@ -245,7 +254,7 @@ describe('create vehicle', () => {
     fillCreate();
     api.controls.expireSession();
     click('Crear vehículo');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     expect(screen.queryByRole('heading', { name: 'No pudimos guardar el vehículo' })).toBeNull();
     type('Cuenta de prueba', demoSubjects.admin);
     click('Continuar');
@@ -509,7 +518,7 @@ describe('edit vehicle', () => {
     type('Marca', 'Toyota');
     api.controls.expireSession();
     click('Guardar cambios');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     type('Cuenta de prueba', demoSubjects.admin);
     click('Continuar');
     await waitFor(() =>
@@ -531,7 +540,7 @@ describe('edit vehicle', () => {
     type('Marca', 'Toyota');
     type('Odómetro actual', '16000');
     click('Guardar cambios');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     // The field changes were saved (version 2); the draft must follow that version.
     expect(api.controls.vehicles()[0]?.make).toBe('Toyota');
     type('Cuenta de prueba', demoSubjects.admin);
@@ -550,7 +559,7 @@ describe('edit vehicle', () => {
     type('Marca', 'Toyota');
     api.controls.expireSession();
     click('Guardar cambios');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     api.controls.changeVehicleExternally('veh-001', { make: 'Ajena' });
     type('Cuenta de prueba', demoSubjects.admin);
     click('Continuar');

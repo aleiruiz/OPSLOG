@@ -1,6 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createMockApi, demoCredentials, demoSubjects } from '../app/mockApi';
-import { click, fireEvent, renderApp, screen, type, waitFor, within } from '../app/test/utils';
+import {
+  click,
+  fireEvent,
+  renderApp,
+  screen,
+  type,
+  waitFor,
+  within,
+  findSessionExpired,
+} from '../app/test/utils';
 import type { ApiError, AlertSettings, Result } from '../app/types';
 import { describeFailure } from './AlertSettingsScreen';
 
@@ -200,14 +209,14 @@ describe('alert settings: editing with manage_config', () => {
     type('Días de anticipación', '12');
     api.controls.expireSession();
     click('Guardar ajustes');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     type('Cuenta de prueba', demoSubjects.admin);
     click('Continuar');
     await waitFor(() => expect(screen.getByLabelText(/^Días de anticipación/)).toHaveValue(12));
     expect(screen.queryByText(/Los ajustes cambiaron desde que empezaste/)).toBeNull();
     api.controls.expireSession();
     click('Guardar ajustes');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     api.controls.changeAlertSettingsExternally({ expiryWindowDays: 21 });
     type('Cuenta de prueba', demoSubjects.admin);
     click('Continuar');

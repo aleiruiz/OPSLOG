@@ -76,6 +76,19 @@ export const click = (name: string | RegExp) =>
 
 export { screen, waitFor, fireEvent, within };
 
+/**
+ * Waits for the session-expired panel. A plain selector instead of a role query: computing roles and
+ * visibility over a whole screen in jsdom is slow enough to time out on a loaded CI runner.
+ */
+export const findSessionExpired = () =>
+  waitFor(() => {
+    const panel = document.querySelector<HTMLElement>(
+      '[role="group"][aria-label="Sesión expirada"]',
+    );
+    if (!panel) throw new Error('The session-expired panel is not shown');
+    return panel;
+  });
+
 /** A promise opened by hand, so a test can hold a port call until it decides to release it. */
 export function deferred() {
   let resolve: () => void = () => undefined;

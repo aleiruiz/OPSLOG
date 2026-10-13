@@ -10,6 +10,7 @@ import {
   type,
   waitFor,
   within,
+  findSessionExpired,
 } from '../app/test/utils';
 import { makeDocument } from '../documents/fixtures';
 import { makePolicy } from '../insurance/fixtures';
@@ -134,7 +135,7 @@ describe('alert list', () => {
           >),
     );
     await list({ api: other });
-    expect(await screen.findByRole('group', { name: 'Sesión expirada' })).toBeInTheDocument();
+    expect(await findSessionExpired()).toBeInTheDocument();
   });
 
   it('loads further pages with the cursor and keeps them until a filter changes', async () => {
@@ -302,7 +303,7 @@ describe('alert list', () => {
     expect(await screen.findByRole('heading', { name: 'No tienes acceso' })).toBeInTheDocument();
     api.controls.expireSession();
     set('Estado', 'expired');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     type('Cuenta de prueba', demoSubjects.admin);
     click('Continuar');
     await screen.findByRole('table', { name: expiryTable });
@@ -316,7 +317,7 @@ describe('alert list', () => {
     expect(await screen.findByText('No pudimos cargar más alertas.')).toBeInTheDocument();
     api.controls.failNext('listAlerts', 401);
     click('Cargar más alertas');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
   });
 
   it('ignores a further page that arrives after the filters changed', async () => {

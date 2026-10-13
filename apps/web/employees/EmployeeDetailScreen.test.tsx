@@ -10,6 +10,7 @@ import {
   type,
   waitFor,
   within,
+  findSessionExpired,
 } from '../app/test/utils';
 import { demoEmployees, makeEmployeeDetail } from './fixtures';
 
@@ -125,7 +126,7 @@ describe('employee detail: data', () => {
     const { api } = await open('emp-001');
     api.controls.failNext('employeeHistory', 401);
     click('Cargar más historial');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
   });
 
   it('ignores a history page that arrives after the history was reloaded', async () => {
@@ -202,7 +203,7 @@ describe('employee detail: data', () => {
     const api = createMockApi();
     api.controls.failNext('listAreas', 401);
     await renderApp({ api, path: '/plantilla/empleados/emp-001' });
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
   });
 
   it('shows the result of the previous screen once and removes it from the address bar', async () => {
@@ -639,7 +640,7 @@ describe('employee detail: change status', () => {
     const dialog = await confirmDialog('Dar de baja a Ana García López');
     api.controls.expireSession();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Dar de baja' }));
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     expect(screen.queryByRole('dialog')).toBeNull();
     type('Cuenta de prueba', demoSubjects.admin);
     click('Continuar');
@@ -652,7 +653,7 @@ describe('employee detail: change status', () => {
     api.controls.failNext('changeEmployeeStatus', 401);
     choose('inactive', 'Licencia');
     submit();
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
   });
 
   it('lets the dispatcher change the status, with the same flow', async () => {
@@ -760,7 +761,7 @@ describe('employee detail: archive', () => {
     const dialog = await openArchive(api);
     api.controls.failNext('archiveEmployee', 401);
     fireEvent.click(within(dialog).getByRole('button', { name: 'Archivar empleado' }));
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 

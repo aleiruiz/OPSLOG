@@ -10,6 +10,7 @@ import {
   type,
   waitFor,
   within,
+  findSessionExpired,
 } from '../app/test/utils';
 import { filtersFromSearch } from './AssignmentsScreen';
 
@@ -187,7 +188,7 @@ describe('assignment list', () => {
     expect(await screen.findByRole('heading', { name: 'No tienes acceso' })).toBeInTheDocument();
     api.controls.expireSession();
     set('Tipo', 'secondary');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
     type('Cuenta de prueba', demoSubjects.admin);
     click('Continuar');
     await screen.findByRole('table', { name: /Asignaciones/ });
@@ -201,7 +202,7 @@ describe('assignment list', () => {
     expect(await screen.findByText('No pudimos cargar más asignaciones.')).toBeInTheDocument();
     api.controls.failNext('listAssignments', 401);
     click('Cargar más asignaciones');
-    await screen.findByRole('group', { name: 'Sesión expirada' });
+    await findSessionExpired();
   });
 
   it('ignores a further page that arrives after the filters changed', async () => {
