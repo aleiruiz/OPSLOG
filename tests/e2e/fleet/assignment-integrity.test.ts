@@ -126,16 +126,19 @@ suite('integrated assignment integrity on real MySQL', () => {
     expect(loser?.text).not.toContain(nextDriver);
     expect(loser?.text).not.toContain(raceDriver);
 
+    // The race loser holds no current assignment, so the only conflict left is the vehicle's
+    // principal. Reusing the winner would hit `already_assigned` instead.
+    const idle = race[0]?.status === 201 ? raceDriver : nextDriver;
     const occupied = await fleet.adminA.post(ASSIGNMENTS, {
       json: {
         vehicleId,
-        employeeId: raceDriver,
+        employeeId: idle,
         type: 'principal',
         reason: 'No desplazar titular vigente',
       },
     });
     expect(occupied.status).toBe(409);
     expect(occupied.json.code).toBe('principal_taken');
-    expect(occupied.text).not.toContain(raceDriver);
+    expect(occupied.text).not.toContain(idle);
   }, 60_000);
 });
