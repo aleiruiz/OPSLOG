@@ -6,6 +6,12 @@ import {
   INCIDENT_MIGRATION_VERSION,
   type IncidentDatabaseConfig,
 } from '../../../../packages/persistence/incidents/cases/src/index.js';
+import {
+  INCIDENT_WORKFLOW_MIGRATION_VERSION,
+  TypeOrmIncidentClosures,
+  createIncidentWorkflowMigrationDataSource,
+  runIncidentWorkflowMigrations,
+} from '../../../../packages/persistence/incidents/workflow/src/index.js';
 import { TypeOrmIncidentChildStore } from '../../../../packages/persistence/incidents/third-parties/src/index.js';
 
 type Endpoint = Pick<IncidentDatabaseConfig, 'host' | 'port' | 'database'>;
@@ -23,6 +29,13 @@ export function incidentMigrationSteps(endpoint: Endpoint, migrator: Account) {
       source: createIncidentMigrationDataSource({ ...endpoint, ...migrator }),
       run: runIncidentMigrations,
     },
+    // The snapshot of each closed cycle: its own migrations table, after the cases it points to.
+    {
+      name: 'incident-workflow',
+      version: INCIDENT_WORKFLOW_MIGRATION_VERSION,
+      source: createIncidentWorkflowMigrationDataSource({ ...endpoint, ...migrator }),
+      run: runIncidentWorkflowMigrations,
+    },
   ] as const;
 }
 
@@ -37,5 +50,10 @@ export function createIncidentRuntimeSource(
 export function incidentRuntimeAdapters(source: ReturnType<typeof createIncidentRuntimeSource>) {
   const incidents = new TypeOrmIncidentStore(source);
   // The children write through the incident store, so a case and its children share a transaction.
-  return { incidents, incidentChildren: new TypeOrmIncidentChildStore(source, incidents) };
+  return {
+    incidents,
+    incidentChildren: new TypeOrmIncidentChildStore(source, incidents),
+    // The closure row joins the transaction of the case through the store's extra write.
+    incidentClosures: new TypeOrmIncidentClosures(source),
+  };
 }

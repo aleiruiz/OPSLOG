@@ -63,6 +63,7 @@
     { "path": "../../../packages/domain/incidents/workflow" },
     { "path": "../../../packages/persistence/incidents/cases" },
     { "path": "../../../packages/persistence/incidents/third-parties" },
+    { "path": "../../../packages/persistence/incidents/workflow" },
     { "path": "../maintenance/orders" },
     { "path": "../incidents/cases" },
     { "path": "../incidents/third-parties" },

@@ -1,4 +1,5 @@
-import { buildIncidentApis } from './incident-children-apis.js';
+import { buildIncidentApis, incidentStores } from './incident-children-apis.js';
+import { incidentHoldsVehicle } from './incident-workflow-apis.js';
 import type { IncidentServices } from './incident-apis.js';
 import type { PlatformKernel } from './kernel.js';
 import { buildMaintenanceApis } from './maintenance-apis.js';
@@ -19,9 +20,18 @@ export function buildDownstreamApis(
   files: WorkOrderFileSupport,
 ) {
   const defaults = withMaintenanceDefaults(adapters);
+  const stores = incidentStores(defaults);
   return {
     ...buildMaintenanceApis(kernel, defaults, services.vehicles, services.settings),
-    workOrders: buildWorkOrderApi(kernel, defaults, services.vehicles, services.settings, files),
-    ...buildIncidentApis(kernel, defaults, services, pii, files),
+    // Closing an order cannot return the vehicle to `active` while an open case holds it (D11).
+    workOrders: buildWorkOrderApi(
+      kernel,
+      defaults,
+      services.vehicles,
+      services.settings,
+      files,
+      (tenantId, vehicleId) => incidentHoldsVehicle(stores.store, tenantId, vehicleId, null),
+    ),
+    ...buildIncidentApis(kernel, defaults, services, pii, files, stores),
   };
 }
