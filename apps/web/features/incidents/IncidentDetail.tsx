@@ -83,6 +83,8 @@ export function IncidentDetail({ id, tab }: { id: string; tab?: string | undefin
     setStale(false);
     setNotice(message ?? null);
     incident.set(next);
+    // A command answers without the `sla` block of the read, so the case is read again to keep it current.
+    incident.reload();
   };
   const childChanged = (_version: number, message?: string) => {
     setNotice(message ?? null);
