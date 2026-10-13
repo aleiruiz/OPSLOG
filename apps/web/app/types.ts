@@ -1,3 +1,4 @@
+import type { IncidentPorts } from '../features/incidents/ports';
 import type { MaintenancePorts } from '../features/maintenance/ports';
 import type {
   AlertsClient,
@@ -379,5 +380,7 @@ export interface ApiPorts {
   readonly imports: ImportsPort;
   /** Maintenance plans, work orders, workshops and mechanics (MNT-PLANS/MNT-ORDERS routes). */
   readonly maintenance: MaintenancePorts;
+  /** Incident cases, their children and workflow (INC-CASES/INC-WORKFLOW routes). */
+  readonly incidents: IncidentPorts;
   readonly oidc: OidcPort;
 }

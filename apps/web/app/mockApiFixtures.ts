@@ -42,6 +42,12 @@ export const allPermissions: readonly Permission[] = [
   'reopen',
   'incidents:report',
   'incidents:approve',
+  'incidents:view',
+  'incidents:create',
+  'incidents:edit',
+  'incidents:close',
+  'incidents:reopen',
+  'incidents:view_costs',
 ];
 
 export const systemRoles: RoleSummary[] = [
@@ -63,7 +69,7 @@ export const systemRoles: RoleSummary[] = [
     id: 'role-dispatch',
     name: 'Despachador',
     kind: 'system',
-    permissions: ['view', 'create', 'edit', 'incidents:report'],
+    permissions: ['view', 'create', 'edit', 'incidents:view', 'incidents:report'],
     memberCount: 3,
   },
   {
@@ -77,7 +83,7 @@ export const systemRoles: RoleSummary[] = [
     id: 'role-mechanic',
     name: 'Mecánico',
     kind: 'system',
-    permissions: ['view', 'edit'],
+    permissions: ['view', 'edit', 'incidents:view'],
     memberCount: 4,
   },
   {

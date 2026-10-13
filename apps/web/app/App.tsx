@@ -40,6 +40,7 @@ import { VehicleCreateScreen, VehicleEditScreen } from '../vehicles/VehicleFormS
 import { VehiclesScreen } from '../vehicles/VehiclesScreen';
 import { AppShell } from './AppShell';
 import { HomeScreen } from './HomeScreen';
+import { IncidentsScreen } from '../features/incidents/IncidentsScreen';
 import { MaintenanceScreen } from '../features/maintenance/MaintenanceScreen';
 import { RouterProvider, useRouter } from './router';
 import { isAllowed, loginPath, resolveRoute } from './routes';
@@ -74,6 +75,7 @@ function navigationRoute(id: string | null): string | null {
   if (id === 'policyNew' || id === 'policyDetail' || id === 'policyEdit' || id === 'policyRenew')
     return 'policies';
   if (id === 'maintenanceOrder') return 'maintenance';
+  if (id === 'incidentNew' || id === 'incidentDetail' || id === 'incidentTab') return 'incidents';
   return id;
 }
 
@@ -273,6 +275,24 @@ function Routes() {
         break;
       case 'maintenanceOrder':
         screen = <MaintenanceScreen orderId={match.params.id as string} />;
+        break;
+      case 'incidents':
+        screen = <IncidentsScreen view="list" />;
+        break;
+      case 'incidentNew':
+        screen = <IncidentsScreen view="new" />;
+        break;
+      case 'incidentDetail':
+        screen = <IncidentsScreen view="detail" id={match.params.id as string} />;
+        break;
+      case 'incidentTab':
+        screen = (
+          <IncidentsScreen
+            view="detail"
+            id={match.params.id as string}
+            tab={match.params.tab as string}
+          />
+        );
         break;
       case 'invitation':
         screen = (

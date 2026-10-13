@@ -14,7 +14,13 @@ import { ShellNavigation } from './ShellNavigation';
 
 const { colors, layout } = opslogTokens;
 
-const navGroups: readonly NavGroup[] = ['Inicio', 'Plantilla', 'Flota', 'Configuración'];
+const navGroups: readonly NavGroup[] = [
+  'Inicio',
+  'Plantilla',
+  'Flota',
+  'Operación',
+  'Configuración',
+];
 
 /** Navigation entries the current permissions allow, grouped in the SPECS §8 order. */
 export function visibleNavigation(
