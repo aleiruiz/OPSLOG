@@ -147,7 +147,7 @@ test.describe('OPSLOG UI components in a real browser', () => {
 // One axe pass over all the stories grew past its 120 s budget under load, so the scan is split into
 // fixed groups of consecutive stories (each its own test, run in parallel) plus one test for the page
 // itself. Together they cover every story and every page-level rule the single pass covered.
-const STORY_COUNT = 359; // Foundations: StatusBadge, UiState, the base components and each feature's stories.
+const STORY_COUNT = 361; // Foundations: StatusBadge, UiState, the base components and each feature's stories.
 const STORY_GROUPS = 8;
 const STORIES_PER_GROUP = Math.ceil(STORY_COUNT / STORY_GROUPS);
 const WCAG = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
