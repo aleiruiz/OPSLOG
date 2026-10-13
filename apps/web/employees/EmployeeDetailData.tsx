@@ -4,7 +4,8 @@ import { StatusBadge } from '@opslog/ui';
 import { RouterLink } from '../app/router';
 import type { Area, Employee } from '../app/types';
 import { areaPath } from '../areas/AreaTreeView';
-import { Mono, Rows, linkSx } from './EmployeeDetailShared';
+import { linkSx } from '../app/router';
+import { Mono, Rows } from './EmployeeDetailShared';
 import {
   fitnessPresentation,
   formatDate,

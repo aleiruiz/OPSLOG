@@ -7,8 +7,6 @@ import { linkSx, RouterLink } from '../app/router';
 import type { Area } from '../app/types';
 import { areaPath, areasPath } from './AreaTreeView';
 
-export { linkSx };
-
 export function Mono({ children }: { children: React.ReactNode }) {
   return (
     <Typography component="span" sx={{ fontFamily: opslogTokens.typography.monoFamily }}>

@@ -98,17 +98,15 @@ export function AreaTreeView({
             return (
               <>
                 {data.truncated && (
-                  <Box>
-                    <Notifications
-                      messages={[
-                        {
-                          id: 'truncated',
-                          severity: 'warning',
-                          text: `Se muestran las primeras ${data.areas.length} áreas; la estructura puede estar incompleta.`,
-                        },
-                      ]}
-                    />
-                  </Box>
+                  <Notifications
+                    messages={[
+                      {
+                        id: 'truncated',
+                        severity: 'warning',
+                        text: `Se muestran las primeras ${data.areas.length} áreas; la estructura puede estar incompleta.`,
+                      },
+                    ]}
+                  />
                 )}
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
                   <Button variant="outlined" size="small" onClick={() => onExpandAll(branches)}>

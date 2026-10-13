@@ -1,9 +1,19 @@
+import ArrowBack from '@mui/icons-material/ArrowBack';
 import React from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import { Button, NextStepPanel, PageHeader, StatusBadge, Timeline, UiState } from '@opslog/ui';
+import {
+  Button,
+  DescriptionList,
+  NextStepPanel,
+  PageHeader,
+  Panel,
+  StatusBadge,
+  Timeline,
+  UiState,
+} from '@opslog/ui';
 import type {
   BffMaintenanceMechanic,
   BffMaintenanceWorkshop,
@@ -79,7 +89,12 @@ export function WorkOrderDetail({
   }, [state]);
 
   const back = (
-    <Button variant="text" onClick={onBack}>
+    <Button
+      variant="text"
+      onClick={onBack}
+      startIcon={<ArrowBack />}
+      sx={{ color: 'text.secondary', mb: 1.5, px: 0.5 }}
+    >
       Volver a órdenes
     </Button>
   );
@@ -138,20 +153,12 @@ export function WorkOrderDetail({
   };
   const commands = availableCommands(order, viewer);
   const viewCosts = order.costs !== undefined;
-  const detail = (label: string, value: string) => (
-    <Box component="div">
-      <Typography component="dt" variant="body2" color="text.secondary">
-        {label}
-      </Typography>
-      <Typography component="dd" sx={{ m: 0 }}>
-        {value}
-      </Typography>
-    </Box>
-  );
+  const detail = (label: string, value: string) => ({ label, value });
   return (
     <Box>
       {back}
       <PageHeader
+        eyebrow="Mantenimiento"
         title={order.description ?? `Orden ${KIND_LABELS[order.kind].toLowerCase()}`}
         description={`${KIND_LABELS[order.kind]} · ${vehicleLabel(directory, order.vehicleId)}`}
         actions={
@@ -190,56 +197,52 @@ export function WorkOrderDetail({
       )}
       <Stack direction={{ xs: 'column', md: 'row' }} gap={3} alignItems="flex-start">
         <Stack spacing={3} sx={{ flex: 1, minWidth: 0 }}>
-          <Box
-            component="dl"
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
-              gap: 2,
-              m: 0,
-            }}
-          >
-            {detail(
-              'Origen',
-              order.planId
-                ? `Plan preventivo de ${vehicleLabel(directory, order.vehicleId)}`
-                : 'Registro correctivo',
-            )}
-            {detail(
-              'Responsable',
-              order.responsibleId === null
-                ? 'Sin asignar'
-                : memberLabel(directory, order.responsibleId),
-            )}
-            {detail(
-              'Taller',
-              order.workshopId === null
-                ? 'Sin taller'
-                : (workshops.find((w) => w.id === order.workshopId)?.name ??
-                    'Taller no disponible'),
-            )}
-            {detail(
-              'Mecánico',
-              order.mechanicId === null
-                ? 'Sin mecánico'
-                : (mechanics.find((m) => m.id === order.mechanicId)?.name ??
-                    'Mecánico no disponible'),
-            )}
-            {detail('Fecha programada', formatDate(order.scheduledDate))}
-            {detail('Fecha real', formatDate(order.actualDate))}
-            {detail('Kilometraje del servicio', formatKm(order.actualKm))}
-            {order.vehicleStatusDecision &&
-              detail(
-                'Estado del vehículo al cerrar',
-                VEHICLE_STATUS_LABELS[
-                  order.vehicleStatusDecision as keyof typeof VEHICLE_STATUS_LABELS
-                ] ?? order.vehicleStatusDecision,
-              )}
-          </Box>
-          <Box component="section" aria-labelledby="mnt-work-title">
-            <Typography id="mnt-work-title" component="h2" variant="h6">
-              Trabajos y refacciones
-            </Typography>
+          <Panel title="Datos de la orden">
+            <DescriptionList
+              items={[
+                detail(
+                  'Origen',
+                  order.planId
+                    ? `Plan preventivo de ${vehicleLabel(directory, order.vehicleId)}`
+                    : 'Registro correctivo',
+                ),
+                detail(
+                  'Responsable',
+                  order.responsibleId === null
+                    ? 'Sin asignar'
+                    : memberLabel(directory, order.responsibleId),
+                ),
+                detail(
+                  'Taller',
+                  order.workshopId === null
+                    ? 'Sin taller'
+                    : (workshops.find((w) => w.id === order.workshopId)?.name ??
+                        'Taller no disponible'),
+                ),
+                detail(
+                  'Mecánico',
+                  order.mechanicId === null
+                    ? 'Sin mecánico'
+                    : (mechanics.find((m) => m.id === order.mechanicId)?.name ??
+                        'Mecánico no disponible'),
+                ),
+                detail('Fecha programada', formatDate(order.scheduledDate)),
+                detail('Fecha real', formatDate(order.actualDate)),
+                detail('Kilometraje del servicio', formatKm(order.actualKm)),
+                ...(order.vehicleStatusDecision
+                  ? [
+                      detail(
+                        'Estado del vehículo al cerrar',
+                        VEHICLE_STATUS_LABELS[
+                          order.vehicleStatusDecision as keyof typeof VEHICLE_STATUS_LABELS
+                        ] ?? order.vehicleStatusDecision,
+                      ),
+                    ]
+                  : []),
+              ]}
+            />
+          </Panel>
+          <Panel title="Trabajos y refacciones">
             {order.tasks.length === 0 ? (
               <Typography color="text.secondary">Aún no hay trabajos registrados.</Typography>
             ) : (
@@ -259,12 +262,9 @@ export function WorkOrderDetail({
                 ))}
               </ul>
             )}
-          </Box>
+          </Panel>
           {viewCosts && (
-            <Box component="section" aria-labelledby="mnt-costs-title">
-              <Typography id="mnt-costs-title" component="h2" variant="h6">
-                Costos
-              </Typography>
+            <Panel title="Costos">
               {order.costs?.length ? (
                 <ul>
                   {order.costs.map((cost) => (
@@ -276,7 +276,7 @@ export function WorkOrderDetail({
               ) : (
                 <Typography color="text.secondary">Sin costos registrados.</Typography>
               )}
-            </Box>
+            </Panel>
           )}
           <EvidencePanel
             ports={ports}
@@ -331,11 +331,10 @@ export function WorkOrderDetail({
               }
             />
           )}
-          <Box component="section" aria-labelledby="mnt-history-title">
-            <Typography id="mnt-history-title" component="h2" variant="h6">
-              Historial
-            </Typography>
-            {history.state.status === 'ready' ? (
+          <Panel title="Historial">
+            {history.state.status === 'ready' && history.state.data.length === 0 ? (
+              <Typography color="text.secondary">Aún no hay movimientos.</Typography>
+            ) : history.state.status === 'ready' ? (
               <Timeline
                 items={history.state.data.map((entry) => ({
                   id: String(entry.sequence),
@@ -351,7 +350,7 @@ export function WorkOrderDetail({
                   : 'No pudimos cargar el historial.'}
               </Typography>
             )}
-          </Box>
+          </Panel>
         </Stack>
         <Stack spacing={2} sx={{ width: { xs: '100%', md: 320 } }}>
           <NextStepPanel

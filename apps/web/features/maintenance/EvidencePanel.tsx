@@ -1,9 +1,10 @@
+import UploadFileOutlined from '@mui/icons-material/UploadFileOutlined';
 import React from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import { Button } from '@opslog/ui';
+import { Button, Panel } from '@opslog/ui';
 import type {
   BffWorkOrder,
   BffWorkOrderFile,
@@ -157,23 +158,43 @@ export function EvidencePanel({
           </ul>
         )}
         {allowed && (
-          <Box sx={{ mt: 1 }}>
-            <Typography
-              component="label"
-              htmlFor={`mnt-upload-${kind}`}
-              variant="body2"
-              sx={{ display: 'block' }}
-            >
-              {kind === 'evidence'
-                ? 'Subir evidencia (foto o PDF)'
-                : 'Subir factura (PDF o imagen)'}
-            </Typography>
-            <input
+          <Box
+            component="label"
+            htmlFor={`mnt-upload-${kind}`}
+            sx={{
+              position: 'relative',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 1,
+              px: 2,
+              py: 0.75,
+              border: 1,
+              borderColor: 'divider',
+              borderRadius: 1,
+              typography: 'button',
+              cursor: busy ? 'default' : 'pointer',
+              opacity: busy ? 0.6 : 1,
+              '&:hover': { borderColor: 'primary.main', color: 'primary.main' },
+              '&:focus-within': { outline: 2, outlineColor: 'primary.main', outlineOffset: 2 },
+            }}
+          >
+            <UploadFileOutlined aria-hidden="true" fontSize="small" />
+            {kind === 'evidence' ? 'Subir evidencia (foto o PDF)' : 'Subir factura (PDF o imagen)'}
+            <Box
+              component="input"
+              sx={{
+                position: 'absolute',
+                width: 1,
+                height: 1,
+                overflow: 'hidden',
+                clip: 'rect(0 0 0 0)',
+                whiteSpace: 'nowrap',
+              }}
               id={`mnt-upload-${kind}`}
               type="file"
               accept={ACCEPT}
               disabled={busy}
-              onChange={(event) => {
+              onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
                 const input = event.target;
                 void upload(kind, input.files?.[0]).finally(() => {
                   input.value = '';
@@ -186,10 +207,7 @@ export function EvidencePanel({
     );
   };
   return (
-    <Box component="section" aria-labelledby="mnt-evidence-title">
-      <Typography id="mnt-evidence-title" component="h2" variant="h6">
-        Evidencia y facturas
-      </Typography>
+    <Panel title="Evidencia y facturas">
       {problem && (
         <Alert severity="error" role="alert" sx={{ my: 1 }}>
           {problem}
@@ -198,10 +216,16 @@ export function EvidencePanel({
       {files.state.status === 'error' && (
         <Typography color="text.secondary">No pudimos cargar los archivos.</Typography>
       )}
-      <Stack spacing={2}>
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' },
+          gap: 3,
+        }}
+      >
         {section('evidence', canAttachEvidence(order, viewer))}
         {section('invoice', canAttachInvoice(order, viewer))}
-      </Stack>
-    </Box>
+      </Box>
+    </Panel>
   );
 }
