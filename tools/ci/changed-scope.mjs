@@ -41,9 +41,13 @@ export function scopeOf(files) {
 function changedFiles(base, head) {
   if (!base || !head || /^0+$/.test(base)) return null;
   try {
-    const out = execFileSync('git', ['diff', '--name-only', '--no-renames', base, head], {
-      encoding: 'utf8',
-    });
+    const out = execFileSync(
+      'git',
+      ['-c', 'core.quotePath=false', 'diff', '--name-only', '--no-renames', base, head],
+      {
+        encoding: 'utf8',
+      },
+    );
     return out.split('\n').filter(Boolean);
   } catch {
     return null;
