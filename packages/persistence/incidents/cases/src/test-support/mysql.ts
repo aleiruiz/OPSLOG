@@ -12,6 +12,7 @@ import {
   runIncidentMigrations,
 } from '../data-source.js';
 import { INCIDENT_TABLES } from '../entities.js';
+import { INCIDENT_CHILD_TABLES } from '../../../third-parties/src/index.js';
 
 export const adminUrl = process.env.OPSLOG_TEST_MYSQL_ADMIN_URL;
 if (!adminUrl && process.env.CI)
@@ -42,6 +43,8 @@ export const INCIDENT_GRANTS: readonly { table: string; privileges: string }[] =
   { table: INCIDENT_TABLES.folios, privileges: 'SELECT, INSERT, UPDATE' },
   { table: INCIDENT_TABLES.transitions, privileges: 'SELECT, INSERT' },
   { table: INCIDENT_TABLES.idempotency, privileges: 'SELECT, INSERT, DELETE' },
+  { table: INCIDENT_CHILD_TABLES.thirdParties, privileges: 'SELECT, INSERT, UPDATE' },
+  { table: INCIDENT_CHILD_TABLES.evidence, privileges: 'SELECT, INSERT, DELETE' },
   { table: AUDIT_TABLES.outbox, privileges: 'SELECT' },
 ];
 

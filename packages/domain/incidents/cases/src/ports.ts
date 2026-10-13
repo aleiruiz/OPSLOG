@@ -3,6 +3,7 @@ import type { IdempotencyRecord } from './idempotency.js';
 import type {
   Incident,
   IncidentApplyResult,
+  IncidentExtraWrite,
   IncidentListQuery,
   IncidentMutation,
   IncidentPage,
@@ -13,8 +14,9 @@ export interface IncidentStore {
   /**
    * Applies the mutation atomically (incident, timeline, audit, outbox, folio, idempotency key).
    * Returns `applied: false` on a stale version or a taken idempotency key; nothing is written then.
+   * An `extra` write of another package joins the same transaction.
    */
-  apply(mutation: IncidentMutation): Promise<IncidentApplyResult>;
+  apply(mutation: IncidentMutation, extra?: IncidentExtraWrite): Promise<IncidentApplyResult>;
   get(tenantId: string, id: string): Promise<Incident | null>;
   list(tenantId: string, query: IncidentListQuery): Promise<IncidentPage>;
   /** Oldest first. */
