@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { DataSource, type DataSourceOptions } from 'typeorm';
 import { SETTINGS_ENTITIES } from './entities.js';
 import {
+  AddIncidentCompanySettings2026101500030,
   AddMaintenanceCompanySettings2026101300010,
   CreateCompanySettings2026100600090,
   SETTINGS_MIGRATIONS_TABLE,
@@ -28,7 +29,11 @@ export const SETTINGS_RUNTIME_ACCOUNT = /^opslog_settings_[a-z0-9_]+$/i;
 const common = {
   type: 'mysql',
   entities: [...SETTINGS_ENTITIES, ...AUDIT_ENTITIES],
-  migrations: [CreateCompanySettings2026100600090, AddMaintenanceCompanySettings2026101300010],
+  migrations: [
+    CreateCompanySettings2026100600090,
+    AddMaintenanceCompanySettings2026101300010,
+    AddIncidentCompanySettings2026101500030,
+  ],
   migrationsTableName: SETTINGS_MIGRATIONS_TABLE,
   synchronize: false,
   migrationsRun: false,

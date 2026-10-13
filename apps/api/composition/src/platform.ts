@@ -56,6 +56,7 @@ import type { MaintenanceApi } from '../../maintenance/plans/src/index.js';
 import type { WorkOrderApi } from '../../maintenance/orders/src/index.js';
 import type { IncidentApi } from '../../incidents/cases/src/index.js';
 import type { IncidentChildApi } from '../../incidents/third-parties/src/index.js';
+import type { IncidentWorkflowApi } from '../../incidents/workflow/src/index.js';
 import { buildDomainApis } from './platform/apis.js';
 import { acceptInvitation, inspectInvitation, inviteUser } from './platform/invitations.js';
 import { PlatformError, failure, success, type PlatformResponse } from './platform/errors.js';
@@ -120,6 +121,7 @@ export class Platform {
   public readonly workOrders: WorkOrderApi;
   public readonly incidents: IncidentApi;
   public readonly incidentChildren: IncidentChildApi;
+  public readonly incidentWorkflow: IncidentWorkflowApi;
   public readonly access: AccessDirectory;
   public readonly tenants: InMemoryTenantStore;
   public readonly audit: AuditStore;
@@ -244,6 +246,7 @@ export class Platform {
     this.workOrders = apis.workOrders;
     this.incidents = apis.incidents;
     this.incidentChildren = apis.incidentChildren;
+    this.incidentWorkflow = apis.incidentWorkflow;
     this.runtime = buildWorkerRuntime(
       this.kernel,
       this.pipeline,

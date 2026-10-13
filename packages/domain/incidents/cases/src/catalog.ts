@@ -16,6 +16,28 @@ export type IncidentStatus = (typeof INCIDENT_STATUSES)[number];
 /** Closed and cancelled cases accept no write of any package. */
 export const TERMINAL_STATUSES: readonly IncidentStatus[] = ['closed', 'cancelled'];
 
+/**
+ * State commands of SPECS §6.2, the only ways to change `status` (`POST /incidents/:id/transitions`).
+ * The model names them so the case view can list the ones a caller may run; INC-WORKFLOW gives them behavior.
+ */
+export const INCIDENT_COMMANDS = [
+  'report',
+  'assign',
+  'review',
+  'insure',
+  'no_insurance',
+  'reject',
+  'appeal',
+  'approve_assumption',
+  'repair',
+  'resolve',
+  'approve_close',
+  'close',
+  'reopen',
+  'cancel',
+] as const;
+export type IncidentCommand = (typeof INCIDENT_COMMANDS)[number];
+
 export const INCIDENT_SEVERITIES = ['low', 'medium', 'high', 'critical'] as const;
 export type IncidentSeverity = (typeof INCIDENT_SEVERITIES)[number];
 

@@ -336,6 +336,7 @@ describe('alert settings over HTTP', () => {
       recipientRoles: [...DEFAULT_RECIPIENT_ROLES],
       maintenanceEvidence: 'none',
       closeCostThreshold: null,
+      incidentReportPhoto: 'photo_or_justification',
       timeZone: 'UTC',
       version: 0,
       updatedBy: null,

@@ -6,7 +6,9 @@ export type IncidentErrorCode =
   | 'invalid_transition'
   | 'rule_violation'
   | 'duplicate'
-  | 'idempotency_conflict';
+  | 'idempotency_conflict'
+  | 'idempotency_key_required'
+  | 'missing_requirements';
 
 export type FieldIssueCode = 'required' | 'invalid' | 'unknown_property' | 'conflict';
 
@@ -23,6 +25,8 @@ export class IncidentError extends Error {
     public readonly fieldErrors: readonly FieldIssue[] = [],
     /** Stable id of the broken business rule of a 422 (for example `occurred_at_in_future`). */
     public readonly rule: string | null = null,
+    /** Stable ids of every unmet requirement of a 422 `missing_requirements` (SPECS §6). */
+    public readonly missingRequirements: readonly string[] = [],
   ) {
     super(`Incident request rejected: ${code}`);
     this.name = 'IncidentError';
@@ -33,4 +37,5 @@ export const RULES = {
   occurredAtInFuture: 'occurred_at_in_future',
   occurredBeforeRegistration: 'occurred_before_vehicle_registration',
   policyNotCovering: 'policy_not_covering_event_day',
+  responsibleNotEligible: 'responsible_not_eligible',
 } as const;

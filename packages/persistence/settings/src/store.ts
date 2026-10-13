@@ -3,6 +3,7 @@ import type { DataSource } from 'typeorm';
 import { appendLocalAuditAndDelivery, type AuditEvent } from '../../audit/src/index.js';
 import {
   isAlertRecipientRole,
+  isIncidentReportPhoto,
   isMaintenanceEvidenceRequirement,
   isValidTimeZone,
   normalizeRoles,
@@ -59,6 +60,9 @@ const toSettings = (row: SettingsEntity): CompanySettings => ({
     : integrity(),
   closeCostThreshold: thresholdOf(row),
   timeZone: isValidTimeZone(row.timeZone) ? row.timeZone : integrity(),
+  incidentReportPhoto: isIncidentReportPhoto(row.incidentReportPhoto)
+    ? row.incidentReportPhoto
+    : integrity(),
   version: row.version,
   updatedBy: row.updatedBy,
   updatedAt: row.updatedAt.toISOString(),
@@ -72,6 +76,7 @@ const mutableColumns = (settings: CompanySettings) => ({
   closeThresholdMinor: settings.closeCostThreshold?.amountMinor ?? null,
   closeThresholdCurrency: settings.closeCostThreshold?.currency ?? null,
   timeZone: settings.timeZone,
+  incidentReportPhoto: settings.incidentReportPhoto,
   version: settings.version,
   updatedBy: settings.updatedBy as string,
   updatedAt: new Date(settings.updatedAt as string),

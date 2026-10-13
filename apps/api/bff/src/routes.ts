@@ -15,6 +15,7 @@ import { MAINTENANCE_ALERT_ROUTES } from './routes/maintenance-alerts.js';
 import { WORK_ORDER_ROUTES } from './routes/work-orders.js';
 import { INCIDENT_ROUTES } from './routes/incidents.js';
 import { INCIDENT_CHILD_ROUTES } from './routes/incident-children.js';
+import { INCIDENT_WORKFLOW_ROUTES } from './routes/incident-workflow.js';
 
 export type { Route, RouteContext, RouteKind } from './routes/shared.js';
 
@@ -35,4 +36,5 @@ export const ROUTES: readonly Route[] = [
   ...WORK_ORDER_ROUTES,
   ...INCIDENT_ROUTES,
   ...INCIDENT_CHILD_ROUTES,
+  ...INCIDENT_WORKFLOW_ROUTES,
 ];

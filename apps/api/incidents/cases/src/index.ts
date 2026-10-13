@@ -15,6 +15,7 @@ import { namesFor, toSuggestions, toTimeline, toView, type Names } from './view.
 
 export type * from './types.js';
 export { fail, runSession, type SessionDeps } from './session.js';
+export { namesFor, toView, type Names } from './view.js';
 
 /** Incident endpoints. Tenant, actor, grants and mechanic scope come only from the session. */
 export class IncidentApi {
@@ -31,6 +32,10 @@ export class IncidentApi {
     );
   }
 
+  private view(incident: Incident, actor: IncidentActor, names: Names): Promise<IncidentView> {
+    return toView(incident, actor, names, this.deps.allowedCommands?.(incident, actor));
+  }
+
   private one(
     token: string,
     correlationId: string,
@@ -38,7 +43,7 @@ export class IncidentApi {
     work: (tenantId: string, actor: IncidentActor) => Promise<Incident>,
   ): Promise<IncidentApiResponse<IncidentView>> {
     return this.run(token, correlationId, entityId, async (tenantId, actor, names) =>
-      toView(await work(tenantId, actor), actor, names),
+      this.view(await work(tenantId, actor), actor, names),
     );
   }
 
@@ -50,7 +55,11 @@ export class IncidentApi {
     return this.run(token, correlationId, 'list', async (tenantId, actor, names) => {
       const page = await this.deps.incidents.list(tenantId, actor, query);
       return {
-        items: await Promise.all(page.items.map((incident) => toView(incident, actor, names))),
+        items: await Promise.all(
+          page.items.map((incident) =>
+            toView(incident, actor, names, this.deps.allowedCommands?.(incident, actor)),
+          ),
+        ),
         total: page.total,
         tenantId,
       };

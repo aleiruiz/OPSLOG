@@ -5,8 +5,12 @@ import type {
 import type {
   CoverageStatus,
   DamageZone,
+  IncidentCommand,
+  InsurerResult,
   DriverSuggestion,
   FieldIssue,
+  Incident,
+  IncidentActor,
   IncidentService,
   IncidentSeverity,
   IncidentStatus,
@@ -27,6 +31,8 @@ export type IncidentApiErrorCode =
   | 'rule_violation'
   | 'duplicate'
   | 'idempotency_conflict'
+  | 'idempotency_key_required'
+  | 'missing_requirements'
   | 'internal_error';
 
 export interface IncidentApiResponse<T> {
@@ -40,6 +46,8 @@ export interface IncidentApiResponse<T> {
     readonly fieldErrors?: readonly FieldIssue[];
     /** Stable id of the broken business rule of a 422. */
     readonly rule?: string;
+    /** Stable ids of every unmet requirement of a 422 `missing_requirements`. */
+    readonly missingRequirements?: readonly string[];
   };
 }
 
@@ -49,6 +57,36 @@ export interface PersonRef {
   readonly displayName: string;
 }
 export type CoverageAlert = 'no_policy_on_event_day' | 'several_policies';
+/** A D20 approval: who gave it (with the name the screens show) and when. */
+export interface ApprovalView {
+  readonly by: PersonRef;
+  readonly at: string;
+}
+/** Process data of the insurer (INC-WORKFLOW). Visible with `incidents:view`; no amounts. */
+export interface IncidentInsuranceView {
+  readonly insurerName: string | null;
+  readonly claimNumber: string | null;
+  readonly adjusterName: string | null;
+  readonly adjusterContact: string | null;
+  readonly insurerReportedOn: string | null;
+  readonly insurerResult: InsurerResult | null;
+  readonly rejectionReason: string | null;
+  readonly appealNote: string | null;
+  readonly noInsuranceReason: string | null;
+  readonly costAssumed: boolean | null;
+  readonly assumptionApproval: ApprovalView | null;
+}
+export interface IncidentResolutionView {
+  readonly resolutionSummary: string | null;
+  readonly totalLoss: boolean | null;
+  /** Recorded, never applied by the case: changing the vehicle is an explicit vehicle command (D11). */
+  readonly vehicleStatusDecision: string | null;
+  readonly resolvedAt: string | null;
+  readonly closeApproval: ApprovalView | null;
+  readonly closedAt: string | null;
+  readonly closedBy: PersonRef | null;
+  readonly cancelReason: string | null;
+}
 
 export interface IncidentView {
   readonly id: string;
@@ -83,9 +121,8 @@ export interface IncidentView {
     readonly alert: CoverageAlert | null;
   };
   readonly vehicleProposal: VehicleProposal | null;
-  /** Insurer data and resolution belong to INC-WORKFLOW; `null` until then. */
-  readonly insurance: null;
-  readonly resolution: null;
+  readonly insurance: IncidentInsuranceView;
+  readonly resolution: IncidentResolutionView;
   readonly reportedAt: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -93,6 +130,8 @@ export interface IncidentView {
   readonly responsible: PersonRef | null;
   readonly reportedBy: PersonRef | null;
   readonly editableFields: readonly WritableKey[];
+  /** State commands the caller's permission and the current state allow now (not their requirements). */
+  readonly allowedCommands: readonly IncidentCommand[];
 }
 export interface IncidentTimelineEntry {
   readonly sequence: number;
@@ -134,6 +173,11 @@ export interface IncidentApiDeps {
     token: string,
     correlationId: string,
   ) => Promise<{ readonly context: TenantContext; readonly permissions: readonly Permission[] }>;
+  /** The state commands a caller may run on a case now; INC-WORKFLOW supplies it (empty when absent). */
+  readonly allowedCommands?: (
+    incident: Incident,
+    actor: IncidentActor,
+  ) => readonly IncidentCommand[];
   /** Whether the member has any mechanic record, active or not (stable source of D9 scope). */
   readonly mechanicLinked: (tenantId: string, memberId: string) => Promise<boolean>;
   readonly labels: IncidentLabels;

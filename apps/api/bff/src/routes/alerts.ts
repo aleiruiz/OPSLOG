@@ -106,6 +106,7 @@ export const ALERT_ROUTES: readonly Route[] = [
         'maintenanceEvidence',
         'closeCostThreshold',
         'timeZone',
+        'incidentReportPhoto',
       ],
       ['version', 'expiryWindowDays', 'recipientRoles'],
     );

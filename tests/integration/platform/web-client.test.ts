@@ -705,6 +705,42 @@ describe('typed client against the real BFF', () => {
       }),
     ).toMatchObject({ ok: true, value: { version: 7 } });
 
+    // The workflow of the case: next steps, a transition that lacks data and the process data.
+    const flow = { incidentId: incident.value.id };
+    expect(await client.call('incidents.nextSteps', { params: flow })).toMatchObject({
+      ok: true,
+      value: {
+        items: [
+          expect.objectContaining({ command: 'report' }),
+          expect.objectContaining({ command: 'cancel' }),
+        ],
+      },
+    });
+    expect(
+      await client.call('incidents.transition', {
+        params: flow,
+        body: { command: 'report', version: 7 },
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: {
+        code: 'missing_requirements',
+        missingRequirements: expect.arrayContaining(['location']),
+      },
+    });
+    expect(
+      await client.call('incidents.insurance.update', {
+        params: flow,
+        body: { version: 7, claimNumber: 'REP-1' },
+      }),
+    ).toMatchObject({ ok: false, error: { code: 'invalid_transition' } });
+    expect(
+      await client.call('incidents.resolution.update', {
+        params: flow,
+        body: { version: 7, resolutionSummary: 'Resuelto' },
+      }),
+    ).toMatchObject({ ok: false, error: { code: 'invalid_transition' } });
+
     // Insurance policies through the typed client.
     const insurance = createInsuranceClient(client);
     const policy = await insurance.create({
@@ -941,6 +977,7 @@ describe('typed client against the real BFF', () => {
         recipientRoles: ['admin', 'editor'],
         maintenanceEvidence: 'none',
         closeCostThreshold: null,
+        incidentReportPhoto: 'photo_or_justification',
         timeZone: 'UTC',
         version: 0,
         updatedBy: null,

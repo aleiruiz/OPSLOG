@@ -16,7 +16,9 @@ import {
   VehicleError,
   type VehicleService,
 } from '../../../../../packages/domain/vehicles/src/index.js';
-import { IncidentApi } from '../../../incidents/cases/src/index.js';
+import { allowedCommands } from '../../../../../packages/domain/incidents/workflow/src/index.js';
+import { IncidentApi, type IncidentLabels } from '../../../incidents/cases/src/index.js';
+import type { IncidentWorkflowApi } from '../../../incidents/workflow/src/index.js';
 import type { IncidentChildApi } from '../../../incidents/third-parties/src/index.js';
 import { ROLE_LABELS } from '../directory.js';
 import type { PlatformKernel } from './kernel.js';
@@ -44,6 +46,7 @@ async function allRows<T>(
 export interface IncidentDomainApis {
   readonly incidents: IncidentApi;
   readonly incidentChildren: IncidentChildApi;
+  readonly incidentWorkflow: IncidentWorkflowApi;
 }
 
 export interface IncidentServices {
@@ -128,6 +131,25 @@ export function incidentReferences(services: IncidentServices): IncidentReferenc
   };
 }
 
+/** The names the incident views show: vehicle, driver and member (a member shows as their role). */
+export function incidentLabels(kernel: PlatformKernel, services: IncidentServices): IncidentLabels {
+  return {
+    vehicle: async (tenantId, vehicleId) => {
+      const found = await findVehicle(services, tenantId, vehicleId);
+      return found ? { economicNumber: found.economicNumber, plate: found.plate } : null;
+    },
+    driver: async (tenantId, employeeId) => {
+      const found = await findEmployee(services, tenantId, employeeId);
+      return found ? `${found.firstName} ${found.lastName}`.trim() : null;
+    },
+    // The identity contract carries no names yet: a member shows as their role.
+    member: async (tenantId, actorId) => {
+      const role = await kernel.access.effectiveRole(tenantId, actorId.replace(/^user-/, ''));
+      return role ? ROLE_LABELS[role] : UNKNOWN_MEMBER_LABEL;
+    },
+  };
+}
+
 /** Incidents (INC-CASES): the service over the store, the ports above and the session-bound API. */
 export function buildIncidentApi(
   kernel: PlatformKernel,
@@ -143,21 +165,8 @@ export function buildIncidentApi(
       return { context, permissions: await kernel.access.resolvePermissions(context) };
     },
     mechanicLinked: scope.mechanicLinked,
-    labels: {
-      vehicle: async (tenantId, vehicleId) => {
-        const found = await findVehicle(services, tenantId, vehicleId);
-        return found ? { economicNumber: found.economicNumber, plate: found.plate } : null;
-      },
-      driver: async (tenantId, employeeId) => {
-        const found = await findEmployee(services, tenantId, employeeId);
-        return found ? `${found.firstName} ${found.lastName}`.trim() : null;
-      },
-      // The identity contract carries no names yet: a member shows as their role.
-      member: async (tenantId, actorId) => {
-        const role = await kernel.access.effectiveRole(tenantId, actorId.replace(/^user-/, ''));
-        return role ? ROLE_LABELS[role] : UNKNOWN_MEMBER_LABEL;
-      },
-    },
+    labels: incidentLabels(kernel, services),
+    allowedCommands,
     // A refused access is audited like any other denied attempt; the audit trail has no payload.
     deny: (context, action, entityId, correlationId) =>
       kernel.auditNow(kernel.userActor(context), action, 'incident', entityId, correlationId),

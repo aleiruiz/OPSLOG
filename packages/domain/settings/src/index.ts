@@ -42,6 +42,15 @@ export const isMaintenanceEvidenceRequirement = (
   typeof value === 'string' &&
   (MAINTENANCE_EVIDENCE_REQUIREMENTS as readonly string[]).includes(value);
 
+/**
+ * Photo evidence to report an incident (INC-WORKFLOW, SPECS §6.2): a clean photo or a written
+ * justification (default), or a clean photo only.
+ */
+export const INCIDENT_REPORT_PHOTO_MODES = ['photo_or_justification', 'photo_required'] as const;
+export type IncidentReportPhoto = (typeof INCIDENT_REPORT_PHOTO_MODES)[number];
+export const isIncidentReportPhoto = (value: unknown): value is IncidentReportPhoto =>
+  typeof value === 'string' && (INCIDENT_REPORT_PHOTO_MODES as readonly string[]).includes(value);
+
 /** SPECS D20 costly-closure threshold: exact minor units plus ISO 4217 code. Never defaulted. */
 export interface CloseCostThreshold {
   readonly amountMinor: string;
@@ -83,6 +92,8 @@ export interface CompanySettings {
   readonly closeCostThreshold: CloseCostThreshold | null;
   /** IANA zone of the tenant: calendar days (due dates, service dates) are computed in it. */
   readonly timeZone: string;
+  /** Photo evidence that reporting an incident requires. */
+  readonly incidentReportPhoto: IncidentReportPhoto;
   /** Optimistic concurrency token: 0 while the company has never saved, then 1, +1 on every change. */
   readonly version: number;
   /** `user-<subject>` of the last writer; `null` for the defaults. */
@@ -113,6 +124,7 @@ export function defaultSettings(tenantId: string): CompanySettings {
     maintenanceEvidence: 'none',
     closeCostThreshold: null,
     timeZone: DEFAULT_TIME_ZONE,
+    incidentReportPhoto: 'photo_or_justification',
     version: 0,
     updatedBy: null,
     updatedAt: null,
@@ -125,6 +137,7 @@ export const OPTIONAL_SETTINGS_FIELDS = [
   'maintenanceEvidence',
   'closeCostThreshold',
   'timeZone',
+  'incidentReportPhoto',
 ] as const;
 
 export interface SettingsData {
@@ -134,6 +147,7 @@ export interface SettingsData {
   /** `null` clears the threshold; omitted keeps it. */
   readonly closeCostThreshold?: CloseCostThreshold | null;
   readonly timeZone?: string;
+  readonly incidentReportPhoto?: IncidentReportPhoto;
 }
 
 function parseThreshold(value: unknown): CloseCostThreshold | null {
@@ -188,6 +202,8 @@ export function parseSettings(input: unknown): SettingsData {
   const zone = fields['timeZone'];
   if (evidence !== undefined && !isMaintenanceEvidenceRequirement(evidence)) return invalid();
   if (zone !== undefined && !isValidTimeZone(zone)) return invalid();
+  const photo = fields['incidentReportPhoto'];
+  if (photo !== undefined && !isIncidentReportPhoto(photo)) return invalid();
   return {
     expiryWindowDays: days,
     recipientRoles: normalizeRoles(roles),
@@ -196,6 +212,7 @@ export function parseSettings(input: unknown): SettingsData {
       ? {}
       : { closeCostThreshold: parseThreshold(fields['closeCostThreshold']) }),
     ...(zone === undefined ? {} : { timeZone: zone }),
+    ...(photo === undefined ? {} : { incidentReportPhoto: photo }),
   };
 }
 
@@ -303,6 +320,7 @@ export class SettingsService {
           ? current.closeCostThreshold
           : data.closeCostThreshold,
       timeZone: data.timeZone ?? current.timeZone,
+      incidentReportPhoto: data.incidentReportPhoto ?? current.incidentReportPhoto,
       version: version + 1,
       updatedBy: actorId,
       updatedAt: now.toISOString(),

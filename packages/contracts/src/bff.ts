@@ -24,6 +24,8 @@ import type { IncidentRouteTypes } from './bff/incidents.js';
 import { INCIDENT_ROUTES } from './bff/incidents.js';
 import type { IncidentChildRouteTypes } from './bff/incident-children.js';
 import { INCIDENT_CHILD_ROUTES } from './bff/incident-children.js';
+import type { IncidentWorkflowRouteTypes } from './bff/incident-workflow.js';
+import { INCIDENT_WORKFLOW_ROUTES } from './bff/incident-workflow.js';
 import type { BffRouteDefinition } from './bff/shared.js';
 
 /**
@@ -160,6 +162,7 @@ export {
   BFF_ALERT_SEVERITIES,
   BFF_ALERT_RECIPIENT_ROLES,
   BFF_MAINTENANCE_EVIDENCE_REQUIREMENTS,
+  BFF_INCIDENT_REPORT_PHOTO_MODES,
 } from './bff/alerts.js';
 export type {
   BffAlertSource,
@@ -172,6 +175,7 @@ export type {
   BffAlertSettingsInput,
   BffMaintenanceEvidenceRequirement,
   BffCloseCostThreshold,
+  BffIncidentReportPhoto,
 } from './bff/alerts.js';
 export { BFF_AREA_ACTIONS, BFF_AREA_FIELDS } from './bff/areas.js';
 export type {
@@ -245,6 +249,13 @@ export type {
   BffIncidentTimelineEntry,
   BffIncidentSuggestions,
 } from './bff/incidents.js';
+export { BFF_INCIDENT_IDEMPOTENCY_REQUIRED_COMMANDS } from './bff/incident-workflow.js';
+export type {
+  BffIncidentTransitionInput,
+  BffIncidentNextStep,
+  BffIncidentInsuranceInput,
+  BffIncidentResolutionInput,
+} from './bff/incident-workflow.js';
 export {
   BFF_THIRD_PARTY_KINDS,
   BFF_EVIDENCE_CATEGORIES,
@@ -289,7 +300,8 @@ export interface BffRouteTypes
     MaintenanceRouteTypes,
     WorkOrderRouteTypes,
     IncidentRouteTypes,
-    IncidentChildRouteTypes {}
+    IncidentChildRouteTypes,
+    IncidentWorkflowRouteTypes {}
 
 export type BffRouteId = keyof BffRouteTypes;
 
@@ -307,6 +319,7 @@ export const BFF_ROUTES = {
   ...WORK_ORDER_ROUTES,
   ...INCIDENT_ROUTES,
   ...INCIDENT_CHILD_ROUTES,
+  ...INCIDENT_WORKFLOW_ROUTES,
 } as const satisfies Record<BffRouteId, BffRouteDefinition>;
 
 type Parts<K extends BffRouteId> = Omit<BffRouteTypes[K], 'response'>;
