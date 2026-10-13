@@ -30,7 +30,13 @@ export type RepairsSnapshot =
   | { readonly available: true; readonly orders: readonly LinkedRepairOrder[] }
   | { readonly available: false };
 export interface IncidentRepairs {
-  linkedOrders(tenantId: string, incidentId: string): Promise<RepairsSnapshot>;
+  /**
+   * `tx` joins the transaction of the command that decides on the orders (the store's, or nothing in
+   * memory). A real implementation must THROW when the links or an order cannot be read: answering
+   * `available: false` is only for the fail-closed variant, because `requirements.ts` treats an
+   * unavailable snapshot as "no linked orders" on routes that never went through `repair`.
+   */
+  linkedOrders(tenantId: string, incidentId: string, tx?: unknown): Promise<RepairsSnapshot>;
 }
 
 export type CostPresence =

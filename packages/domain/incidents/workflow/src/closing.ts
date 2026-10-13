@@ -7,7 +7,7 @@ import {
 } from '../../cases/src/index.js';
 import type { IncidentClosure } from './closures.js';
 import { approvalNeeded } from './facts.js';
-import type { WorkflowPorts } from './ports.js';
+import type { LinkedRepairOrder, WorkflowPorts } from './ports.js';
 import { activeOrders, type Facts } from './requirements.js';
 
 /** The snapshot of the cycle that is closing, from the case as it stands and the facts read for the command. */
@@ -55,16 +55,26 @@ export function inTransaction(
   closure: IncidentClosure | null,
 ): IncidentExtraWrite | undefined {
   const { tenantId, id } = incident;
-  const guard = async (tx: unknown): Promise<void> => {
+  /** The orders as the transaction sees them: what `repair_orders_closed` and the snapshot rest on. */
+  const guard = async (tx: unknown): Promise<readonly LinkedRepairOrder[] | null> => {
     if (command === 'approve_assumption' || command === 'approve_close') {
       if ((await ports.settings.closeCostThreshold(tenantId)) === null)
         throw missing('d20_configured');
-      return;
+      return null;
     }
     if (command === 'close') {
       if ((await approvalNeeded(ports, tenantId, id, tx)) && incident.closeApproval === null)
         throw missing('close_approval');
-      return;
+      // The orders read before the transaction may have moved: judge and snapshot the ones it sees.
+      const fresh = await ports.repairs.linkedOrders(tenantId, id, tx);
+      if (!fresh.available) {
+        if (closure?.resolvedFrom === 'repair') throw missing('repair_orders_closed');
+        return null;
+      }
+      const active = activeOrders(fresh);
+      if (!active.every((order) => order.status === 'closed'))
+        throw missing('repair_orders_closed');
+      return active;
     }
     // `repair` and `resolve` out of a rejection rest on the assumption approval.
     if (
@@ -74,6 +84,7 @@ export function inTransaction(
       (await approvalNeeded(ports, tenantId, id, tx))
     )
       throw missing('assumption_approval');
+    return null;
   };
   const relevant =
     command === 'approve_assumption' ||
@@ -83,11 +94,22 @@ export function inTransaction(
   if (!relevant) return undefined;
   return {
     run: async (tx) => {
-      await guard(tx);
+      const orders = await guard(tx);
       if (!closure) return true;
       // Snapshot of the costs first: the closure row is the last thing written.
-      await ports.closureCosts.snapshot({ tenantId, incidentId: id, cycle: closure.cycle }, tx);
-      return ports.closures.record(closure, tx);
+      await ports.closureCosts.snapshot(
+        { tenantId, incidentId: id, cycle: closure.cycle, closedAt: closure.closedAt },
+        tx,
+      );
+      return ports.closures.record(
+        orders
+          ? {
+              ...closure,
+              orders: orders.map(({ orderId, version, status }) => ({ orderId, version, status })),
+            }
+          : closure,
+        tx,
+      );
     },
   };
 }

@@ -48,6 +48,8 @@ export interface ClosureCostsRequest {
   readonly tenantId: string;
   readonly incidentId: string;
   readonly cycle: number;
+  /** The instant of the closure, so the cost snapshot and the closure row carry the same one. */
+  readonly closedAt: string;
 }
 /**
  * INC-COSTS keeps the consolidated costs of the cycle here, in the transaction of the closure, so a

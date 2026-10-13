@@ -4,7 +4,10 @@ import {
   INCIDENT_ASSIGNED_EVENT,
   INCIDENT_CANCELLED_EVENT,
   INCIDENT_CLOSED_EVENT,
+  INCIDENT_COSTS_CHANGED_EVENT,
   INCIDENT_CREATED_EVENT,
+  INCIDENT_REPAIR_LINKED_EVENT,
+  INCIDENT_REPAIR_UNLINKED_EVENT,
   INCIDENT_REOPENED_EVENT,
   INCIDENT_STATUS_CHANGED_EVENT,
   INCIDENT_UPDATED_EVENT,
@@ -30,6 +33,9 @@ const SCHEMAS: Readonly<Record<string, Readonly<Record<string, (value: unknown) 
   [INCIDENT_CANCELLED_EVENT]: { incidentId: id, version: count },
   [INCIDENT_CLOSED_EVENT]: { incidentId: id, vehicleId: id, version: count },
   [INCIDENT_REOPENED_EVENT]: { incidentId: id, version: count, cycle: count },
+  [INCIDENT_COSTS_CHANGED_EVENT]: { incidentId: id, version: count },
+  [INCIDENT_REPAIR_LINKED_EVENT]: { incidentId: id, orderId: id, version: count },
+  [INCIDENT_REPAIR_UNLINKED_EVENT]: { incidentId: id, orderId: id, version: count },
 };
 
 export function validateIncidentEvent(event: IncidentEvent): IncidentEvent {

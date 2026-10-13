@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { IncidentError, type Incident } from '../../cases/src/index.js';
 import { allowedCommands, mayRun } from './access.js';
 import { approvalRequired } from './d20.js';
+import type { LinkedRepairOrder } from './ports.js';
 import {
   ADMIN,
   FLEET_EDITOR,
@@ -306,7 +307,12 @@ describe('close with snapshot (cases 9, 11 and 16)', () => {
       },
     ]);
     expect(world.closureCosts.taken).toEqual([
-      { tenantId: TENANT_A, incidentId: incident.id, cycle: 1 },
+      {
+        tenantId: TENANT_A,
+        incidentId: incident.id,
+        cycle: 1,
+        closedAt: '2026-10-13T18:00:00.000Z',
+      },
     ]);
     const events = world.store.events.filter((entry) => entry.event.type === 'incident.closed');
     expect(events.map((entry) => entry.event.payload)).toEqual([
@@ -319,6 +325,55 @@ describe('close with snapshot (cases 9, 11 and 16)', () => {
       comment: 'Cierre',
     });
     expect(world.store.audit.at(-1)?.action).toBe('incident.close');
+  });
+
+  it('re-reads the linked orders inside the transaction: a reopened order aborts, the snapshot keeps the fresh ones', async () => {
+    const world = setup();
+    const incident = await resolved(world, { insurerResult: 'accepted' });
+    const closedOrder: LinkedRepairOrder = {
+      orderId: 'o1',
+      status: 'closed',
+      version: 4,
+      hasCosts: true,
+    };
+    const reads: unknown[] = [];
+    // The first read (before the write) sees the order closed; the one in the transaction sees what happened since.
+    let inTransaction: LinkedRepairOrder = { ...closedOrder, status: 'in_progress', version: 5 };
+    (world.repairs as { linkedOrders: unknown }).linkedOrders = async (
+      _tenant: string,
+      _incident: string,
+      tx?: unknown,
+    ) => {
+      reads.push(tx);
+      return {
+        available: true,
+        orders: [reads.length === 1 ? closedOrder : inTransaction],
+      };
+    };
+    await expect(run(world, incident, 'close')).rejects.toMatchObject({
+      code: 'missing_requirements',
+      missingRequirements: ['repair_orders_closed'],
+    });
+    expect(reads).toHaveLength(2);
+    expect(await world.closures.list(TENANT_A, incident.id)).toEqual([]);
+    expect(world.closureCosts.taken).toEqual([]);
+    expect((await world.store.get(TENANT_A, incident.id))?.status).toBe('resolved');
+    // The order changed in a way that still allows the closure: the closure keeps the version it saw there.
+    reads.length = 0;
+    inTransaction = { ...closedOrder, version: 6 };
+    await run(world, incident, 'close');
+    expect(await world.closures.list(TENANT_A, incident.id)).toMatchObject([
+      { orders: [{ orderId: 'o1', version: 6, status: 'closed' }] },
+    ]);
+  });
+
+  it('closes without reading orders again when the route never went through repair and the port is unavailable', async () => {
+    const world = setup();
+    const incident = await resolved(world, { insurerResult: 'accepted' });
+    world.repairs.snapshot = { available: false };
+    const closed = await run(world, incident, 'close');
+    expect(closed.status).toBe('closed');
+    expect(await world.closures.list(TENANT_A, incident.id)).toMatchObject([{ orders: [] }]);
   });
 
   it('needs incidents:close together with incidents:view_costs', async () => {
