@@ -6,7 +6,9 @@ export default [
   { ignores: ['**/dist/**', '**/coverage/**', '**/storybook-static/**', 'pnpm-lock.yaml'] },
   {
     files: ['**/*.ts', '**/*.tsx'],
-    languageOptions: { parser, parserOptions: { project: true } },
+    // No rule here needs type information; tsc (`pnpm typecheck`) checks types. Loading one
+    // TypeScript program per tsconfig exhausted the CI heap (owner decision 2026-10-13).
+    languageOptions: { parser, parserOptions: { project: false } },
     plugins: { '@typescript-eslint': tseslint },
     rules: {
       'no-console': 'error',
