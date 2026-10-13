@@ -1,18 +1,23 @@
+import ArchiveOutlined from '@mui/icons-material/ArchiveOutlined';
+import EditOutlined from '@mui/icons-material/EditOutlined';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import React from 'react';
 import {
   Button,
   ConfirmDialog,
+  DescriptionList,
   Notifications,
   opslogTokens,
   PageHeader,
+  Panel,
   StatusBadge,
   UiState,
 } from '@opslog/ui';
 import { VehicleNotFound } from './VehicleMessages';
+import { BackLink } from '../app/BackLink';
 import { ResourceView, type ResourceState } from '../app/resource';
-import { RouterButton, RouterLink } from '../app/router';
+import { RouterButton } from '../app/router';
 import type { Vehicle } from '../app/types';
 import {
   formatDate,
@@ -52,16 +57,6 @@ function Mono({ children }: { children: React.ReactNode }) {
   );
 }
 
-function BackLink() {
-  return (
-    <Box sx={{ mb: 2 }}>
-      <RouterLink to="/flota/vehiculos" sx={{ color: 'primary.main', textDecoration: 'underline' }}>
-        Volver a vehículos
-      </RouterLink>
-    </Box>
-  );
-}
-
 /** Success message of the last change; kept focusable so the result is announced and reachable. */
 function FocusNotice({ text }: { text: string }) {
   const ref = React.useRef<HTMLDivElement>(null);
@@ -75,43 +70,26 @@ function FocusNotice({ text }: { text: string }) {
 
 function Detail({ vehicle }: { vehicle: Vehicle }) {
   const status = statusPresentation[vehicle.status];
-  const rows: [string, React.ReactNode][] = [
-    ['Número económico', <Mono>{vehicle.economicNumber}</Mono>],
-    ['Placa', <Mono>{vehicle.plate}</Mono>],
-    ['VIN', vehicle.vin ? <Mono>{vehicle.vin}</Mono> : 'Sin VIN registrado'],
-    ['Marca', vehicle.make],
-    ['Modelo', vehicle.model],
-    ['Año', String(vehicle.year)],
-    ['Área', <Mono>{vehicle.areaId}</Mono>],
-    ['Estado', <StatusBadge label={status.label} tone={status.tone} />],
-    ['Motivo del estado', vehicle.statusReason],
-    ['Odómetro', formatKm(vehicle.odometerKm)],
-    ['Fecha de alta', formatDate(vehicle.registeredOn)],
-    ['Última actualización', formatDateTime(vehicle.updatedAt)],
-  ];
   return (
-    <Box
-      component="dl"
-      sx={{
-        display: 'grid',
-        gridTemplateColumns: { xs: '1fr', sm: 'minmax(160px, 220px) 1fr' },
-        columnGap: 3,
-        rowGap: { xs: 0.5, sm: 1.5 },
-        m: 0,
-        maxWidth: 720,
-      }}
-    >
-      {rows.map(([label, value]) => (
-        <React.Fragment key={label}>
-          <Typography component="dt" variant="body2" color="text.secondary">
-            {label}
-          </Typography>
-          <Typography component="dd" variant="body1" sx={{ m: 0, mb: { xs: 1.5, sm: 0 } }}>
-            {value}
-          </Typography>
-        </React.Fragment>
-      ))}
-    </Box>
+    <Panel title="Datos del vehículo">
+      <DescriptionList
+        columns={3}
+        items={[
+          { label: 'Número económico', value: <Mono>{vehicle.economicNumber}</Mono> },
+          { label: 'Placa', value: <Mono>{vehicle.plate}</Mono> },
+          { label: 'VIN', value: vehicle.vin ? <Mono>{vehicle.vin}</Mono> : 'Sin VIN registrado' },
+          { label: 'Marca', value: vehicle.make },
+          { label: 'Modelo', value: vehicle.model },
+          { label: 'Año', value: String(vehicle.year) },
+          { label: 'Área', value: <Mono>{vehicle.areaId}</Mono> },
+          { label: 'Estado', value: <StatusBadge label={status.label} tone={status.tone} /> },
+          { label: 'Motivo del estado', value: vehicle.statusReason },
+          { label: 'Odómetro', value: formatKm(vehicle.odometerKm) },
+          { label: 'Fecha de alta', value: formatDate(vehicle.registeredOn) },
+          { label: 'Última actualización', value: formatDateTime(vehicle.updatedAt) },
+        ]}
+      />
+    </Panel>
   );
 }
 
@@ -130,11 +108,12 @@ export function VehicleDetailView({
   if (state.status === 'error' && state.error.status === 404) return <VehicleNotFound />;
   return (
     <>
-      <BackLink />
+      <BackLink to="/flota/vehiculos">Volver a vehículos</BackLink>
       <ResourceView state={state} onRetry={onRetry}>
         {(vehicle) => (
           <>
             <PageHeader
+              eyebrow="Flota"
               title={`Vehículo ${vehicle.economicNumber}`}
               description={`${vehicle.make} ${vehicle.model} ${vehicle.year}`}
               actions={
@@ -143,12 +122,18 @@ export function VehicleDetailView({
                     <RouterButton
                       to={`/flota/vehiculos/${encodeURIComponent(vehicle.id)}/editar`}
                       variant="contained"
+                      startIcon={<EditOutlined />}
                     >
                       Editar
                     </RouterButton>
                   )}
                   {can('delete') && isArchivable(vehicle) && (
-                    <Button variant="outlined" color="error" onClick={onArchiveRequest}>
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      startIcon={<ArchiveOutlined />}
+                      onClick={onArchiveRequest}
+                    >
                       Archivar
                     </Button>
                   )}
@@ -175,9 +160,6 @@ export function VehicleDetailView({
                 </Box>
               )
             )}
-            <Typography component="h2" variant="h2" sx={{ mb: 2 }}>
-              Datos del vehículo
-            </Typography>
             <Detail vehicle={vehicle} />
             {archive.open && (
               <ConfirmDialog

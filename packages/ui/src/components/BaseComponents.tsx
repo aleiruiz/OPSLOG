@@ -14,3 +14,5 @@ export {
 export type { UploadItem } from './BaseFeedback';
 export { Panel } from './Panel';
 export { StatCard } from './StatCard';
+export { DescriptionList } from './DescriptionList';
+export type { DescriptionItem } from './DescriptionList';

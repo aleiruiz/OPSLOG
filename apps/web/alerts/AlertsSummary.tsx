@@ -1,8 +1,11 @@
+import ErrorOutline from '@mui/icons-material/ErrorOutline';
+import NotificationsOutlined from '@mui/icons-material/NotificationsOutlined';
+import ScheduleOutlined from '@mui/icons-material/ScheduleOutlined';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import React from 'react';
-import { Button, StatusBadge } from '@opslog/ui';
-import { RouterLink } from '../app/router';
+import { Button, Panel, StatCard } from '@opslog/ui';
+import { RouterButton } from '../app/router';
 import { useResource, type ResourceState } from '../app/resource';
 import type { Result } from '../app/types';
 import { useSession } from '../auth/session';
@@ -14,7 +17,7 @@ export interface AlertsSummaryData {
   readonly windowDays: number;
 }
 
-const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
+const days = (count: number) => `${count} ${count === 1 ? 'día' : 'días'}`;
 
 /** Presentational summary: how many documents and policies are expired or about to expire. */
 export function AlertsSummaryView({
@@ -27,17 +30,24 @@ export function AlertsSummaryView({
   // Best effort on the landing page: a person without access or with an expired session just does not see it.
   if (state.status === 'forbidden' || state.status === 'expired') return null;
   return (
-    <Box component="section" aria-labelledby="alerts-summary-title" sx={{ mt: 3, maxWidth: 720 }}>
-      <Typography id="alerts-summary-title" component="h2" variant="h6">
-        Vencimientos
-      </Typography>
+    <Panel
+      title="Vencimientos"
+      description="Documentos de vehículo, seguros y licencias."
+      actions={
+        state.status === 'ready' ? (
+          <RouterButton to={alertsPath} variant="text" startIcon={<NotificationsOutlined />}>
+            Ver alertas
+          </RouterButton>
+        ) : undefined
+      }
+    >
       {state.status === 'loading' && (
         <Typography color="text.secondary" variant="body2" role="status">
           Cargando vencimientos…
         </Typography>
       )}
       {state.status === 'error' && (
-        <Box sx={{ mt: 1 }}>
+        <Box>
           <Typography variant="body2" sx={{ mb: 1 }}>
             No pudimos cargar el resumen de vencimientos.
           </Typography>
@@ -46,30 +56,30 @@ export function AlertsSummaryView({
           </Button>
         </Box>
       )}
-      {state.status === 'ready' && (
-        <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
-          {state.data.expired === 0 && state.data.expiring === 0 ? (
-            <Typography variant="body2">
-              {`Ningún documento, seguro ni licencia vence en los próximos ${plural(state.data.windowDays, 'día', 'días')}.`}
-            </Typography>
-          ) : (
-            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-              <StatusBadge
-                label={plural(state.data.expired, 'vencido', 'vencidos')}
-                tone={state.data.expired > 0 ? 'danger' : 'neutral'}
-              />
-              <StatusBadge
-                label={`${plural(state.data.expiring, 'por vencer', 'por vencer')} en ${plural(state.data.windowDays, 'día', 'días')}`}
-                tone={state.data.expiring > 0 ? 'warning' : 'neutral'}
-              />
-            </Box>
-          )}
-          <RouterLink to={alertsPath} sx={{ color: 'primary.main', textDecoration: 'underline' }}>
-            Ver alertas
-          </RouterLink>
-        </Box>
-      )}
-    </Box>
+      {state.status === 'ready' &&
+        (state.data.expired === 0 && state.data.expiring === 0 ? (
+          <Typography variant="body2">
+            {`Ningún documento, seguro ni licencia vence en los próximos ${days(state.data.windowDays)}.`}
+          </Typography>
+        ) : (
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 2 }}>
+            <StatCard
+              label="Vencidos"
+              value={state.data.expired}
+              hint="Requieren renovación"
+              tone={state.data.expired > 0 ? 'danger' : 'neutral'}
+              icon={<ErrorOutline fontSize="small" />}
+            />
+            <StatCard
+              label="Por vencer"
+              value={state.data.expiring}
+              hint={`En los próximos ${days(state.data.windowDays)}`}
+              tone={state.data.expiring > 0 ? 'warning' : 'neutral'}
+              icon={<ScheduleOutlined fontSize="small" />}
+            />
+          </Box>
+        ))}
+    </Panel>
   );
 }
 

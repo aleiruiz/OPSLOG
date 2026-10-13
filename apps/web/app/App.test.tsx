@@ -130,6 +130,17 @@ describe('shell: session, company and user', () => {
     expect(api.controls.isSignedIn()).toBe(false);
   });
 
+  it('closes the navigation menu with Escape and returns focus to its button', async () => {
+    await renderApp();
+    await screen.findByRole('heading', { name: 'Inicio', level: 1 });
+    const toggle = screen.getByRole('button', { name: 'Menú' });
+    click('Menú');
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(toggle).toHaveFocus();
+  });
+
   it('stays signed in and says so when the sign-out call fails', async () => {
     const { api } = await renderApp();
     await screen.findByRole('heading', { name: 'Inicio', level: 1 });

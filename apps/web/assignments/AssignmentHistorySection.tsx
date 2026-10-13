@@ -1,7 +1,7 @@
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import React from 'react';
-import { Button, StatusBadge } from '@opslog/ui';
+import { Button, Panel, StatusBadge } from '@opslog/ui';
 import { ResourceView, useResource } from '../app/resource';
 import { RouterLink } from '../app/router';
 import type { AssignmentListQuery, VehicleAssignment } from '../app/types';
@@ -50,10 +50,7 @@ export function AssignmentHistorySection({
   };
 
   return (
-    <Box component="section" aria-labelledby="assignment-history-title" sx={{ mt: 4 }}>
-      <Typography id="assignment-history-title" component="h2" variant="h2" sx={{ mb: 2 }}>
-        Asignaciones e historial
-      </Typography>
+    <Panel title="Asignaciones e historial">
       <ResourceView state={state} onRetry={reload}>
         {(page) => {
           const items = [...page.items, ...extra];
@@ -61,26 +58,41 @@ export function AssignmentHistorySection({
             <Typography color="text.secondary">No hay asignaciones registradas.</Typography>
           ) : (
             <>
-              <Box component="ul" sx={{ p: 0, m: 0, listStyle: 'none', display: 'grid', gap: 1 }}>
+              <Box component="ul" sx={{ p: 0, m: 0, listStyle: 'none' }}>
                 {items.map((assignment) => {
                   const status = statusPresentation[isCurrent(assignment) ? 'current' : 'ended'];
                   return (
                     <Box
                       component="li"
                       key={assignment.id}
-                      sx={{ borderBottom: 1, borderColor: 'divider', py: 1 }}
+                      sx={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        alignItems: 'center',
+                        columnGap: 1.5,
+                        rowGap: 0.5,
+                        py: 1.5,
+                        borderBottom: 1,
+                        borderColor: 'divider',
+                        '&:first-of-type': { pt: 0 },
+                        '&:last-of-type': { borderBottom: 0, pb: 0 },
+                      }}
                     >
                       <RouterLink
                         to={`/flota/asignaciones/${encodeURIComponent(assignment.id)}`}
-                        sx={{ color: 'primary.main', textDecoration: 'underline' }}
+                        sx={{
+                          color: 'primary.main',
+                          fontWeight: 500,
+                          textDecoration: 'underline',
+                          textUnderlineOffset: '3px',
+                        }}
                       >
                         {typeLabel(assignment.type)} · {formatDateTime(assignment.startedAt)}
                       </RouterLink>
-                      {' · '}
                       <StatusBadge label={status.label} tone={status.tone} />
                       {assignment.endedAt !== null && (
                         <Typography component="span" variant="body2" color="text.secondary">
-                          {' · Fin: '}
+                          {'Fin: '}
                           {formatDateTime(assignment.endedAt)}
                         </Typography>
                       )}
@@ -89,17 +101,12 @@ export function AssignmentHistorySection({
                 })}
               </Box>
               {notice && (
-                <Typography role="alert" color="error.main" sx={{ mt: 1 }}>
+                <Typography role="alert" color="error.main">
                   {notice}
                 </Typography>
               )}
               {cursor && (
-                <Button
-                  variant="outlined"
-                  loading={busy}
-                  onClick={() => void loadMore()}
-                  sx={{ mt: 2 }}
-                >
+                <Button variant="outlined" loading={busy} onClick={() => void loadMore()}>
                   Cargar más asignaciones
                 </Button>
               )}
@@ -107,6 +114,6 @@ export function AssignmentHistorySection({
           );
         }}
       </ResourceView>
-    </Box>
+    </Panel>
   );
 }

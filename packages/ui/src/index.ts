@@ -23,6 +23,7 @@ export {
   Notifications,
   Panel,
   StatCard,
+  DescriptionList,
 } from './components/BaseComponents';
 export { ConfirmDialog } from './components/ConfirmDialog';
 export type { ConfirmDialogProps } from './components/ConfirmDialog';
@@ -31,4 +32,5 @@ export type {
   FieldProps,
   DataTableColumn,
   UploadItem,
+  DescriptionItem,
 } from './components/BaseComponents';

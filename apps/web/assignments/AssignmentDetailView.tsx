@@ -1,7 +1,17 @@
+import LinkOffOutlined from '@mui/icons-material/LinkOffOutlined';
 import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
 import React from 'react';
-import { Button, Notifications, PageHeader, StatusBadge, Timeline, UiState } from '@opslog/ui';
+import {
+  Button,
+  DescriptionList,
+  Notifications,
+  PageHeader,
+  Panel,
+  StatusBadge,
+  Timeline,
+  UiState,
+} from '@opslog/ui';
+import { BackLink } from '../app/BackLink';
 import { ResourceView, type ResourceState } from '../app/resource';
 import { RouterButton, RouterLink } from '../app/router';
 import type { AssignmentEvent, VehicleAssignment } from '../app/types';
@@ -40,7 +50,12 @@ export interface AssignmentDetailViewProps {
   readonly onRetry: () => void;
 }
 
-const linkSx = { color: 'primary.main', textDecoration: 'underline' } as const;
+const linkSx = {
+  color: 'primary.main',
+  fontWeight: 500,
+  textDecoration: 'underline',
+  textUnderlineOffset: '3px',
+} as const;
 
 /** Success message of the last change; kept focusable so the result is announced and reachable. */
 function FocusNotice({ text }: { text: string }) {
@@ -63,70 +78,51 @@ function Detail({
   driverName: string | null;
 }) {
   const status = statusPresentation[isCurrent(assignment) ? 'current' : 'ended'];
-  const rows: [string, React.ReactNode][] = [
-    [
-      'Vehículo',
-      <RouterLink to={`/flota/vehiculos/${encodeURIComponent(assignment.vehicleId)}`} sx={linkSx}>
-        {vehicleName ?? 'Ver vehículo'}
-      </RouterLink>,
-    ],
-    [
-      'Conductor',
-      <RouterLink
-        to={`/plantilla/empleados/${encodeURIComponent(assignment.employeeId)}`}
-        sx={linkSx}
-      >
-        {driverName ?? 'Ver conductor'}
-      </RouterLink>,
-    ],
-    ['Tipo', typeLabel(assignment.type)],
-    ['Estado', <StatusBadge label={status.label} tone={status.tone} />],
-    ['Inicio', formatDateTime(assignment.startedAt)],
-    ['Asignada por', assignment.assignedBy],
-    ['Motivo de la asignación', assignment.reason],
+  const rows: { label: string; value: React.ReactNode }[] = [
+    {
+      label: 'Vehículo',
+      value: (
+        <RouterLink to={`/flota/vehiculos/${encodeURIComponent(assignment.vehicleId)}`} sx={linkSx}>
+          {vehicleName ?? 'Ver vehículo'}
+        </RouterLink>
+      ),
+    },
+    {
+      label: 'Conductor',
+      value: (
+        <RouterLink
+          to={`/plantilla/empleados/${encodeURIComponent(assignment.employeeId)}`}
+          sx={linkSx}
+        >
+          {driverName ?? 'Ver conductor'}
+        </RouterLink>
+      ),
+    },
+    { label: 'Tipo', value: typeLabel(assignment.type) },
+    { label: 'Estado', value: <StatusBadge label={status.label} tone={status.tone} /> },
+    { label: 'Inicio', value: formatDateTime(assignment.startedAt) },
+    { label: 'Asignada por', value: assignment.assignedBy },
+    { label: 'Motivo de la asignación', value: assignment.reason },
     ...(assignment.endedAt === null
       ? []
-      : ([
-          ['Fin', formatDateTime(assignment.endedAt)],
-          ['Cómo terminó', assignment.endKind ? endKindLabels[assignment.endKind] : '—'],
-          ['Motivo del cierre', assignment.endReason ?? '—'],
-          ['Cerrada por', assignment.endedBy ?? '—'],
-        ] as [string, React.ReactNode][])),
-    ['Última actualización', formatDateTime(assignment.updatedAt)],
+      : [
+          { label: 'Fin', value: formatDateTime(assignment.endedAt) },
+          {
+            label: 'Cómo terminó',
+            value: assignment.endKind ? endKindLabels[assignment.endKind] : '—',
+          },
+          { label: 'Motivo del cierre', value: assignment.endReason ?? '—' },
+          { label: 'Cerrada por', value: assignment.endedBy ?? '—' },
+        ]),
+    { label: 'Última actualización', value: formatDateTime(assignment.updatedAt) },
   ];
-  return (
-    <Box
-      component="dl"
-      sx={{
-        display: 'grid',
-        gridTemplateColumns: { xs: '1fr', sm: 'minmax(160px, 220px) 1fr' },
-        columnGap: 3,
-        rowGap: { xs: 0.5, sm: 1.5 },
-        m: 0,
-        maxWidth: 720,
-      }}
-    >
-      {rows.map(([label, value]) => (
-        <React.Fragment key={label}>
-          <Typography component="dt" variant="body2" color="text.secondary">
-            {label}
-          </Typography>
-          <Typography component="dd" variant="body1" sx={{ m: 0, mb: { xs: 1.5, sm: 0 } }}>
-            {value}
-          </Typography>
-        </React.Fragment>
-      ))}
-    </Box>
-  );
+  return <DescriptionList columns={3} items={rows} />;
 }
 
 function History({ props }: { props: HistoryProps }) {
   const { state } = props;
   return (
-    <Box component="section" aria-labelledby="history-title" sx={{ mt: 4 }}>
-      <Typography id="history-title" component="h2" variant="h2" sx={{ mb: 1 }}>
-        Historial de la asignación
-      </Typography>
+    <Panel title="Historial de la asignación">
       {state.status === 'ready' ? (
         <>
           <Timeline
@@ -138,11 +134,9 @@ function History({ props }: { props: HistoryProps }) {
             }))}
           />
           {props.notice && (
-            <Box sx={{ my: 1 }}>
-              <Notifications
-                messages={[{ id: 'history-notice', text: props.notice, severity: 'error' }]}
-              />
-            </Box>
+            <Notifications
+              messages={[{ id: 'history-notice', text: props.notice, severity: 'error' }]}
+            />
           )}
           {state.data.nextCursor && (
             <Button
@@ -159,7 +153,7 @@ function History({ props }: { props: HistoryProps }) {
           {() => null}
         </ResourceView>
       )}
-    </Box>
+    </Panel>
   );
 }
 
@@ -176,20 +170,21 @@ export function AssignmentDetailView({
   if (state.status === 'error' && state.error.status === 404) return <AssignmentNotFound />;
   return (
     <>
-      <Box sx={{ mb: 2 }}>
-        <RouterLink to={assignmentsPath} sx={linkSx}>
-          Volver a asignaciones
-        </RouterLink>
-      </Box>
+      <BackLink to={assignmentsPath}>Volver a asignaciones</BackLink>
       <ResourceView state={state} onRetry={onRetry}>
         {(assignment) => (
           <>
             <PageHeader
+              eyebrow="Flota"
               title={`Asignación${vehicleName ? ` de ${vehicleName}` : ''}`}
               description={`${typeLabel(assignment.type)}${driverName ? ` · Conductor ${driverName}` : ''}`}
               actions={
                 can('edit') && isCurrent(assignment) ? (
-                  <RouterButton to={`${assignmentPath(assignment.id)}/cerrar`} variant="contained">
+                  <RouterButton
+                    to={`${assignmentPath(assignment.id)}/cerrar`}
+                    variant="contained"
+                    startIcon={<LinkOffOutlined />}
+                  >
                     Cerrar asignación
                   </RouterButton>
                 ) : undefined
@@ -205,24 +200,33 @@ export function AssignmentDetailView({
                 />
               </Box>
             )}
-            <Typography component="h2" variant="h2" sx={{ mb: 2 }}>
-              Datos de la asignación
-            </Typography>
-            <Detail assignment={assignment} vehicleName={vehicleName} driverName={driverName} />
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 2 }}>
-              <RouterLink
-                to={`${assignmentsPath}?vehiculo=${encodeURIComponent(assignment.vehicleId)}`}
-                sx={linkSx}
+            <Panel title="Datos de la asignación">
+              <Detail assignment={assignment} vehicleName={vehicleName} driverName={driverName} />
+              <Box
+                sx={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  columnGap: 3,
+                  rowGap: 1,
+                  pt: 2,
+                  borderTop: 1,
+                  borderColor: 'divider',
+                }}
               >
-                Ver todas las asignaciones del vehículo
-              </RouterLink>
-              <RouterLink
-                to={`${assignmentsPath}?conductor=${encodeURIComponent(assignment.employeeId)}`}
-                sx={linkSx}
-              >
-                Ver todas las asignaciones del conductor
-              </RouterLink>
-            </Box>
+                <RouterLink
+                  to={`${assignmentsPath}?vehiculo=${encodeURIComponent(assignment.vehicleId)}`}
+                  sx={linkSx}
+                >
+                  Ver todas las asignaciones del vehículo
+                </RouterLink>
+                <RouterLink
+                  to={`${assignmentsPath}?conductor=${encodeURIComponent(assignment.employeeId)}`}
+                  sx={linkSx}
+                >
+                  Ver todas las asignaciones del conductor
+                </RouterLink>
+              </Box>
+            </Panel>
             <History props={history} />
           </>
         )}
