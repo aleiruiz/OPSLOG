@@ -2,11 +2,12 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import React from 'react';
 import { Notifications, opslogTokens } from '@opslog/ui';
-import { RouterLink } from '../app/router';
+import { BackLink as BackTo } from '../app/BackLink';
+import { linkSx, RouterLink } from '../app/router';
 import type { Area } from '../app/types';
 import { areaPath, areasPath } from './AreaTreeView';
 
-export const linkSx = { color: 'primary.main', textDecoration: 'underline' } as const;
+export { linkSx };
 
 export function Mono({ children }: { children: React.ReactNode }) {
   return (
@@ -17,13 +18,7 @@ export function Mono({ children }: { children: React.ReactNode }) {
 }
 
 export function BackLink() {
-  return (
-    <Box sx={{ mb: 2 }}>
-      <RouterLink to={areasPath} sx={linkSx}>
-        Volver a áreas
-      </RouterLink>
-    </Box>
-  );
+  return <BackTo to={areasPath}>Volver a áreas</BackTo>;
 }
 
 /** Success message of the last change; kept focusable so the result is announced and reachable. */

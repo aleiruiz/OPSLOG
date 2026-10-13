@@ -1,6 +1,7 @@
+import AddOutlined from '@mui/icons-material/AddOutlined';
 import Box from '@mui/material/Box';
 import React from 'react';
-import { Button, Field, FilterBar, Notifications, PageHeader, UiState } from '@opslog/ui';
+import { Button, Field, FilterBar, Notifications, PageHeader, Panel, UiState } from '@opslog/ui';
 import { NoSubmit, ResourceView, type ResourceState } from '../app/resource';
 import { RouterButton } from '../app/router';
 import type { Area } from '../app/types';
@@ -46,88 +47,90 @@ export function AreaTreeView({
   return (
     <>
       <PageHeader
+        eyebrow="Plantilla"
         title="Áreas"
         description="Estructura organizativa de tu empresa: hasta cuatro niveles, con responsables."
         actions={
           can('create') ? (
-            <RouterButton to={`${areasPath}/nueva`} variant="contained">
+            <RouterButton to={`${areasPath}/nueva`} variant="contained" startIcon={<AddOutlined />}>
               Nueva área
             </RouterButton>
           ) : undefined
         }
       />
       <NoSubmit>
-        <FilterBar>
-          <Field
-            id={`${uid}-inactive`}
-            label="Estado"
-            select
-            SelectProps={{ native: true }}
-            InputLabelProps={{ shrink: true }}
-            value={includeInactive ? 'true' : 'false'}
-            onChange={(event) => onIncludeInactiveChange(event.target.value === 'true')}
-          >
-            <option value="false">Solo áreas activas</option>
-            <option value="true">Incluir áreas inactivas</option>
-          </Field>
-        </FilterBar>
+        <Panel>
+          <FilterBar>
+            <Field
+              id={`${uid}-inactive`}
+              label="Estado"
+              select
+              SelectProps={{ native: true }}
+              InputLabelProps={{ shrink: true }}
+              value={includeInactive ? 'true' : 'false'}
+              onChange={(event) => onIncludeInactiveChange(event.target.value === 'true')}
+            >
+              <option value="false">Solo áreas activas</option>
+              <option value="true">Incluir áreas inactivas</option>
+            </Field>
+          </FilterBar>
+        </Panel>
       </NoSubmit>
-      <ResourceView state={state} onRetry={onRetry}>
-        {(data) => {
-          if (data.areas.length === 0)
+      <Panel title="Estructura">
+        <ResourceView state={state} onRetry={onRetry}>
+          {(data) => {
+            if (data.areas.length === 0)
+              return (
+                <UiState
+                  kind="empty"
+                  title="Aún no hay áreas"
+                  description={
+                    can('create')
+                      ? 'Crea la primera área para organizar tu flota y tu plantilla.'
+                      : 'Cuando se creen áreas aparecerán aquí.'
+                  }
+                />
+              );
+            const roots = buildTree(data.areas);
+            const branches = allNodes(roots)
+              .filter((node) => node.children.length > 0)
+              .map((node) => node.area.id);
             return (
-              <UiState
-                kind="empty"
-                title="Aún no hay áreas"
-                description={
-                  can('create')
-                    ? 'Crea la primera área para organizar tu flota y tu plantilla.'
-                    : 'Cuando se creen áreas aparecerán aquí.'
-                }
-              />
+              <>
+                {data.truncated && (
+                  <Box>
+                    <Notifications
+                      messages={[
+                        {
+                          id: 'truncated',
+                          severity: 'warning',
+                          text: `Se muestran las primeras ${data.areas.length} áreas; la estructura puede estar incompleta.`,
+                        },
+                      ]}
+                    />
+                  </Box>
+                )}
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
+                  <Button variant="outlined" size="small" onClick={() => onExpandAll(branches)}>
+                    Expandir todo
+                  </Button>
+                  <Button variant="outlined" size="small" onClick={onCollapseAll}>
+                    Contraer todo
+                  </Button>
+                  <Box component="span" sx={{ color: 'text.secondary', typography: 'body2' }}>
+                    {count(data.areas.length, 'área', 'áreas')}
+                  </Box>
+                </Box>
+                <Box component="p" sx={{ color: 'text.secondary', typography: 'body2', mb: 0 }}>
+                  Con el teclado: flechas arriba y abajo para moverte, derecha e izquierda para
+                  abrir o cerrar una rama, Enter para abrir el área.
+                </Box>
+                <AreaTree roots={roots} expanded={expanded} onToggle={onToggle} onOpen={onOpen} />
+              </>
             );
-          const roots = buildTree(data.areas);
-          const branches = allNodes(roots)
-            .filter((node) => node.children.length > 0)
-            .map((node) => node.area.id);
-          return (
-            <>
-              {data.truncated && (
-                <Box sx={{ mb: 2 }}>
-                  <Notifications
-                    messages={[
-                      {
-                        id: 'truncated',
-                        severity: 'warning',
-                        text: `Se muestran las primeras ${data.areas.length} áreas; la estructura puede estar incompleta.`,
-                      },
-                    ]}
-                  />
-                </Box>
-              )}
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1, mb: 1 }}>
-                <Button variant="outlined" size="small" onClick={() => onExpandAll(branches)}>
-                  Expandir todo
-                </Button>
-                <Button variant="outlined" size="small" onClick={onCollapseAll}>
-                  Contraer todo
-                </Button>
-                <Box component="span" sx={{ color: 'text.secondary', typography: 'body2' }}>
-                  {count(data.areas.length, 'área', 'áreas')}
-                </Box>
-              </Box>
-              <Box
-                component="p"
-                sx={{ color: 'text.secondary', typography: 'body2', mt: 0, mb: 1 }}
-              >
-                Con el teclado: flechas arriba y abajo para moverte, derecha e izquierda para abrir
-                o cerrar una rama, Enter para abrir el área.
-              </Box>
-              <AreaTree roots={roots} expanded={expanded} onToggle={onToggle} onOpen={onOpen} />
-            </>
-          );
-        }}
-      </ResourceView>
+          }}
+        </ResourceView>
+      </Panel>
     </>
   );
 }

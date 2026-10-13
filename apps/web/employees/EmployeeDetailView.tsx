@@ -1,6 +1,8 @@
 import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
-import { ConfirmDialog, PageHeader, Button, UiState } from '@opslog/ui';
+import ArchiveOutlined from '@mui/icons-material/ArchiveOutlined';
+import EditOutlined from '@mui/icons-material/EditOutlined';
+import SwapHorizOutlined from '@mui/icons-material/SwapHorizOutlined';
+import { ConfirmDialog, PageHeader, Panel, Button, UiState } from '@opslog/ui';
 import { ResourceView, type ResourceState } from '../app/resource';
 import { RouterButton } from '../app/router';
 import type { EmployeeStatus } from '../app/types';
@@ -84,22 +86,36 @@ export function EmployeeDetailView({
           return (
             <>
               <PageHeader
+                eyebrow="Plantilla"
                 title={fullName(employee)}
                 description={`${kindLabels[employee.kind]}${employee.position ? ` · ${employee.position}` : ''}`}
                 actions={
                   <>
                     {can('edit') && isEditable(employee) && (
-                      <RouterButton to={`${employeePath(employee.id)}/editar`} variant="contained">
+                      <RouterButton
+                        to={`${employeePath(employee.id)}/editar`}
+                        variant="contained"
+                        startIcon={<EditOutlined />}
+                      >
                         Editar
                       </RouterButton>
                     )}
                     {changeable && !statusPanel.open && (
-                      <Button variant="outlined" onClick={onStatusOpen}>
+                      <Button
+                        variant="outlined"
+                        startIcon={<SwapHorizOutlined />}
+                        onClick={onStatusOpen}
+                      >
                         Cambiar estado
                       </Button>
                     )}
                     {can('delete') && isArchivable(employee) && (
-                      <Button variant="outlined" color="error" onClick={onArchiveRequest}>
+                      <Button
+                        variant="outlined"
+                        color="error"
+                        startIcon={<ArchiveOutlined />}
+                        onClick={onArchiveRequest}
+                      >
                         Archivar
                       </Button>
                     )}
@@ -136,10 +152,9 @@ export function EmployeeDetailView({
                   onErrorAction={onStatusErrorAction}
                 />
               )}
-              <Typography component="h2" variant="h2" sx={{ mb: 2 }}>
-                Datos del empleado
-              </Typography>
-              <Detail employee={employee} areas={areas} />
+              <Panel title="Datos del empleado">
+                <Detail employee={employee} areas={areas} />
+              </Panel>
               <PersonalData
                 // A new version remounts this section on purpose: it re-hides the personal data after any change.
                 key={`${employee.id}:${employee.version}`}

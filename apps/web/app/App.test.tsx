@@ -141,6 +141,19 @@ describe('shell: session, company and user', () => {
     expect(toggle).toHaveFocus();
   });
 
+  it('leaves the menu open when something else already handled Escape', async () => {
+    await renderApp();
+    await screen.findByRole('heading', { name: 'Inicio', level: 1 });
+    const toggle = screen.getByRole('button', { name: 'Menú' });
+    click('Menú');
+    const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    event.preventDefault();
+    act(() => {
+      document.dispatchEvent(event);
+    });
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  });
+
   it('stays signed in and says so when the sign-out call fails', async () => {
     const { api } = await renderApp();
     await screen.findByRole('heading', { name: 'Inicio', level: 1 });

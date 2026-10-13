@@ -13,7 +13,7 @@ import {
 } from '@opslog/ui';
 import { BackLink } from '../app/BackLink';
 import { ResourceView, type ResourceState } from '../app/resource';
-import { RouterButton, RouterLink } from '../app/router';
+import { linkSx, RouterButton, RouterLink } from '../app/router';
 import type { AssignmentEvent, VehicleAssignment } from '../app/types';
 import { AssignmentNotFound, assignmentPath, assignmentsPath } from './AssignmentMessages';
 import {
@@ -49,13 +49,6 @@ export interface AssignmentDetailViewProps {
   readonly notice?: string | null;
   readonly onRetry: () => void;
 }
-
-const linkSx = {
-  color: 'primary.main',
-  fontWeight: 500,
-  textDecoration: 'underline',
-  textUnderlineOffset: '3px',
-} as const;
 
 /** Success message of the last change; kept focusable so the result is announced and reachable. */
 function FocusNotice({ text }: { text: string }) {

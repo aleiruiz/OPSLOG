@@ -1,7 +1,7 @@
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import React from 'react';
-import { DataTable, StatusBadge } from '@opslog/ui';
+import type React from 'react';
+import { DataTable, DescriptionList, Panel, StatusBadge } from '@opslog/ui';
 import { RouterLink } from '../app/router';
 import type { Area } from '../app/types';
 import { Mono, linkSx } from './AreaDetailParts';
@@ -51,42 +51,12 @@ export function Detail({ context }: { context: AreaContext }) {
       ? []
       : ([['Desactivada', formatDateTime(area.deactivatedAt)]] as [string, React.ReactNode][])),
   ];
-  return (
-    <Box
-      component="dl"
-      sx={{
-        display: 'grid',
-        gridTemplateColumns: { xs: '1fr', sm: 'minmax(160px, 220px) 1fr' },
-        columnGap: 3,
-        rowGap: { xs: 0.5, sm: 1.5 },
-        m: 0,
-        maxWidth: 720,
-      }}
-    >
-      {rows.map(([label, value]) => (
-        <React.Fragment key={label}>
-          <Typography component="dt" variant="body2" color="text.secondary">
-            {label}
-          </Typography>
-          <Typography
-            component="dd"
-            variant="body1"
-            sx={{ m: 0, mb: { xs: 1.5, sm: 0 }, overflowWrap: 'anywhere' }}
-          >
-            {value}
-          </Typography>
-        </React.Fragment>
-      ))}
-    </Box>
-  );
+  return <DescriptionList columns={3} items={rows.map(([label, value]) => ({ label, value }))} />;
 }
 
 export function SubAreas({ children }: { children: readonly Area[] }) {
   return (
-    <Box component="section" aria-labelledby="sub-areas-title" sx={{ mt: 4 }}>
-      <Typography id="sub-areas-title" component="h2" variant="h2" sx={{ mb: 1 }}>
-        Sub-áreas
-      </Typography>
+    <Panel title="Sub-áreas">
       {children.length === 0 ? (
         <Typography color="text.secondary">Esta área no tiene sub-áreas.</Typography>
       ) : (
@@ -126,6 +96,6 @@ export function SubAreas({ children }: { children: readonly Area[] }) {
           />
         </Box>
       )}
-    </Box>
+    </Panel>
   );
 }

@@ -1,7 +1,7 @@
 import Typography from '@mui/material/Typography';
 import React from 'react';
 import { DataTable, StatusBadge } from '@opslog/ui';
-import { RouterLink } from '../app/router';
+import { linkSx, RouterLink } from '../app/router';
 import { ScrollRegion } from '../app/ScrollRegion';
 import type { ImportEntity, ImportRow } from '../app/types';
 import { codeLabel, columnLabel, entityPaths, outcomePresentation } from './labels';
@@ -9,8 +9,6 @@ import { codeLabel, columnLabel, entityPaths, outcomePresentation } from './labe
 interface Row extends ImportRow {
   id: string;
 }
-
-const linkSx = { color: 'primary.main', textDecoration: 'underline' } as const;
 
 /**
  * The per-row report of an import: the row number, the outcome, why, and which columns. It never shows a cell value:

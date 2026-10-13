@@ -1,11 +1,14 @@
+import AddOutlined from '@mui/icons-material/AddOutlined';
+import DriveFileMoveOutlined from '@mui/icons-material/DriveFileMoveOutlined';
+import EditOutlined from '@mui/icons-material/EditOutlined';
 import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
 import {
   Button,
   ConfirmDialog,
   Notifications,
   opslogTokens,
   PageHeader,
+  Panel,
   UiState,
 } from '@opslog/ui';
 import { ResourceView, type ResourceState } from '../app/resource';
@@ -85,17 +88,26 @@ export function AreaDetailView({
           return (
             <>
               <PageHeader
+                eyebrow="Plantilla"
                 title={area.name}
                 description={area.code ? `Código ${area.code}` : 'Área sin código'}
                 actions={
                   <>
                     {can('edit') && area.active && (
-                      <RouterButton to={`${areaPath(area.id)}/editar`} variant="contained">
+                      <RouterButton
+                        to={`${areaPath(area.id)}/editar`}
+                        variant="contained"
+                        startIcon={<EditOutlined />}
+                      >
                         Editar
                       </RouterButton>
                     )}
                     {can('edit') && area.active && (
-                      <RouterButton to={`${areaPath(area.id)}/mover`} variant="outlined">
+                      <RouterButton
+                        to={`${areaPath(area.id)}/mover`}
+                        variant="outlined"
+                        startIcon={<DriveFileMoveOutlined />}
+                      >
                         Mover
                       </RouterButton>
                     )}
@@ -103,6 +115,7 @@ export function AreaDetailView({
                       <RouterButton
                         to={`${areasPath}/nueva?padre=${encodeURIComponent(area.id)}`}
                         variant="outlined"
+                        startIcon={<AddOutlined />}
                       >
                         Nueva sub-área
                       </RouterButton>
@@ -150,10 +163,9 @@ export function AreaDetailView({
                   />
                 </Box>
               )}
-              <Typography component="h2" variant="h2" sx={{ mb: 2 }}>
-                Datos del área
-              </Typography>
-              <Detail context={context} />
+              <Panel title="Datos del área">
+                <Detail context={context} />
+              </Panel>
               <SubAreas>{subAreas}</SubAreas>
               <History props={history} nameOf={(id) => names.get(id) ?? null} />
               {context.truncated && (

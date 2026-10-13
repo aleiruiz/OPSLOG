@@ -18,7 +18,7 @@ import {
 } from '@opslog/ui';
 import { BackLink } from '../app/BackLink';
 import { ResourceView, type ResourceState } from '../app/resource';
-import { RouterButton, RouterLink } from '../app/router';
+import { linkSx, RouterButton, RouterLink } from '../app/router';
 import type { Document, DocumentRevision } from '../app/types';
 import { DocumentNotFound, documentPath, documentsPath } from './DocumentMessages';
 import {
@@ -68,13 +68,6 @@ export interface DocumentDetailViewProps {
   readonly onArchiveCancel: () => void;
   readonly onArchiveErrorAction: () => void;
 }
-
-const linkSx = {
-  color: 'primary.main',
-  fontWeight: 500,
-  textDecoration: 'underline',
-  textUnderlineOffset: '3px',
-} as const;
 
 function Mono({ children }: { children: React.ReactNode }) {
   return (

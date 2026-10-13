@@ -15,7 +15,7 @@ import {
 } from '@opslog/ui';
 import type { DriverOptions } from '../app/driverOptions';
 import { NoSubmit, ResourceView, type ResourceState } from '../app/resource';
-import { RouterButton, RouterLink } from '../app/router';
+import { linkSx, RouterButton, RouterLink } from '../app/router';
 import { ScrollRegion } from '../app/ScrollRegion';
 import type { AssignmentStatus, AssignmentType, VehicleAssignment } from '../app/types';
 import type { VehicleOptions } from '../app/vehicleOptions';
@@ -71,13 +71,6 @@ export interface AssignmentListViewProps {
   readonly onRetry: () => void;
   readonly onLoadMore: (cursor: string) => void;
 }
-
-const linkSx = {
-  color: 'primary.main',
-  fontWeight: 500,
-  textDecoration: 'underline',
-  textUnderlineOffset: '3px',
-} as const;
 
 /** Assignment list: filters, cursor-paginated table and every data state (SPECS §8). With a status filter off it is the history. */
 export function AssignmentListView({
