@@ -158,6 +158,23 @@ describe('route matching', () => {
     });
   });
 
+  it('resolves the incident notices and settings before the case address, with their own access', () => {
+    expect(resolveRoute('/incidents/avisos')?.route.id).toBe('incidentAlerts');
+    expect(resolveRoute('/incidents/configuracion')?.route.id).toBe('incidentSettings');
+    expect(resolveRoute('/incidents/new')?.route.id).toBe('incidentNew');
+    expect(resolveRoute('/incidents/abc')?.route.id).toBe('incidentDetail');
+    expect(resolveRoute('/incidents/abc/costs')?.route.id).toBe('incidentTab');
+    const byId = Object.fromEntries(routes.map((route) => [route.id, route]));
+    expect(byId.incidentAlerts?.access).toEqual({ permission: 'incidents:view' });
+    expect(byId.incidentAlerts?.nav).toBeUndefined();
+    expect(byId.incidentSettings?.access).toEqual({ permission: 'manage_config' });
+    expect(byId.incidentSettings?.nav).toEqual({
+      group: 'Configuración',
+      label: 'Ajustes de siniestros',
+      requires: 'manage_config',
+    });
+  });
+
   it('declares a permission for every configuration route and none for public ones', () => {
     const byId = Object.fromEntries(routes.map((route) => [route.id, route.access]));
     expect(byId.company).toEqual({ permission: 'manage_config' });

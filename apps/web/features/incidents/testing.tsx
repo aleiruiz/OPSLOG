@@ -16,6 +16,9 @@ afterEach(() => {
 });
 
 export const ADMIN = [
+  'view',
+  'create',
+  'manage_config',
   'incidents:view',
   'incidents:create',
   'incidents:edit',
@@ -30,6 +33,7 @@ export const FLEET_EDITOR = ['view', 'create', 'edit', 'incidents:view'];
 export const VIEWER = ['incidents:view'];
 export const REPORTER = ['incidents:view', 'incidents:report'];
 export const MANAGER = [
+  'view',
   'incidents:view',
   'incidents:create',
   'incidents:edit',
@@ -86,6 +90,7 @@ export function renderIncident(node: React.ReactElement, view: View = {}): Rende
     drivers: [{ id: 'emp-2', label: 'Luis Gómez · EMP-2' }],
     mayChangeVehicles: permissions.includes('edit'),
     photoRequired: false,
+    approvalThreshold: null,
     onExpired,
     ...view.env,
   };

@@ -1,6 +1,12 @@
 import type {
+  BffAlertSettings,
+  BffAlertSettingsInput,
   BffClient,
   BffIncident,
+  BffIncidentAlertPage,
+  BffIncidentAlertsQuery,
+  BffIncidentCosts,
+  BffIncidentCostsInput,
   BffIncidentEvidence,
   BffIncidentEvidenceChange,
   BffIncidentEvidenceContent,
@@ -16,6 +22,11 @@ import type {
   BffIncidentTransitionInput,
   BffIncidentVersion,
   BffIncidentsQuery,
+  BffRepairLinkChange,
+  BffRepairLinkInput,
+  BffRepairLinkList,
+  BffRepairUnlink,
+  BffWorkOrder,
   BffThirdPartyChange,
   BffThirdPartyInput,
   BffThirdPartyList,
@@ -69,6 +80,50 @@ export interface IncidentPorts {
     detach(id: string, evidenceId: string, version: number): Promise<Result<BffIncidentVersion>>;
     content(id: string, evidenceId: string): Promise<Result<BffIncidentEvidenceContent>>;
   };
+  /** Linked maintenance orders (INC-COSTS): references only, never an amount. Linking needs `incidents:edit`. */
+  readonly repairs: {
+    list(id: string): Promise<Result<BffRepairLinkList>>;
+    link(
+      id: string,
+      body: BffRepairLinkInput,
+      idempotencyKey: string,
+    ): Promise<Result<BffRepairLinkChange>>;
+    unlink(
+      id: string,
+      linkId: string,
+      version: number,
+      idempotencyKey: string,
+    ): Promise<Result<BffRepairUnlink>>;
+  };
+  /** Costs of the case. Only for `incidents:view_costs`: the screens never call this without it (403 otherwise). */
+  readonly costs: {
+    get(id: string): Promise<Result<BffIncidentCosts>>;
+    update(
+      id: string,
+      body: BffIncidentCostsInput,
+      idempotencyKey: string,
+    ): Promise<Result<BffIncidentCosts>>;
+  };
+  /** The notices of the incident SLA the caller may see (INC-SLA). */
+  readonly alerts: {
+    list(query?: BffIncidentAlertsQuery): Promise<Result<BffIncidentAlertPage>>;
+  };
+  /**
+   * The maintenance orders a repair can be linked to, from the maintenance module (generic `view` lists them,
+   * generic `create` registers a corrective one). The order endpoint takes no `Idempotency-Key` yet.
+   */
+  readonly orders: {
+    list(): Promise<Result<readonly BffWorkOrder[]>>;
+    createCorrective(body: {
+      vehicleId: string;
+      description: string;
+    }): Promise<Result<BffWorkOrder>>;
+  };
+  /** Company settings that drive incidents (SLA days, inactivity days, photo rule, D20 threshold). */
+  readonly settings: {
+    get(): Promise<Result<BffAlertSettings>>;
+    save(body: BffAlertSettingsInput): Promise<Result<BffAlertSettings>>;
+  };
   /**
    * The explicit, human-triggered status change of the vehicles module that a vehicle proposal asks for
    * (BR-I5, D11). It reads the vehicle's current version, then applies the status with the reason given.
@@ -118,6 +173,34 @@ export function createIncidentPorts(client: BffClient): IncidentPorts {
         }),
       content: (incidentId, evidenceId) =>
         call('incidents.evidence.content', { params: { incidentId, evidenceId } }),
+    },
+    repairs: {
+      list: (incidentId) => call('incidents.repairs.list', { params: { incidentId } }),
+      link: (incidentId, body, idempotencyKey) =>
+        call('incidents.repairs.link', { params: { incidentId }, body, idempotencyKey }),
+      unlink: (incidentId, linkId, version, idempotencyKey) =>
+        call('incidents.repairs.unlink', {
+          params: { incidentId, linkId },
+          body: { version },
+          idempotencyKey,
+        }),
+    },
+    costs: {
+      get: (incidentId) => call('incidents.costs.get', { params: { incidentId } }),
+      update: (incidentId, body, idempotencyKey) =>
+        call('incidents.costs.update', { params: { incidentId }, body, idempotencyKey }),
+    },
+    alerts: {
+      list: (query) =>
+        query ? call('incidents.alerts.list', { query }) : call('incidents.alerts.list'),
+    },
+    orders: {
+      list: () => call('workOrders.list'),
+      createCorrective: (body) => call('workOrders.create', { body }),
+    },
+    settings: {
+      get: () => call('alerts.settings.get'),
+      save: (body) => call('alerts.settings.update', { body }),
     },
     vehicles: {
       applyStatus: async (id, status, reason) => {

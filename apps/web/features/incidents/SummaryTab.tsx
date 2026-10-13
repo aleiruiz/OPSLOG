@@ -10,6 +10,7 @@ import { TYPE_LABELS, YES_NO, ZONE_LABELS } from './labels';
 import { outcomeOf } from './outcome';
 import { ResolutionPanel } from './ResolutionPanel';
 import { useSuggestions } from './useIncident';
+import { SlaPanel } from './SlaPanel';
 import { VehiclePanel } from './VehiclePanel';
 import { canWrite } from './model';
 import { draftPath } from './paths';
@@ -137,6 +138,7 @@ export function SummaryTab({ incident, onIncident, onReload }: CaseProps) {
           </>
         )}
       </Panel>
+      <SlaPanel incident={incident} />
       <ResolutionPanel incident={incident} onIncident={onIncident} onReload={onReload} />
       <VehiclePanel incident={incident} />
     </>

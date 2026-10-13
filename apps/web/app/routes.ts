@@ -53,6 +53,8 @@ export interface RouteDefinition {
     | 'maintenanceOrder'
     | 'incidents'
     | 'incidentNew'
+    | 'incidentAlerts'
+    | 'incidentSettings'
     | 'incidentDetail'
     | 'incidentTab';
   readonly pattern: string;
@@ -322,6 +324,20 @@ export const routes: readonly RouteDefinition[] = [
     pattern: '/incidents/new',
     title: 'Nuevo siniestro',
     access: { anyOf: ['incidents:create', 'incidents:report'] },
+  },
+  // Fixed addresses before `:id`: the notices of the caller and the company's incident settings.
+  {
+    id: 'incidentAlerts',
+    pattern: '/incidents/avisos',
+    title: 'Avisos de siniestros',
+    access: { permission: 'incidents:view' },
+  },
+  {
+    id: 'incidentSettings',
+    pattern: '/incidents/configuracion',
+    title: 'Configuración de siniestros',
+    access: { permission: 'manage_config' },
+    nav: { group: 'Configuración', label: 'Ajustes de siniestros', requires: 'manage_config' },
   },
   {
     id: 'incidentDetail',

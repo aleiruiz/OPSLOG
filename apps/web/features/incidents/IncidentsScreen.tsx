@@ -4,16 +4,18 @@ import { loadDriverOptions } from '../../app/driverOptions';
 import { useRouter } from '../../app/router';
 import { loadVehicleOptions, type VehicleOptions } from '../../app/vehicleOptions';
 import { useSession } from '../../auth/session';
+import type { BffCloseCostThreshold } from '@opslog/contracts';
 import { DirectoryProvider, type DirectoryOption } from '../maintenance/directory';
 import { loadMemberOptions } from '../maintenance/members';
+import { IncidentAlertsScreen } from './IncidentAlertsScreen';
 import { IncidentDetail } from './IncidentDetail';
 import { IncidentListScreen } from './IncidentListScreen';
 import { IncidentWizard } from './IncidentWizard';
 import { IncidentEnvProvider, type IncidentEnv } from './context';
-import { mayStartIncident, mayViewIncidents } from './model';
+import { mayStartIncident, mayViewCosts, mayViewIncidents } from './model';
 import { DEFAULT_ZONE } from './time';
 
-export type IncidentView = 'list' | 'new' | 'detail';
+export type IncidentView = 'list' | 'new' | 'detail' | 'alerts';
 
 const byLabel = (a: { label: string }, b: { label: string }) =>
   a.label.localeCompare(b.label, 'es');
@@ -46,6 +48,7 @@ export function IncidentsScreen({
   const [drivers, setDrivers] = React.useState<readonly DirectoryOption[]>([]);
   const [zone, setZone] = React.useState(DEFAULT_ZONE);
   const [photoRequired, setPhotoRequired] = React.useState(false);
+  const [threshold, setThreshold] = React.useState<BffCloseCostThreshold | null>(null);
   const mayListMembers = can('manage_users');
 
   React.useEffect(() => {
@@ -70,6 +73,8 @@ export function IncidentsScreen({
       if (!current || !result.ok) return;
       setZone(result.value.timeZone);
       setPhotoRequired(result.value.incidentReportPhoto === 'photo_required');
+      // Held only for callers who may see amounts: the settings route also answers those who may not.
+      setThreshold(mayViewCosts(permissions) ? result.value.closeCostThreshold : null);
     });
     void loadDriverOptions(ports.employees).then((result) => {
       if (current && result.ok)
@@ -102,9 +107,10 @@ export function IncidentsScreen({
       drivers,
       mayChangeVehicles: permissions.includes('edit'),
       photoRequired,
+      approvalThreshold: threshold,
       onExpired: markExpired,
     }),
-    [ports, permissions, userId, zone, members, drivers, photoRequired],
+    [ports, permissions, userId, zone, members, drivers, photoRequired, threshold],
   );
   const directory = React.useMemo(
     () => ({
@@ -125,6 +131,7 @@ export function IncidentsScreen({
       <DirectoryProvider value={directory}>
         {view === 'list' && <IncidentListScreen key={router.path} />}
         {view === 'new' && <IncidentWizard />}
+        {view === 'alerts' && <IncidentAlertsScreen />}
         {view === 'detail' && id !== undefined && <IncidentDetail key={id} id={id} tab={tab} />}
       </DirectoryProvider>
     </IncidentEnvProvider>
