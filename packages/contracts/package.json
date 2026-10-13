@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "vitest run --coverage.enabled --coverage.include=src/index.ts --coverage.include=src/bff.ts --coverage.include=src/bff/*.ts --coverage.include=src/client.ts --coverage.thresholds.lines=95 --coverage.thresholds.functions=95 --coverage.thresholds.statements=95 --coverage.thresholds.branches=90",
+    "test": "vitest run --coverage.enabled --coverage.include=src/index.ts --coverage.include=src/errors.ts --coverage.include=src/files.ts --coverage.include=src/validation-support.ts --coverage.include=src/bff.ts --coverage.include=src/bff/*.ts --coverage.include=src/client.ts --coverage.thresholds.lines=95 --coverage.thresholds.functions=95 --coverage.thresholds.statements=95 --coverage.thresholds.branches=90",
     "typecheck": "tsc -b"
   },
   "devDependencies": {

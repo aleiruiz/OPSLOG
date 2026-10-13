@@ -1,32 +1,9 @@
+import type { ActorRef } from './identity.js';
+import { actor, i, keys, r, t, u, type ContractValidationError } from './validation-support.js';
+
 export type UUID = string;
 export type ISODateTime = string;
 export type Certainty = 'confirmed' | 'proposed' | 'assumption' | 'decision_required';
-export type Permission =
-  | 'manage_users'
-  | 'manage_config'
-  | 'view'
-  | 'create'
-  | 'edit'
-  | 'delete'
-  | 'export'
-  | 'view_pii'
-  | 'view_costs'
-  | 'view_audit'
-  | 'approve'
-  | 'reopen'
-  | 'incidents:report'
-  | 'incidents:approve';
-export type ActorKind = 'user' | 'api_key' | 'system';
-export interface ActorRef {
-  subject: string;
-  kind: ActorKind;
-}
-export interface TenantContext {
-  readonly tenantId: string;
-  readonly actor: ActorRef;
-  readonly authorizationVersion: number;
-  readonly correlationId: string;
-}
 export interface PageQuery {
   limit?: 25 | 50 | 100;
   cursor?: string;
@@ -39,20 +16,6 @@ export interface Page<T> {
   total: number;
   sort: { field: string; direction: 'asc' | 'desc' };
 }
-export interface FieldError {
-  field: string;
-  code: string;
-  message: string;
-}
-export interface ApiError {
-  code: string;
-  status: ApiErrorStatus;
-  message: string;
-  fieldErrors?: readonly FieldError[];
-  missingRequirements?: readonly string[];
-  correlationId: string;
-}
-export type ApiErrorStatus = 400 | 401 | 403 | 404 | 409 | 422 | 429 | 500;
 export interface EventEnvelope<T> {
   eventId: UUID;
   schemaVersion: number;
@@ -132,38 +95,6 @@ export interface CloseIncidentChecklist {
 export interface ReopenIncidentInput {
   reason: string;
 }
-export type AllowedFileType =
-  | 'image/jpeg'
-  | 'image/png'
-  | 'image/webp'
-  | 'application/pdf'
-  | 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-  | 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-export type FileCategory =
-  | 'identity'
-  | 'vehicle'
-  | 'insurance'
-  | 'incident_evidence'
-  | 'maintenance';
-export interface FileMetadata {
-  originalName: string;
-  category: FileCategory;
-  contentType: AllowedFileType;
-  sizeBytes: number;
-  sha256: string;
-  issuedAt?: ISODateTime;
-  expiresAt?: ISODateTime;
-  version: number;
-}
-export interface UploadIntent {
-  entityType: string;
-  entityId: UUID;
-  metadata: FileMetadata;
-}
-export interface SignedFileUrl {
-  url: string;
-  expiresAt: ISODateTime;
-}
 export interface ImportDryRunRequest {
   entity: 'vehicles' | 'drivers';
   fileId: UUID;
@@ -187,69 +118,6 @@ export interface EligibilityResult {
   reasons: readonly string[];
   evaluatedAt: ISODateTime;
 }
-export interface ContractValidationError {
-  path: string;
-  code: string;
-  message: string;
-}
-const keys = (
-  v: Record<string, unknown>,
-  allowed: readonly string[],
-  e: ContractValidationError[],
-) =>
-  Object.keys(v)
-    .filter((k) => !allowed.includes(k))
-    .forEach((path) =>
-      e.push({ path, code: 'unknown_property', message: 'property is not allowed' }),
-    );
-const actor = (v: unknown): v is ActorRef =>
-  r(v) && t(v.subject) && (['user', 'api_key', 'system'] as string[]).includes(String(v.kind));
-const fileMax: Record<FileCategory, number> = {
-  identity: 10 * 1024 * 1024,
-  vehicle: 15 * 1024 * 1024,
-  insurance: 25 * 1024 * 1024,
-  incident_evidence: 25 * 1024 * 1024,
-  maintenance: 25 * 1024 * 1024,
-};
-const fileTypes: readonly AllowedFileType[] = [
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'application/pdf',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-];
-export const FILE_SIZE_LIMITS = { ...fileMax } as const;
-const U = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-  I = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{3}))?Z$/,
-  H = /^[a-f0-9]{64}$/i;
-type R = Record<string, unknown>;
-const r = (v: unknown): v is R => typeof v === 'object' && v !== null && !Array.isArray(v),
-  t = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0,
-  u = (v: unknown): v is string => typeof v === 'string' && U.test(v),
-  i = (v: unknown): v is string => {
-    if (typeof v !== 'string') return false;
-    const m = I.exec(v);
-    if (!m) return false;
-    const d = Date.UTC(
-      Number(m[1]),
-      Number(m[2]) - 1,
-      Number(m[3]),
-      Number(m[4]),
-      Number(m[5]),
-      Number(m[6]),
-      Number(m[7] ?? 0),
-    );
-    const x = new Date(d);
-    return (
-      x.getUTCFullYear() === Number(m[1]) &&
-      x.getUTCMonth() === Number(m[2]) - 1 &&
-      x.getUTCDate() === Number(m[3]) &&
-      x.getUTCHours() === Number(m[4]) &&
-      x.getUTCMinutes() === Number(m[5]) &&
-      x.getUTCSeconds() === Number(m[6])
-    );
-  };
 export function validatePageQuery(v: unknown): ContractValidationError[] {
   if (!r(v)) return [{ path: '', code: 'invalid_type', message: 'Expected object' }];
   const e: ContractValidationError[] = [];
@@ -351,125 +219,9 @@ export function validateIdempotencyClaim(v: unknown): ContractValidationError[] 
     e.push({ path: 'scope', code: 'invalid_scope', message: 'scope must be tenant:event' });
   return e;
 }
-export function validateFileMetadata(v: unknown): ContractValidationError[] {
-  if (!r(v)) return [{ path: '', code: 'invalid_type', message: 'Expected object' }];
-  const e: ContractValidationError[] = [];
-  keys(
-    v,
-    [
-      'originalName',
-      'category',
-      'contentType',
-      'sizeBytes',
-      'sha256',
-      'issuedAt',
-      'expiresAt',
-      'version',
-    ],
-    e,
-  );
-  if (!t(v.originalName))
-    e.push({ path: 'originalName', code: 'required', message: 'originalName required' });
-  if (typeof v.category !== 'string' || !(v.category in fileMax))
-    e.push({ path: 'category', code: 'invalid_category', message: 'category is not supported' });
-  if (!fileTypes.includes(v.contentType as AllowedFileType))
-    e.push({
-      path: 'contentType',
-      code: 'invalid_content_type',
-      message: 'contentType is not allowed',
-    });
-  if (!Number.isInteger(v.sizeBytes) || (v.sizeBytes as number) <= 0)
-    e.push({ path: 'sizeBytes', code: 'invalid_size', message: 'sizeBytes positive' });
-  else if (
-    typeof v.category === 'string' &&
-    v.category in fileMax &&
-    (v.sizeBytes as number) > fileMax[v.category as FileCategory]
-  )
-    e.push({ path: 'sizeBytes', code: 'limit_exceeded', message: 'size exceeds category limit' });
-  if (!H.test(String(v.sha256 ?? '')))
-    e.push({ path: 'sha256', code: 'invalid_sha256', message: 'sha256 must be 64 hex chars' });
-  if (!Number.isInteger(v.version) || (v.version as number) < 1)
-    e.push({ path: 'version', code: 'invalid_version', message: 'version positive' });
-  for (const field of ['issuedAt', 'expiresAt'] as const)
-    if (v[field] !== undefined && !i(v[field]))
-      e.push({ path: field, code: 'invalid_datetime', message: `${field} must be UTC ISO-8601` });
-  if (
-    v.issuedAt &&
-    v.expiresAt &&
-    i(v.issuedAt) &&
-    i(v.expiresAt) &&
-    Date.parse(v.expiresAt) <= Date.parse(v.issuedAt)
-  )
-    e.push({
-      path: 'expiresAt',
-      code: 'invalid_range',
-      message: 'expiresAt must be after issuedAt',
-    });
-  return e;
-}
-const ERROR_STATUS: Record<string, ApiErrorStatus> = {
-  bad_request: 400,
-  unauthorized: 401,
-  forbidden: 403,
-  not_found: 404,
-  conflict: 409,
-  unprocessable_entity: 422,
-  rate_limited: 429,
-  internal_error: 500 as ApiErrorStatus,
-};
-const ERROR_MESSAGES: Record<string, string> = {
-  bad_request: 'Invalid request',
-  unauthorized: 'Authentication required',
-  forbidden: 'Permission denied',
-  not_found: 'Resource not found',
-  conflict: 'Conflict',
-  unprocessable_entity: 'Business rule violation',
-  rate_limited: 'Too many requests',
-  internal_error: 'Request failed',
-};
-const FIELD_MESSAGES: Record<string, string> = {
-  required: 'Field is required',
-  invalid_type: 'Invalid value',
-  invalid_enum: 'Invalid option',
-  invalid_uuid: 'Invalid identifier',
-  invalid_datetime: 'Invalid date and time',
-  invalid_range: 'Invalid range',
-  unknown_property: 'Property is not allowed',
-};
-const ERROR_CODES = Object.keys(ERROR_MESSAGES);
-const safe = (v: unknown, max = 160): string =>
-  typeof v === 'string' ? v.trim().slice(0, max) : '';
-export function serializeApiError(input: unknown): ApiError {
-  const v = r(input) ? input : {};
-  const code = ERROR_CODES.includes(safe(v.code)) ? safe(v.code) : 'internal_error';
-  const result: ApiError = {
-    code,
-    status: ERROR_STATUS[code]!,
-    message: ERROR_MESSAGES[code]!,
-    correlationId: safe(v.correlationId, 100) || 'unknown',
-  };
-  if (Array.isArray(v.fieldErrors)) {
-    const fields = v.fieldErrors.flatMap((item) => {
-      if (!r(item)) return [];
-      const field = safe(item.field, 80);
-      const fieldCode = safe(item.code);
-      return field && FIELD_MESSAGES[fieldCode]
-        ? [{ field, code: fieldCode, message: FIELD_MESSAGES[fieldCode]! }]
-        : [];
-    });
-    if (fields.length) result.fieldErrors = fields;
-  }
-  if (Array.isArray(v.missingRequirements)) {
-    const missing = v.missingRequirements.flatMap((item) => {
-      const value = safe(item, 120);
-      return value ? [value] : [];
-    });
-    if (missing.length) result.missingRequirements = missing;
-  }
-  return result;
-}
-export function notFoundApiError(correlationId: string): ApiError {
-  return serializeApiError({ code: 'not_found', correlationId });
-}
+export * from './identity.js';
+export * from './errors.js';
+export * from './files.js';
+export type { ContractValidationError } from './validation-support.js';
 export * from './bff.js';
 export * from './client.js';

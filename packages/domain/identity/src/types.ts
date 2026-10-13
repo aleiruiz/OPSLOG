@@ -15,8 +15,14 @@ export type Permission =
   | 'view_audit'
   | 'approve'
   | 'reopen'
+  | 'incidents:view'
+  | 'incidents:create'
+  | 'incidents:edit'
   | 'incidents:report'
-  | 'incidents:approve';
+  | 'incidents:approve'
+  | 'incidents:close'
+  | 'incidents:reopen'
+  | 'incidents:view_costs';
 
 export interface ActorRef {
   readonly subject: string;
