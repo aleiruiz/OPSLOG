@@ -2,7 +2,9 @@ import React from 'react';
 import Typography from '@mui/material/Typography';
 import type { BffIncident, BffIncidentInsuranceInput } from '@opslog/contracts';
 import { DescriptionList, Field, InlineAlert, Panel } from '@opslog/ui';
+import { coverageLabel } from '../../insurance/labels';
 import { useIncidentEnv } from './context';
+import { RELOADED_COPY } from './errors';
 import type { SubmitOutcome } from './EventForm';
 import { INSURER_RESULT_LABELS } from './labels';
 import { canEditInsurance } from './model';
@@ -80,7 +82,10 @@ export function InsuranceTab({ incident, onIncident, onReload }: CaseProps) {
       (next) => onIncident(next, 'Póliza elegida.'),
       'elegir la póliza',
     );
-    if (!outcome.ok) setPolicyError(outcome.message);
+    if (!outcome.ok) {
+      if (outcome.stale) onReload();
+      setPolicyError(outcome.stale ? RELOADED_COPY : outcome.message);
+    }
   };
   const save = async (changed: Readonly<Record<string, string>>): Promise<SubmitOutcome> => {
     const body: Record<string, unknown> = { version: incident.version };
@@ -116,7 +121,7 @@ export function InsuranceTab({ incident, onIncident, onReload }: CaseProps) {
             items={[
               { label: 'Aseguradora', value: policy.insurer },
               { label: 'Número de póliza', value: policy.policyNumber },
-              { label: 'Tipo de cobertura', value: policy.coverageType },
+              { label: 'Tipo de cobertura', value: coverageLabel(policy.coverageType) },
               {
                 label: 'Vigencia',
                 value: `${formatDay(policy.startsOn)} al ${formatDay(policy.endsOn)}`,

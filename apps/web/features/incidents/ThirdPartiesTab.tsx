@@ -9,7 +9,7 @@ import type {
 } from '@opslog/contracts';
 import { Button, ConfirmDialog, InlineAlert, Panel, UiState } from '@opslog/ui';
 import { useIncidentEnv } from './context';
-import { describeError } from './errors';
+import { RELOADED_COPY, describeError, isStale } from './errors';
 import type { SubmitOutcome } from './EventForm';
 import { KIND_LABELS } from './labels';
 import { canWrite } from './model';
@@ -150,7 +150,10 @@ export function ThirdPartiesTab({ incident, onVersion, onReload }: ChildProps) {
       onVersion(result.value.version, 'Tercero retirado.');
     } else {
       if (result.error.status === 401) env.onExpired();
-      setRemoveError(describeError(result.error, 'retirar al tercero'));
+      if (isStale(result.error)) onReload();
+      setRemoveError(
+        isStale(result.error) ? RELOADED_COPY : describeError(result.error, 'retirar al tercero'),
+      );
     }
   };
   const editing = form !== null && form !== 'new' ? form : null;

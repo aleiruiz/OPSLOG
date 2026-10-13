@@ -7,7 +7,7 @@ import type { BffEvidenceCategory, BffEvidenceStage, BffIncidentEvidence } from 
 import { Button, FileButton, Field, InlineAlert, Panel, UiState, UploadQueue } from '@opslog/ui';
 import { errorKind } from '../maintenance/useResult';
 import { useIncidentEnv } from './context';
-import { describeError } from './errors';
+import { RELOADED_COPY, describeError, isStale } from './errors';
 import { EvidenceList } from './EvidenceList';
 import { CATEGORY_LABELS, STAGE_LABELS } from './labels';
 import { canWrite } from './model';
@@ -92,7 +92,10 @@ export function EvidenceTab({
     if (result.ok) onVersion(result.value.version, 'Archivo retirado.');
     else {
       if (result.error.status === 401) env.onExpired();
-      setProblem(describeError(result.error, 'quitar el archivo'));
+      if (isStale(result.error)) onReload();
+      setProblem(
+        isStale(result.error) ? RELOADED_COPY : describeError(result.error, 'quitar el archivo'),
+      );
     }
   };
   if (list.data === null)

@@ -379,7 +379,10 @@ export function IncidentListScreen() {
             ))}
           </Field>
         </FilterBar>
-        <div aria-live="polite">{body}</div>
+        <div role="status" className="sr-only">
+          {loaded.kind === 'ready' ? `${loaded.rows.length} siniestros encontrados.` : ''}
+        </div>
+        {body}
       </Panel>
     </Box>
   );

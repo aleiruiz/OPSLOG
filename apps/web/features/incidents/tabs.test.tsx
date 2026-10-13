@@ -105,6 +105,23 @@ describe('third parties', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
   });
 
+  it('reloads the case when a removal finds it changed, with no dead-end message', async () => {
+    const { fake } = open(review(), 'third-parties', { permissions: ADMIN });
+    await screen.findByText('Sin terceros registrados');
+    press('Agregar tercero');
+    fill(/Tipo de tercero/, 'property');
+    press('Guardar nuevo tercero');
+    await screen.findByRole('listitem', { name: 'Propiedad 1' });
+    press('Retirar Propiedad 1');
+    fake.failNext('thirdParties.remove', 409, 'stale_version');
+    const load = vi.spyOn(fake.ports, 'get');
+    const dialog = await screen.findByRole('dialog', { name: 'Retirar tercero' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Retirar' }));
+    expect(await within(dialog).findByText(/ya lo actualizamos/)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/Recarga para ver/)).toBeNull();
+    expect(load).toHaveBeenCalled();
+  });
+
   it('retries a failed first load', async () => {
     open(review(), 'third-parties', {
       prepare: (fake) => fake.failNext('thirdParties.list', 500),
@@ -186,6 +203,44 @@ describe('insurance', () => {
     fireEvent.change(select, { target: { value: 'pol-a' } });
     expect(await screen.findByText('POL-1')).toBeInTheDocument();
     expect(screen.getByText('01/01/2026 al 31/12/2026')).toBeInTheDocument();
+    expect(screen.getByText('Todo riesgo')).toBeInTheDocument();
+  });
+
+  it('reloads the case when choosing the policy finds it changed', async () => {
+    const { fake } = open(
+      completeEvent({
+        status: 'under_review',
+        version: 4,
+        coverage: { status: 'multiple', policy: null, alert: null },
+      }),
+      'insurance',
+      {
+        options: {
+          suggestions: {
+            drivers: [],
+            policies: [
+              {
+                policyId: 'pol-a',
+                revision: 1,
+                insurer: 'Aseguradora A',
+                policyNumber: 'A-1',
+                coverageType: 'comprehensive',
+                startsOn: '2026-01-01',
+                endsOn: '2026-12-31',
+              },
+            ],
+            coverage: { status: 'multiple', alert: null },
+          },
+        },
+      },
+    );
+    const select = await screen.findByLabelText('Póliza que aplica');
+    fake.failNext('updateInsurance', 409, 'stale_version');
+    const load = vi.spyOn(fake.ports, 'get');
+    fireEvent.change(select, { target: { value: 'pol-a' } });
+    expect(await screen.findByText(/ya lo actualizamos/)).toBeInTheDocument();
+    expect(screen.queryByText(/Recarga para ver/)).toBeNull();
+    expect(load).toHaveBeenCalled();
   });
 });
 
@@ -529,6 +584,22 @@ describe('evidence', () => {
     fake.failNext('evidence.detach', 500);
     press('Quitar a.pdf');
     expect(await screen.findByText(/No pudimos quitar el archivo/)).toBeInTheDocument();
+  });
+
+  it('reloads the case when a detach finds it changed', async () => {
+    const { fake } = setup({ pollMs: 20, compress: async (f) => f });
+    await screen.findByRole('region', { name: 'Agregar evidencia' });
+    pick(
+      'Adjuntar archivos',
+      new File([new Uint8Array(100)], 'a.pdf', { type: 'application/pdf' }),
+    );
+    await screen.findByText(/En revisión/);
+    fake.scan('inc-001');
+    await screen.findByText('Guardado');
+    fake.failNext('evidence.detach', 409, 'stale_version');
+    press('Quitar a.pdf');
+    expect(await screen.findByText(/ya lo actualizamos/)).toBeInTheDocument();
+    expect(screen.queryByText(/Recarga para ver/)).toBeNull();
   });
 
   it('explains why a closed case or a read-only caller cannot add files', async () => {

@@ -27,6 +27,14 @@ export interface Prepared {
 /** JPEG, then lower quality, then smaller, until it fits. A `canvas` is all it needs. */
 export const canvasCompress: Compressor = async (file, target) => {
   const bitmap = await createImageBitmap(file);
+  try {
+    return await fitJpeg(bitmap, target);
+  } finally {
+    bitmap.close();
+  }
+};
+
+async function fitJpeg(bitmap: ImageBitmap, target: number): Promise<Blob> {
   let scale = Math.min(1, 2560 / Math.max(bitmap.width, bitmap.height));
   for (let round = 0; round < 8; round += 1) {
     const canvas = document.createElement('canvas');
@@ -44,7 +52,7 @@ export const canvasCompress: Compressor = async (file, target) => {
     scale *= 0.75;
   }
   throw new Error('could not reach the target size');
-};
+}
 
 const readBytes = (blob: Blob): Promise<ArrayBuffer> =>
   new Promise((resolve, reject) => {

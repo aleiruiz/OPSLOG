@@ -102,6 +102,7 @@ describe('canvasCompress', () => {
     vi.restoreAllMocks();
     globalThis.createImageBitmap = original.bitmap;
   });
+  let closeBitmap = vi.fn();
   const stubCanvas = (sizes: (quality: number, width: number) => number, hasContext = true) => {
     const draw = vi.fn();
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((() =>
@@ -114,7 +115,12 @@ describe('canvasCompress', () => {
     ) {
       callback(new Blob([new Uint8Array(sizes(quality ?? 1, this.width))]));
     } as never);
-    globalThis.createImageBitmap = vi.fn(async () => ({ width: 4000, height: 3000 })) as never;
+    closeBitmap = vi.fn();
+    globalThis.createImageBitmap = vi.fn(async () => ({
+      width: 4000,
+      height: 3000,
+      close: closeBitmap,
+    })) as never;
     return draw;
   };
 
@@ -125,11 +131,13 @@ describe('canvasCompress', () => {
     const blob = await canvasCompress(new Blob(['x']), 2_000_000);
     expect(blob.size).toBe(1_000_000);
     expect(draw).toHaveBeenCalled();
+    expect(closeBitmap).toHaveBeenCalledTimes(1);
   });
 
   it('gives up when the browser cannot reach the target or has no canvas', async () => {
     stubCanvas(() => 9_000_000);
     await expect(canvasCompress(new Blob(['x']), 2_000_000)).rejects.toThrow('target size');
+    expect(closeBitmap).toHaveBeenCalledTimes(1);
     stubCanvas(() => 1, false);
     await expect(canvasCompress(new Blob(['x']), 2_000_000)).rejects.toThrow('no canvas');
   });

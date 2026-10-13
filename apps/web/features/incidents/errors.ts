@@ -19,6 +19,10 @@ const RULE_COPY: Readonly<Record<string, string>> = {
 export const STALE_COPY =
   'El caso cambió mientras lo editabas. Recarga para ver la versión actual: lo que escribiste y aún no enviaste se conserva.';
 
+/** After a conflict on a one-click action the screen has already reloaded the case: retry on what is current. */
+export const RELOADED_COPY =
+  'El caso cambió mientras lo editabas y ya lo actualizamos. Revisa lo que ves e inténtalo de nuevo.';
+
 /**
  * Neutral Spanish copy for a failed request (SPECS §8): it never echoes server payloads, ids or values.
  * Only field names the screens know, and rule ids from the fixed list above, are turned into text.

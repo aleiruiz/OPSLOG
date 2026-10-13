@@ -19,7 +19,7 @@ export function createFakeUpdates(
             revision: 1,
             insurer: 'Aseguradora Demo',
             policyNumber: 'POL-1',
-            coverageType: 'full',
+            coverageType: 'comprehensive',
             startsOn: '2026-01-01',
             endsOn: '2026-12-31',
           }
