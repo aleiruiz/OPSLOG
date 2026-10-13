@@ -16,6 +16,7 @@ import {
 } from './formModel';
 import { coverageLabel, coverageLabels } from './labels';
 import { COVERAGE_TYPES } from './rules';
+import { formCardSx } from '../app/formCard';
 
 export type { FormAlert };
 
@@ -237,11 +238,12 @@ export function PolicyForm({
 
   return (
     <form onSubmit={submit} noValidate aria-label={copy[mode].label}>
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, maxWidth: 720 }}>
+      <Box sx={formCardSx}>
         {alert && (
           <Box ref={alertRef} tabIndex={-1} sx={{ outline: 'none' }}>
             {alert.severity === 'error' ? (
               <UiState
+                layout="banner"
                 kind="error"
                 title={alert.title ?? copy[mode].failure}
                 description={alert.message}
@@ -307,6 +309,7 @@ export function PolicyForm({
           >
             {vehicles && vehicles.items.length === 0 ? (
               <UiState
+                layout="banner"
                 kind="empty"
                 title="Aún no hay vehículos"
                 description="Registra un vehículo antes de agregar su póliza."

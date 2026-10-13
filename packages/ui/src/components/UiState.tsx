@@ -1,8 +1,15 @@
+import React from 'react';
+import ErrorOutline from '@mui/icons-material/ErrorOutline';
+import InboxOutlined from '@mui/icons-material/InboxOutlined';
+import LockOutlined from '@mui/icons-material/LockOutlined';
+import SearchOffOutlined from '@mui/icons-material/SearchOffOutlined';
 import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import { opslogTokens, statusColors } from '../tokens';
 export type UiStateKind =
   | 'loading'
   | 'empty'
@@ -20,6 +27,8 @@ export type UiStateProps = {
   description?: string;
   actionLabel?: string;
   onAction?: () => void;
+  /** `banner` keeps any state inline (inside forms); by default the kind decides. */
+  layout?: 'auto' | 'banner';
 };
 const copy: Record<
   UiStateKind,
@@ -76,25 +85,94 @@ const copy: Record<
     severity: 'warning',
   },
 };
-export function UiState({ kind, title, description, actionLabel, onAction }: UiStateProps) {
+/** States that stand for a whole list or screen: a centred block with an icon instead of a banner. */
+const blockIcons: Partial<Record<UiStateKind, React.ReactNode>> = {
+  empty: <InboxOutlined />,
+  'no-results': <SearchOffOutlined />,
+  'no-permission': <LockOutlined />,
+  error: <ErrorOutline />,
+};
+const tones = {
+  info: { foreground: opslogTokens.colors.primary, background: opslogTokens.colors.primarySoft },
+  warning: statusColors.warning,
+  error: statusColors.danger,
+  success: statusColors.success,
+};
+
+/**
+ * Empty, no results, no permission, loading and a failed load (an error with a retry action) are
+ * blocks centred in their card; other states (form validation, expired, closed, success) stay
+ * banners next to the content they describe.
+ */
+export function UiState({
+  kind,
+  title,
+  description,
+  actionLabel,
+  onAction,
+  layout = 'auto',
+}: UiStateProps) {
   const state = copy[kind];
+  const action = actionLabel && onAction && (
+    <Button onClick={onAction} variant="outlined" size="small">
+      {actionLabel}
+    </Button>
+  );
+  const block =
+    layout === 'auto' &&
+    (kind === 'loading' || (kind in blockIcons && (kind !== 'error' || action)));
+  if (block) {
+    const tone = tones[state.severity];
+    return (
+      <Box
+        role={kind === 'error' ? 'alert' : 'status'}
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          textAlign: 'center',
+          gap: 1,
+          px: 2,
+          py: { xs: 4, sm: 5 },
+        }}
+      >
+        <Box
+          aria-hidden={kind === 'loading' ? undefined : 'true'}
+          sx={{
+            width: 48,
+            height: 48,
+            mb: 0.5,
+            borderRadius: '50%',
+            display: 'grid',
+            placeItems: 'center',
+            color: tone.foreground,
+            bgcolor: tone.background,
+          }}
+        >
+          {kind === 'loading' ? (
+            <CircularProgress size={22} aria-label="Cargando" sx={{ color: 'inherit' }} />
+          ) : (
+            blockIcons[kind]
+          )}
+        </Box>
+        <Typography component="h2" variant="h3">
+          {title ?? state.title}
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 440 }}>
+          {description ?? state.description}
+        </Typography>
+        {action && <Box sx={{ mt: 1 }}>{action}</Box>}
+      </Box>
+    );
+  }
   return (
-    <Alert
-      severity={state.severity}
-      role={kind === 'error' ? 'alert' : 'status'}
-      icon={kind === 'loading' ? <CircularProgress size={20} aria-label="Cargando" /> : undefined}
-      sx={{ my: 2 }}
-    >
+    <Alert severity={state.severity} role={kind === 'error' ? 'alert' : 'status'} sx={{ my: 2 }}>
       <Stack spacing={1}>
         <Typography component="h2" variant="subtitle1">
           {title ?? state.title}
         </Typography>
         <Typography variant="body2">{description ?? state.description}</Typography>
-        {actionLabel && onAction && (
-          <Button onClick={onAction} variant="outlined" size="small">
-            {actionLabel}
-          </Button>
-        )}
+        {action}
       </Stack>
     </Alert>
   );

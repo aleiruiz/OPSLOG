@@ -4,8 +4,6 @@ import Box from '@mui/material/Box';
 import { Button, DataTable, PageHeader, Panel, StatusBadge, UiState } from '@opslog/ui';
 import type { BffMaintenanceMechanic, BffMaintenanceWorkshop } from '@opslog/contracts';
 import { MechanicForm, WorkshopForm, type MemberOption } from './CatalogForms';
-
-export type { MemberOption };
 import type { MaintenancePorts, Result } from './ports';
 import { errorKind, useResult } from './useResult';
 import type { MaintenanceViewer } from './workflow';

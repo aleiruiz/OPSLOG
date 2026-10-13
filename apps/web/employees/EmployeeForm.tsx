@@ -18,6 +18,7 @@ import {
 import { idTypeLabel, idTypeOrder, kindLabels, kindOrder } from './labels';
 import type { FormAlert } from './messages';
 import { MAX_LICENSE_DATE, MIN_DATE, hasLicense, todayOf } from './rules';
+import { formCardSx } from '../app/formCard';
 
 export type { FormAlert };
 
@@ -198,11 +199,12 @@ export function EmployeeForm({
       noValidate
       aria-label={mode === 'create' ? 'Nuevo empleado' : 'Editar empleado'}
     >
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, maxWidth: 720 }}>
+      <Box sx={formCardSx}>
         {alert && (
           <Box ref={alertRef} tabIndex={-1} sx={{ outline: 'none' }}>
             {alert.severity === 'error' ? (
               <UiState
+                layout="banner"
                 kind="error"
                 title={alert.title ?? 'No pudimos guardar el empleado'}
                 description={alert.message}

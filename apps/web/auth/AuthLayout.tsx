@@ -21,7 +21,7 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
         <BrandMark compact={false} />
       </Box>
-      <Box sx={{ width: '100%', maxWidth: 440, '& > section': { mb: 0 } }}>
+      <Box sx={{ width: '100%', maxWidth: 440, '& > *': { mb: 0 } }}>
         <Panel>{children}</Panel>
       </Box>
     </Box>

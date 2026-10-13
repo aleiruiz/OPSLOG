@@ -206,18 +206,20 @@ export function UsersScreen() {
           )}
         </Box>
         {roles.state.status === 'ready' && (
-          <Panel>
-            <InviteForm
-              roles={roles.state.data}
-              onInviteStarted={() => setIssued(null)}
-              onInvited={(invitation) => {
-                setIssued(invitation);
-                setNotice({ text: 'Invitación creada.', severity: 'success' });
-                first.reload();
-              }}
-            />
-            {issued && <IssuedInvitation invitation={issued} />}
-          </Panel>
+          <Box sx={{ minWidth: 0 }}>
+            <Panel>
+              <InviteForm
+                roles={roles.state.data}
+                onInviteStarted={() => setIssued(null)}
+                onInvited={(invitation) => {
+                  setIssued(invitation);
+                  setNotice({ text: 'Invitación creada.', severity: 'success' });
+                  first.reload();
+                }}
+              />
+              {issued && <IssuedInvitation invitation={issued} />}
+            </Panel>
+          </Box>
         )}
       </Box>
     </>

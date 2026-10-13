@@ -15,6 +15,7 @@ export function Panel({
   toolbar,
   flush = false,
   headingLevel = 2,
+  label,
   children,
 }: {
   title?: string;
@@ -23,6 +24,8 @@ export function Panel({
   toolbar?: React.ReactNode;
   flush?: boolean;
   headingLevel?: 2 | 3;
+  /** Accessible name when it should differ from the visible title. */
+  label?: string;
   children?: React.ReactNode;
 }) {
   const headingId = React.useId();
@@ -30,7 +33,11 @@ export function Panel({
   return (
     <Card
       component="section"
-      {...(title === undefined ? {} : { 'aria-labelledby': headingId })}
+      {...(label !== undefined
+        ? { 'aria-label': label }
+        : title === undefined
+          ? {}
+          : { 'aria-labelledby': headingId })}
       sx={{ mb: 3, overflow: 'hidden' }}
     >
       {hasHeader && (
