@@ -46,30 +46,31 @@ Orden de M4 y dueños de archivos compartidos: ver `INC-CASES-M4-20261013.md`. E
 
 ## Alcance
 
-1. **Cableado pendiente.** Registrar en `apps/worker/composition` los handlers de `apps/worker/incident-sla` y el consumo de `incident.assigned`; dejar el disparo periódico de `incident.sla.scan` conectado al mecanismo local disponible y documentar que el disparador en la nube sigue diferido (ADR-0002). Añadir en la ficha de vehículo un enlace "Siniestros" al listado filtrado por ese vehículo.
-2. **Mundo de pruebas.** `tests/e2e/incidents/world.ts` sobre el arnés de flota con tenants A y B, cuenta runtime de siniestros con exactamente los grants declarados por cada paquete, roles sintéticos (responsable de casos con `edit`, reportero con `view` e `incidents:report`, supervisor con `incidents:approve`, cerrador con `incidents:close` e `incidents:view_costs`, consulta con `view`) y reloj determinista.
+1. **Cableado pendiente.** Registrar en `apps/worker/composition` los handlers de `apps/worker/incident-sla`, el consumo de `incident.assigned` y el envío de correo de `incident.sla_alert` con el sumidero de prueba (ADR-0014); dejar el disparo periódico de `incident.sla.scan` conectado al mecanismo local disponible y documentar que el disparador en la nube y el envío real de correo siguen diferidos (ADR-0002). Añadir en la ficha de vehículo un enlace "Siniestros" al listado filtrado por ese vehículo.
+2. **Mundo de pruebas.** `tests/e2e/incidents/world.ts` sobre el arnés de flota con tenants A y B, cuenta runtime de siniestros con exactamente los grants declarados por cada paquete, roles sintéticos con los permisos propios de ADR-0014 (responsable de casos con `incidents:view` e `incidents:edit`, reportero con `incidents:view` e `incidents:report`, supervisor con `incidents:approve`, cerrador con `incidents:close` e `incidents:view_costs`, consulta con `incidents:view`, editor de flota con `view`, `create` y `edit` genéricos e `incidents:view`) y reloj determinista.
 3. **Journeys por API sobre MySQL** (`tests/e2e/incidents/*.integration.test.ts`), los cinco de `Orchestrator.md`:
    - **Aceptado.** Borrador → reportado → revisión → proceso con aseguradora → resultado aceptado → orden correctiva creada y vinculada → reparación → orden cerrada → resuelto con evidencia final → cierre con snapshot de costos.
-   - **Rechazado, apelado y asumido.** Proceso → rechazado con carta → apelación → rechazado otra vez → asunción con aprobación D20 → reparación → resuelto → cerrado con aprobación de cierre.
-   - **Sin seguro.** Revisión → `no_insurance` con motivo → asunción → reparación → resuelto → cerrado; el texto nunca afirma falta legal de cobertura.
+   - **Rechazado, apelado y asumido.** Proceso → rechazado con carta → apelación → rechazado otra vez → asunción con costo por encima del umbral y aprobación D20 → reparación → resuelto → cerrado con aprobación de cierre; la misma ruta con costo igual al umbral cierra sin aprobación.
+   - **Sin seguro.** Revisión → `no_insurance` con motivo → asunción → reparación con solo presupuesto `clean` y costo como línea propia → resuelto → cerrado; el texto nunca afirma falta legal de cobertura.
    - **Pérdida total.** `theft_total` → proceso → resuelto sin reparación con `totalLoss` → propuesta `decommissioned` aplicada solo con el comando explícito de vehículos → cerrado; ningún camino lleva a `repair`.
    - **Reapertura.** Caso cerrado → reabierto con motivo → evidencia nueva → reparación adicional → resuelto → cerrado; dos snapshots de cierre y dos ciclos de SLA con métricas separadas.
-4. **Matriz de aislamiento** (`tests/integration/incidents/**`, SPECS §4.4): con ids locales iguales en A y B, lectura, escritura, comandos, terceros, evidencia y descarga, costos, vínculos de órdenes, avisos SLA, jobs y reintentos, idempotencia (misma clave en A y B no colisiona), outbox y audit. Incluye headers manipulados, tenant suspendido, sesión revocada y cambio de permisos con un job de SLA pendiente.
+4. **Matriz de aislamiento** (`tests/integration/incidents/**`, SPECS §4.4): con ids locales iguales en A y B, lectura, escritura, comandos, terceros, evidencia y descarga, costos, vínculos de órdenes, avisos SLA, correos del sumidero, jobs y reintentos, idempotencia (misma clave en A y B no colisiona), outbox y audit. Incluye headers manipulados, tenant suspendido, sesión revocada y cambio de permisos con un job de SLA pendiente.
 5. **Journey de navegador** (`e2e/incidents-journeys.spec.ts`) sobre `e2e/real-api`: asistente móvil a 360 px con foto, reporte, revisión, rechazo, apelación, reparación con orden creada desde la ficha, cierre con aprobación y reapertura; un rol sin `incidents:view_costs` ni `view_pii` recorre la misma ficha sin ver importes ni identidad de terceros.
-6. **Trazabilidad consolidada.** `docs/traceability/incidents.md` con la cadena requisito → contrato → implementación → prueba → evidencia por SHA para FR-110 a FR-125, BR-I1 a BR-I7, BR-005, BR-006, BR-016 a BR-020, BR-024, BR-027, BR-028, US-021, US-030 a US-035, US-051, D4, D8, D10, D11, D15, D16, D17, D20 y D23. Conservar las etiquetas de fuente (`CONFIRMED`, `PROPOSED`, `DECISION REQUIRED`) y marcar como diferidos, sin contarlos como implementados, FR-124, FR-125, el correo de avisos y las vistas guardadas.
+6. **Trazabilidad consolidada.** `docs/traceability/incidents.md` con la cadena requisito → contrato → implementación → prueba → evidencia por SHA para FR-110 a FR-125, BR-I1 a BR-I7, BR-005, BR-006, BR-016 a BR-020, BR-024, BR-027, BR-028, US-021, US-030 a US-035, US-051, D4, D8, D10, D11, D15, D16, D17, D18, D20, D23 y ADR-0014. Conservar las etiquetas de fuente (`CONFIRMED`, `PROPOSED`, `DECISION REQUIRED`) y marcar como diferidos, sin contarlos como implementados, FR-124, FR-125, el envío real de correo (el sumidero de prueba sí cuenta como implementado) y las vistas guardadas.
 7. **Regresión acumulativa.** En el SHA candidato pasan `pnpm quality`, `pnpm test:integration`, `pnpm test:fleet-integration`, `pnpm test:e2e` y `pnpm test:visual`, sin escenarios MySQL omitidos. Añadir `tests/e2e/incidents` a `test:fleet-integration` y `test:platform`.
 
 ## Aceptación Given / When / Then
 
-1. Given una sesión con `view`, When abre "Siniestros" desde Operación, Then ve lista, asistente y ficha con datos del contrato y estados compartidos; un miembro con alcance de mecánico no ve la entrada ni accede por URL.
+1. Given una sesión con `incidents:view`, When abre "Siniestros" desde Operación, Then ve lista, asistente y ficha con datos del contrato y estados compartidos; un miembro con alcance de mecánico no ve la entrada ni accede por URL; el editor de flota con `edit` genérico ve los casos pero no los gestiona (403 en API, sin acciones en navegador).
 2. Given el arnés de API real con MySQL 8.4 y tenants A/B, When corren los cinco journeys, Then cada paso persiste, cada transición deja timeline, audit y un evento de la allowlist, y los totales de costos por moneda coinciden con la suma exacta de órdenes y líneas sin doble conteo.
 3. Given la reapertura, Then el ciclo 1 conserva su snapshot de cierre y su resultado de SLA, y el ciclo 2 se mide desde la reapertura.
 4. Given la matriz de aislamiento, Then ningún dato, conteo, aviso, archivo o error de B aparece en A, y al revés.
 5. Given un rol sin `incidents:view_costs` y sin `view_pii`, When recorre API y navegador, Then ninguna respuesta, DOM, árbol accesible, timeline, error, audit ni outbox contiene importes o identidad de terceros.
 6. Given dos cierres concurrentes con la misma `Idempotency-Key`, Then un cierre, un snapshot, un evento y la misma respuesta; con claves distintas, uno gana y el otro recibe 409.
 7. Given un vehículo con dos siniestros no operables y una orden de taller abierta, When se resuelve uno con decisión `active` o se cierra la orden con `active`, Then ambos se rechazan mientras quede otra causa abierta.
-8. Given el SHA candidato, When corren los comandos de regresión, Then todos pasan sin omisiones y se registra la versión exacta de MySQL de cada corrida.
-9. Given pendientes declarados (correo de avisos, disparador periódico en la nube), When se publica la trazabilidad, Then siguen marcados pendientes con su condición de desbloqueo y no como aprobados.
+8. Given un aviso SLA y el worker compuesto con el sumidero de prueba, Then el sumidero recibe un correo por destinatario autorizado, sin importes ni PII, y repetir el scan no envía otro.
+9. Given el SHA candidato, When corren los comandos de regresión, Then todos pasan sin omisiones y se registra la versión exacta de MySQL de cada corrida.
+10. Given pendientes declarados (envío real de correo, disparador periódico en la nube, alineación de D20 por monto en mantenimiento), When se publica la trazabilidad, Then siguen marcados pendientes con su condición de desbloqueo y no como aprobados.
 
 ## Decisiones por defecto
 
@@ -82,7 +83,7 @@ Un PR de unas 2.000 líneas, casi todas pruebas y trazabilidad. Si el journey de
 
 ## Fuera de alcance
 
-Reglas nuevas, cambios de contrato, M5 (reportes, dashboard, búsqueda, correo, webhooks), auditoría G4 y su declaración, y AWS.
+Reglas nuevas, cambios de contrato, M5 (reportes, dashboard, búsqueda, correo general de MVP-NOTIFY, webhooks), auditoría G4 y su declaración, y AWS.
 
 ## Comandos y evidencia
 
