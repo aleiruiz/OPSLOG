@@ -22,20 +22,21 @@ SPECS §8 manda «aplicar el artifact mediante theme Material UI y componentes O
 1. **Se mantiene Material UI** como design system (no se cambia de librería). Se añade `@mui/icons-material` (misma versión, 6.4.12) para la iconografía. Las pantallas siguen consumiendo componentes de `@opslog/ui`; `apps/web` no usa widgets de MUI directamente ni colores literales (guardas de `apps/web/app/guards.test.tsx`).
 2. **Tema OPSLOG v2** (`packages/ui/src/tokens.ts`, `theme.ts`, `themeComponents.ts`):
 
-   | Token | v1 (SPECS §8) | v2 |
-   |---|---|---|
-   | Fondo / superficie / borde | #F3F4F6 / #FFFFFF / #E3E6EB | #F5F6F8 / #FFFFFF / #E5E7EB (+ superficie sutil #F9FAFB) |
-   | Texto principal / secundario | #171A1F / #3E4650 | #111827 / #4B5563 |
-   | Navegación / activo | #0F1420 / #243052 (oscuro) | #FFFFFF / #EDF2FF con texto #1F43C2 (claro) |
-   | Acción / hover / suave | #1F4FD8 / #1A41B2 / #E8EEFC | #2952E3 / #1F43C2 / #EDF2FF |
-   | Correcto / atención / importante / crítico | #1B7A3E / #7A5000 / #A3420A / #B42318 | #127A3E / #8A5300 / #B4430E / #C0261A, cada uno con su fondo suave |
-   | Fuente | IBM Plex Sans y Mono, autoalojadas | Igual; se añade el peso 500 |
-   | Escala | 14 / H1 22 / H2 16 | 12 (caption) / 14 / H1 24 / H2 18 / H3–H6 16 |
-   | Espaciado | 4/8/12/16/24/32/48 | Igual |
-   | Geometría | Sidebar 232, contenido 24, radio 6/8 | Sidebar 248, barra superior 60, contenido 32 (máx. 1360), radio 8/12 |
-   | Densidad | Filas 38/30 | Filas 44/32 |
+   | Token                                      | v1 (SPECS §8)                         | v2                                                                   |
+   | ------------------------------------------ | ------------------------------------- | -------------------------------------------------------------------- |
+   | Fondo / superficie / borde                 | #F3F4F6 / #FFFFFF / #E3E6EB           | #F5F6F8 / #FFFFFF / #E5E7EB (+ superficie sutil #F9FAFB)             |
+   | Texto principal / secundario               | #171A1F / #3E4650                     | #111827 / #4B5563                                                    |
+   | Navegación / activo                        | #0F1420 / #243052 (oscuro)            | #FFFFFF / #EDF2FF con texto #1F43C2 (claro)                          |
+   | Acción / hover / suave                     | #1F4FD8 / #1A41B2 / #E8EEFC           | #2952E3 / #1F43C2 / #EDF2FF                                          |
+   | Correcto / atención / importante / crítico | #1B7A3E / #7A5000 / #A3420A / #B42318 | #127A3E / #8A5300 / #B4430E / #C0261A, cada uno con su fondo suave   |
+   | Fuente                                     | IBM Plex Sans y Mono, autoalojadas    | Igual; se añade el peso 500                                          |
+   | Escala                                     | 14 / H1 22 / H2 16                    | 12 (caption) / 14 / H1 24 / H2 18 / H3–H6 16                         |
+   | Espaciado                                  | 4/8/12/16/24/32/48                    | Igual                                                                |
+   | Geometría                                  | Sidebar 232, contenido 24, radio 6/8  | Sidebar 248, barra superior 60, contenido 32 (máx. 1360), radio 8/12 |
+   | Densidad                                   | Filas 38/30                           | Filas 44/32                                                          |
 
    Todos los pares texto/fondo y estado/fondo suave tienen contraste ≥ 4.5:1 y los bordes de campo ≥ 3:1; `tokens.test.ts` lo mide.
+
 3. **Patrones de composición** nuevos en `@opslog/ui`:
    - `Panel`: tarjeta con título, descripción, acciones, barra de herramientas y contenido (opcionalmente sin márgenes para que la tabla llegue a los bordes).
    - `StatCard`: total con etiqueta, pista e icono; opcionalmente botón de filtro rápido con `aria-pressed`.
@@ -48,15 +49,15 @@ SPECS §8 manda «aplicar el artifact mediante theme Material UI y componentes O
 
 Cada fase es un PR pequeño con su revisión de código, capturas antes/después y la regresión visual regenerada.
 
-| Fase | Alcance | Estado |
-|---|---|---|
-| 0 — Piloto | Tema v2, shell, componentes base y **Alertas** (tarjetas de resumen, filtros y tablas en tarjetas). Como el tema y los componentes son compartidos, todas las pantallas cambian de aspecto ya en esta fase. | Fusionada (PR #99) |
-| 1 — Inicio y Flota | Inicio (resumen con `StatCard`), Vehículos (lista y ficha), Asignaciones. Añade `DescriptionList` (datos de una ficha) y `BackLink`; Escape cierra el menú móvil. | Fusionada (PR #102) |
-| 2 — Cumplimiento | Documentos, Seguros (lista y ficha), Ajustes de alertas, Importaciones. Alertas avisa que sus totales son de toda la flota cuando la lista está filtrada. | Fusionada (PR #104) |
-| 3 — Plantilla | Empleados (lista, ficha, formulario), Áreas (árbol y ficha). El estilo de los enlaces de contenido (`linkSx`) queda en un solo sitio. | Fusionada (PR #105) |
-| 4 — Mantenimiento | Planes, órdenes, talleres, «Mis órdenes» en móvil. Subida de archivos con botón propio; los formularios de alta de talleres y mecánicos pasan a `CatalogForms.tsx`. | Fusionada (PR #106) |
-| 5 — Configuración y acceso | Empresa, Usuarios (invitar al lado de la lista), Roles, inicio de sesión e invitación en una tarjeta centrada con el logo (`AuthLayout`, `BrandMark`). | Fusionada (PR #107) |
-| 6 — Estados | `UiState` (vacío, sin resultados, error, sin permiso) como bloques centrados con icono; diálogos y formularios. Los formularios de alta y edición se dibujan como una tarjeta (`formCardSx`); `Panel` acepta `label` para un nombre accesible distinto del título. | En curso |
+| Fase                       | Alcance                                                                                                                                                                                                                                                            | Estado              |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------- |
+| 0 — Piloto                 | Tema v2, shell, componentes base y **Alertas** (tarjetas de resumen, filtros y tablas en tarjetas). Como el tema y los componentes son compartidos, todas las pantallas cambian de aspecto ya en esta fase.                                                        | Fusionada (PR #99)  |
+| 1 — Inicio y Flota         | Inicio (resumen con `StatCard`), Vehículos (lista y ficha), Asignaciones. Añade `DescriptionList` (datos de una ficha) y `BackLink`; Escape cierra el menú móvil.                                                                                                  | Fusionada (PR #102) |
+| 2 — Cumplimiento           | Documentos, Seguros (lista y ficha), Ajustes de alertas, Importaciones. Alertas avisa que sus totales son de toda la flota cuando la lista está filtrada.                                                                                                          | Fusionada (PR #104) |
+| 3 — Plantilla              | Empleados (lista, ficha, formulario), Áreas (árbol y ficha). El estilo de los enlaces de contenido (`linkSx`) queda en un solo sitio.                                                                                                                              | Fusionada (PR #105) |
+| 4 — Mantenimiento          | Planes, órdenes, talleres, «Mis órdenes» en móvil. Subida de archivos con botón propio; los formularios de alta de talleres y mecánicos pasan a `CatalogForms.tsx`.                                                                                                | Fusionada (PR #106) |
+| 5 — Configuración y acceso | Empresa, Usuarios (invitar al lado de la lista), Roles, inicio de sesión e invitación en una tarjeta centrada con el logo (`AuthLayout`, `BrandMark`).                                                                                                             | Fusionada (PR #107) |
+| 6 — Estados                | `UiState` (vacío, sin resultados, error, sin permiso) como bloques centrados con icono; diálogos y formularios. Los formularios de alta y edición se dibujan como una tarjeta (`formCardSx`); `Panel` acepta `label` para un nombre accesible distinto del título. | Fusionada (PR #108) |
 
 M4 (siniestros) sigue en pausa por indicación del propietario; cuando se reanude, sus pantallas nacen con el tema v2.
 
