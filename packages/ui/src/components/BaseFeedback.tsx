@@ -66,11 +66,22 @@ export function NextStepPanel({
 export function ConfirmWithReason({
   title = 'Confirma la acción',
   reasonLabel = 'Motivo',
+  confirmLabel = 'Confirmar',
+  description,
+  busy = false,
+  error,
   onConfirm,
   onCancel,
 }: {
   title?: string;
   reasonLabel?: string;
+  confirmLabel?: string;
+  /** What the action does, above the reason field. */
+  description?: string;
+  /** The confirmation is running: both buttons are disabled. */
+  busy?: boolean;
+  /** A failure of the confirmed action, announced and kept next to the reason that was typed. */
+  error?: string;
   onConfirm: (reason: string) => void;
   onCancel?: () => void;
 }) {
@@ -79,6 +90,7 @@ export function ConfirmWithReason({
     <Card component="section" aria-label={title} sx={{ p: 2 }}>
       <Stack spacing={2}>
         <Typography variant="h6">{title}</Typography>
+        {description && <Typography color="text.secondary">{description}</Typography>}
         <Field
           required
           label={reasonLabel}
@@ -87,16 +99,22 @@ export function ConfirmWithReason({
           multiline
           minRows={2}
         />
+        {error && (
+          <Alert severity="error" role="alert">
+            {error}
+          </Alert>
+        )}
         <Stack direction="row" gap={1}>
           <ButtonControl
             variant="contained"
             disabled={!reason.trim()}
+            loading={busy}
             onClick={() => onConfirm(reason.trim())}
           >
-            Confirmar
+            {confirmLabel}
           </ButtonControl>
           {onCancel && (
-            <ButtonControl variant="text" onClick={onCancel}>
+            <ButtonControl variant="text" disabled={busy} onClick={onCancel}>
               Cancelar
             </ButtonControl>
           )}

@@ -24,7 +24,11 @@ export {
   Panel,
   StatCard,
   DescriptionList,
+  InlineAlert,
+  CheckField,
+  FileButton,
 } from './components/BaseComponents';
+export type { InlineAlertSeverity } from './components/BaseComponents';
 export { ConfirmDialog } from './components/ConfirmDialog';
 export type { ConfirmDialogProps } from './components/ConfirmDialog';
 export type {

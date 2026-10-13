@@ -16,3 +16,7 @@ export { Panel } from './Panel';
 export { StatCard } from './StatCard';
 export { DescriptionList } from './DescriptionList';
 export type { DescriptionItem } from './DescriptionList';
+export { InlineAlert } from './InlineAlert';
+export type { InlineAlertSeverity } from './InlineAlert';
+export { CheckField } from './CheckField';
+export { FileButton } from './FileButton';
