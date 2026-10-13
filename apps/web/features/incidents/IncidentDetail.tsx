@@ -126,7 +126,7 @@ export function IncidentDetail({ id, tab }: { id: string; tab?: string | undefin
           alignItems: 'start',
         }}
       >
-        <Box sx={{ minWidth: 0, display: 'grid', gap: 2 }}>
+        <Box sx={{ minWidth: 0, display: 'grid', gap: 2, gridTemplateColumns: 'minmax(0, 1fr)' }}>
           <DetailTabs
             value={active}
             onChange={(next) => router.navigate(incidentPath(id, next))}

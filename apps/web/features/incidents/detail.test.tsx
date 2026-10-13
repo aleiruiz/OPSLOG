@@ -203,6 +203,11 @@ describe('next step', () => {
     );
     const panel = await screen.findByRole('complementary', { name: 'Falta para continuar' });
     expect(within(panel).getByText(/Sube la carta de rechazo/)).toBeInTheDocument();
+    // The stored reason moved the case to a new version; the next write must use it.
+    press('Editar datos del evento');
+    fill('Descripción', 'Texto corregido después del rechazo');
+    press('Guardar cambios');
+    expect(await screen.findByText('Cambios guardados.')).toBeInTheDocument();
   });
 
   it('offers the supervisor approval and hides the command it blocks (D20)', async () => {

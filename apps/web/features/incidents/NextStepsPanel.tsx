@@ -91,7 +91,7 @@ export function NextStepsPanel({
 }: {
   incident: BffIncident;
   steps: Live<{ readonly items: readonly BffIncidentNextStep[] }>;
-  onIncident: (incident: BffIncident, message: string) => void;
+  onIncident: (incident: BffIncident, message?: string) => void;
   onStale: () => void;
 }) {
   const env = useIncidentEnv();
@@ -135,6 +135,8 @@ export function NextStepsPanel({
         return setError(describeError(saved.error));
       }
       version = saved.value.version;
+      // The reason is already stored: the case moved on even if the command is refused next.
+      onIncident(saved.value);
     }
     const body = { command, version, ...extra };
     const result = await sendKeyed(keys.current, [incident.id, body], (key) =>
