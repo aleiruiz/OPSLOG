@@ -25,6 +25,7 @@ const settings = (tenant: string, over: Partial<CompanySettings> = {}): CompanyS
   recipientRoles: ['admin', 'editor'],
   maintenanceEvidence: 'none',
   closeCostThreshold: null,
+  incidentReportPhoto: 'photo_or_justification',
   timeZone: 'UTC',
   version: 1,
   updatedBy: ACTOR,
@@ -105,7 +106,7 @@ suite('persistent settings store on MySQL', () => {
           WHERE TABLE_SCHEMA = ? AND DATA_TYPE IN ('varchar', 'char') AND TABLE_NAME = ?`,
         [db.databaseName, T.settings],
       );
-      expect(columns).toHaveLength(6);
+      expect(columns).toHaveLength(7);
       expect(columns.filter((column) => column.coll !== BINARY_COLLATION)).toEqual([]);
       const keys = await db.rows<{ name: string; col: string }>(
         `SELECT INDEX_NAME AS name, COLUMN_NAME AS col FROM information_schema.STATISTICS
@@ -128,6 +129,7 @@ suite('persistent settings store on MySQL', () => {
         'upper case role': { recipient_roles: 'Admin' },
         'six roles': { recipient_roles: 'admin,editor,viewer,auditor,pii_reader,admin' },
         'unknown evidence requirement': { maintenance_evidence: 'invoice' },
+        'unknown report photo mode': { incident_report_photo: 'none' },
         'blank zone': { time_zone: '  ' },
         'threshold without currency': { close_threshold_minor: 100 },
         'currency without threshold': { close_threshold_currency: 'MXN' },
@@ -197,6 +199,7 @@ suite('persistent settings store on MySQL', () => {
       const value = settings('tenant-maintenance', {
         maintenanceEvidence: 'evidence_invoice',
         closeCostThreshold: { amountMinor: '999999999999999', currency: 'MXN' },
+        incidentReportPhoto: 'photo_required',
         timeZone: 'America/Mexico_City',
       });
       expect(await storeA.insert(value)).toBe(true);
@@ -206,6 +209,7 @@ suite('persistent settings store on MySQL', () => {
       expect(await storeA.find('tenant-legacy')).toMatchObject({
         maintenanceEvidence: 'none',
         closeCostThreshold: null,
+        incidentReportPhoto: 'photo_or_justification',
         timeZone: 'UTC',
       });
     });

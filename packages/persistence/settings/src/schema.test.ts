@@ -9,7 +9,11 @@ import {
 } from './entities.js';
 import { AUDIT_ENTITIES } from '../../audit/src/entities.js';
 import {
+  AddIncidentCompanySettings2026101500030,
   AddMaintenanceCompanySettings2026101300010,
+  INCIDENT_SETTINGS_CHECKS,
+  INCIDENT_SETTINGS_COLUMNS,
+  INCIDENT_SETTINGS_MIGRATION_VERSION,
   MAINTENANCE_SETTINGS_CHECKS,
   MAINTENANCE_SETTINGS_COLUMNS,
   MAINTENANCE_SETTINGS_MIGRATION_VERSION,
@@ -72,6 +76,7 @@ describe('migration and entity metadata agree', () => {
     const { runner, tables, added } = recordingRunner();
     await migration.up(runner);
     await new AddMaintenanceCompanySettings2026101300010().up(runner);
+    await new AddIncidentCompanySettings2026101500030().up(runner);
     tables[0]?.columns.push(...added);
     const dataSource = new DataSource({
       type: 'mysql',
@@ -144,6 +149,34 @@ describe('maintenance settings migration', () => {
     expect(maintenance.name.endsWith(MAINTENANCE_SETTINGS_MIGRATION_VERSION)).toBe(true);
     expect(Number(MAINTENANCE_SETTINGS_MIGRATION_VERSION)).toBeGreaterThan(
       Number(SETTINGS_MIGRATION_VERSION),
+    );
+  });
+});
+
+describe('incident settings migration', () => {
+  it('adds the photo mode with a NULL-safe CHECK and a default, and reverts them', async () => {
+    const incident = new AddIncidentCompanySettings2026101500030();
+    const { runner, statements, added, droppedColumns } = recordingRunner();
+    await incident.up(runner);
+    expect(added.map((column) => column.name)).toEqual(
+      INCIDENT_SETTINGS_COLUMNS.map((column) => column.name),
+    );
+    expect(added[0]).toMatchObject({
+      name: 'incident_report_photo',
+      default: "'photo_or_justification'",
+    });
+    for (const check of INCIDENT_SETTINGS_CHECKS) {
+      expect(check.expression).toContain('IS TRUE');
+      expect(statements).toContain(
+        `ALTER TABLE \`${check.table}\` ADD CONSTRAINT \`${check.name}\` CHECK (${check.expression})`,
+      );
+    }
+    await incident.down(runner);
+    expect(droppedColumns).toEqual(added.map((column) => column.name));
+    expect(statements.filter((sql) => sql.includes('DROP CHECK'))).toHaveLength(1);
+    expect(incident.name.endsWith(INCIDENT_SETTINGS_MIGRATION_VERSION)).toBe(true);
+    expect(Number(INCIDENT_SETTINGS_MIGRATION_VERSION)).toBeGreaterThan(
+      Number(MAINTENANCE_SETTINGS_MIGRATION_VERSION),
     );
   });
 });
@@ -235,6 +268,7 @@ describe('DataSource factories', () => {
     expect(dataSource.options.migrations).toEqual([
       CreateCompanySettings2026100600090,
       AddMaintenanceCompanySettings2026101300010,
+      AddIncidentCompanySettings2026101500030,
     ]);
     const custom = createSettingsMigrationDataSource({
       ...base,

@@ -22,6 +22,7 @@ const settings = (tenant: string, over: Partial<CompanySettings> = {}): CompanyS
   recipientRoles: ['admin', 'editor'],
   maintenanceEvidence: 'none',
   closeCostThreshold: null,
+  incidentReportPhoto: 'photo_or_justification',
   timeZone: 'UTC',
   version: 1,
   updatedBy: ACTOR,
@@ -165,7 +166,16 @@ describe('maintenance settings columns', () => {
     expect((await store.find(A))?.closeCostThreshold).toBeNull();
   });
 
+  it('round-trips the photo mode of the incident report', async () => {
+    const { db, store } = setup();
+    const strict = settings(A, { incidentReportPhoto: 'photo_required' });
+    expect(await store.insert(strict)).toBe(true);
+    expect(db.committed()[0]).toMatchObject({ incidentReportPhoto: 'photo_required' });
+    expect(await store.find(A)).toEqual(strict);
+  });
+
   it.each([
+    { incidentReportPhoto: 'none' },
     { maintenanceEvidence: 'invoice' },
     { timeZone: 'Mars/Olympus' },
     { closeThresholdMinor: '10', closeThresholdCurrency: null },

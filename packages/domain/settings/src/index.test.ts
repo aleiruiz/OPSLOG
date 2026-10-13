@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  isIncidentReportPhoto,
   ALERT_RECIPIENT_ROLES,
   DEFAULT_EXPIRY_WINDOW_DAYS,
   DEFAULT_RECIPIENT_ROLES,
@@ -92,6 +93,32 @@ describe('parseSettings', () => {
   });
 });
 
+describe('incident report photo setting', () => {
+  it('defaults to a photo or a justification and parses the stricter mode', () => {
+    expect(defaultSettings(A).incidentReportPhoto).toBe('photo_or_justification');
+    expect(parseSettings(valid)).not.toHaveProperty('incidentReportPhoto');
+    expect(parseSettings({ ...valid, incidentReportPhoto: 'photo_required' })).toMatchObject({
+      incidentReportPhoto: 'photo_required',
+    });
+    expect(isIncidentReportPhoto('photo_required')).toBe(true);
+    expect(isIncidentReportPhoto('none')).toBe(false);
+    for (const bad of ['none', 1, null, ''])
+      expect(() => parseSettings({ ...valid, incidentReportPhoto: bad })).toThrow();
+  });
+
+  it('is replaced only when sent, and keeps the stored mode otherwise', async () => {
+    const { service: s } = service();
+    await s.update(A, ACTOR, 0, { ...valid, incidentReportPhoto: 'photo_required' });
+    const kept = await s.update(A, ACTOR, 1, { expiryWindowDays: 7, recipientRoles: ['viewer'] });
+    expect(kept.incidentReportPhoto).toBe('photo_required');
+    const relaxed = await s.update(A, ACTOR, 2, {
+      ...valid,
+      incidentReportPhoto: 'photo_or_justification',
+    });
+    expect(relaxed.incidentReportPhoto).toBe('photo_or_justification');
+  });
+});
+
 describe('maintenance settings (evidence, D20 threshold, time zone)', () => {
   it('defaults to no evidence, no D20 threshold and UTC', () => {
     expect(defaultSettings(A)).toMatchObject({
@@ -179,6 +206,7 @@ describe('SettingsService', () => {
       recipientRoles: ['admin', 'editor'],
       maintenanceEvidence: 'none',
       closeCostThreshold: null,
+      incidentReportPhoto: 'photo_or_justification',
       timeZone: 'UTC',
       version: 1,
       updatedBy: ACTOR,

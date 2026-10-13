@@ -134,3 +134,51 @@ export class AddMaintenanceCompanySettings2026101300010 implements MigrationInte
     );
   }
 }
+
+export const INCIDENT_SETTINGS_MIGRATION_VERSION = '2026101500030';
+
+/** Existing rows read the default: a clean photo or a written justification. */
+export const INCIDENT_SETTINGS_COLUMNS: readonly TableColumnOptions[] = [
+  text('incident_report_photo', 24, { default: "'photo_or_justification'" }),
+];
+
+export const INCIDENT_SETTINGS_CHECKS: readonly {
+  readonly table: string;
+  readonly name: string;
+  readonly expression: string;
+}[] = [
+  {
+    table: T.settings,
+    name: 'ck_settings_incident_photo',
+    expression:
+      "((`incident_report_photo` IN ('photo_or_justification','photo_required')) IS TRUE)",
+  },
+];
+
+/**
+ * Incident settings (INC-WORKFLOW, M4): the photo evidence reporting an incident requires. An expand
+ * migration in its own step, so the maintenance slice stays reversible on its own.
+ */
+export class AddIncidentCompanySettings2026101500030 implements MigrationInterface {
+  name = 'AddIncidentCompanySettings2026101500030';
+
+  async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.addColumns(
+      T.settings,
+      INCIDENT_SETTINGS_COLUMNS.map((column) => new TableColumn(column)),
+    );
+    for (const check of INCIDENT_SETTINGS_CHECKS)
+      await queryRunner.query(
+        `ALTER TABLE \`${check.table}\` ADD CONSTRAINT \`${check.name}\` CHECK (${check.expression})`,
+      );
+  }
+
+  async down(queryRunner: QueryRunner): Promise<void> {
+    for (const check of INCIDENT_SETTINGS_CHECKS)
+      await queryRunner.query(`ALTER TABLE \`${check.table}\` DROP CHECK \`${check.name}\``);
+    await queryRunner.dropColumns(
+      T.settings,
+      INCIDENT_SETTINGS_COLUMNS.map((column) => column.name),
+    );
+  }
+}

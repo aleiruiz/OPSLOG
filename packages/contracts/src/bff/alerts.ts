@@ -65,6 +65,12 @@ export const BFF_MAINTENANCE_EVIDENCE_REQUIREMENTS: readonly BffMaintenanceEvide
   'evidence',
   'evidence_invoice',
 ];
+/** Photo evidence that reporting an incident requires: a clean photo or a justification, or a clean photo only. */
+export type BffIncidentReportPhoto = 'photo_or_justification' | 'photo_required';
+export const BFF_INCIDENT_REPORT_PHOTO_MODES: readonly BffIncidentReportPhoto[] = [
+  'photo_or_justification',
+  'photo_required',
+];
 /** Exact amount in the currency's minor unit (digits) with its ISO 4217 code. */
 export interface BffCloseCostThreshold {
   readonly amountMinor: string;
@@ -84,6 +90,8 @@ export interface BffAlertSettings {
   readonly closeCostThreshold: BffCloseCostThreshold | null;
   /** IANA zone of the company; calendar days are computed in it (default `UTC`). */
   readonly timeZone: string;
+  /** Photo evidence reporting an incident requires (default `photo_or_justification`). The server always sends it. */
+  readonly incidentReportPhoto?: BffIncidentReportPhoto;
   readonly version: number;
   readonly updatedBy: string | null;
   readonly updatedAt: ISODateTime | null;
@@ -98,6 +106,7 @@ export interface BffAlertSettingsInput {
   readonly maintenanceEvidence?: BffMaintenanceEvidenceRequirement;
   readonly closeCostThreshold?: BffCloseCostThreshold | null;
   readonly timeZone?: string;
+  readonly incidentReportPhoto?: BffIncidentReportPhoto;
 }
 
 /** Request and response types of the alerts routes. */

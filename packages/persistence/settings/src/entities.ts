@@ -23,6 +23,7 @@ export class SettingsEntity {
   closeThresholdMinor!: string | null;
   closeThresholdCurrency!: string | null;
   timeZone!: string;
+  incidentReportPhoto!: string;
   version!: number;
   updatedBy!: string;
   updatedAt!: Date;
@@ -67,6 +68,12 @@ export const SettingsEntitySchema = new EntitySchema<SettingsEntity>({
       nullable: true,
     },
     timeZone: { name: 'time_zone', type: 'varchar', length: 64, collation: BINARY_COLLATION },
+    incidentReportPhoto: {
+      name: 'incident_report_photo',
+      type: 'varchar',
+      length: 24,
+      collation: BINARY_COLLATION,
+    },
     version: { type: 'int', unsigned: true },
     updatedBy: { name: 'updated_by', type: 'varchar', length: 64, collation: BINARY_COLLATION },
     updatedAt: { name: 'updated_at', type: 'datetime', precision: 6 },

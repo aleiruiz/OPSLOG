@@ -3,6 +3,7 @@ import {
   type AlertRecipientRole,
   type CloseCostThreshold,
   type CompanySettings,
+  type IncidentReportPhoto,
   type MaintenanceEvidenceRequirement,
   type SettingsService,
 } from '../../../../packages/domain/settings/src/index.js';
@@ -64,6 +65,7 @@ export interface CompanySettingsView {
   readonly maintenanceEvidence: MaintenanceEvidenceRequirement;
   readonly closeCostThreshold: CloseCostThreshold | null;
   readonly timeZone: string;
+  readonly incidentReportPhoto: IncidentReportPhoto;
   /** 0 while the company has never saved (the values are then the defaults). */
   readonly version: number;
   readonly updatedBy: string | null;
@@ -108,6 +110,7 @@ const viewOf = (settings: CompanySettings): CompanySettingsView => ({
   maintenanceEvidence: settings.maintenanceEvidence,
   closeCostThreshold: settings.closeCostThreshold,
   timeZone: settings.timeZone,
+  incidentReportPhoto: settings.incidentReportPhoto,
   version: settings.version,
   updatedBy: settings.updatedBy,
   updatedAt: settings.updatedAt,
