@@ -42,7 +42,9 @@ export function AreaDetailScreen({ id }: { id: string }) {
   const [historyNotice, setHistoryNotice] = React.useState<string | null>(null);
   // Bumped whenever the first page is reloaded: a page requested before that belongs to an older list.
   const generation = React.useRef(0);
-  React.useEffect(() => {
+  // A layout effect: the reset must land before the page can be clicked, or a "load more"
+  // started right after the first page arrives is discarded as stale.
+  React.useLayoutEffect(() => {
     generation.current += 1;
     setExtra(null);
     setHistoryNotice(null);
