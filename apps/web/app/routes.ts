@@ -1,8 +1,13 @@
 import type { Permission } from './types';
 
-export type RouteAccess = 'public' | 'authenticated' | { readonly permission: Permission };
+export type RouteAccess =
+  | 'public'
+  | 'authenticated'
+  | { readonly permission: Permission }
+  /** Any one of these grants access (incidents: creating or reporting). */
+  | { readonly anyOf: readonly Permission[] };
 
-export type NavGroup = 'Inicio' | 'Plantilla' | 'Flota' | 'Configuración';
+export type NavGroup = 'Inicio' | 'Plantilla' | 'Flota' | 'Operación' | 'Configuración';
 
 export interface RouteDefinition {
   readonly id:
@@ -45,7 +50,11 @@ export interface RouteDefinition {
     | 'alerts'
     | 'alertSettings'
     | 'maintenance'
-    | 'maintenanceOrder';
+    | 'maintenanceOrder'
+    | 'incidents'
+    | 'incidentNew'
+    | 'incidentDetail'
+    | 'incidentTab';
   readonly pattern: string;
   readonly title: string;
   readonly access: RouteAccess;
@@ -299,6 +308,33 @@ export const routes: readonly RouteDefinition[] = [
     title: 'Importación',
     access: { permission: 'view' },
   },
+  // Incidents (INC-UI, nav group "Operación"): they follow their own permissions (ADR-0014). The generic
+  // `view`, `create` and `edit` grant nothing here; creating needs `incidents:create` or `incidents:report`.
+  {
+    id: 'incidents',
+    pattern: '/incidents',
+    title: 'Siniestros',
+    access: { permission: 'incidents:view' },
+    nav: { group: 'Operación', label: 'Siniestros' },
+  },
+  {
+    id: 'incidentNew',
+    pattern: '/incidents/new',
+    title: 'Nuevo siniestro',
+    access: { anyOf: ['incidents:create', 'incidents:report'] },
+  },
+  {
+    id: 'incidentDetail',
+    pattern: '/incidents/:id',
+    title: 'Siniestro',
+    access: { permission: 'incidents:view' },
+  },
+  {
+    id: 'incidentTab',
+    pattern: '/incidents/:id/:tab',
+    title: 'Siniestro',
+    access: { permission: 'incidents:view' },
+  },
   {
     id: 'alertSettings',
     pattern: '/configuracion/alertas',
@@ -360,7 +396,8 @@ export function resolveRoute(
 }
 
 export function isAllowed(access: RouteAccess, can: (permission: Permission) => boolean): boolean {
-  return typeof access === 'object' ? can(access.permission) : true;
+  if (typeof access !== 'object') return true;
+  return 'anyOf' in access ? access.anyOf.some(can) : can(access.permission);
 }
 
 export const loginPath = '/iniciar-sesion';

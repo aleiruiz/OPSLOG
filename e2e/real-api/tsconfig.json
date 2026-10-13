@@ -7,7 +7,7 @@
     "outDir": "../../dist/e2e/real-api",
     "types": ["node", "@playwright/test"]
   },
-  "include": ["./**/*.ts", "../maintenance-real.spec.ts"],
+  "include": ["./**/*.ts", "../maintenance-real.spec.ts", "../incidents-real.spec.ts"],
   "references": [
     { "path": "../../apps/api/composition" },
     { "path": "../../apps/api/bff" },
