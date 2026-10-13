@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { In, type DataSource, type EntityManager } from 'typeorm';
+import { In, IsNull, LessThanOrEqual, type DataSource, type EntityManager } from 'typeorm';
 import { MySqlTenantOutboxStore } from '../../../audit/src/index.js';
 import {
   alertEventOf,
@@ -331,8 +331,18 @@ export class TypeOrmIncidentSlaStore implements IncidentSlaStore {
       .update({ ...this.where(key), status: 'pending', attempts: attempt }, change);
   }
 
-  public async skipDelivery(key: DeliveryKey): Promise<void> {
-    await this.dataSource.transaction('READ COMMITTED', async (manager) => {
+  public async abandonDelivery(key: DeliveryKey): Promise<void> {
+    await this.dataSource
+      .getRepository(IncidentSlaDeliverySchema)
+      .update(
+        { ...this.where(key), status: 'pending' },
+        { status: 'failed', nextAttemptAt: null, leaseUntil: null },
+      );
+  }
+
+  public async skipDelivery(key: DeliveryKey, now: string): Promise<boolean> {
+    const at = new Date(now);
+    return this.dataSource.transaction('READ COMMITTED', async (manager) => {
       const rows = manager.getRepository(IncidentSlaDeliverySchema);
       try {
         await rows.insert({
@@ -342,14 +352,17 @@ export class TypeOrmIncidentSlaStore implements IncidentSlaStore {
           nextAttemptAt: null,
           leaseUntil: null,
         });
+        return true;
       } catch (error) {
         if (!isDuplicate(error)) throw error;
-        // A `sent` or `failed` row stays as it is; only a pending one becomes skipped.
-        await rows.update(
-          { ...this.where(key), status: 'pending' },
-          { status: 'skipped', nextAttemptAt: null, leaseUntil: null },
-        );
       }
+      // A `sent` or `failed` row stays; a pending one becomes skipped unless a worker holds its lease.
+      const change = { status: 'skipped', nextAttemptAt: null, leaseUntil: null };
+      const pending = { ...this.where(key), status: 'pending' };
+      await rows.update({ ...pending, leaseUntil: IsNull() }, change);
+      await rows.update({ ...pending, leaseUntil: LessThanOrEqual(at) }, change);
+      const row = await rows.findOne({ where: this.where(key) });
+      return row?.status !== 'pending';
     });
   }
 

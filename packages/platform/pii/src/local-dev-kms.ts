@@ -7,6 +7,7 @@ import {
   timingSafeEqual,
 } from 'node:crypto';
 import { KmsError, type DataKey, type EncryptionContext, type KmsPort } from './kms.js';
+import { isProductionMode } from './environment.js';
 
 export interface LocalDevKmsOptions {
   /** Master key material, at least 32 bytes. It comes from configuration, never from the repository. */
@@ -25,7 +26,6 @@ export interface LocalDevKmsOptions {
 
 const KEY_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
 const TENANT = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
-const PRODUCTION = /^(?:production|prod)$/i;
 const MAX_MESSAGE_BYTES = 4096;
 
 const canonical = (context: EncryptionContext, keyId: string): Buffer =>
@@ -73,8 +73,7 @@ export class LocalDevKms implements KmsPort {
     environment: string,
     env: Readonly<Record<string, string | undefined>> = process.env,
   ): void {
-    const announced = [environment, env['NODE_ENV'], env['OPSLOG_ENV']];
-    if (announced.some((value) => typeof value === 'string' && PRODUCTION.test(value.trim())))
+    if (isProductionMode(environment, env))
       throw new Error('LocalDevKms must not be used in production');
   }
 

@@ -159,10 +159,18 @@ export class InMemoryIncidentSlaStore implements IncidentSlaStore {
     if (s.status === 'retry') row.nextAttemptAt = s.nextAttemptAt;
     else row.status = s.status;
   }
-  public async skipDelivery(key: DeliveryKey): Promise<void> {
+  public async abandonDelivery(key: DeliveryKey): Promise<void> {
+    const row = this.rows.get(this.deliveryKey(key));
+    if (row?.status !== 'pending') return;
+    row.status = 'failed';
+    row.nextAttemptAt = null;
+    row.leaseUntil = null;
+  }
+  public async skipDelivery(key: DeliveryKey, now: string): Promise<boolean> {
     const id = this.deliveryKey(key);
     const row = this.rows.get(id);
-    if (row?.status === 'sent' || row?.status === 'failed') return;
+    if (row?.status === 'sent' || row?.status === 'failed') return true;
+    if (row?.leaseUntil != null && row.leaseUntil > Date.parse(now)) return false;
     this.rows.set(id, {
       ...key,
       status: 'skipped',
@@ -170,6 +178,7 @@ export class InMemoryIncidentSlaStore implements IncidentSlaStore {
       nextAttemptAt: null,
       leaseUntil: null,
     });
+    return true;
   }
   public async deliveries(tenantId: string, alertId: string): Promise<readonly DeliveryRow[]> {
     return [...this.rows.values()]

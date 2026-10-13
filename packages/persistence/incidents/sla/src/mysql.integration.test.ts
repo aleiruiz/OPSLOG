@@ -293,10 +293,10 @@ suite('incident SLA on disposable MySQL 8.4', () => {
     await store.settleDelivery(key, 3, { status: 'sent' });
     expect(await store.claimDelivery(key, later, 60_000)).toEqual({ result: 'done' });
     // A sent row is not skipped afterwards; a new recipient is skipped with no attempt.
-    await store.skipDelivery(key);
+    await store.skipDelivery(key, t0);
     const other = { ...key, recipientId: 'user-other' };
-    await store.skipDelivery(other);
-    await store.skipDelivery(other);
+    await store.skipDelivery(other, t0);
+    await store.skipDelivery(other, t0);
     const rows = await store.deliveries(tenantA, alert.id);
     expect(rows.map((r) => [r.recipientId, r.status])).toEqual([
       [MANAGER.id, 'sent'],
@@ -305,12 +305,23 @@ suite('incident SLA on disposable MySQL 8.4', () => {
     // A pending row that gets skipped is final, and a failed one stays failed.
     const pending = { ...key, recipientId: 'user-pending' };
     await store.claimDelivery(pending, t0, 1);
-    await store.skipDelivery(pending);
+    expect(await store.skipDelivery(pending, later)).toBe(true);
     expect(await store.claimDelivery(pending, later, 1)).toEqual({ result: 'done' });
+    // A live lease blocks the skip; a row nobody holds any more can be skipped or abandoned.
+    const held = { ...key, recipientId: 'user-held' };
+    await store.claimDelivery(held, t0, 60_000);
+    expect(await store.skipDelivery(held, t0)).toBe(false);
+    expect(
+      (await store.deliveries(tenantA, alert.id)).find((r) => r.recipientId === 'user-held'),
+    ).toMatchObject({ status: 'pending' });
+    await store.abandonDelivery(held);
+    expect(
+      (await store.deliveries(tenantA, alert.id)).find((r) => r.recipientId === 'user-held'),
+    ).toMatchObject({ status: 'failed' });
     const failed = { ...key, recipientId: 'user-failed' };
     await store.claimDelivery(failed, t0, 1);
     await store.settleDelivery(failed, 1, { status: 'failed' });
-    await store.skipDelivery(failed);
+    await store.skipDelivery(failed, t0);
     expect(
       (await store.deliveries(tenantA, alert.id)).find((r) => r.recipientId === 'user-failed')
         ?.status,

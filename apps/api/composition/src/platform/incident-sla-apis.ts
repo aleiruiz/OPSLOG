@@ -13,6 +13,7 @@ import {
   type SlaSettings,
   type SlaSettingsReader,
 } from '../../../../../packages/domain/incidents/sla/src/index.js';
+import { isProductionMode } from '../../../../../packages/platform/pii/src/environment.js';
 import { InMemoryMechanicStore } from '../../../../../packages/domain/maintenance/mechanics/src/index.js';
 import {
   selectIncidentAlertMailer,
@@ -105,7 +106,7 @@ export function buildIncidentSla(
     ...(adapters.incidentAlertMailer ? { mailer: adapters.incidentAlertMailer } : {}),
   });
   // Production needs the real directory too: a reserved address would make every send look done.
-  if (environment === 'production' && !adapters.incidentAlertAddresses)
+  if (isProductionMode(environment) && !adapters.incidentAlertAddresses)
     throw new Error('A member address directory is required for incident alerts in production');
   const store =
     adapters.incidentSla ??

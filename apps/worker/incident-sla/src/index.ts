@@ -1,3 +1,4 @@
+import { isProductionMode } from '../../../../packages/platform/pii/src/environment.js';
 import type { Handler } from '../../base/src/index.js';
 import {
   INCIDENT_SLA_ALERT_EVENT,
@@ -52,7 +53,9 @@ export function registerIncidentSlaHandlers(
   });
   worker.register(INCIDENT_SLA_ALERT_EVENT, async (payload, event) => {
     // The delivery validates the exact payload and throws while a recipient still awaits a retry.
-    await sla.delivery.deliver(event.tenantId, payload);
+    await sla.delivery.deliver(event.tenantId, payload, {
+      final: event.attempt !== undefined && event.attempt >= (event.maxAttempts ?? Infinity),
+    });
   });
 }
 
@@ -76,11 +79,11 @@ export function selectIncidentAlertMailer(options: {
   readonly mailer?: IncidentAlertMailer;
 }): IncidentAlertMailer {
   if (options.mailer) {
-    if (options.environment === 'production' && options.mailer instanceof TestSinkMailer)
+    if (isProductionMode(options.environment) && options.mailer instanceof TestSinkMailer)
       throw new Error('The incident alert test sink cannot run in production');
     return options.mailer;
   }
-  if (options.environment === 'production')
+  if (isProductionMode(options.environment))
     throw new Error('A real incident alert mail adapter is required in production');
   return new TestSinkMailer();
 }

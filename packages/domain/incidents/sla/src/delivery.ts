@@ -83,8 +83,12 @@ export class IncidentAlertDelivery {
     this.random = options.random ?? Math.random;
   }
 
-  /** Handles one `incident.sla_alert`. Throws `DeliveryPendingError` while any recipient awaits a retry. */
-  public async deliver(tenantId: string, payload: unknown): Promise<DeliverySummary> {
+  /** Handles one `incident.sla_alert`. Throws `DeliveryPendingError` while any recipient awaits a retry, except on the last outbox try (`final`), which settles those rows as failed. */
+  public async deliver(
+    tenantId: string,
+    payload: unknown,
+    options: { readonly final?: boolean } = {},
+  ): Promise<DeliverySummary> {
     const event = parseSlaAlertPayload(payload);
     const alert = await this.store.alert(tenantId, event.alertId);
     const summary = { sent: 0, skipped: 0, failed: 0, pending: 0 };
@@ -92,6 +96,7 @@ export class IncidentAlertDelivery {
     if (!alert || alert.incidentId !== event.incidentId) return summary;
     const incident = await this.incidents.get(tenantId, alert.incidentId);
     const open = incident !== null && !TERMINAL_STATUSES.includes(incident.status);
+    const waiting: DeliveryKey[] = [];
     const candidates = await recipientsOf(alert, incident?.responsibleId ?? null, this.members);
     for (const recipientId of candidates) {
       const key: DeliveryKey = {
@@ -100,9 +105,17 @@ export class IncidentAlertDelivery {
         recipientId,
         channel: DELIVERY_CHANNEL,
       };
-      const outcome = open ? await this.deliverTo(key, alert, incident) : 'skipped';
-      if (outcome === 'skipped') await this.store.skipDelivery(key);
+      let outcome = open ? await this.deliverTo(key, alert, incident) : 'skipped';
+      // A row another worker is still sending stays pending: the outbox tries again.
+      if (outcome === 'skipped' && !(await this.store.skipDelivery(key, this.now().toISOString())))
+        outcome = 'pending';
+      if (outcome === 'pending') waiting.push(key);
       if (outcome !== 'done') summary[outcome] += 1;
+    }
+    if (summary.pending > 0 && options.final) {
+      // The outbox event dead-letters after this try: no row may stay pending for good.
+      for (const key of waiting) await this.store.abandonDelivery(key);
+      return { ...summary, failed: summary.failed + summary.pending, pending: 0 };
     }
     if (summary.pending > 0) throw new DeliveryPendingError();
     return summary;

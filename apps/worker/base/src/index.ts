@@ -30,7 +30,14 @@ export interface WorkerMetrics {
 }
 export type Handler = (
   payload: unknown,
-  event: { eventId: string; tenantId: string; type: string },
+  event: {
+    eventId: string;
+    tenantId: string;
+    type: string;
+    /** Tries so far, this one included, and the tries after which the event dead-letters. */
+    attempt?: number;
+    maxAttempts?: number;
+  },
 ) => void | Promise<void>;
 export class Worker {
   readonly metrics: WorkerMetrics = {
@@ -166,6 +173,8 @@ export class Worker {
           eventId: record.eventId,
           tenantId: record.tenantId,
           type: record.type,
+          attempt: record.attempts,
+          maxAttempts: this.maxAttempts,
         });
       } catch (error) {
         // Backoff counts from the failure, not from the claim: a slow handler must not retry immediately.

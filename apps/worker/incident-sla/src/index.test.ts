@@ -64,9 +64,30 @@ describe('incident SLA outbox handlers', () => {
     const { sla, run } = setup();
     const payload = { incidentId: 'inc-1', alertId: 'a-1', kind: 'sla_breach', cycle: 1 };
     await run(INCIDENT_SLA_ALERT_EVENT, payload, 'tenant-b');
-    expect(sla.delivery.deliver).toHaveBeenCalledExactlyOnceWith('tenant-b', payload);
+    expect(sla.delivery.deliver).toHaveBeenCalledExactlyOnceWith('tenant-b', payload, {
+      final: false,
+    });
     sla.delivery.deliver.mockRejectedValueOnce(new Error('pending'));
     await expect(run(INCIDENT_SLA_ALERT_EVENT, payload)).rejects.toThrow('pending');
+  });
+});
+
+describe('alert handler on the last outbox try', () => {
+  it('tells the delivery only on the last try', async () => {
+    const { sla, run } = setup();
+    const payload = { alertId: 'a', incidentId: 'i' };
+    const handlers = new Map<string, H>();
+    registerIncidentSlaHandlers({ register: (t, h) => handlers.set(t, h) }, sla as never);
+    const base = { tenantId: 'tenant-a', eventId: 'e1', type: INCIDENT_SLA_ALERT_EVENT };
+    const alert = handlers.get(INCIDENT_SLA_ALERT_EVENT);
+    await alert?.(payload, { ...base, attempt: 5, maxAttempts: 6 } as never);
+    await alert?.(payload, { ...base, attempt: 6, maxAttempts: 6 } as never);
+    await run(INCIDENT_SLA_ALERT_EVENT, payload);
+    expect(sla.delivery.deliver.mock.calls.map((c) => (c as unknown[])[2])).toEqual([
+      { final: false },
+      { final: true },
+      { final: false },
+    ]);
   });
 });
 
@@ -94,5 +115,20 @@ describe('incident alert mail adapter selection', () => {
     const real = { send: async () => undefined };
     expect(selectIncidentAlertMailer({ environment: 'production', mailer: real })).toBe(real);
     expect(selectIncidentAlertMailer({ environment: 'test', mailer: real })).toBe(real);
+  });
+  it('treats prod, any case, NODE_ENV and OPSLOG_ENV as production too', () => {
+    for (const environment of ['prod', 'PRODUCTION', ' Prod '])
+      expect(() => selectIncidentAlertMailer({ environment })).toThrow('required');
+    for (const name of ['NODE_ENV', 'OPSLOG_ENV']) {
+      vi.stubEnv(name, name === 'NODE_ENV' ? 'production' : 'prod');
+      try {
+        expect(() => selectIncidentAlertMailer({ environment: 'test' })).toThrow('required');
+        expect(() =>
+          selectIncidentAlertMailer({ environment: 'test', mailer: new TestSinkMailer() }),
+        ).toThrow('cannot run in production');
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    }
   });
 });

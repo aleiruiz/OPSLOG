@@ -149,6 +149,64 @@ describe('e-mail of a notice (acceptance 14)', () => {
     expect(world.mailer.sent).toHaveLength(0);
   });
 
+  it('settles still-pending rows as failed on the last outbox try, whatever their own attempts', async () => {
+    const world = slaWorld();
+    const { payload } = await warn(world);
+    const alertId = String(payload['alertId']);
+    // The mail port fails: the row would stay pending, but the outbox gives up after this try.
+    world.mailer.failNext = 99;
+    expect(await world.delivery().deliver(TENANT_A, payload, { final: true })).toMatchObject({
+      failed: 1,
+      pending: 0,
+    });
+    expect((await world.slaStore.deliveries(TENANT_A, alertId))[0]).toMatchObject({
+      status: 'failed',
+      attempts: 1,
+    });
+    // A row another worker still holds is settled too, instead of lingering for good.
+    const busy = slaWorld();
+    const { payload: other } = await warn(busy);
+    const key = {
+      tenantId: TENANT_A,
+      alertId: String(other['alertId']),
+      recipientId: MANAGER.id,
+      channel: 'email',
+    } as const;
+    await busy.slaStore.claimDelivery(key, busy.clock.current.toISOString(), 300_000);
+    await expect(busy.delivery().deliver(TENANT_A, other)).rejects.toBeInstanceOf(
+      DeliveryPendingError,
+    );
+    expect(await busy.delivery().deliver(TENANT_A, other, { final: true })).toMatchObject({
+      failed: 1,
+      pending: 0,
+    });
+    expect((await busy.slaStore.deliveries(TENANT_A, key.alertId))[0]?.status).toBe('failed');
+    expect(busy.mailer.sent).toHaveLength(0);
+  });
+
+  it('does not skip a row while another worker holds its lease', async () => {
+    const world = slaWorld();
+    const { payload } = await warn(world);
+    const key = {
+      tenantId: TENANT_A,
+      alertId: String(payload['alertId']),
+      recipientId: MANAGER.id,
+      channel: 'email',
+    } as const;
+    const now = world.clock.current.toISOString();
+    await world.slaStore.claimDelivery(key, now, 300_000);
+    expect(await world.slaStore.skipDelivery(key, now)).toBe(false);
+    expect((await world.slaStore.deliveries(TENANT_A, key.alertId))[0]?.status).toBe('pending');
+    // Revoked meanwhile: the job comes back instead of recording a skip over a send in flight.
+    world.directory.revoke(TENANT_A, MANAGER.id);
+    await expect(world.delivery().deliver(TENANT_A, payload)).rejects.toBeInstanceOf(
+      DeliveryPendingError,
+    );
+    const expired = new Date(world.clock.current.getTime() + 300_001).toISOString();
+    expect(await world.slaStore.skipDelivery(key, expired)).toBe(true);
+    expect((await world.slaStore.deliveries(TENANT_A, key.alertId))[0]?.status).toBe('skipped');
+  });
+
   it('skips a recipient who was revoked, lost the right, is mechanic-scoped or has no address', async () => {
     for (const change of [
       (w: SlaWorld) => w.directory.revoke(TENANT_A, MANAGER.id),

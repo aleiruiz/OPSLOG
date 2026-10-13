@@ -60,8 +60,14 @@ export interface IncidentSlaStore {
   /** Takes the row of the notice and recipient for one attempt, creating it as `pending` first. */
   claimDelivery(key: DeliveryKey, now: string, leaseMs: number): Promise<ClaimResult>;
   settleDelivery(key: DeliveryKey, attempt: number, settlement: Settlement): Promise<void>;
-  /** Final `skipped` for a recipient that must not get the message; a `sent` row stays `sent`. */
-  skipDelivery(key: DeliveryKey): Promise<void>;
+  /**
+   * Final `skipped` for a recipient that must not get the message; a `sent` or `failed` row stays.
+   * A pending row whose lease is live (another worker is sending) is left alone. `false`: the row is
+   * still pending, so the recipient still awaits a settlement.
+   */
+  skipDelivery(key: DeliveryKey, now: string): Promise<boolean>;
+  /** Last outbox try: a still-pending row becomes `failed`, so none stays pending for good. */
+  abandonDelivery(key: DeliveryKey): Promise<void>;
   deliveries(tenantId: string, alertId: string): Promise<readonly DeliveryRow[]>;
 }
 

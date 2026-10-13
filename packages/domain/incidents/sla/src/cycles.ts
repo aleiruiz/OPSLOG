@@ -50,8 +50,12 @@ export async function cycleFacts(
   if (startedAt === null) return null;
   const resolvedAt = await endOf(incident, cycle, startedAt, history);
   // A cycle that already ended keeps the severity it ended with: only the current one is retargeted.
+  // Nor does a resolved one: its deadline is closed, a later severity edit must not reopen the target.
   const retarget =
-    stored !== undefined && cycle === incident.cycle && stored.severity !== incident.severity;
+    stored !== undefined &&
+    cycle === incident.cycle &&
+    resolvedAt === null &&
+    stored.severity !== incident.severity;
   const severity = stored && !retarget ? stored.severity : incident.severity;
   if (severity === null) return null;
   if (stored && !retarget)

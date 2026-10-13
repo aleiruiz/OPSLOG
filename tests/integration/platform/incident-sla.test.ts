@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, it, vi } from 'vitest';
+import { EnvelopePiiCipher, LocalDevKms } from '../../../packages/platform/pii/src/index.js';
 import {
   InMemoryOutboxStore,
   createPlatform,
@@ -389,5 +390,41 @@ describe('in-memory composition: jobs, settings, atomicity, capacity and product
       createPlatform({ ...base, environment: 'test' }).incidentSlaModule.mailer,
     ).toBeInstanceOf(TestSinkMailer);
     void P;
+  });
+
+  it('also fails closed for prod, and for NODE_ENV or OPSLOG_ENV announcing production', () => {
+    const verifier = new FakeOidcVerifier();
+    const base = {
+      verifier,
+      issuer: verifier.issuer,
+      grantSecret: 'synthetic-grant-secret-for-tests-0123456789',
+    };
+    const real = { send: async () => undefined };
+    // Built before the environment announces production: the default local KMS would refuse first.
+    const pii = new EnvelopePiiCipher(LocalDevKms.ephemeral('test'));
+    expect(() => createPlatform({ ...base, environment: 'prod' })).toThrow(/mail adapter/);
+    expect(() =>
+      createPlatform({ ...base, environment: 'Prod', adapters: { incidentAlertMailer: real } }),
+    ).toThrow(/address directory/);
+    for (const [name, value] of [
+      ['NODE_ENV', 'production'],
+      ['OPSLOG_ENV', 'prod'],
+    ] as const) {
+      vi.stubEnv(name, value);
+      try {
+        expect(() => createPlatform({ ...base, environment: 'test', adapters: { pii } })).toThrow(
+          /mail adapter/,
+        );
+        expect(() =>
+          createPlatform({
+            ...base,
+            environment: 'test',
+            adapters: { pii, incidentAlertMailer: real },
+          }),
+        ).toThrow(/address directory/);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    }
   });
 });
