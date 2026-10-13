@@ -9,12 +9,21 @@ import {
 } from '../../cases/src/index.js';
 import {
   IDEMPOTENCY_REQUIRED_COMMANDS,
-  IMPLEMENTED_COMMANDS,
   TRANSITIONS,
   routeAllows,
   transitionAllowed,
 } from './commands.js';
-import { ADMIN, FULL, MANAGER, TENANT_A, draft, put, setup, type World } from './test-support.js';
+import {
+  ADMIN,
+  FULL,
+  MANAGER,
+  TENANT_A,
+  draft,
+  put,
+  resolvedFrom,
+  setup,
+  type World,
+} from './test-support.js';
 
 /** SPECS §6.2, written out independently of the code under test (the oracle of the matrix). */
 const OPEN: readonly IncidentStatus[] = [
@@ -52,25 +61,19 @@ const ORACLE: Readonly<
   reopen: { from: ['closed'], to: 'reopened' },
   cancel: { from: OPEN, to: 'cancelled' },
 };
-/** Delivered with this package; the D20 approvals, close and reopen come in its second part. */
-const DELIVERED: readonly IncidentCommand[] = [
-  'report',
-  'assign',
-  'review',
-  'insure',
-  'no_insurance',
-  'reject',
-  'appeal',
-  'repair',
-  'resolve',
-  'cancel',
-];
-
 /** A world with a case in `status` that meets every requirement of `command`. */
 async function cell(command: IncidentCommand, status: IncidentStatus) {
   const world = setup();
   const created = await draft(world, { type: 'other' });
-  const incident = await put(world, created, { ...FULL, status });
+  const incident = await put(
+    world,
+    created,
+    { ...FULL, status },
+    status === 'resolved' ? [resolvedFrom('under_review')] : [],
+  );
+  // The approvals only exist where a threshold does.
+  if (command === 'approve_assumption' || command === 'approve_close')
+    world.settings.threshold = { amountMinor: '500000', currency: 'MXN' };
   for (const category of [
     'photo',
     'police_report',
@@ -127,9 +130,7 @@ async function outcome(command: IncidentCommand, status: IncidentStatus): Promis
 
 const expected = (command: IncidentCommand, status: IncidentStatus): string => {
   const rule = ORACLE[command];
-  return DELIVERED.includes(command) && rule.from.includes(status)
-    ? `ok:${rule.to ?? status}`
-    : 'invalid_transition';
+  return rule.from.includes(status) ? `ok:${rule.to ?? status}` : 'invalid_transition';
 };
 
 describe('the transition table (case 1)', () => {
@@ -140,7 +141,6 @@ describe('the transition table (case 1)', () => {
       expect(TRANSITIONS[command].from, command).toEqual(ORACLE[command].from);
       expect(TRANSITIONS[command].to, command).toBe(ORACLE[command].to);
     }
-    expect([...IMPLEMENTED_COMMANDS].sort()).toEqual([...DELIVERED].sort());
     expect([...IDEMPOTENCY_REQUIRED_COMMANDS].sort()).toEqual(
       ['approve_assumption', 'approve_close', 'close', 'reopen'].sort(),
     );
@@ -161,7 +161,7 @@ describe('the transition table (case 1)', () => {
   it('catches a directed mutation of any cell of the transition map', async () => {
     const original = { ...TRANSITIONS };
     try {
-      for (const command of DELIVERED)
+      for (const command of INCIDENT_COMMANDS)
         for (const status of INCIDENT_STATUSES) {
           const rule = original[command];
           const flipped = rule.from.includes(status)
@@ -204,6 +204,6 @@ describe('the route of each type (case 6)', () => {
     expect(transitionAllowed(underReview, 'review')).toBe(false);
     expect(transitionAllowed(underReview, 'repair')).toBe(false);
     expect(transitionAllowed(underReview, 'insure')).toBe(true);
-    expect(transitionAllowed({ ...underReview, status: 'resolved' }, 'close')).toBe(false);
+    expect(transitionAllowed({ ...underReview, status: 'resolved' }, 'close')).toBe(true);
   });
 });

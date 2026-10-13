@@ -29,8 +29,26 @@ export function effectOf(
     case 'appeal':
       // An appeal reopens the question: the earlier assumption no longer stands (US-033).
       return { status, insurerResult: 'pending', assumptionApproval: null };
+    case 'approve_assumption':
+      return { assumptionApproval: { by: context.actor.id, at: context.time } };
+    case 'approve_close':
+      return { closeApproval: { by: context.actor.id, at: context.time } };
     case 'resolve':
       return { status, resolvedAt: context.time };
+    case 'close':
+      return { status, closedAt: context.time, closedBy: context.actor.id };
+    case 'reopen':
+      // A new cycle starts: both approvals covered what the supervisor saw before, and the
+      // closing stamp belongs to the cycle that ended (its snapshot keeps it).
+      return {
+        status,
+        cycle: incident.cycle + 1,
+        reopenCount: incident.reopenCount + 1,
+        assumptionApproval: null,
+        closeApproval: null,
+        closedAt: null,
+        closedBy: null,
+      };
     case 'cancel':
       return { status, cancelReason: context.reason };
     default:

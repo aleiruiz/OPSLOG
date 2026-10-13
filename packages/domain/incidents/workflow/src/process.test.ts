@@ -265,6 +265,7 @@ describe('evidence guard (ADR-0014)', () => {
             category: row.category,
             stage: row.stage,
             clean: (await world.files.record(tenantId, row.fileId))?.status === 'clean',
+            pending: false,
           })),
         );
       },

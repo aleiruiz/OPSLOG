@@ -1,4 +1,5 @@
 import {
+  INCIDENT_COMMANDS,
   can,
   canEdit,
   canView,
@@ -6,7 +7,7 @@ import {
   type IncidentActor,
   type IncidentCommand,
 } from '../../cases/src/index.js';
-import { TRANSITIONS, transitionAllowed, IMPLEMENTED_COMMANDS } from './commands.js';
+import { TRANSITIONS, transitionAllowed } from './commands.js';
 
 /**
  * Permission of a command on a case the caller already sees. Only the permissions of incidents count
@@ -38,7 +39,7 @@ export function allowedCommands(
   incident: Incident,
   actor: IncidentActor,
 ): readonly IncidentCommand[] {
-  return IMPLEMENTED_COMMANDS.filter(
+  return INCIDENT_COMMANDS.filter(
     (command) => transitionAllowed(incident, command) && mayRun(actor, incident, command),
   );
 }
