@@ -26,26 +26,23 @@ describe('quality workflow change scope', () => {
     expect(scopeOf(['docs/adr/0014-x.md', 'AGENTS.md'])).toEqual({
       product: false,
       integration: false,
-      visual: false,
     });
-    expect(scopeOf([])).toEqual({ product: false, integration: false, visual: false });
+    expect(scopeOf([])).toEqual({ product: false, integration: false });
   });
 
   it('runs only the suites the changed areas can affect', () => {
     expect(scopeOf(['apps/web/app/router.tsx', 'docs/x.md'])).toEqual({
       product: true,
       integration: false,
-      visual: true,
     });
     expect(scopeOf(['packages/domain/vehicles/src/vin.ts'])).toEqual({
       product: true,
       integration: true,
-      visual: false,
     });
-    expect(scopeOf(['pnpm-lock.yaml'])).toEqual({ product: true, integration: true, visual: true });
+    expect(scopeOf(['pnpm-lock.yaml'])).toEqual({ product: true, integration: true });
   });
 
   it('runs everything when the change set is unknown', () => {
-    expect(scopeOf(null)).toEqual({ product: true, integration: true, visual: true });
+    expect(scopeOf(null)).toEqual({ product: true, integration: true });
   });
 });

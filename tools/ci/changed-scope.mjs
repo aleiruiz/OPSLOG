@@ -29,13 +29,12 @@ export function areaOf(file) {
 
 /** Which suites must run for the changed files; `null` means the change set is unknown. */
 export function scopeOf(files) {
-  if (files === null) return { product: true, integration: true, visual: true };
+  if (files === null) return { product: true, integration: true };
   const areas = new Set(files.map(areaOf));
   const config = areas.has('config');
   return {
     product: config || areas.has('web') || areas.has('server'),
     integration: config || areas.has('server'),
-    visual: config || areas.has('web'),
   };
 }
 
