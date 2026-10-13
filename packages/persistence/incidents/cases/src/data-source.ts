@@ -6,6 +6,7 @@ import {
   INCIDENT_CHILD_ENTITIES,
 } from '../../third-parties/src/index.js';
 import { INCIDENT_COST_ENTITIES } from '../../costs/src/entities.js';
+import { INCIDENT_SLA_ENTITIES } from '../../sla/src/entities.js';
 import { INCIDENT_REPAIR_ENTITIES } from '../../repairs/src/entities.js';
 import { INCIDENT_WORKFLOW_ENTITIES } from '../../workflow/src/entities.js';
 import { INCIDENT_ENTITIES } from './entities.js';
@@ -31,6 +32,7 @@ const common = {
     ...INCIDENT_WORKFLOW_ENTITIES,
     ...INCIDENT_REPAIR_ENTITIES,
     ...INCIDENT_COST_ENTITIES,
+    ...INCIDENT_SLA_ENTITIES,
     ...AUDIT_ENTITIES,
   ],
   // Ordered by version: the cases first, then their third parties and evidence (PR 2).

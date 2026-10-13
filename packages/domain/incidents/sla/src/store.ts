@@ -1,11 +1,18 @@
-import type { IncidentStore } from '../../cases/src/index.js';
-import { alertEventOf, alertIdOf, parseSlaAlertPayload } from './events.js';
+import { IncidentError, type IncidentStore } from '../../cases/src/index.js';
+import {
+  INCIDENT_SLA_SCAN_EVENT,
+  alertEventOf,
+  alertIdOf,
+  isOpaqueId,
+  parseSlaAlertPayload,
+} from './events.js';
 import type {
   AlertFilter,
   AlertWindow,
   ClaimResult,
   IncidentSlaStore,
   Settlement,
+  SlaScanJob,
 } from './ports.js';
 import { visibleTo, type Viewer } from './recipients.js';
 import { alertKey } from './scan.js';
@@ -16,6 +23,10 @@ export interface SlaEvent {
   readonly tenantId: string;
   readonly type: string;
   readonly payload: Readonly<Record<string, string | number>>;
+  /** Present when the event has its own id (a scan job); notices derive it from the notice id. */
+  readonly eventId?: string;
+  readonly entityId?: string;
+  readonly occurredAt?: string;
 }
 const tuple = (...parts: (string | number)[]) => JSON.stringify(parts);
 
@@ -40,6 +51,19 @@ export class InMemoryIncidentSlaStore implements IncidentSlaStore {
     private readonly incidents: IncidentStore,
     private readonly emit: (event: SlaEvent) => void = () => undefined,
   ) {}
+
+  public async enqueueScan(job: SlaScanJob): Promise<void> {
+    if (!isOpaqueId(job.jobId) || (job.incidentId !== undefined && !isOpaqueId(job.incidentId)))
+      throw new IncidentError('invalid_input');
+    this.emit({
+      tenantId: job.tenantId,
+      type: INCIDENT_SLA_SCAN_EVENT,
+      payload: job.incidentId === undefined ? {} : { incidentId: job.incidentId },
+      eventId: `scan-${job.jobId}`,
+      entityId: job.incidentId ?? job.tenantId,
+      occurredAt: job.at,
+    });
+  }
 
   public async cycles(tenantId: string, ids: readonly string[]): Promise<readonly CycleRow[]> {
     return [...this.cycleRows.values()]

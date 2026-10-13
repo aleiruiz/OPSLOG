@@ -4,6 +4,8 @@ import { isOpaqueId } from './events.js';
 
 export const ALERT_LIMITS = [25, 50, 100] as const;
 const QUERY_KEYS = ['kind', 'incidentId', 'limit', 'offset'];
+/** Deepest page a caller can ask for; the list is for recent notices, not for export. */
+export const MAX_ALERT_OFFSET = 100_000;
 
 export interface AlertQuery {
   readonly kind?: AlertKind;
@@ -27,7 +29,13 @@ export function parseAlertQuery(input: unknown): AlertQuery {
   if (kind !== undefined && !isAlertKind(kind)) invalid('kind');
   if (incidentId !== undefined && !isOpaqueId(incidentId)) invalid('incidentId');
   if (!(ALERT_LIMITS as readonly unknown[]).includes(limit)) invalid('limit');
-  if (typeof offset !== 'number' || !Number.isInteger(offset) || offset < 0) invalid('offset');
+  if (
+    typeof offset !== 'number' ||
+    !Number.isInteger(offset) ||
+    offset < 0 ||
+    offset > MAX_ALERT_OFFSET
+  )
+    invalid('offset');
   if (issues.length > 0) throw new IncidentError('invalid_input', issues);
   return {
     ...(kind === undefined ? {} : { kind: kind as AlertKind }),

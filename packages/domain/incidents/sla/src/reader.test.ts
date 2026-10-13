@@ -252,6 +252,8 @@ describe('notices visible to a member (acceptance 8 and 10)', () => {
       { limit: 30 },
       { offset: -1 },
       { offset: 1.5 },
+      { offset: 100_001 },
+      { offset: 1e21 },
     ])
       expect(() => parseAlertQuery(input)).toThrow(IncidentError);
     expect(() => parseAlertQuery(null)).toThrow(IncidentError);

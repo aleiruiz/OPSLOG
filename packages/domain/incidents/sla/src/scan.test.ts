@@ -376,3 +376,42 @@ describe('isolation and atomicity (acceptance 10 and 12)', () => {
     expect(count(world, 'sla_warning')).toBe(205);
   });
 });
+
+describe('scan job queue', () => {
+  it('hands the store the scan job as an event with its own id, for one case or for all', async () => {
+    const world = slaWorld();
+    await world.slaStore.enqueueScan({ tenantId: TENANT_A, jobId: 'job-1', at: REPORTED_AT });
+    await world.slaStore.enqueueScan({
+      tenantId: TENANT_A,
+      jobId: 'job-2',
+      incidentId: 'inc-1',
+      at: REPORTED_AT,
+    });
+    expect(world.events).toEqual([
+      {
+        tenantId: TENANT_A,
+        type: 'incident.sla.scan',
+        payload: {},
+        eventId: 'scan-job-1',
+        entityId: TENANT_A,
+        occurredAt: REPORTED_AT,
+      },
+      {
+        tenantId: TENANT_A,
+        type: 'incident.sla.scan',
+        payload: { incidentId: 'inc-1' },
+        eventId: 'scan-job-2',
+        entityId: 'inc-1',
+        occurredAt: REPORTED_AT,
+      },
+    ]);
+  });
+  it('refuses a job that is not made of opaque ids', async () => {
+    const world = slaWorld();
+    for (const job of [{ jobId: '' }, { jobId: 'job 1' }, { jobId: 'job-1', incidentId: '../x' }])
+      await expect(
+        world.slaStore.enqueueScan({ tenantId: TENANT_A, at: REPORTED_AT, ...job }),
+      ).rejects.toMatchObject({ code: 'invalid_input' });
+    expect(world.events).toEqual([]);
+  });
+});

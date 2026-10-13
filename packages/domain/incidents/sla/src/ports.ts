@@ -12,6 +12,14 @@ export interface AlertWindow {
   readonly offset: number;
 }
 
+export interface SlaScanJob {
+  readonly tenantId: string;
+  /** Opaque and unique per job: it names the outbox event, so a repeated call is not a second job. */
+  readonly jobId: string;
+  readonly incidentId?: string;
+  readonly at: string;
+}
+
 export type ClaimResult =
   | { readonly result: 'claimed'; readonly attempt: number }
   /** Another worker holds the row right now: the caller must try again later. */
@@ -30,6 +38,8 @@ export type Settlement =
  * Every method names the tenant. A notice and its outbox event are written together or not at all.
  */
 export interface IncidentSlaStore {
+  /** Queues an `incident.sla.scan` job in the tenant's outbox (one case, or all when no id is given). */
+  enqueueScan(job: SlaScanJob): Promise<void>;
   cycles(tenantId: string, incidentIds: readonly string[]): Promise<readonly CycleRow[]>;
   /** Writes the cycle unless it exists (two workers may open it at once). */
   openCycle(row: CycleRow): Promise<void>;
