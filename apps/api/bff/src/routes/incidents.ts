@@ -54,16 +54,23 @@ const LIST_KEYS = new Set([
   'direction',
 ]);
 
-/** Strict query: unknown or repeated keys, a bad limit and a foreign or forged cursor are a 400. */
+/**
+ * Strict query: unknown keys, a repeated key other than `status`, a bad limit and a foreign or
+ * forged cursor are a 400. `status` may be comma-separated or repeated; both forms are one filter.
+ */
 function listQuery(ctx: RouteContext, tenantId: string) {
   const keys = [...ctx.query.keys()];
-  if (keys.some((key) => !LIST_KEYS.has(key)) || new Set(keys).size !== keys.length) return null;
+  const single = keys.filter((key) => key !== 'status');
+  if (keys.some((key) => !LIST_KEYS.has(key)) || new Set(single).size !== single.length)
+    return null;
   const limitRaw = ctx.query.get('limit');
   const limit = limitRaw === null ? 25 : LIMITS.find((value) => String(value) === limitRaw);
   if (limit === undefined) return null;
   const filters: Record<string, string> = {};
   for (const key of keys)
-    if (key !== 'limit' && key !== 'cursor') filters[key] = ctx.query.get(key) as string;
+    if (key !== 'limit' && key !== 'cursor')
+      filters[key] =
+        key === 'status' ? ctx.query.getAll(key).join(',') : (ctx.query.get(key) as string);
   // The cursor is signed and bound to the tenant and to the filters it was issued for.
   const signature = JSON.stringify([
     Object.entries(filters).sort(([a], [b]) => a.localeCompare(b)),

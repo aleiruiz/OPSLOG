@@ -41,7 +41,10 @@ export async function mergeChanges(
   if (merged.noDriverReason !== incident.noDriverReason) fieldsChanged.add('noDriverReason');
   if (!touches('vehicleId', 'occurredAt', 'policyId'))
     return { incident: merged, changed: [...fieldsChanged] };
-  const vehicle = await refs.vehicle(tenantId, merged.vehicleId);
+  // An unchanged vehicle may have been archived since the case was opened; a new one must be live.
+  const vehicle = await refs.vehicle(tenantId, merged.vehicleId, {
+    includeArchived: merged.vehicleId === incident.vehicleId,
+  });
   if (!vehicle) throw new IncidentError('not_found');
   const zone = await refs.timeZone(tenantId);
   const occurredOn = merged.occurredAt

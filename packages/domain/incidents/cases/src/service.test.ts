@@ -147,6 +147,25 @@ describe('create (cases 1, 3, 4)', () => {
 });
 
 describe('permissions (cases 8, 9, 16)', () => {
+  it('keeps editing a case whose vehicle was archived, but a new vehicle must be live', async () => {
+    const { service, refs } = setup();
+    const created = await service.create(TENANT_A, MANAGER, {
+      ...draft,
+      occurredAt: '2026-10-13T12:00:00Z',
+    });
+    refs.archived.add(VEHICLE);
+    const edited = await service.update(TENANT_A, MANAGER, created.id, {
+      version: 1,
+      occurredAt: '2026-10-12T12:00:00Z',
+    });
+    expect(edited).toMatchObject({ vehicleId: VEHICLE, occurredOn: '2026-10-12', version: 2 });
+    refs.archived.add('vehicle-2');
+    const moved = await codeOf(
+      service.update(TENANT_A, MANAGER, created.id, { version: 2, vehicleId: 'vehicle-2' }),
+    );
+    expect(moved.code).toBe('not_found');
+  });
+
   it('lets a reporter create and edit their own draft only', async () => {
     const { service } = setup();
     const own = await service.create(TENANT_A, REPORTER, draft);

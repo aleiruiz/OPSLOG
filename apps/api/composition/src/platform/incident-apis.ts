@@ -66,9 +66,9 @@ const findEmployee = (services: IncidentServices, tenantId: string, id: string) 
 /** The ports of INC-CASES over the fleet modules. Unknown, foreign and archived ids all read as absent. */
 export function incidentReferences(services: IncidentServices): IncidentReferences {
   return {
-    vehicle: async (tenantId, vehicleId) => {
+    vehicle: async (tenantId, vehicleId, options) => {
       const found = await findVehicle(services, tenantId, vehicleId);
-      return found && found.archivedAt === null
+      return found && (options?.includeArchived === true || found.archivedAt === null)
         ? { id: found.id, areaId: found.areaId, registeredOn: found.registeredOn }
         : null;
     },

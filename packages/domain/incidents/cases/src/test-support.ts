@@ -56,7 +56,9 @@ export class FakeReferences implements IncidentReferences {
   public revisions: PolicyRevisionRef[] = [];
   public zones = new Map<string, string>([[TENANT_A, 'America/Mexico_City']]);
 
-  public async vehicle(tenantId: string, id: string) {
+  public archived = new Set<string>();
+  public async vehicle(tenantId: string, id: string, options?: { includeArchived?: boolean }) {
+    if (this.archived.has(id) && options?.includeArchived !== true) return null;
     return this.vehicles.get(`${tenantId}/${id}`) ?? null;
   }
   public async driver(tenantId: string, id: string) {

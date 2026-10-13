@@ -120,6 +120,15 @@ describe('incidents over HTTP', () => {
     expect((await managerA.get(`${P}?unknown=1`)).status).toBe(400);
   });
 
+  it('accepts the status filter comma-separated or repeated, and nothing else repeated', async () => {
+    const { managerA, vehicleId } = await fixture();
+    expect((await managerA.post(P, { json: { vehicleId, type: 'collision' } })).status).toBe(201);
+    for (const query of ['status=draft,reported', 'status=draft&status=reported'])
+      expect((await managerA.get(`${P}?${query}`)).json.total, query).toBe(1);
+    expect((await managerA.get(`${P}?status=reported&status=closed`)).json.total).toBe(0);
+    expect((await managerA.get(`${P}?type=collision&type=rollover`)).status).toBe(400);
+  });
+
   it('paginates with a signed cursor that cannot be forged', async () => {
     const { managerA, vehicleId } = await fixture();
     for (let n = 0; n < 3; n += 1)

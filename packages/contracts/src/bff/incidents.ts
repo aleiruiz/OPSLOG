@@ -159,7 +159,10 @@ export interface BffIncidentInput {
   readonly noPhotoJustification?: string | null;
   readonly policyId?: string | null;
 }
-/** Fields of the event with the `version` they were read at; at least one besides it. Never `status`. */
+/**
+ * Fields of the event with the `version` they were read at; at least one besides it. Never `status`.
+ * `damage`, when present, replaces the whole object (description and zones); it is not merged.
+ */
 export interface BffIncidentPatch extends Partial<Omit<BffIncidentInput, 'vehicleId' | 'type'>> {
   readonly version: number;
   readonly vehicleId?: string;

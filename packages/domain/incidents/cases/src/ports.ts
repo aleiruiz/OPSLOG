@@ -59,7 +59,12 @@ export interface PolicyRevisionRef {
 
 /** Ports to other modules; each answers `null` or an empty list for an unknown or foreign id. */
 export interface IncidentReferences {
-  vehicle(tenantId: string, vehicleId: string): Promise<VehicleRef | null>;
+  /** Live vehicles only, unless `includeArchived`: an existing case keeps its archived vehicle. */
+  vehicle(
+    tenantId: string,
+    vehicleId: string,
+    options?: { readonly includeArchived?: boolean },
+  ): Promise<VehicleRef | null>;
   driver(tenantId: string, employeeId: string): Promise<DriverRef | null>;
   assignments(tenantId: string, vehicleId: string): Promise<readonly AssignmentRef[]>;
   policyRevisions(tenantId: string, vehicleId: string): Promise<readonly PolicyRevisionRef[]>;
