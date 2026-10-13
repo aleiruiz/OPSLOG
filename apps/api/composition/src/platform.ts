@@ -56,6 +56,8 @@ import type { MaintenanceApi } from '../../maintenance/plans/src/index.js';
 import type { WorkOrderApi } from '../../maintenance/orders/src/index.js';
 import type { IncidentApi } from '../../incidents/cases/src/index.js';
 import type { IncidentChildApi } from '../../incidents/third-parties/src/index.js';
+import type { IncidentCostApi } from '../../incidents/costs/src/index.js';
+import type { IncidentRepairApi } from '../../incidents/repairs/src/index.js';
 import type { IncidentWorkflowApi } from '../../incidents/workflow/src/index.js';
 import { buildDomainApis } from './platform/apis.js';
 import { acceptInvitation, inspectInvitation, inviteUser } from './platform/invitations.js';
@@ -89,18 +91,7 @@ import type {
 
 export { PlatformError, type PlatformErrorCode, type PlatformResponse } from './platform/errors.js';
 export { sessionIdOf } from './platform/gate.js';
-export type {
-  DraftView,
-  Emit,
-  EmitInput,
-  MemberView,
-  PlatformAdapters,
-  PlatformOptions,
-  RoleView,
-  SessionDetails,
-  SettingsInput,
-  SettingsView,
-} from './platform/types.js';
+export type * from './platform/types.js';
 
 /** Composition root for tenant-safe API, persistence, audit, and worker adapters. */
 export class Platform {
@@ -122,6 +113,8 @@ export class Platform {
   public readonly incidents: IncidentApi;
   public readonly incidentChildren: IncidentChildApi;
   public readonly incidentWorkflow: IncidentWorkflowApi;
+  public readonly incidentRepairs: IncidentRepairApi;
+  public readonly incidentCosts: IncidentCostApi;
   public readonly access: AccessDirectory;
   public readonly tenants: InMemoryTenantStore;
   public readonly audit: AuditStore;
@@ -247,6 +240,8 @@ export class Platform {
     this.incidents = apis.incidents;
     this.incidentChildren = apis.incidentChildren;
     this.incidentWorkflow = apis.incidentWorkflow;
+    this.incidentRepairs = apis.incidentRepairs;
+    this.incidentCosts = apis.incidentCosts;
     this.runtime = buildWorkerRuntime(
       this.kernel,
       this.pipeline,

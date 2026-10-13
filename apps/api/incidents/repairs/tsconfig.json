@@ -1,0 +1,20 @@
+{
+  "extends": "../../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../../../",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
+  },
+  "include": [
+    "src/**/*.ts",
+    "../cases/src/**/*.ts",
+    "../../../../packages/domain/incidents/cases/src/**/*.ts",
+    "../../../../packages/domain/incidents/third-parties/src/**/*.ts",
+    "../../../../packages/domain/incidents/workflow/src/**/*.ts",
+    "../../../../packages/domain/incidents/repairs/src/**/*.ts",
+    "../../../../packages/domain/incidents/costs/src/**/*.ts",
+    "../../../../packages/domain/identity/src/**/*.ts",
+    "../../../../packages/domain/maintenance/orders/src/**/*.ts",
+    "../../../../packages/platform/pii/src/**/*.ts"
+  ]
+}

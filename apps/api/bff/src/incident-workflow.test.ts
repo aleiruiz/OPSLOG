@@ -306,7 +306,7 @@ describe('approvals, close and reopen over HTTP (PR 2)', () => {
     ).toEqual(['close', 'reopen']);
   });
 
-  it('asks the D20 approval fail-closed without INC-COSTS, from incidents:approve only, and again after an edit (case 8)', async () => {
+  it('asks the D20 approval when the cost passes the threshold, from incidents:approve only, and again after an edit (case 8)', async () => {
     const f = await fixture();
     const saved = await f.adminA.put('/api/alerts/settings', {
       json: {
@@ -317,7 +317,23 @@ describe('approvals, close and reopen over HTTP (PR 2)', () => {
       },
     });
     expect(saved.status, saved.text).toBe(200);
-    const { id, version } = await resolved(f);
+    const { id, version: resolvedVersion } = await resolved(f);
+    // 5.000,01 MXN against a 5.000,00 MXN threshold (INC-COSTS provides the totals).
+    const priced = await f.adminA.put(`${P}/${id}/costs`, {
+      json: {
+        version: resolvedVersion,
+        lines: [
+          {
+            kind: 'expense',
+            category: 'towing',
+            amount: { amountMinor: '500001', currency: 'MXN' },
+          },
+        ],
+      },
+      headers: { 'idempotency-key': key() },
+    });
+    expect(priced.status, priced.text).toBe(200);
+    const version = priced.json.version as number;
     const steps = await f.managerA.get(`${P}/${id}/next-steps`);
     expect(steps.json.items).toContainEqual({
       command: 'close',

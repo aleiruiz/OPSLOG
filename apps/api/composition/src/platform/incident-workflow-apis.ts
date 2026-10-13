@@ -5,10 +5,6 @@ import type {
 import {
   IncidentProcessService,
   IncidentWorkflowService,
-  FAIL_CLOSED_COSTS,
-  FAIL_CLOSED_REPAIRS,
-  FAIL_CLOSED_TOTALS,
-  NO_CLOSURE_COSTS,
   type IncidentClosures,
   type IncidentEvidenceFacts,
   type WorkflowPorts,
@@ -19,6 +15,7 @@ import {
   TERMINAL_STATUSES,
   type IncidentStore,
 } from '../../../../../packages/domain/incidents/cases/src/index.js';
+import type { IncidentRepairStore } from '../../../../../packages/domain/incidents/repairs/src/index.js';
 import { InMemoryMechanicStore } from '../../../../../packages/domain/maintenance/mechanics/src/index.js';
 import { IncidentWorkflowApi } from '../../../incidents/workflow/src/index.js';
 import { ROLE_PERMISSIONS } from '../access.js';
@@ -87,15 +84,19 @@ export interface WorkflowPortSources {
   readonly services: IncidentServices;
   readonly store: IncidentStore;
   readonly evidence: IncidentEvidenceFacts;
-  /** Open workshop orders of the vehicle (MNT-ORDERS). */
-  readonly openWorkshopOrders: (tenantId: string, vehicleId: string) => Promise<number>;
+  /** Ids of the open workshop orders of the vehicle (MNT-ORDERS). */
+  readonly openWorkshopOrders: (tenantId: string, vehicleId: string) => Promise<readonly string[]>;
   readonly closures: IncidentClosures;
+  /** The links to the workshop's orders: the orders that repair a case do not hold its vehicle. */
+  readonly repairLinks: Pick<IncidentRepairStore, 'links'>;
+  /** The ports of INC-COSTS (`costPorts`). */
+  readonly cost: Pick<WorkflowPorts, 'repairs' | 'costs' | 'totals' | 'closureCosts'>;
 }
 
 /**
- * Ports of the workflow. The repairs, the costs, their totals and their closure snapshot belong to
- * INC-COSTS, which does not exist yet: they are the fail-closed ports, so nothing that depends on
- * them can pass. Swap them here and every consumer follows.
+ * Ports of the workflow. The repairs, the costs, their totals and their closure snapshot are the
+ * real ones of INC-COSTS; they live in this one object, so the workflow, the process data and the
+ * evidence guard all follow.
  */
 export function workflowPorts(sources: WorkflowPortSources): WorkflowPorts {
   const { kernel, services, store } = sources;
@@ -114,16 +115,21 @@ export function workflowPorts(sources: WorkflowPortSources): WorkflowPorts {
         return role ? ROLE_PERMISSIONS[role] : null;
       },
     },
-    repairs: FAIL_CLOSED_REPAIRS,
-    costs: FAIL_CLOSED_COSTS,
-    totals: FAIL_CLOSED_TOTALS,
+    ...sources.cost,
     blocks: {
-      blocked: async (tenantId, vehicleId, exceptIncidentId) =>
-        (await sources.openWorkshopOrders(tenantId, vehicleId)) > 0 ||
-        (await incidentHoldsVehicle(store, tenantId, vehicleId, exceptIncidentId)),
+      // The orders that repair the case itself (linked, whatever their state) do not hold its vehicle.
+      blocked: async (tenantId, vehicleId, exceptIncidentId) => {
+        const own = new Set(
+          (await sources.repairLinks.links(tenantId, exceptIncidentId)).map((link) => link.orderId),
+        );
+        const open = await sources.openWorkshopOrders(tenantId, vehicleId);
+        return (
+          open.some((orderId) => !own.has(orderId)) ||
+          (await incidentHoldsVehicle(store, tenantId, vehicleId, exceptIncidentId))
+        );
+      },
     },
     closures: sources.closures,
-    closureCosts: NO_CLOSURE_COSTS,
   };
 }
 

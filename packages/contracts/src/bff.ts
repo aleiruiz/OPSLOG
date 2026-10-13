@@ -24,6 +24,8 @@ import type { IncidentRouteTypes } from './bff/incidents.js';
 import { INCIDENT_ROUTES } from './bff/incidents.js';
 import type { IncidentChildRouteTypes } from './bff/incident-children.js';
 import { INCIDENT_CHILD_ROUTES } from './bff/incident-children.js';
+import type { IncidentCostRouteTypes } from './bff/incident-costs.js';
+import { INCIDENT_COST_ROUTES } from './bff/incident-costs.js';
 import type { IncidentWorkflowRouteTypes } from './bff/incident-workflow.js';
 import { INCIDENT_WORKFLOW_ROUTES } from './bff/incident-workflow.js';
 import type { BffRouteDefinition } from './bff/shared.js';
@@ -249,6 +251,30 @@ export type {
   BffIncidentTimelineEntry,
   BffIncidentSuggestions,
 } from './bff/incidents.js';
+export {
+  BFF_COST_KINDS,
+  BFF_COST_MAX_LINES,
+  BFF_EXPENSE_CATEGORIES,
+  BFF_RECOVERY_CATEGORIES,
+} from './bff/incident-costs.js';
+export type {
+  BffCostCategory,
+  BffCostKind,
+  BffCostLine,
+  BffCostLineInput,
+  BffCostSnapshot,
+  BffCurrencyTotals,
+  BffIncidentCosts,
+  BffIncidentCostsInput,
+  BffPolicyDeductible,
+  BffRepairLink,
+  BffRepairLinkChange,
+  BffRepairLinkInput,
+  BffRepairLinkList,
+  BffRepairOrder,
+  BffRepairUnlink,
+  BffRepairUnlinkInput,
+} from './bff/incident-costs.js';
 export { BFF_INCIDENT_IDEMPOTENCY_REQUIRED_COMMANDS } from './bff/incident-workflow.js';
 export type {
   BffIncidentTransitionInput,
@@ -301,7 +327,8 @@ export interface BffRouteTypes
     WorkOrderRouteTypes,
     IncidentRouteTypes,
     IncidentChildRouteTypes,
-    IncidentWorkflowRouteTypes {}
+    IncidentWorkflowRouteTypes,
+    IncidentCostRouteTypes {}
 
 export type BffRouteId = keyof BffRouteTypes;
 
@@ -320,6 +347,7 @@ export const BFF_ROUTES = {
   ...INCIDENT_ROUTES,
   ...INCIDENT_CHILD_ROUTES,
   ...INCIDENT_WORKFLOW_ROUTES,
+  ...INCIDENT_COST_ROUTES,
 } as const satisfies Record<BffRouteId, BffRouteDefinition>;
 
 type Parts<K extends BffRouteId> = Omit<BffRouteTypes[K], 'response'>;
