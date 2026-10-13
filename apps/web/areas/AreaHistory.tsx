@@ -1,6 +1,5 @@
 import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
-import { Button, Notifications, Timeline } from '@opslog/ui';
+import { Button, Notifications, Panel, Timeline } from '@opslog/ui';
 import { ResourceView } from '../app/resource';
 import type { HistoryProps } from './areaDetailState';
 import { describeHistory, formatDateTime } from './labels';
@@ -14,10 +13,7 @@ export function History({
 }) {
   const { state } = props;
   return (
-    <Box component="section" aria-labelledby="history-title" sx={{ mt: 4 }}>
-      <Typography id="history-title" component="h2" variant="h2" sx={{ mb: 1 }}>
-        Historial
-      </Typography>
+    <Panel title="Historial">
       {state.status === 'ready' ? (
         <>
           <Timeline
@@ -50,6 +46,6 @@ export function History({
           {() => null}
         </ResourceView>
       )}
-    </Box>
+    </Panel>
   );
 }

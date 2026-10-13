@@ -15,7 +15,7 @@ import {
   UiState,
 } from '@opslog/ui';
 import { NoSubmit, ResourceView, type ResourceState } from '../app/resource';
-import { RouterButton, RouterLink } from '../app/router';
+import { linkSx, RouterButton, RouterLink } from '../app/router';
 import { ScrollRegion } from '../app/ScrollRegion';
 import type { Vehicle, VehicleStatus } from '../app/types';
 import { formatKm, isEditable, statusOrder, statusPresentation } from './labels';
@@ -54,13 +54,6 @@ export interface VehicleListViewProps {
 }
 
 const detailPath = (id: string) => `/flota/vehiculos/${encodeURIComponent(id)}`;
-
-const linkSx = {
-  color: 'primary.main',
-  fontWeight: 500,
-  textDecoration: 'underline',
-  textUnderlineOffset: '3px',
-} as const;
 
 /** Vehicle list: filters, cursor-paginated table and every data state (SPECS §8). */
 export function VehicleListView({

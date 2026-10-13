@@ -15,7 +15,7 @@ import {
   UiState,
 } from '@opslog/ui';
 import { NoSubmit, ResourceView, type ResourceState } from '../app/resource';
-import { RouterButton, RouterLink } from '../app/router';
+import { linkSx, RouterButton, RouterLink } from '../app/router';
 import { ScrollRegion } from '../app/ScrollRegion';
 import type { Document, DocumentOwnerType, DocumentStatus } from '../app/types';
 import type { VehicleOptions } from '../app/vehicleOptions';
@@ -73,13 +73,6 @@ export interface DocumentListViewProps {
   readonly onRetry: () => void;
   readonly onLoadMore: (cursor: string) => void;
 }
-
-const linkSx = {
-  color: 'primary.main',
-  fontWeight: 500,
-  textDecoration: 'underline',
-  textUnderlineOffset: '3px',
-} as const;
 
 /** Document list: filters, cursor-paginated table and every data state (SPECS §8). */
 export function DocumentListView({

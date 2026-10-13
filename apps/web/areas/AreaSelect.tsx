@@ -15,6 +15,8 @@ export interface AreaSelectProps {
   readonly emptyLabel?: string;
   /** In a filter every area (inactive too) is meaningful: nothing is disabled. */
   readonly allowInactive?: boolean;
+  /** A form field takes the whole row; in a filter bar it sits next to the other filters. */
+  readonly fullWidth?: boolean;
 }
 
 /** Area selector: the areas of the company, never a free-text id. */
@@ -29,6 +31,7 @@ export function AreaSelect({
   description,
   emptyLabel = 'Elige un área',
   allowInactive = false,
+  fullWidth = true,
 }: AreaSelectProps) {
   const known = choices.some((choice) => choice.id === value);
   return (
@@ -43,7 +46,7 @@ export function AreaSelect({
       required={required}
       error={Boolean(error)}
       {...(error || description ? { helperText: error ?? description } : {})}
-      fullWidth
+      fullWidth={fullWidth}
     >
       <option value="">{emptyLabel}</option>
       {/* An id the catalog does not list (loaded from an old record) stays visible instead of silently clearing. */}

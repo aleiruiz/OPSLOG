@@ -1,7 +1,7 @@
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import React from 'react';
-import { Button, Notifications } from '@opslog/ui';
+import { Button, Notifications, Panel } from '@opslog/ui';
 import type { EmployeeDetail } from '../app/types';
 import { Mono, Rows } from './EmployeeDetailShared';
 import { idTypeLabel } from './labels';
@@ -88,18 +88,15 @@ export function PersonalData({
     return [label, shown] as const;
   });
   return (
-    <Box component="section" aria-labelledby="pii-title" sx={{ mt: 4 }}>
-      <Typography id="pii-title" component="h2" variant="h2" sx={{ mb: 1 }}>
-        Datos personales
-      </Typography>
+    <Panel title="Datos personales">
       {pii ? (
-        <Typography color="text.secondary" sx={{ mb: 2 }}>
+        <Typography color="text.secondary">
           {revealed
             ? 'Los datos personales están visibles. Ocúltalos cuando termines; el acceso a ellos queda registrado en la auditoría.'
             : 'Los datos personales están ocultos en pantalla hasta que decidas mostrarlos. El acceso a ellos queda registrado en la auditoría.'}
         </Typography>
       ) : (
-        <Box sx={{ mb: 2 }}>
+        <Box>
           <Notifications
             messages={[
               {
@@ -115,7 +112,7 @@ export function PersonalData({
         <Rows rows={rows} />
       </Box>
       {pii && (
-        <Box sx={{ mt: 2 }}>
+        <Box>
           <Button
             variant="outlined"
             aria-pressed={revealed}
@@ -126,6 +123,6 @@ export function PersonalData({
           </Button>
         </Box>
       )}
-    </Box>
+    </Panel>
   );
 }

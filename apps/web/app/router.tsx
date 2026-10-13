@@ -124,3 +124,11 @@ export function RouterButton({
     </Button>
   );
 }
+
+/** Look of a link inside content (tables, records, cards): primary colour, medium weight, underlined. */
+export const linkSx = {
+  color: 'primary.main',
+  fontWeight: 500,
+  textDecoration: 'underline',
+  textUnderlineOffset: '3px',
+} as const;

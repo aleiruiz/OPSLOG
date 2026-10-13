@@ -63,7 +63,15 @@ export function StatusPanel({
       noValidate
       onSubmit={submit}
       aria-label="Cambiar estado"
-      sx={{ border: `1px solid ${colors.border}`, borderRadius: 1, p: 2, mb: 3, maxWidth: 720 }}
+      sx={{
+        bgcolor: colors.surface,
+        border: `1px solid ${colors.border}`,
+        borderRadius: `${opslogTokens.shape.cardRadius}px`,
+        boxShadow: opslogTokens.shadow.card,
+        p: { xs: 2, sm: 2.5 },
+        mb: 3,
+        maxWidth: 760,
+      }}
     >
       <Typography component="h2" variant="h2" sx={{ mb: 0.5 }}>
         Cambiar estado
