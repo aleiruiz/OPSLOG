@@ -49,7 +49,9 @@ const P = '/api/v1/incidents';
 
 describe('incident contract', () => {
   it('declares incident routes as session reads or CSRF-protected writes', () => {
-    const routes = Object.entries(BFF_ROUTES).filter(([id]) => id.startsWith('incidents.'));
+    const routes = Object.entries(BFF_ROUTES).filter(
+      ([id]) => id.startsWith('incidents.') && id.split('.').length === 2,
+    );
     expect(routes.map(([id]) => id).sort()).toEqual([
       'incidents.create',
       'incidents.get',

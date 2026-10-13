@@ -98,7 +98,16 @@ export interface Incident {
 }
 
 /** Timeline commands of this package; INC-WORKFLOW adds the state commands. */
-export const INCIDENT_TIMELINE_COMMANDS = ['create', 'update', 'coverage_none'] as const;
+export const INCIDENT_TIMELINE_COMMANDS = [
+  'create',
+  'update',
+  'coverage_none',
+  'third_party_added',
+  'third_party_updated',
+  'third_party_removed',
+  'evidence_attached',
+  'evidence_detached',
+] as const;
 export type IncidentTimelineCommand = (typeof INCIDENT_TIMELINE_COMMANDS)[number];
 
 /** Facts a timeline entry may keep of the state before a change: structured ones, never free text. */
@@ -145,6 +154,15 @@ export interface IncidentMutation {
   readonly auditActions: readonly string[];
   readonly events: readonly IncidentEvent[];
   readonly idempotency?: IdempotencyClaim;
+}
+/**
+ * A write of another package (the third parties and evidence of the case) that commits or fails
+ * together with the incident mutation. `tx` is whatever the store runs in: the ORM manager of the
+ * transaction for MySQL, nothing in memory. It resolves `false` on a uniqueness conflict, which
+ * aborts the whole mutation; any other failure throws and aborts it as well.
+ */
+export interface IncidentExtraWrite {
+  run(tx: unknown): Promise<boolean>;
 }
 export type IncidentApplyResult =
   | { readonly applied: false }

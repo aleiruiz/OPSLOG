@@ -1,7 +1,8 @@
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 import { INCIDENT_TABLES as T } from './entities.js';
 
-export const INCIDENT_MIGRATION_VERSION = '2026101500010';
+/** Version of the last migration of the incidents module (the third parties and evidence, PR 2). */
+export const INCIDENT_MIGRATION_VERSION = '2026101500020';
 export const INCIDENT_MIGRATIONS_TABLE = 'opslog_incident_migrations';
 
 const TABLE = 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin';

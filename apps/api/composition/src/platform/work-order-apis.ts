@@ -51,7 +51,8 @@ const fileFailure = (code: string | undefined): WorkOrderError =>
         : 'invalid_input',
   );
 
-const UPLOAD_REJECTIONS: ReadonlySet<FileErrorCode> = new Set<FileErrorCode>([
+/** Upload failures that are the caller's input (type, content or size), not a server fault. */
+export const UPLOAD_REJECTIONS: ReadonlySet<FileErrorCode> = new Set<FileErrorCode>([
   'invalid_input',
   'unsupported_type',
   'type_mismatch',

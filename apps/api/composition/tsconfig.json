@@ -28,6 +28,7 @@
     "../../../packages/domain/maintenance/mechanics/src/**/*.ts",
     "../../../packages/domain/maintenance/orders/src/**/*.ts",
     "../../../packages/domain/incidents/cases/src/**/*.ts",
+    "../../../packages/domain/incidents/third-parties/src/**/*.ts",
     "../../../packages/platform/pii/src/**/*.ts",
     "../../../packages/platform/auth/src/**/*.ts",
     "../../../packages/platform/audit/src/**/*.ts",
@@ -57,9 +58,12 @@
     { "path": "../../../packages/domain/maintenance/orders" },
     { "path": "../../../packages/persistence/maintenance/orders" },
     { "path": "../../../packages/domain/incidents/cases" },
+    { "path": "../../../packages/domain/incidents/third-parties" },
     { "path": "../../../packages/persistence/incidents/cases" },
+    { "path": "../../../packages/persistence/incidents/third-parties" },
     { "path": "../maintenance/orders" },
     { "path": "../incidents/cases" },
+    { "path": "../incidents/third-parties" },
     { "path": "../maintenance/plans" },
     { "path": "../../worker/maintenance-plans" }
   ]

@@ -22,6 +22,8 @@ import type { WorkOrderRouteTypes } from './bff/work-orders.js';
 import { WORK_ORDER_ROUTES } from './bff/work-orders.js';
 import type { IncidentRouteTypes } from './bff/incidents.js';
 import { INCIDENT_ROUTES } from './bff/incidents.js';
+import type { IncidentChildRouteTypes } from './bff/incident-children.js';
+import { INCIDENT_CHILD_ROUTES } from './bff/incident-children.js';
 import type { BffRouteDefinition } from './bff/shared.js';
 
 /**
@@ -244,6 +246,29 @@ export type {
   BffIncidentSuggestions,
 } from './bff/incidents.js';
 export {
+  BFF_THIRD_PARTY_KINDS,
+  BFF_EVIDENCE_CATEGORIES,
+  BFF_EVIDENCE_STAGES,
+  BFF_EVIDENCE_MAX_BYTES,
+  BFF_EVIDENCE_MAX_BODY_BYTES,
+} from './bff/incident-children.js';
+export type {
+  BffThirdPartyKind,
+  BffEvidenceCategory,
+  BffEvidenceStage,
+  BffThirdParty,
+  BffThirdPartyList,
+  BffThirdPartyInput,
+  BffThirdPartyPatch,
+  BffThirdPartyChange,
+  BffIncidentVersion,
+  BffEvidenceFileStatus,
+  BffIncidentEvidence,
+  BffIncidentEvidenceChange,
+  BffIncidentEvidenceUpload,
+  BffIncidentEvidenceContent,
+} from './bff/incident-children.js';
+export {
   BFF_IDEMPOTENCY_REQUIRED_COMMANDS,
   BFF_WORK_ORDER_FILE_KINDS,
   BFF_WORK_ORDER_FILE_MAX_BYTES,
@@ -263,7 +288,8 @@ export interface BffRouteTypes
     AreasRouteTypes,
     MaintenanceRouteTypes,
     WorkOrderRouteTypes,
-    IncidentRouteTypes {}
+    IncidentRouteTypes,
+    IncidentChildRouteTypes {}
 
 export type BffRouteId = keyof BffRouteTypes;
 
@@ -280,6 +306,7 @@ export const BFF_ROUTES = {
   ...MAINTENANCE_ROUTES,
   ...WORK_ORDER_ROUTES,
   ...INCIDENT_ROUTES,
+  ...INCIDENT_CHILD_ROUTES,
 } as const satisfies Record<BffRouteId, BffRouteDefinition>;
 
 type Parts<K extends BffRouteId> = Omit<BffRouteTypes[K], 'response'>;

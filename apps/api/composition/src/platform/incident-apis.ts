@@ -5,8 +5,8 @@ import {
 } from '../../../../../packages/domain/employees/src/index.js';
 import {
   IncidentService,
-  InMemoryIncidentStore,
   type AssignmentRef,
+  type IncidentStore,
   type IncidentReferences,
   type PolicyRevisionRef,
 } from '../../../../../packages/domain/incidents/cases/src/index.js';
@@ -17,6 +17,7 @@ import {
   type VehicleService,
 } from '../../../../../packages/domain/vehicles/src/index.js';
 import { IncidentApi } from '../../../incidents/cases/src/index.js';
+import type { IncidentChildApi } from '../../../incidents/third-parties/src/index.js';
 import { ROLE_LABELS } from '../directory.js';
 import type { PlatformKernel } from './kernel.js';
 import { InMemoryMechanicStore } from '../../../../../packages/domain/maintenance/mechanics/src/index.js';
@@ -42,6 +43,7 @@ async function allRows<T>(
 /** The incident API as a member of the composed domain APIs. */
 export interface IncidentDomainApis {
   readonly incidents: IncidentApi;
+  readonly incidentChildren: IncidentChildApi;
 }
 
 export interface IncidentServices {
@@ -131,14 +133,11 @@ export function buildIncidentApi(
   kernel: PlatformKernel,
   adapters: PlatformAdapters,
   services: IncidentServices,
+  store: IncidentStore,
 ): IncidentApi {
   const scope = createMechanicScope(adapters.maintenanceMechanics ?? new InMemoryMechanicStore());
   return new IncidentApi({
-    incidents: new IncidentService(
-      adapters.incidents ?? new InMemoryIncidentStore(),
-      incidentReferences(services),
-      { now: kernel.now },
-    ),
+    incidents: new IncidentService(store, incidentReferences(services), { now: kernel.now }),
     authorize: async (token, correlationId) => {
       const context = await kernel.authorize(token, correlationId, []);
       return { context, permissions: await kernel.access.resolvePermissions(context) };

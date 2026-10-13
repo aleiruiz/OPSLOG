@@ -290,6 +290,38 @@ function writes(f: Fixture): [string, string, unknown?][] {
       '/api/v1/incidents/00000000-0000-4000-8000-000000000001',
       { version: 1, description: 'Golpe lateral' },
     ],
+    [
+      'POST',
+      '/api/v1/incidents/00000000-0000-4000-8000-000000000001/third-parties',
+      { version: 1, kind: 'person' },
+    ],
+    [
+      'PATCH',
+      '/api/v1/incidents/00000000-0000-4000-8000-000000000001/third-parties/00000000-0000-4000-8000-000000000002',
+      { version: 1, injuries: true },
+    ],
+    [
+      'POST',
+      '/api/v1/incidents/00000000-0000-4000-8000-000000000001/third-parties/00000000-0000-4000-8000-000000000002/remove',
+      { version: 1 },
+    ],
+    [
+      'POST',
+      '/api/v1/incidents/00000000-0000-4000-8000-000000000001/evidence',
+      {
+        version: 1,
+        category: 'photo',
+        stage: 'on_site',
+        name: 'a.png',
+        contentType: 'image/png',
+        contentBase64: 'iVBORw0KGgo=',
+      },
+    ],
+    [
+      'POST',
+      '/api/v1/incidents/00000000-0000-4000-8000-000000000001/evidence/00000000-0000-4000-8000-000000000002/detach',
+      { version: 1 },
+    ],
   ];
 }
 

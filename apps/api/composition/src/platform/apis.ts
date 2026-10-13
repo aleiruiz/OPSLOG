@@ -33,7 +33,6 @@ import {
   VehicleError,
   VehicleService,
 } from '../../../../../packages/domain/vehicles/src/index.js';
-import { EnvelopePiiCipher, LocalDevKms } from '../../../../../packages/platform/pii/src/index.js';
 import { AlertsApi } from '../alerts.js';
 import { driverLicenseAlerts } from '../driver-license-alerts.js';
 import { AreasApi } from '../areas.js';
@@ -47,13 +46,10 @@ import { CompanySettingsApi } from '../settings.js';
 import { VehiclesApi } from '../vehicles.js';
 import type { PlatformKernel } from './kernel.js';
 import type { PlatformAdapters } from './types.js';
-import { buildMaintenanceApis } from './maintenance-apis.js';
-import {
-  buildWorkOrderApi,
-  withMaintenanceDefaults,
-  type WorkOrderFileSupport,
-} from './work-order-apis.js';
-import { buildIncidentApi, type IncidentDomainApis } from './incident-apis.js';
+import type { buildWorkOrderApi, WorkOrderFileSupport } from './work-order-apis.js';
+import type { IncidentDomainApis } from './incident-apis.js';
+import { buildDownstreamApis } from './downstream-apis.js';
+import { resolvePiiCipher } from './pii-cipher.js';
 import type { MaintenanceApi } from '../../../maintenance/plans/src/index.js';
 import type { MaintenancePlanWorker } from '../../../../../packages/domain/maintenance/plans/src/index.js';
 
@@ -81,10 +77,7 @@ export function buildDomainApis(
   const vehicleStore = adapters.vehicles ?? new InMemoryVehicleStore();
   const vehicleAuditInTransaction =
     adapters.vehicles !== undefined && !(adapters.vehicles instanceof InMemoryVehicleStore);
-  // A persistent store with the throwaway local KMS would seal rows that cannot be opened after a
-  // restart (and would put real data under a dev key): the cipher must be chosen explicitly.
-  if (adapters.employees && !adapters.pii)
-    throw new Error('adapters.employees requires adapters.pii (no local KMS fallback)');
+  const pii = resolvePiiCipher(adapters);
   const employeeStore = adapters.employees ?? new InMemoryEmployeeStore();
   const employeeAuditInTransaction =
     adapters.employees !== undefined && !(adapters.employees instanceof InMemoryEmployeeStore);
@@ -141,9 +134,7 @@ export function buildDomainApis(
   });
   const employeeService = new EmployeeService(employeeStore, {
     now: kernel.now,
-    pii:
-      adapters.pii ??
-      new EnvelopePiiCipher(LocalDevKms.ephemeral(process.env['OPSLOG_ENV'] ?? 'development')),
+    pii,
     // BR-021 vs. TOCTOU: an employee write that sets or changes `areaId` runs under the same
     // per-tenant area lock as `AreaService.deactivate`, after checking the area is active.
     areas: {
@@ -390,13 +381,6 @@ export function buildDomainApis(
       );
     },
   });
-  const maintenanceAdapters = withMaintenanceDefaults(adapters);
-  const maintenanceApis = buildMaintenanceApis(
-    kernel,
-    maintenanceAdapters,
-    vehicleService,
-    settingsService,
-  );
   return {
     vehicles,
     areas,
@@ -407,20 +391,18 @@ export function buildDomainApis(
     imports,
     companySettings,
     alerts,
-    ...maintenanceApis,
-    workOrders: buildWorkOrderApi(
+    ...buildDownstreamApis(
       kernel,
-      maintenanceAdapters,
-      vehicleService,
-      settingsService,
+      adapters,
+      {
+        vehicles: vehicleService,
+        employees: employeeService,
+        assignments: assignmentStore,
+        policies: policyStore,
+        settings: settingsService,
+      },
+      pii,
       files,
     ),
-    incidents: buildIncidentApi(kernel, maintenanceAdapters, {
-      vehicles: vehicleService,
-      employees: employeeService,
-      assignments: assignmentStore,
-      policies: policyStore,
-      settings: settingsService,
-    }),
   };
 }

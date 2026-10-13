@@ -28,6 +28,7 @@ import {
   INCIDENT_RUNTIME_ACCOUNT,
   INCIDENT_TABLES,
 } from '../../../packages/persistence/incidents/cases/src/index.js';
+import { INCIDENT_CHILD_TABLES } from '../../../packages/persistence/incidents/third-parties/src/index.js';
 import {
   createFleetMigrationModules,
   openFleetRuntimeStores,
@@ -120,6 +121,8 @@ const grants = {
     { table: INCIDENT_TABLES.folios, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
     { table: INCIDENT_TABLES.transitions, privileges: ['SELECT', 'INSERT'] },
     { table: INCIDENT_TABLES.idempotency, privileges: ['SELECT', 'INSERT', 'DELETE'] },
+    { table: INCIDENT_CHILD_TABLES.thirdParties, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
+    { table: INCIDENT_CHILD_TABLES.evidence, privileges: ['SELECT', 'INSERT', 'DELETE'] },
   ],
 } satisfies Record<string, readonly Grant[]>;
 

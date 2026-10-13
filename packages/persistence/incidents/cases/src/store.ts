@@ -8,6 +8,7 @@ import {
   type IdempotencyRecord,
   type Incident,
   type IncidentApplyResult,
+  type IncidentExtraWrite,
   type IncidentListQuery,
   type IncidentMutation,
   type IncidentPage,
@@ -33,6 +34,9 @@ import {
 
 const digest = (value: string) => createHash('sha256').update(value).digest('hex').slice(0, 24);
 const FOLIO_KIND = 'incident';
+
+/** Thrown inside the transaction to roll it back when an extra write refuses (a uniqueness conflict). */
+class ExtraWriteRefused extends Error {}
 
 /**
  * Tenant is part of every selector. Each mutation commits the incident (version CAS), the folio
@@ -98,7 +102,10 @@ export class TypeOrmIncidentStore implements IncidentStore {
     return formatFolio(year, next);
   }
 
-  public async apply(mutation: IncidentMutation): Promise<IncidentApplyResult> {
+  public async apply(
+    mutation: IncidentMutation,
+    extra?: IncidentExtraWrite,
+  ): Promise<IncidentApplyResult> {
     const events = mutation.events.map(validateIncidentEvent);
     const { tenantId } = mutation.incident;
     try {
@@ -119,6 +126,8 @@ export class TypeOrmIncidentStore implements IncidentStore {
           );
           if (changed.affected !== 1) return { applied: false };
         }
+        // The case row is written (and its version taken) before the children that depend on it.
+        if (extra && !(await extra.run(manager))) throw new ExtraWriteRefused();
         await this.writeTimeline(manager, incident, mutation);
         for (const action of mutation.auditActions)
           await appendLocalAuditAndDelivery(manager, {
@@ -167,7 +176,9 @@ export class TypeOrmIncidentStore implements IncidentStore {
         return { applied: true, incident };
       });
     } catch (error) {
-      // A duplicate key is a lost creation race or a live idempotency key: nothing was written.
+      if (error instanceof ExtraWriteRefused) return { applied: false };
+      // A duplicate key is a lost creation race, a live idempotency key or a file linked twice:
+      // nothing was written.
       if ((error as { code?: string }).code === 'ER_DUP_ENTRY') return { applied: false };
       throw error;
     }

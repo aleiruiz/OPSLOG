@@ -7,6 +7,7 @@ import type {
   Incident,
   IncidentApplyResult,
   IncidentEvent,
+  IncidentExtraWrite,
   IncidentListQuery,
   IncidentMutation,
   IncidentPage,
@@ -33,7 +34,22 @@ export class InMemoryIncidentStore implements IncidentStore {
   public readonly events: { readonly tenantId: string; readonly event: IncidentEvent }[] = [];
   public readonly audit: { readonly tenantId: string; readonly action: string }[] = [];
 
-  public async apply(mutation: IncidentMutation): Promise<IncidentApplyResult> {
+  /** Mutations run one after the other, so the version check and the commit are never interleaved. */
+  private tail: Promise<unknown> = Promise.resolve();
+
+  public apply(
+    mutation: IncidentMutation,
+    extra?: IncidentExtraWrite,
+  ): Promise<IncidentApplyResult> {
+    const run = this.tail.then(() => this.applyNow(mutation, extra));
+    this.tail = run.catch(() => undefined);
+    return run;
+  }
+
+  private async applyNow(
+    mutation: IncidentMutation,
+    extra?: IncidentExtraWrite,
+  ): Promise<IncidentApplyResult> {
     const events = mutation.events.map(validateIncidentEvent);
     const { tenantId } = mutation.incident;
     const k = key(tenantId, mutation.incident.id);
@@ -46,6 +62,8 @@ export class InMemoryIncidentStore implements IncidentStore {
       const taken = this.keys.get(ck);
       if (taken && taken.expiresAt > claim.createdAt) return { applied: false };
     }
+    // The extra write goes before anything is committed here: if it refuses, nothing is kept.
+    if (extra && !(await extra.run(undefined))) return { applied: false };
     let incident = structuredClone(mutation.incident);
     if (mutation.expectedVersion === null && mutation.folioYear !== null) {
       const sequenceKey = `${tenantId.length}:${tenantId}${mutation.folioYear}`;
