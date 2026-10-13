@@ -230,10 +230,11 @@ export interface WorkOrderReferences {
   timeZone(tenantId: string): Promise<string>;
   /**
    * Optional (incidents, D11): whether an open incident that says the vehicle cannot operate holds
-   * the vehicle, so closing an order cannot return it to `active`. Absent, nothing changes. A read
+   * the vehicle, so closing an order cannot return it to `active`. `orderId` is the order being
+   * closed: a case that repairs it through a link does not count. Absent, nothing changes. A read
    * that fails is an error, never "free".
    */
-  vehicleBlocks?(tenantId: string, vehicleId: string): Promise<boolean>;
+  vehicleBlocks?(tenantId: string, vehicleId: string, orderId: string): Promise<boolean>;
   /** Evidence and invoice the tenant requires before completing and closing (default: none). */
   fileRequirements(tenantId: string): Promise<WorkOrderFileRequirements>;
   /** The record of a file of the files module, tenant-scoped; null when it is unknown for the tenant. */

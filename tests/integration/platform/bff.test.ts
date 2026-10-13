@@ -337,6 +337,21 @@ function writes(f: Fixture): [string, string, unknown?][] {
       '/api/v1/incidents/00000000-0000-4000-8000-000000000001/resolution',
       { version: 1, resolutionSummary: 'Resuelto' },
     ],
+    [
+      'POST',
+      '/api/v1/incidents/00000000-0000-4000-8000-000000000001/repairs',
+      { version: 1, orderId: '00000000-0000-4000-8000-000000000003' },
+    ],
+    [
+      'POST',
+      '/api/v1/incidents/00000000-0000-4000-8000-000000000001/repairs/00000000-0000-4000-8000-000000000004/unlink',
+      { version: 1 },
+    ],
+    [
+      'PUT',
+      '/api/v1/incidents/00000000-0000-4000-8000-000000000001/costs',
+      { version: 1, lines: [] },
+    ],
   ];
 }
 

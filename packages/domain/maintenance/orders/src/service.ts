@@ -263,6 +263,7 @@ export class WorkOrderService extends IdempotentCommands {
               noOpenIncidentHoldingVehicle: !(await this.refs.vehicleBlocks(
                 tenantId,
                 order.vehicleId,
+                order.id,
               )),
             }
           : {}),

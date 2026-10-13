@@ -204,7 +204,7 @@ suite('incident approvals, close and reopen on real MySQL with two synthetic ten
     }
   });
 
-  it('asks the D20 approval while INC-COSTS is not connected, and not at all without a threshold (case 8)', async () => {
+  it('asks the D20 approval only when the real cost passes the threshold, and not at all without one (case 8)', async () => {
     const free = await resolved();
     expect(
       (await transition(managerA, free.id, { command: 'close', version: free.version }, key()))
@@ -220,7 +220,29 @@ suite('incident approvals, close and reopen on real MySQL with two synthetic ten
       },
     });
     expect(saved.status, saved.text).toBe(200);
-    const { id, version } = await resolved();
+    const resolvedCase = await resolved();
+    const { id } = resolvedCase;
+    // Free cost: nothing is asked while the case bears no cost.
+    expect(
+      (await managerA.get(`${P}/${id}/next-steps`)).json.items.find(
+        (item: { command: string }) => item.command === 'close',
+      ),
+    ).toEqual({ command: 'close', missingRequirements: [] });
+    const priced = await managerA.put(`${P}/${id}/costs`, {
+      json: {
+        version: resolvedCase.version,
+        lines: [
+          {
+            kind: 'expense',
+            category: 'towing',
+            amount: { amountMinor: '500001', currency: 'MXN' },
+          },
+        ],
+      },
+      headers: { 'idempotency-key': key() },
+    });
+    expect(priced.status, priced.text).toBe(200);
+    const version = priced.json.version as number;
     const steps = await managerA.get(`${P}/${id}/next-steps`);
     expect(steps.json.items).toContainEqual({
       command: 'close',

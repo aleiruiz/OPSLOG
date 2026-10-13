@@ -154,8 +154,16 @@ export class FactLoader {
           ? this.once('origin', () => resolvedFrom(this.history, tenantId, incident.id))
           : undefined,
       ]);
+    // A standing approval only counts while the costs have not grown past what it covered.
+    const kind = needs.closeApproval ? 'close' : 'assumption';
+    const standing = kind === 'close' ? incident.closeApproval : incident.assumptionApproval;
+    const stale =
+      approval === true && standing !== null
+        ? await ports.closureCosts.approvalStale({ tenantId, incidentId: incident.id, kind })
+        : false;
     return {
       evidence,
+      ...(stale ? { approvalStale: true } : {}),
       ...(photoMode === undefined ? {} : { photoMode }),
       ...(repairs === undefined ? {} : { repairs }),
       ...(costs === undefined ? {} : { costs }),

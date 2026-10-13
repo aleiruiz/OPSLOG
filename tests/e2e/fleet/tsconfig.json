@@ -24,6 +24,8 @@
     { "path": "../../../packages/persistence/incidents/cases" },
     { "path": "../../../packages/persistence/incidents/third-parties" },
     { "path": "../../../packages/persistence/incidents/workflow" },
+    { "path": "../../../packages/persistence/incidents/repairs" },
+    { "path": "../../../packages/persistence/incidents/costs" },
     { "path": "../../../packages/platform/pii" }
   ]
 }

@@ -19,6 +19,8 @@ import {
 import { allowedCommands } from '../../../../../packages/domain/incidents/workflow/src/index.js';
 import { IncidentApi, type IncidentLabels } from '../../../incidents/cases/src/index.js';
 import type { IncidentWorkflowApi } from '../../../incidents/workflow/src/index.js';
+import type { IncidentCostApi } from '../../../incidents/costs/src/index.js';
+import type { IncidentRepairApi } from '../../../incidents/repairs/src/index.js';
 import type { IncidentChildApi } from '../../../incidents/third-parties/src/index.js';
 import { ROLE_LABELS } from '../directory.js';
 import type { PlatformKernel } from './kernel.js';
@@ -47,6 +49,8 @@ export interface IncidentDomainApis {
   readonly incidents: IncidentApi;
   readonly incidentChildren: IncidentChildApi;
   readonly incidentWorkflow: IncidentWorkflowApi;
+  readonly incidentRepairs: IncidentRepairApi;
+  readonly incidentCosts: IncidentCostApi;
 }
 
 export interface IncidentServices {

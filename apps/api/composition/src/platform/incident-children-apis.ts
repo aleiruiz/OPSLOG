@@ -17,6 +17,14 @@ import {
   type IncidentClosures,
   type WorkflowPorts,
 } from '../../../../../packages/domain/incidents/workflow/src/index.js';
+import {
+  InMemoryIncidentCostStore,
+  type IncidentCostStore,
+} from '../../../../../packages/domain/incidents/costs/src/index.js';
+import {
+  InMemoryIncidentRepairStore,
+  type IncidentRepairStore,
+} from '../../../../../packages/domain/incidents/repairs/src/index.js';
 import { InMemoryWorkOrderStore } from '../../../../../packages/domain/maintenance/orders/src/index.js';
 import { InMemoryMechanicStore } from '../../../../../packages/domain/maintenance/mechanics/src/index.js';
 import type { PiiCipher } from '../../../../../packages/platform/pii/src/index.js';
@@ -34,6 +42,7 @@ import {
   type IncidentServices,
 } from './incident-apis.js';
 import type { PlatformKernel } from './kernel.js';
+import { buildIncidentCostApis, costPorts, repairOrderReader } from './incident-cost-apis.js';
 import { createMechanicScope } from './mechanic-scope.js';
 import type { PlatformAdapters } from './types.js';
 import { UPLOAD_REJECTIONS, type WorkOrderFileSupport } from './work-order-apis.js';
@@ -43,19 +52,29 @@ export function incidentStores(adapters: PlatformAdapters): {
   readonly store: IncidentStore;
   readonly children: IncidentChildStore;
   readonly closures: IncidentClosures;
+  readonly repairs: IncidentRepairStore;
+  readonly costs: IncidentCostStore;
 } {
   // A persistent case with in-memory children or closures (or the reverse) would lose them on
   // restart and skip the one-link-per-file key and the one-closure-per-cycle key: they travel together.
-  const injected = [adapters.incidents, adapters.incidentChildren, adapters.incidentClosures];
+  const injected = [
+    adapters.incidents,
+    adapters.incidentChildren,
+    adapters.incidentClosures,
+    adapters.incidentRepairs,
+    adapters.incidentCosts,
+  ];
   if (injected.some(Boolean) && !injected.every(Boolean))
     throw new Error(
-      'adapters.incidents, adapters.incidentChildren and adapters.incidentClosures must be injected together',
+      'adapters.incidents, incidentChildren, incidentClosures, incidentRepairs and incidentCosts must be injected together',
     );
   const store = adapters.incidents ?? new InMemoryIncidentStore();
   return {
     store,
     children: adapters.incidentChildren ?? new InMemoryIncidentChildStore(store),
     closures: adapters.incidentClosures ?? new InMemoryIncidentClosures(),
+    repairs: adapters.incidentRepairs ?? new InMemoryIncidentRepairStore(store),
+    costs: adapters.incidentCosts ?? new InMemoryIncidentCostStore(store),
   };
 }
 
@@ -172,23 +191,29 @@ export function buildIncidentApis(
   support: WorkOrderFileSupport,
   stores: ReturnType<typeof incidentStores> = incidentStores(adapters),
 ): IncidentDomainApis {
+  const evidence = evidenceFacts(stores.children, incidentFiles(support));
+  const orders = repairOrderReader(adapters);
+  const cost = costPorts(stores.repairs, stores.costs, orders);
   const ports = workflowPorts({
     kernel,
     services,
     store: stores.store,
-    evidence: evidenceFacts(stores.children, incidentFiles(support)),
+    evidence,
     openWorkshopOrders: async (tenantId, vehicleId) =>
       (
         await (adapters.maintenanceOrders ?? new InMemoryWorkOrderStore()).openWorkshopOrders(
           tenantId,
           vehicleId,
         )
-      ).length,
+      ).map((order) => order.id),
     closures: stores.closures,
+    repairLinks: stores.repairs,
+    cost,
   });
   return {
     incidents: buildIncidentApi(kernel, adapters, services, stores.store),
     incidentChildren: buildIncidentChildApi(kernel, adapters, stores, pii, support, ports),
     incidentWorkflow: buildIncidentWorkflowApi(kernel, adapters, services, stores.store, ports),
+    ...buildIncidentCostApis(kernel, adapters, services, stores, orders, evidence, cost.ledger),
   };
 }

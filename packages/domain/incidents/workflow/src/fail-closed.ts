@@ -28,4 +28,8 @@ export const FAIL_CLOSED_TOTALS: IncidentCostTotals = {
  * closing without reading costs is covered by `FAIL_CLOSED_TOTALS`: with a D20 threshold, the closure
  * asks for an approval.
  */
-export const NO_CLOSURE_COSTS: IncidentClosureCosts = { snapshot: async (): Promise<void> => {} };
+export const NO_CLOSURE_COSTS: IncidentClosureCosts = {
+  snapshot: async (): Promise<void> => {},
+  recordApproval: async (): Promise<void> => {},
+  approvalStale: async (): Promise<boolean> => false,
+};

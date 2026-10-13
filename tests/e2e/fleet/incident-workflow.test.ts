@@ -196,7 +196,7 @@ suite('incident workflow on real MySQL with two synthetic tenants', () => {
     }
   });
 
-  it('fails closed on repair and on cancelling a started case while there are no costs (cases 5 and 13)', async () => {
+  it('refuses repair without an order or budget, and cancels a started case only while it bears no cost (cases 5 and 13)', async () => {
     const { id, version } = await draft({ type: 'other' });
     const reported = await transition(id, { command: 'report', version });
     const assigned = await transition(id, {
@@ -221,14 +221,35 @@ suite('incident workflow on real MySQL with two synthetic tenants', () => {
       422,
       expect.arrayContaining(['repair_order_or_budget']),
     ]);
+    const priced = await managerA.put(`${P}/${id}/costs`, {
+      json: {
+        version: noInsurance.json.version,
+        lines: [
+          { kind: 'expense', category: 'towing', amount: { amountMinor: '1000', currency: 'MXN' } },
+        ],
+      },
+      headers: { 'idempotency-key': `key-wf-costs-${Date.now()}-1` },
+    });
+    expect(priced.status, priced.text).toBe(200);
     const cancel = await transition(id, {
       command: 'cancel',
-      version: noInsurance.json.version,
+      version: priced.json.version,
       reason: REASON,
     });
     expect(cancel.status).toBe(422);
     expect(cancel.json.missingRequirements).toEqual(expect.arrayContaining(['no_costs']));
     expect((await read(id)).status).toBe('no_insurance');
+    const cleared = await managerA.put(`${P}/${id}/costs`, {
+      json: { version: priced.json.version, lines: [] },
+      headers: { 'idempotency-key': `key-wf-costs-${Date.now()}-2` },
+    });
+    expect(cleared.status, cleared.text).toBe(200);
+    const cancelled = await transition(id, {
+      command: 'cancel',
+      version: cleared.json.version,
+      reason: REASON,
+    });
+    expect(cancelled.status, cancelled.text).toBe(200);
   });
 
   it('resolves a direct-route case with its summary and decision, and locks every write once it is cancelled (cases 6 and 11)', async () => {

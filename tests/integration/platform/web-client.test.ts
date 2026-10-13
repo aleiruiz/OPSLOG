@@ -741,6 +741,37 @@ describe('typed client against the real BFF', () => {
       }),
     ).toMatchObject({ ok: false, error: { code: 'invalid_transition' } });
 
+    // Repair links and costs of the case: a draft takes neither, and the answers carry no value.
+    expect(await client.call('incidents.repairs.list', { params: flow })).toMatchObject({
+      ok: true,
+      value: { items: [] },
+    });
+    expect(await client.call('incidents.costs.get', { params: flow })).toMatchObject({
+      ok: true,
+      value: { lines: [], totals: [] },
+    });
+    expect(
+      await client.call('incidents.repairs.link', {
+        params: flow,
+        body: { version: 7, orderId: '00000000-0000-4000-8000-0000000000aa' },
+        idempotencyKey: 'web-client-link-key-1',
+      }),
+    ).toMatchObject({ ok: false, error: { code: 'invalid_transition' } });
+    expect(
+      await client.call('incidents.repairs.unlink', {
+        params: { ...flow, linkId: '00000000-0000-4000-8000-0000000000bb' },
+        body: { version: 7 },
+        idempotencyKey: 'web-client-unlink-key-1',
+      }),
+    ).toMatchObject({ ok: false, error: { code: 'invalid_transition' } });
+    expect(
+      await client.call('incidents.costs.update', {
+        params: flow,
+        body: { version: 7, lines: [] },
+        idempotencyKey: 'web-client-costs-key-1',
+      }),
+    ).toMatchObject({ ok: false, error: { code: 'invalid_transition' } });
+
     // Insurance policies through the typed client.
     const insurance = createInsuranceClient(client);
     const policy = await insurance.create({

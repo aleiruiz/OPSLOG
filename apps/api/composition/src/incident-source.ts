@@ -12,6 +12,18 @@ import {
   createIncidentWorkflowMigrationDataSource,
   runIncidentWorkflowMigrations,
 } from '../../../../packages/persistence/incidents/workflow/src/index.js';
+import {
+  INCIDENT_REPAIRS_MIGRATION_VERSION,
+  TypeOrmIncidentRepairStore,
+  createIncidentRepairsMigrationDataSource,
+  runIncidentRepairsMigrations,
+} from '../../../../packages/persistence/incidents/repairs/src/index.js';
+import {
+  INCIDENT_COSTS_MIGRATION_VERSION,
+  TypeOrmIncidentCostStore,
+  createIncidentCostsMigrationDataSource,
+  runIncidentCostsMigrations,
+} from '../../../../packages/persistence/incidents/costs/src/index.js';
 import { TypeOrmIncidentChildStore } from '../../../../packages/persistence/incidents/third-parties/src/index.js';
 
 type Endpoint = Pick<IncidentDatabaseConfig, 'host' | 'port' | 'database'>;
@@ -36,6 +48,19 @@ export function incidentMigrationSteps(endpoint: Endpoint, migrator: Account) {
       source: createIncidentWorkflowMigrationDataSource({ ...endpoint, ...migrator }),
       run: runIncidentWorkflowMigrations,
     },
+    // The links to the workshop's orders and the costs of the case, in version order after the workflow.
+    {
+      name: 'incident-repairs',
+      version: INCIDENT_REPAIRS_MIGRATION_VERSION,
+      source: createIncidentRepairsMigrationDataSource({ ...endpoint, ...migrator }),
+      run: runIncidentRepairsMigrations,
+    },
+    {
+      name: 'incident-costs',
+      version: INCIDENT_COSTS_MIGRATION_VERSION,
+      source: createIncidentCostsMigrationDataSource({ ...endpoint, ...migrator }),
+      run: runIncidentCostsMigrations,
+    },
   ] as const;
 }
 
@@ -55,5 +80,8 @@ export function incidentRuntimeAdapters(source: ReturnType<typeof createIncident
     incidentChildren: new TypeOrmIncidentChildStore(source, incidents),
     // The closure row joins the transaction of the case through the store's extra write.
     incidentClosures: new TypeOrmIncidentClosures(source),
+    // Links and cost lines join the transaction of the case the same way.
+    incidentRepairs: new TypeOrmIncidentRepairStore(source, incidents),
+    incidentCosts: new TypeOrmIncidentCostStore(source, incidents),
   };
 }

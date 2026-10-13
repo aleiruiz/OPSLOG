@@ -48,13 +48,28 @@ export interface ClosureCostsRequest {
   readonly tenantId: string;
   readonly incidentId: string;
   readonly cycle: number;
+  /** The instant of the closure, so the cost snapshot and the closure row carry the same one. */
+  readonly closedAt: string;
 }
 /**
  * INC-COSTS keeps the consolidated costs of the cycle here, in the transaction of the closure, so a
  * failure leaves no closed case and no half snapshot. Until INC-COSTS exists nothing is kept.
  */
+export type ApprovalKind = 'assumption' | 'close';
+export interface ApprovalCostsRequest {
+  readonly tenantId: string;
+  readonly incidentId: string;
+  readonly kind: ApprovalKind;
+}
 export interface IncidentClosureCosts {
   snapshot(request: ClosureCostsRequest, tx: unknown): Promise<void>;
+  /** Keeps what the company bears (per currency) at the moment of the approval, in the approval's transaction. */
+  recordApproval(request: ApprovalCostsRequest, tx: unknown): Promise<void>;
+  /**
+   * The costs grew past what the standing approval covered (any currency, or a new one with a positive
+   * amount), or nothing was recorded: the approval no longer stands. A failed read throws.
+   */
+  approvalStale(request: ApprovalCostsRequest, tx?: unknown): Promise<boolean>;
 }
 
 /** Closures in memory: unit tests and the non-persistent composition. */

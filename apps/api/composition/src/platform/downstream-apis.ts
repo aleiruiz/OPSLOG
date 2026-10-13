@@ -30,7 +30,14 @@ export function buildDownstreamApis(
       services.vehicles,
       services.settings,
       files,
-      (tenantId, vehicleId) => incidentHoldsVehicle(stores.store, tenantId, vehicleId, null),
+      // The case that repairs the order through a link does not hold the order's own vehicle.
+      async (tenantId, vehicleId, orderId) =>
+        incidentHoldsVehicle(
+          stores.store,
+          tenantId,
+          vehicleId,
+          (await stores.repairs.linkOfOrder(tenantId, orderId))?.incidentId ?? null,
+        ),
     ),
     ...buildIncidentApis(kernel, defaults, services, pii, files, stores),
   };

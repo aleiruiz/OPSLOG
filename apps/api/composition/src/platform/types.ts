@@ -15,6 +15,8 @@ import type { PlanStore } from '../../../../../packages/domain/maintenance/plans
 import type { WorkshopStore } from '../../../../../packages/domain/maintenance/workshops/src/index.js';
 import type { MechanicStore } from '../../../../../packages/domain/maintenance/mechanics/src/index.js';
 import type { IncidentStore } from '../../../../../packages/domain/incidents/cases/src/index.js';
+import type { IncidentCostStore } from '../../../../../packages/domain/incidents/costs/src/index.js';
+import type { IncidentRepairStore } from '../../../../../packages/domain/incidents/repairs/src/index.js';
 import type { IncidentClosures } from '../../../../../packages/domain/incidents/workflow/src/index.js';
 import type { IncidentChildStore } from '../../../../../packages/domain/incidents/third-parties/src/index.js';
 import type { WorkOrderStore } from '../../../../../packages/domain/maintenance/orders/src/index.js';
@@ -78,6 +80,9 @@ export interface PlatformAdapters {
   readonly incidentChildren?: IncidentChildStore;
   /** Persistent snapshots of closed cycles (`packages/persistence/incidents/workflow`), written with the case; in-memory by default. All three travel together. */
   readonly incidentClosures?: IncidentClosures;
+  /** Persistent repair links and costs of the incidents (`packages/persistence/incidents/{repairs,costs}`), written with the case; in-memory by default. All five travel together. */
+  readonly incidentRepairs?: IncidentRepairStore;
+  readonly incidentCosts?: IncidentCostStore;
   /**
    * Personal-data protection (SPECS D23): envelope encryption plus blind indexes. Defaults to the
    * local development KMS with a random per-process key, which refuses production-mode

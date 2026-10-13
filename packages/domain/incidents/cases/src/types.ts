@@ -109,6 +109,10 @@ export const INCIDENT_TIMELINE_COMMANDS = [
   'evidence_detached',
   'insurance_updated',
   'resolution_updated',
+  // INC-COSTS: own cost lines and repair links; the entry keeps ids and counts, never amounts.
+  'costs_changed',
+  'repair_linked',
+  'repair_unlinked',
 ] as const;
 export type IncidentTimelineCommand = (typeof INCIDENT_TIMELINE_COMMANDS)[number];
 
@@ -143,6 +147,10 @@ export const INCIDENT_ASSIGNED_EVENT = 'incident.assigned';
 export const INCIDENT_CANCELLED_EVENT = 'incident.cancelled';
 export const INCIDENT_CLOSED_EVENT = 'incident.closed';
 export const INCIDENT_REOPENED_EVENT = 'incident.reopened';
+/** INC-COSTS events: ids and the version only, never an amount or a currency. */
+export const INCIDENT_COSTS_CHANGED_EVENT = 'incident.costs_changed';
+export const INCIDENT_REPAIR_LINKED_EVENT = 'incident.repair_linked';
+export const INCIDENT_REPAIR_UNLINKED_EVENT = 'incident.repair_unlinked';
 export interface IncidentEvent {
   readonly type: string;
   readonly payload: Readonly<Record<string, string | number>>;
