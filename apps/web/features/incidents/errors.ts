@@ -1,5 +1,5 @@
 import type { ApiError } from '@opslog/contracts';
-import { FIELD_LABELS } from './labels';
+import { FIELD_LABELS, requirementLabel } from './labels';
 
 /** Business rules of the server (field of a `rule_violation`), as instructions. Unknown rules get a neutral line. */
 const RULE_COPY: Readonly<Record<string, string>> = {
@@ -14,6 +14,9 @@ const RULE_COPY: Readonly<Record<string, string>> = {
   evidence_limit_reached: 'El caso ya tiene el máximo de archivos permitido.',
   repair_order_or_budget:
     'Este presupuesto sostiene el paso a reparación: sube otro o vincula una orden antes de quitarlo.',
+  invalid_association: 'Esa orden es de otro vehículo: solo se vinculan órdenes de este vehículo.',
+  order_not_corrective: 'Solo se pueden vincular órdenes correctivas.',
+  order_cancelled: 'Esa orden está cancelada y no se puede vincular.',
 };
 
 export const STALE_COPY =
@@ -54,7 +57,10 @@ export function describeError(error: ApiError, action = 'completar la acción'):
       if (rule !== undefined && RULE_COPY[rule] !== undefined) return RULE_COPY[rule];
       if (error.code === 'invalid_responsible')
         return RULE_COPY['responsible_not_eligible'] as string;
-      if (error.code === 'missing_requirements') return 'Faltan requisitos para continuar.';
+      if (error.code === 'missing_requirements') {
+        const lines = (error.missingRequirements ?? []).map(requirementLabel);
+        return lines.length > 0 ? lines.join(' ') : 'Faltan requisitos para continuar.';
+      }
       return 'La regla del negocio no permite esta acción.';
     }
     default:

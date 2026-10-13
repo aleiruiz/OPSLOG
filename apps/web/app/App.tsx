@@ -40,6 +40,7 @@ import { VehicleCreateScreen, VehicleEditScreen } from '../vehicles/VehicleFormS
 import { VehiclesScreen } from '../vehicles/VehiclesScreen';
 import { AppShell } from './AppShell';
 import { HomeScreen } from './HomeScreen';
+import { IncidentSettingsScreen } from '../features/incidents/IncidentSettingsScreen';
 import { IncidentsScreen } from '../features/incidents/IncidentsScreen';
 import { MaintenanceScreen } from '../features/maintenance/MaintenanceScreen';
 import { RouterProvider, useRouter } from './router';
@@ -75,7 +76,13 @@ function navigationRoute(id: string | null): string | null {
   if (id === 'policyNew' || id === 'policyDetail' || id === 'policyEdit' || id === 'policyRenew')
     return 'policies';
   if (id === 'maintenanceOrder') return 'maintenance';
-  if (id === 'incidentNew' || id === 'incidentDetail' || id === 'incidentTab') return 'incidents';
+  if (
+    id === 'incidentNew' ||
+    id === 'incidentAlerts' ||
+    id === 'incidentDetail' ||
+    id === 'incidentTab'
+  )
+    return 'incidents';
   return id;
 }
 
@@ -87,7 +94,7 @@ function Redirect({ to }: { to: string }) {
 
 function Routes() {
   const router = useRouter();
-  const { state, can, logout, retry } = useSession();
+  const { state, can, logout, retry, ports, markExpired } = useSession();
   const [signOutFailed, setSignOutFailed] = React.useState(false);
   const match = resolveRoute(router.path);
   // The invitation token is kept in memory only and removed from the address bar and history entry.
@@ -281,6 +288,12 @@ function Routes() {
         break;
       case 'incidentNew':
         screen = <IncidentsScreen view="new" />;
+        break;
+      case 'incidentAlerts':
+        screen = <IncidentsScreen view="alerts" />;
+        break;
+      case 'incidentSettings':
+        screen = <IncidentSettingsScreen ports={ports.incidents} onExpired={markExpired} />;
         break;
       case 'incidentDetail':
         screen = <IncidentsScreen view="detail" id={match.params.id as string} />;

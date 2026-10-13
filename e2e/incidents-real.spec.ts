@@ -765,3 +765,310 @@ test('keyboard: Escape closes the removal dialog and focus returns to its trigge
     await expectNoViolations(page);
   }
 });
+
+// ---- INC-UI PR 2: repair, costs, SLA, notices and settings --------------------------------------
+
+type SeedLine = {
+  kind: 'expense' | 'recovery';
+  category: string;
+  amountMinor: string;
+  currency: string;
+};
+/** Replaces the own cost lines of a case through the INC-COSTS port (the browser has no other way to seed them). */
+async function seedCostLines(tenant: RealTenant, id: string, lines: SeedLine[]) {
+  const token = await adminToken(tenant, 'e2e-admin-a');
+  const [row] = await tenant.database.rows<{ version: number }>(
+    `SELECT version FROM ${INCIDENTS} WHERE company_id = ? AND id = ?`,
+    [tenant.tenantId, id],
+  );
+  const saved = await tenant.platform.incidentCosts.update(
+    token,
+    `e2e-lines-${id}`,
+    id,
+    {
+      version: row?.version,
+      lines: lines.map(({ kind, category, amountMinor, currency }) => ({
+        kind,
+        category,
+        amount: { amountMinor, currency },
+      })),
+    },
+    `e2e-lines-key-${id}-${lines.map((l) => l.amountMinor + l.currency).join('-')}`,
+  );
+  expect(JSON.stringify(saved)).toContain('"ok":true');
+}
+/** Records the cost of a maintenance order the way a fleet administrator does, so the case reads it. */
+async function seedOrderCost(tenant: RealTenant, description: string, amountMinor: string) {
+  const token = await adminToken(tenant, 'e2e-admin-a');
+  const listed = await tenant.platform.workOrders.list(token, 'e2e-orders');
+  const order = (listed.value ?? []).find((item) => item.description === description);
+  if (!order) throw new Error('e2e order not found');
+  const saved = await tenant.platform.workOrders.command(
+    token,
+    'e2e-order-costs',
+    'updateCosts',
+    order.id,
+    {
+      version: order.version,
+      costs: [{ category: 'labor', amount: { amountMinor, currency: 'MXN' } }],
+    },
+  );
+  expect(saved.ok, JSON.stringify(saved)).toBe(true);
+}
+let repairCase = '';
+
+test('acceptance 11: link a new corrective order, costs by currency, the formula and the D20 threshold', async ({
+  page,
+}) => {
+  await signIn(page, a, 'e2e-admin-a');
+  const { folio, path } = await reportedCase(page, 'Choque con poste de alumbrado');
+  repairCase = path.split('/').pop() as string;
+  await page.getByRole('button', { name: 'Asignar responsable' }).click();
+  await page.getByLabel(/Persona responsable/).selectOption({ label: 'Tú' });
+  await submit(page, 'Asignar responsable', 'Asignar');
+  await expect(page.getByText('Asignar responsable: listo.')).toBeVisible();
+  await page.getByRole('button', { name: 'Iniciar revisión' }).click();
+  await expect(status(page, 'En revisión')).toBeVisible();
+  await page.getByRole('button', { name: 'Continuar sin aseguradora' }).click();
+  await page
+    .getByLabel(/Por qué el caso sigue sin aseguradora/)
+    .fill('La póliza no cubre daños propios');
+  await page
+    .getByRole('region', { name: 'Continuar sin aseguradora' })
+    .getByRole('button', { name: 'Continuar sin aseguradora' })
+    .click();
+  await expect(status(page, 'Sin aseguradora')).toBeVisible();
+  await page.getByLabel('Resumen de la resolución').fill('Se repara con cargo a la empresa');
+  await page.getByLabel('Estado en que queda el vehículo').selectOption('active');
+  await page.getByLabel('¿La empresa asume el costo?').selectOption('yes');
+  await page.getByRole('button', { name: 'Guardar resolución' }).click();
+  await expect(page.getByText('Resolución guardada.')).toBeVisible();
+
+  // Without an order or a budget, repair is not possible and the server says what is missing.
+  await page.getByRole('button', { name: 'Pasar a reparación' }).click();
+  await expect(actions(page)).toContainText('Pasar a reparación:');
+  await expect(status(page, 'Sin aseguradora')).toBeVisible();
+
+  await page.getByRole('tab', { name: 'Reparación' }).click();
+  await expect(page.getByText('Sin órdenes vinculadas')).toBeVisible();
+  await expectNoViolations(page);
+  await page.getByRole('button', { name: 'Vincular orden' }).click();
+  await expectNoViolations(page);
+  await submit(page, 'Crear orden correctiva', 'Crear orden y vincular');
+  await expect(page.getByText('Orden creada y vinculada.')).toBeVisible();
+  const linked = page.getByRole('list', { name: 'Órdenes vinculadas' });
+  await expect(linked.getByRole('listitem')).toHaveCount(1);
+  await expect(linked).toContainText(`Reparación del siniestro ${folio}`);
+  expect(await page.getByRole('main').innerText()).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/);
+  await shot(page, 'reparacion-orden-vinculada-escritorio');
+  await expectNoViolations(page);
+
+  // Now the case can go to repair.
+  await page.getByRole('button', { name: 'Pasar a reparación' }).click();
+  await expect(status(page, 'En reparación')).toBeVisible();
+
+  // Costs: 10,000.00 (order) + 2,000.00 (deductible) + 500.00 (towing) - 8,000.00 (insurer) = 4,500.00 MXN.
+  await seedOrderCost(a, `Reparación del siniestro ${folio}`, '1000000');
+  await seedCostLines(a, repairCase, [
+    { kind: 'expense', category: 'deductible', amountMinor: '200000', currency: 'MXN' },
+    { kind: 'expense', category: 'towing', amountMinor: '50000', currency: 'MXN' },
+    { kind: 'recovery', category: 'insurer', amountMinor: '800000', currency: 'MXN' },
+  ]);
+  const costBodies: string[] = [];
+  page.on('response', async (response) => {
+    if (/\/api\/v1\/incidents\/[^/]+\/costs$/.test(response.url()) && response.ok())
+      costBodies.push(await response.text().catch(() => ''));
+  });
+  await page.reload();
+  await page.getByRole('tab', { name: 'Costos' }).click();
+  const totals = page.getByRole('region', { name: 'Totales por moneda' });
+  await expect(totals).toContainText('MXN');
+  for (const amount of ['10,000.00 MXN', '2,500.00 MXN', '8,000.00 MXN', '4,500.00 MXN'])
+    await expect(totals).toContainText(amount);
+  await expect(page.getByText(/más de una moneda/)).toHaveCount(0);
+  // D20: the company bears more than the 1,000.00 MXN threshold.
+  const approval = page.getByRole('region', { name: 'Aprobación de costos' });
+  await expect(approval).toContainText('1,000.00 MXN');
+  await expect(approval).toContainText('Sin aprobación');
+  expect(costBodies.join('')).toContain('"companyBorne"');
+  await expectNoViolations(page);
+
+  // Another currency never merges into the total: its own row and a visible warning.
+  await seedCostLines(a, repairCase, [
+    { kind: 'expense', category: 'deductible', amountMinor: '200000', currency: 'MXN' },
+    { kind: 'expense', category: 'towing', amountMinor: '50000', currency: 'MXN' },
+    { kind: 'recovery', category: 'insurer', amountMinor: '800000', currency: 'MXN' },
+    { kind: 'expense', category: 'fine', amountMinor: '12000', currency: 'USD' },
+  ]);
+  await page.reload();
+  await page.getByRole('tab', { name: 'Costos' }).click();
+  await expect(page.getByText(/más de una moneda/)).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Totales por moneda' })).toContainText(
+    '120.00 USD',
+  );
+  await expect(page.getByRole('region', { name: 'Totales por moneda' })).toContainText(
+    '4,500.00 MXN',
+  );
+  await shot(page, 'costos-monedas-escritorio');
+  await expectNoViolations(page);
+
+  // A fleet editor cannot link orders nor see amounts; the manager (view_costs) sees what the API says.
+  await switchTo(page, a, 'e2e-editor-a', path);
+  await page.getByRole('tab', { name: 'Reparación' }).click();
+  await expect(page.getByRole('button', { name: 'Vincular orden' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Desvincular/ })).toHaveCount(0);
+});
+
+test('acceptance 11: a closed case keeps its cost summary per cycle, apart from later changes', async ({
+  page,
+}) => {
+  // Serial dependency: the D20 journeys above close and reopen a case with a 1,000.01 MXN cost.
+  const [reopened] = await a.database.rows<{ id: string }>(
+    `SELECT id FROM ${INCIDENTS} WHERE company_id = ? AND status = 'reopened' ORDER BY created_at LIMIT 1`,
+    [a.tenantId],
+  );
+  expect(reopened).toBeDefined();
+  await signIn(page, a, 'e2e-admin-a', `/incidents/${reopened?.id}`);
+  await page.getByRole('tab', { name: 'Costos' }).click();
+  const closing = page.getByRole('region', { name: 'Costos al cierre' }).last();
+  await expect(closing).toContainText('Ciclo 1');
+  await expect(closing).toContainText('1,000.01 MXN');
+  await expectNoViolations(page);
+});
+
+test('acceptance 7: without incidents:view_costs there is no cost UI and no amount in any case response', async ({
+  page,
+}) => {
+  const bodies: string[] = [];
+  const urls: string[] = [];
+  page.on('response', async (response) => {
+    if (/\/api\/v1\/incidents/.test(response.url()) && response.ok()) {
+      urls.push(response.url());
+      bodies.push(await response.text().catch(() => ''));
+    }
+  });
+  await signIn(page, a, 'e2e-viewer-a', `/incidents/${repairCase}`);
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Reparación' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Costos' })).toHaveCount(0);
+  await page.goto(`${a.webUrl}/real/incidents/${repairCase}?tab=costs`);
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Resumen', selected: true })).toBeVisible();
+  await page.getByRole('tab', { name: 'Reparación' }).click();
+  await expect(page.getByRole('list', { name: 'Órdenes vinculadas' })).toBeVisible();
+  await expect(page.getByText(/MXN|USD/)).toHaveCount(0);
+  await page.goto(`${a.webUrl}/real/incidents`);
+  await expect(page.getByRole('heading', { name: 'Siniestros', level: 1 })).toBeVisible();
+  await expectNoViolations(page);
+  expect(urls.some((url) => /\/costs/.test(url))).toBe(false);
+  expect(bodies.join('\n')).not.toMatch(/amountMinor/);
+
+  // The manager has view_costs: the amounts shown are the ones the API returns.
+  const apiTotals: string[] = [];
+  page.on('response', async (response) => {
+    if (/\/api\/v1\/incidents\/[^/]+\/costs$/.test(response.url()) && response.ok())
+      apiTotals.push(await response.text());
+  });
+  await switchTo(page, a, 'e2e-manager-a', `/incidents/${repairCase}`);
+  await page.getByRole('tab', { name: 'Costos' }).click();
+  const totals = page.getByRole('region', { name: 'Totales por moneda' });
+  await expect(totals).toContainText('4,500.00 MXN');
+  expect(apiTotals.join('')).toContain('"companyBorne":"450000"');
+  await expectNoViolations(page);
+});
+
+test('acceptance 12: the SLA badge, the notice for the responsible and its link to the case', async ({
+  page,
+}) => {
+  await signIn(page, a, 'e2e-admin-a');
+  const { path } = await reportedCase(page, 'Raspón en la puerta trasera');
+  const id = path.split('/').pop() as string;
+  await page.getByRole('button', { name: 'Asignar responsable' }).click();
+  await page.getByLabel(/Persona responsable/).selectOption({ label: 'Tú' });
+  await submit(page, 'Asignar responsable', 'Asignar');
+  await expect(page.getByText('Asignar responsable: listo.')).toBeVisible();
+  await expect(status(page, 'SLA en tiempo')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Plazo de resolución' })).toContainText(
+    '30 días naturales',
+  );
+  await expectNoViolations(page);
+
+  // 25 of the 30 days have passed (83 %), and the platform scan raises the notice.
+  await a.platform.incidentSlaModule.scanner.scan(a.tenantId);
+  await a.database.rows(
+    'UPDATE opslog_incident_sla_cycles SET started_at = DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 25 DAY) WHERE company_id = ? AND incident_id = ?',
+    [a.tenantId, id],
+  );
+  await a.platform.incidentSlaModule.scanner.scan(a.tenantId);
+
+  await page.goto(`${a.webUrl}/real/incidents`);
+  const alertsPanel = page.getByRole('region', { name: 'Avisos de siniestros' });
+  await expect(alertsPanel).toContainText('SLA por vencer');
+  await expect(
+    page.getByRole('table', { name: /siniestros$/ }).getByText('SLA por vencer'),
+  ).toBeVisible();
+  await expectNoViolations(page);
+  await shot(page, 'lista-avisos-sla-escritorio');
+  await page.goto(`${a.webUrl}/real/incidents/avisos`);
+  await expect(page.getByRole('heading', { name: 'Avisos de siniestros', level: 1 })).toBeVisible();
+  const row = page.getByRole('row').filter({ hasText: 'SLA por vencer' });
+  await expect(row).toHaveCount(1);
+  await expectNoViolations(page);
+  await row.getByRole('link').click();
+  await expect(page).toHaveURL(new RegExp(`/real/incidents/${id}$`));
+  await expect(status(page, 'SLA por vencer')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Plazo de resolución' })).toContainText('83 %');
+
+  // Notices are for their recipients: the viewer has none of them.
+  await switchTo(page, a, 'e2e-viewer-a', '/incidents/avisos');
+  await expect(page.getByText('No tienes avisos de siniestros')).toBeVisible();
+});
+
+test('settings: SLA days and inactivity days are saved, a stale save keeps what was typed, and only managers get the screen', async ({
+  page,
+}) => {
+  await signIn(page, a, 'e2e-admin-a', '/incidents');
+  await page.getByRole('navigation').getByRole('link', { name: 'Ajustes de siniestros' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Configuración de siniestros', level: 1 }),
+  ).toBeVisible();
+  await expectNoViolations(page);
+  const days = page.getByLabel('Días para casos de gravedad media');
+  await expect(days).toHaveValue('30');
+  await days.fill('21');
+  await page.getByLabel('Días sin movimiento').fill('5');
+  await page.getByRole('button', { name: 'Guardar configuración' }).click();
+  await expect(page.getByText('Configuración guardada.')).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel('Días para casos de gravedad media')).toHaveValue('21');
+  await expect(page.getByLabel('Días sin movimiento')).toHaveValue('5');
+  // The threshold of the maintenance settings is kept by the full replacement.
+  await expect(page.getByLabel(/Umbral de aprobación/)).toHaveValue('1000.00');
+
+  // Another administrator saves first: this save is stale, nothing typed is lost, Recargar resends it.
+  const other = await (page.context().browser() as Browser).newContext();
+  const second = await other.newPage();
+  await signIn(second, a, 'e2e-admin-a', '/incidents/configuracion');
+  await second.getByLabel('Días sin movimiento').fill('9');
+  await second.getByRole('button', { name: 'Guardar configuración' }).click();
+  await expect(second.getByText('Configuración guardada.')).toBeVisible();
+  await other.close();
+  await page.getByLabel('Días para casos de gravedad media').fill('18');
+  await page.getByRole('button', { name: 'Guardar configuración' }).click();
+  await expect(page.getByText(/cambió mientras la editabas/)).toBeVisible();
+  await expect(page.getByLabel('Días para casos de gravedad media')).toHaveValue('18');
+  await expectNoViolations(page);
+  await page.getByRole('button', { name: 'Recargar' }).click();
+  await expect(page.getByLabel('Días sin movimiento')).toHaveValue('9');
+  await expect(page.getByLabel('Días para casos de gravedad media')).toHaveValue('18');
+  await page.getByRole('button', { name: 'Guardar configuración' }).click();
+  await expect(page.getByText('Configuración guardada.')).toBeVisible();
+
+  // Not a manager of the configuration: no entry in the navigation and the address says so.
+  await switchTo(page, a, 'e2e-manager-a', '/incidents');
+  await expect(
+    page.getByRole('navigation').getByRole('link', { name: 'Ajustes de siniestros' }),
+  ).toHaveCount(0);
+  await page.goto(`${a.webUrl}/real/incidents/configuracion`);
+  await expect(page.getByText('No tienes acceso')).toBeVisible();
+});

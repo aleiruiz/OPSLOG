@@ -1,6 +1,9 @@
 import type {
   ApiError,
+  BffAlertSettings,
   BffIncident,
+  BffIncidentAlert,
+  BffPolicyDeductible,
   BffIncidentInput,
   BffIncidentSuggestions,
   Page,
@@ -16,7 +19,9 @@ import {
   type Record_,
   type Setting,
 } from './fakeContext';
+import type { FakeOrder } from './fakeCosts';
 import { createFakeChildren } from './fakeChildren';
+import { createFakeCosts } from './fakeCosts';
 import { createFakeUpdates } from './fakeUpdates';
 import { FAKE_NOW, ME, baseIncident } from './fakeIncident';
 import {
@@ -41,6 +46,14 @@ export interface FakeIncidentOptions {
   readonly approvalRequired?: Setting<boolean>;
   readonly suggestions?: BffIncidentSuggestions;
   readonly vehicles?: readonly BffIncident['vehicle'][];
+  /** Maintenance orders the repair tab can link (the stand-in of the maintenance module). */
+  readonly orders?: readonly FakeOrder[];
+  /** The deductible the case's policy states, as insurance keeps it. */
+  readonly policyDeductible?: BffPolicyDeductible;
+  /** Notices of the incident SLA the caller may see. */
+  readonly alerts?: readonly BffIncidentAlert[];
+  /** The company settings (SLA days, inactivity days, photo rule, D20 threshold). */
+  readonly settings?: Partial<BffAlertSettings>;
 }
 
 const ALL_ADMIN = [
@@ -73,6 +86,8 @@ export function createFakeIncidentPorts(options: FakeIncidentOptions = {}) {
       timeline: [],
       parties: [],
       evidence: [],
+      repairs: [],
+      costs: { lines: [], estimate: null, snapshots: [] },
     });
   for (const incident of options.incidents ?? []) seed(incident);
 
@@ -87,6 +102,7 @@ export function createFakeIncidentPorts(options: FakeIncidentOptions = {}) {
     permissions().includes('incidents:view') ? (records.get(id) ?? null) : null;
 
   const facts = (record: Record_): FakeFacts => ({
+    repairLinked: record.repairs.length > 0,
     cleanPhoto: record.evidence.some(
       (item) => item.category === 'photo' && item.fileStatus === 'clean',
     ),
@@ -165,8 +181,15 @@ export function createFakeIncidentPorts(options: FakeIncidentOptions = {}) {
     commit,
     entry,
     viewPii: () => read(options.viewPii ?? false),
+    permissions,
+    all: () => [...records.values()],
   };
-  const children = { ...createFakeChildren(context), ...createFakeUpdates(context) };
+  const costing = createFakeCosts(context, options);
+  const children = {
+    ...createFakeChildren(context),
+    ...createFakeUpdates(context),
+    ...costing.ports,
+  };
 
   const ports: IncidentPorts = {
     list: (query) => {
@@ -328,8 +351,10 @@ export function createFakeIncidentPorts(options: FakeIncidentOptions = {}) {
         changes.resolution = { ...current.resolution, closeApproval: stamp };
       if (body.command === 'approve_assumption')
         changes.insurance = { ...current.insurance, assumptionApproval: stamp };
-      if (body.command === 'close')
+      if (body.command === 'close') {
         changes.resolution = { ...current.resolution, closedAt: FAKE_NOW, closedBy: ME };
+        costing.snapshot(record);
+      }
       if (body.command === 'cancel')
         changes.resolution = { ...current.resolution, cancelReason: body.reason ?? null };
       if (body.command === 'reopen')
@@ -380,6 +405,10 @@ export function createFakeIncidentPorts(options: FakeIncidentOptions = {}) {
         record.incident = { ...record.incident, ...changes, version: record.incident.version + 1 };
     },
     /** The stored case, without the caller's view. */
+    /** Stand-in of the worker: a notice appears for the caller. */
+    addAlert: costing.addAlert,
+    /** Another person changes the costs of a case: the version moves on. */
+    changeCostsExternally: costing.changeCostsExternally,
     stored(incidentId: string): BffIncident | undefined {
       return records.get(incidentId)?.incident;
     },

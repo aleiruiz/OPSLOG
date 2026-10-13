@@ -98,6 +98,8 @@ export function fakeMayRun(
 }
 
 export interface FakeFacts {
+  /** At least one order is linked to the case (INC-COSTS). */
+  readonly repairLinked: boolean;
   readonly cleanPhoto: boolean;
   readonly cleanCategories: readonly string[];
   readonly pendingFiles: boolean;
@@ -161,7 +163,7 @@ export function fakeMissing(
       checks['d20_configured'] = facts.thresholdConfigured;
       break;
     case 'repair':
-      checks['repair_order_or_budget'] = clean('budget');
+      checks['repair_order_or_budget'] = facts.repairLinked || clean('budget');
       assumption();
       break;
     case 'resolve':

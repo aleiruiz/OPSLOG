@@ -15,12 +15,16 @@ import { BackLink } from '../../app/BackLink';
 import { useRouter } from '../../app/router';
 import { errorKind } from '../maintenance/useResult';
 import { useIncidentEnv } from './context';
+import { CostsTab } from './CostsTab';
 import { EvidenceTab } from './EvidenceTab';
 import { STALE_COPY } from './errors';
 import { InsuranceTab } from './InsuranceTab';
 import { STATUS_LABELS, STATUS_TONES, TYPE_LABELS } from './labels';
+import { mayViewCosts, approvalPending, stepViews } from './model';
 import { NextStepsPanel } from './NextStepsPanel';
-import { TAB_IDS, TAB_LABELS, asTab, incidentPath, incidentsPath } from './paths';
+import { RepairTab } from './RepairTab';
+import { SlaBadge } from './SlaBadge';
+import { TAB_LABELS, type TabId, asTab, incidentPath, incidentsPath, tabsFor } from './paths';
 import { SummaryTab } from './SummaryTab';
 import { ThirdPartiesTab } from './ThirdPartiesTab';
 import { TimelineTab } from './TimelineTab';
@@ -43,7 +47,8 @@ export function IncidentDetail({ id, tab }: { id: string; tab?: string | undefin
   );
   const [notice, setNotice] = React.useState<string | null>(null);
   const [stale, setStale] = React.useState(false);
-  const active = asTab(tab);
+  const viewCosts = mayViewCosts(env.permissions);
+  const active = asTab(tab, viewCosts);
   const back = <BackLink to={incidentsPath}>Siniestros</BackLink>;
 
   if (incident.data === null) {
@@ -78,6 +83,8 @@ export function IncidentDetail({ id, tab }: { id: string; tab?: string | undefin
     setStale(false);
     setNotice(message ?? null);
     incident.set(next);
+    // A command answers without the `sla` block of the read, so the case is read again to keep it current.
+    incident.reload();
   };
   const childChanged = (_version: number, message?: string) => {
     setNotice(message ?? null);
@@ -85,11 +92,16 @@ export function IncidentDetail({ id, tab }: { id: string; tab?: string | undefin
   };
   const props = { incident: current, onIncident: changed, onReload: reload };
   const child = { incident: current, onVersion: childChanged, onReload: reload };
-  const content: Record<(typeof TAB_IDS)[number], React.ReactNode> = {
+  const content: Record<TabId, React.ReactNode> = {
     summary: <SummaryTab {...props} />,
     'third-parties': <ThirdPartiesTab {...child} />,
     evidence: <EvidenceTab {...child} />,
     insurance: <InsuranceTab {...props} />,
+    repair: <RepairTab {...child} />,
+    // Costs are requested only with `incidents:view_costs`: the tab itself is absent otherwise.
+    costs: (
+      <CostsTab {...child} approvalPending={approvalPending(stepViews(steps.data?.items ?? []))} />
+    ),
     timeline: <TimelineTab incidentId={current.id} version={current.version} />,
   };
 
@@ -104,6 +116,7 @@ export function IncidentDetail({ id, tab }: { id: string; tab?: string | undefin
       <Stack direction="row" gap={1} flexWrap="wrap" sx={{ mb: 2, mt: -2 }}>
         <StatusBadge label={STATUS_LABELS[current.status]} tone={STATUS_TONES[current.status]} />
         {current.severity && <SeverityBadge severity={current.severity} />}
+        <SlaBadge sla={current.sla} />
       </Stack>
       {notice && <InlineAlert severity="success">{notice}</InlineAlert>}
       {(stale || incident.error) && (
@@ -130,7 +143,7 @@ export function IncidentDetail({ id, tab }: { id: string; tab?: string | undefin
           <DetailTabs
             value={active}
             onChange={(next) => router.navigate(incidentPath(id, next))}
-            tabs={TAB_IDS.map((tabId) => ({
+            tabs={tabsFor(viewCosts).map((tabId) => ({
               id: tabId,
               label: TAB_LABELS[tabId],
               content: content[tabId],

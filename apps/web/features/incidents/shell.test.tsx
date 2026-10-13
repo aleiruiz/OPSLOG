@@ -67,7 +67,7 @@ describe('incidents in the web shell', () => {
   it('lets a reporter start a case but not run the commands of an editor', async () => {
     await renderApp({ path: '/incidents', account: 'dispatch' });
     expect(await screen.findByRole('link', { name: 'Nuevo siniestro' })).toBeInTheDocument();
-    await screen.findByRole('table');
+    await screen.findByRole('table', { name: '2 siniestros' });
     cleanup();
     await renderApp({ path: '/incidents/inc-002', account: 'dispatch' });
     await screen.findByRole('heading', { name: 'SIN-2026-000002', level: 1 });
@@ -102,5 +102,46 @@ describe('incidents in the web shell', () => {
     api.controls.failNext('listVehicles', 401);
     await renderApp({ api, path: '/incidents/new' });
     expect(await screen.findByText(/Sesión expirada|expir/i)).toBeInTheDocument();
+  });
+
+  it('opens the notices and the settings from the shell, the settings only for who manages the configuration', async () => {
+    await renderApp({ path: '/' });
+    const nav = await screen.findByRole('navigation');
+    fireEvent.click(within(nav).getByRole('link', { name: 'Ajustes de siniestros' }));
+    expect(
+      await screen.findByRole('heading', { name: 'Configuración de siniestros', level: 1 }),
+    ).toBeInTheDocument();
+    expect(await screen.findByLabelText('Días sin movimiento')).toHaveValue('5');
+    cleanup();
+    await renderApp({ path: '/incidents/avisos' });
+    expect(
+      await screen.findByRole('heading', { name: 'Avisos de siniestros', level: 1 }),
+    ).toBeInTheDocument();
+    const alerts = await screen.findByRole('table', { name: '1 avisos' });
+    fireEvent.click(within(alerts).getByRole('link', { name: 'SIN-2026-000002' }));
+    expect(
+      await screen.findByRole('heading', { name: 'SIN-2026-000002', level: 1 }),
+    ).toBeInTheDocument();
+    expect(await screen.findByLabelText('Estado: SLA por vencer')).toBeInTheDocument();
+    cleanup();
+    for (const account of ['mechanic', 'dispatch'] as const) {
+      await renderApp({ path: '/incidents/configuracion', account });
+      await screen.findByRole('heading', { name: 'No tienes acceso' });
+      expect(screen.queryByLabelText('Días sin movimiento')).toBeNull();
+      cleanup();
+    }
+  });
+
+  it('opens the repair and cost tabs of a case, the costs only with incidents:view_costs', async () => {
+    await renderApp({ path: '/incidents/inc-002/repair' });
+    await screen.findByRole('heading', { name: 'SIN-2026-000002', level: 1 });
+    expect(await screen.findByText('Sin órdenes vinculadas')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: 'Costos' }));
+    expect(await screen.findByText('Totales a cargo de la empresa')).toBeInTheDocument();
+    cleanup();
+    await renderApp({ path: '/incidents/inc-002/costs', account: 'mechanic' });
+    await screen.findByRole('heading', { name: 'SIN-2026-000002', level: 1 });
+    expect(screen.queryByRole('tab', { name: 'Costos' })).toBeNull();
+    expect(screen.queryByText('Totales a cargo de la empresa')).toBeNull();
   });
 });

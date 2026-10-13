@@ -1,8 +1,11 @@
 import type {
   ApiError,
+  BffCostLine,
+  BffCostSnapshot,
   BffIncident,
   BffIncidentEvidence,
   BffIncidentTimelineEntry,
+  BffMoney,
   BffThirdParty,
 } from '@opslog/contracts';
 import type { Result } from '../../app/types';
@@ -42,6 +45,9 @@ export interface Record_ {
     };
   })[];
   evidence: BffIncidentEvidence[];
+  /** Orders linked to the case, by the order's id. */
+  repairs: { id: string; orderId: string; linkedAt: string }[];
+  costs: { lines: BffCostLine[]; estimate: BffMoney | null; snapshots: BffCostSnapshot[] };
 }
 
 export const isFailure = (value: Record_ | Result<never>): value is Result<never> => 'ok' in value;
@@ -54,4 +60,7 @@ export interface FakeContext {
   commit(record: Record_, changes: Writable<BffIncident>): BffIncident;
   entry(record: Record_, command: string, changed: string[], comment?: string | null): void;
   viewPii(): boolean;
+  permissions(): readonly string[];
+  /** Every stored case, for checks that cross cases (an order linked to one case only). */
+  all(): readonly Record_[];
 }

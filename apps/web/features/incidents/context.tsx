@@ -1,4 +1,5 @@
 import React from 'react';
+import type { BffCloseCostThreshold } from '@opslog/contracts';
 import type { DirectoryOption } from '../maintenance/directory';
 import type { IncidentPorts } from './ports';
 
@@ -17,6 +18,11 @@ export interface IncidentEnv {
   readonly mayChangeVehicles: boolean;
   /** The company's photo rule at report time, when the settings could be read. */
   readonly photoRequired: boolean;
+  /**
+   * The D20 threshold, for display next to the costs. Only read for callers with `incidents:view_costs`; it is
+   * `null` for everyone else, so no amount reaches a screen that must not show one. Never compared on the client.
+   */
+  readonly approvalThreshold: BffCloseCostThreshold | null;
   readonly onExpired: () => void;
 }
 

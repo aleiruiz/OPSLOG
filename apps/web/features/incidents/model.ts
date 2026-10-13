@@ -10,6 +10,10 @@ export const mayStartIncident = (permissions: readonly string[]): boolean =>
 export const mayApprove = (permissions: readonly string[]): boolean =>
   permissions.includes('incidents:approve');
 
+/** Amounts are for `incidents:view_costs` only (D10): without it nothing about costs is shown or requested. */
+export const mayViewCosts = (permissions: readonly string[]): boolean =>
+  permissions.includes('incidents:view_costs');
+
 /** The server sends no editable fields when the caller may not write (or the case is closed or cancelled). */
 export const canWrite = (incident: BffIncident): boolean => incident.editableFields.length > 0;
 
@@ -33,6 +37,23 @@ export const canEditInsurance = (incident: BffIncident): boolean =>
   canWrite(incident) && INSURANCE_STATES.includes(incident.status);
 export const canEditResolution = (incident: BffIncident): boolean =>
   canWrite(incident) && RESOLUTION_STATES.includes(incident.status);
+
+/** Where an order may be linked or unlinked and the case's own costs may change (INC-COSTS): not a draft, not finished. */
+const REPAIR_STATES: readonly BffIncidentStatus[] = [
+  'under_review',
+  'insurance_process',
+  'insurance_rejected',
+  'no_insurance',
+  'repair',
+  'reopened',
+];
+export const canLinkRepairs = (incident: BffIncident, permissions: readonly string[]): boolean =>
+  permissions.includes('incidents:edit') && REPAIR_STATES.includes(incident.status);
+export const canEditCosts = (incident: BffIncident, permissions: readonly string[]): boolean =>
+  permissions.includes('incidents:edit') &&
+  mayViewCosts(permissions) &&
+  incident.status !== 'draft' &&
+  canWrite(incident);
 
 export const isFinished = (incident: BffIncident): boolean =>
   incident.status === 'closed' || incident.status === 'cancelled';

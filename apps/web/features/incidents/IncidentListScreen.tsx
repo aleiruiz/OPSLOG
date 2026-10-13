@@ -10,8 +10,6 @@ import {
   InlineAlert,
   PageHeader,
   Panel,
-  SeverityBadge,
-  StatusBadge,
   UiState,
 } from '@opslog/ui';
 import { BFF_INCIDENT_SEVERITIES, BFF_INCIDENT_TYPES } from '@opslog/contracts';
@@ -23,14 +21,15 @@ import type {
   BffIncidentsQuery,
   Page,
 } from '@opslog/contracts';
-import { RouterButton, RouterLink, linkSx, useRouter } from '../../app/router';
+import { RouterButton, useRouter } from '../../app/router';
 import { ScrollRegion } from '../../app/ScrollRegion';
 import { errorKind } from '../maintenance/useResult';
 import { useIncidentEnv } from './context';
 import { mayStartIncident } from './model';
-import { OPEN_STATUSES, SEVERITY_LABELS, STATUS_LABELS, STATUS_TONES, TYPE_LABELS } from './labels';
-import { incidentPath, newIncidentPath, incidentsPath } from './paths';
-import { daysSince, formatDateTime } from './time';
+import { OPEN_STATUSES, SEVERITY_LABELS, STATUS_LABELS, TYPE_LABELS } from './labels';
+import { incidentColumns } from './listColumns';
+import { IncidentAlertsPanel } from './IncidentAlertsPanel';
+import { newIncidentPath, incidentsPath } from './paths';
 import type { ApiError } from '@opslog/contracts';
 
 const SIZES = [25, 50, 100] as const;
@@ -217,59 +216,7 @@ export function IncidentListScreen() {
           <DataTable
             caption={`${rows.length} siniestros`}
             rows={rows}
-            columns={[
-              {
-                key: 'folio',
-                label: 'Folio',
-                render: (_value, row) => (
-                  <RouterLink
-                    to={incidentPath(row.id)}
-                    sx={{ ...linkSx, fontFamily: 'ui-monospace, "IBM Plex Mono", monospace' }}
-                  >
-                    {row.folio}
-                  </RouterLink>
-                ),
-              },
-              {
-                key: 'occurredAt',
-                label: 'Fecha del evento',
-                render: (_value, row) => formatDateTime(row.occurredAt, env.zone),
-              },
-              {
-                key: 'vehicle',
-                label: 'Vehículo',
-                render: (_value, row) => `${row.vehicle.economicNumber} · ${row.vehicle.plate}`,
-              },
-              {
-                key: 'driver',
-                label: 'Conductor',
-                render: (_value, row) => row.driver?.displayName ?? 'Sin conductor',
-              },
-              {
-                key: 'responsible',
-                label: 'Responsable',
-                render: (_value, row) => row.responsible?.displayName ?? 'Sin asignar',
-              },
-              { key: 'type', label: 'Tipo', render: (_value, row) => TYPE_LABELS[row.type] },
-              {
-                key: 'severity',
-                label: 'Gravedad',
-                render: (_value, row) =>
-                  row.severity ? <SeverityBadge severity={row.severity} /> : 'Sin definir',
-              },
-              {
-                key: 'status',
-                label: 'Estado',
-                render: (_value, row) => (
-                  <StatusBadge label={STATUS_LABELS[row.status]} tone={STATUS_TONES[row.status]} />
-                ),
-              },
-              {
-                key: 'updatedAt',
-                label: 'Días sin movimiento',
-                render: (_value, row) => String(daysSince(row.updatedAt)),
-              },
-            ]}
+            columns={incidentColumns(env.zone)}
           />
         </ScrollRegion>
         {more.error && <InlineAlert severity="error">{more.error}</InlineAlert>}
@@ -317,6 +264,7 @@ export function IncidentListScreen() {
   return (
     <Box>
       {header}
+      <IncidentAlertsPanel compact />
       <Panel>
         <Stack
           direction="row"
