@@ -17,6 +17,7 @@
     { "path": "./packages/domain/incidents/workflow" },
     { "path": "./packages/domain/incidents/repairs" },
     { "path": "./packages/domain/incidents/costs" },
+    { "path": "./packages/domain/incidents/sla" },
     { "path": "./packages/persistence/incidents/workflow" },
     { "path": "./packages/persistence/incidents/repairs" },
     { "path": "./packages/persistence/incidents/costs" },

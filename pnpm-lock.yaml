@@ -204,6 +204,8 @@ importers:
 
   packages/domain/incidents/repairs: {}
 
+  packages/domain/incidents/sla: {}
+
   packages/domain/incidents/third-parties: {}
 
   packages/domain/incidents/workflow: {}
