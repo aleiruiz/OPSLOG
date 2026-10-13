@@ -5,7 +5,12 @@ import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
 import { Button, Field, FormSection } from '@opslog/ui';
 import type { BffMaintenanceWorkshop } from '@opslog/contracts';
-import type { MemberOption } from './CatalogScreen';
+
+/** A member of the same company, offered for linking an internal mechanic (never created here). */
+export interface MemberOption {
+  readonly id: string;
+  readonly label: string;
+}
 
 const split = (value: string) =>
   value

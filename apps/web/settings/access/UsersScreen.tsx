@@ -1,3 +1,4 @@
+import Box from '@mui/material/Box';
 import React from 'react';
 import {
   Button,
@@ -8,6 +9,7 @@ import {
   FormSection,
   Notifications,
   PageHeader,
+  Panel,
   StatusBadge,
   UiState,
 } from '@opslog/ui';
@@ -94,100 +96,130 @@ export function UsersScreen() {
 
   return (
     <>
-      <PageHeader title="Usuarios" description="Personas con acceso a tu empresa." />
+      <PageHeader
+        eyebrow="Configuración"
+        title="Usuarios"
+        description="Personas con acceso a tu empresa."
+      />
       {notice && (
         <Notifications
           messages={[{ id: 'notice', text: notice.text, severity: notice.severity }]}
         />
       )}
-      <NoSubmit>
-        <FilterBar onClear={() => setSearch('')}>
-          <Field
-            id="users-search"
-            label="Buscar por identificador, rol o estado"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-        </FilterBar>
-      </NoSubmit>
-      <ResourceView state={first.state} onRetry={first.reload}>
-        {(page) => {
-          const items = [...page.items, ...(extra?.items ?? [])];
-          const cursor = extra ? extra.cursor : page.nextCursor;
-          if (items.length === 0)
-            return search ? (
-              <UiState kind="no-results" />
-            ) : (
-              <UiState
-                kind="empty"
-                title="Aún no hay usuarios"
-                description="Invita a tu equipo para que pueda entrar."
-              />
-            );
-          const rows: UserRow[] = items.map((user) => ({ ...user, actions: user.id }));
-          return (
-            <>
-              <ScrollRegion label="Tabla de usuarios">
-                <DataTable<UserRow>
-                  caption={`Usuarios (${page.total})`}
-                  columns={[
-                    { key: 'id', label: 'Identificador' },
-                    { key: 'roleLabel', label: 'Rol' },
-                    {
-                      key: 'status',
-                      label: 'Estado',
-                      render: (value) => {
-                        const view = statusPresentation[value as UserStatus];
-                        return <StatusBadge label={view.label} tone={view.tone} />;
-                      },
-                    },
-                    {
-                      key: 'actions',
-                      label: 'Acciones',
-                      render: (_, row) =>
-                        row.status === 'inactive' || row.id === currentUserId ? null : (
-                          <Button size="small" onClick={() => setTarget(row)}>
-                            {`Desactivar a ${row.id}`}
-                          </Button>
-                        ),
-                    },
-                  ]}
-                  rows={rows}
-                />
-              </ScrollRegion>
-              {cursor && (
-                <Button
-                  variant="outlined"
-                  loading={loadingMore}
-                  onClick={() => void loadMore(cursor)}
-                >
-                  Cargar más usuarios
-                </Button>
-              )}
-            </>
-          );
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 2fr) minmax(300px, 1fr)' },
+          columnGap: 3,
+          alignItems: 'start',
         }}
-      </ResourceView>
-      {target && (
-        <ConfirmWithReason
-          title={`Desactivar a ${target.id}`}
-          reasonLabel="Motivo de la desactivación"
-          onConfirm={(reason) => void deactivate(reason)}
-          onCancel={() => setTarget(null)}
-        />
-      )}
-      {roles.state.status === 'ready' && (
-        <InviteForm
-          roles={roles.state.data}
-          onInviteStarted={() => setIssued(null)}
-          onInvited={(invitation) => {
-            setIssued(invitation);
-            setNotice({ text: 'Invitación creada.', severity: 'success' });
-            first.reload();
-          }}
-        />
-      )}
-      {issued && <IssuedInvitation invitation={issued} />}
+      >
+        <Box sx={{ minWidth: 0 }}>
+          <NoSubmit>
+            <Panel>
+              <FilterBar onClear={() => setSearch('')}>
+                <Field
+                  id="users-search"
+                  label="Buscar por identificador, rol o estado"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                />
+              </FilterBar>
+            </Panel>
+          </NoSubmit>
+          <Panel
+            title="Personas"
+            flush={first.state.status === 'ready' && first.state.data.items.length > 0}
+          >
+            <ResourceView state={first.state} onRetry={first.reload}>
+              {(page) => {
+                const items = [...page.items, ...(extra?.items ?? [])];
+                const cursor = extra ? extra.cursor : page.nextCursor;
+                if (items.length === 0)
+                  return search ? (
+                    <UiState kind="no-results" />
+                  ) : (
+                    <UiState
+                      kind="empty"
+                      title="Aún no hay usuarios"
+                      description="Invita a tu equipo para que pueda entrar."
+                    />
+                  );
+                const rows: UserRow[] = items.map((user) => ({ ...user, actions: user.id }));
+                return (
+                  <>
+                    <ScrollRegion label="Tabla de usuarios">
+                      <DataTable<UserRow>
+                        caption={`Usuarios (${page.total})`}
+                        columns={[
+                          { key: 'id', label: 'Identificador' },
+                          { key: 'roleLabel', label: 'Rol' },
+                          {
+                            key: 'status',
+                            label: 'Estado',
+                            render: (value) => {
+                              const view = statusPresentation[value as UserStatus];
+                              return <StatusBadge label={view.label} tone={view.tone} />;
+                            },
+                          },
+                          {
+                            key: 'actions',
+                            label: 'Acciones',
+                            render: (_, row) =>
+                              row.status === 'inactive' || row.id === currentUserId ? null : (
+                                <Button
+                                  size="small"
+                                  aria-label={`Desactivar a ${row.id}`}
+                                  onClick={() => setTarget(row)}
+                                >
+                                  Desactivar
+                                </Button>
+                              ),
+                          },
+                        ]}
+                        rows={rows}
+                      />
+                    </ScrollRegion>
+                    {cursor && (
+                      <Box sx={{ px: { xs: 2, sm: 2.5 }, pb: 2 }}>
+                        <Button
+                          variant="outlined"
+                          loading={loadingMore}
+                          onClick={() => void loadMore(cursor)}
+                        >
+                          Cargar más usuarios
+                        </Button>
+                      </Box>
+                    )}
+                  </>
+                );
+              }}
+            </ResourceView>
+          </Panel>
+          {target && (
+            <ConfirmWithReason
+              title={`Desactivar a ${target.id}`}
+              reasonLabel="Motivo de la desactivación"
+              onConfirm={(reason) => void deactivate(reason)}
+              onCancel={() => setTarget(null)}
+            />
+          )}
+        </Box>
+        {roles.state.status === 'ready' && (
+          <Panel>
+            <InviteForm
+              roles={roles.state.data}
+              onInviteStarted={() => setIssued(null)}
+              onInvited={(invitation) => {
+                setIssued(invitation);
+                setNotice({ text: 'Invitación creada.', severity: 'success' });
+                first.reload();
+              }}
+            />
+            {issued && <IssuedInvitation invitation={issued} />}
+          </Panel>
+        )}
+      </Box>
     </>
   );
 }

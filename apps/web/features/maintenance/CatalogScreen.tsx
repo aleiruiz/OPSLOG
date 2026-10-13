@@ -3,16 +3,12 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import { Button, DataTable, PageHeader, Panel, StatusBadge, UiState } from '@opslog/ui';
 import type { BffMaintenanceMechanic, BffMaintenanceWorkshop } from '@opslog/contracts';
-import { MechanicForm, WorkshopForm } from './CatalogForms';
+import { MechanicForm, WorkshopForm, type MemberOption } from './CatalogForms';
+
+export type { MemberOption };
 import type { MaintenancePorts, Result } from './ports';
 import { errorKind, useResult } from './useResult';
 import type { MaintenanceViewer } from './workflow';
-
-/** A member of the same company, offered for linking an internal mechanic (never created here). */
-export interface MemberOption {
-  readonly id: string;
-  readonly label: string;
-}
 
 const active = (value: boolean) => (
   <StatusBadge label={value ? 'Activo' : 'Inactivo'} tone={value ? 'success' : 'neutral'} />

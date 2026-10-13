@@ -54,8 +54,8 @@ Cada fase es un PR pequeño con su revisión de código, capturas antes/después
 | 1 — Inicio y Flota | Inicio (resumen con `StatCard`), Vehículos (lista y ficha), Asignaciones. Añade `DescriptionList` (datos de una ficha) y `BackLink`; Escape cierra el menú móvil. | Fusionada (PR #102) |
 | 2 — Cumplimiento | Documentos, Seguros (lista y ficha), Ajustes de alertas, Importaciones. Alertas avisa que sus totales son de toda la flota cuando la lista está filtrada. | Fusionada (PR #104) |
 | 3 — Plantilla | Empleados (lista, ficha, formulario), Áreas (árbol y ficha). El estilo de los enlaces de contenido (`linkSx`) queda en un solo sitio. | Fusionada (PR #105) |
-| 4 — Mantenimiento | Planes, órdenes, talleres, «Mis órdenes» en móvil. Subida de archivos con botón propio; los formularios de alta de talleres y mecánicos pasan a `CatalogForms.tsx`. | En curso |
-| 5 — Configuración y acceso | Empresa, Usuarios, Roles, inicio de sesión, invitación, sesión expirada. | |
+| 4 — Mantenimiento | Planes, órdenes, talleres, «Mis órdenes» en móvil. Subida de archivos con botón propio; los formularios de alta de talleres y mecánicos pasan a `CatalogForms.tsx`. | Fusionada (PR #106) |
+| 5 — Configuración y acceso | Empresa, Usuarios (invitar al lado de la lista), Roles, inicio de sesión e invitación en una tarjeta centrada con el logo (`AuthLayout`, `BrandMark`). | En curso |
 | 6 — Estados | `UiState` (vacío, sin resultados, error, sin permiso) como bloques centrados con icono; diálogos y formularios. | |
 
 M4 (siniestros) sigue en pausa por indicación del propietario; cuando se reanude, sus pantallas nacen con el tema v2.

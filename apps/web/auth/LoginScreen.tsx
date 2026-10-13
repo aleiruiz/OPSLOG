@@ -1,9 +1,9 @@
-import Box from '@mui/material/Box';
 import React from 'react';
 import { Button, FormSection, PageHeader, UiState } from '@opslog/ui';
 import { useRouter } from '../app/router';
 import { safeNextPath } from '../app/routes';
 import { OidcHintField, useHintMissing } from './OidcHintField';
+import { AuthLayout } from './AuthLayout';
 import { useSession } from './session';
 
 /** The identity provider authorizes the sign-in; the BFF verifies the code and answers with an httpOnly cookie. */
@@ -33,7 +33,7 @@ export function LoginScreen() {
   };
 
   return (
-    <Box sx={{ maxWidth: 440, mx: 'auto', p: 3 }}>
+    <AuthLayout>
       <PageHeader title="Iniciar sesión" description="Entra con tu cuenta de identidad." />
       <form onSubmit={(event) => void submit(event)} noValidate aria-label="Inicio de sesión">
         <FormSection title="Tu identidad">
@@ -60,6 +60,6 @@ export function LoginScreen() {
           </Button>
         </FormSection>
       </form>
-    </Box>
+    </AuthLayout>
   );
 }
