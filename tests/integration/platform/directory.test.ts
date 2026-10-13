@@ -26,7 +26,7 @@ describe('role, settings and draft directories', () => {
     catalog.add('t-a', { id: 'custom-1', name: 'Regional', permissions: ['view'] });
     expect(catalog.find('t-a', 'custom-1')?.name).toBe('Regional');
     expect(catalog.find('t-b', 'custom-1')).toBeUndefined();
-    expect(catalog.find('t-a', 'viewer')?.permissions).toEqual(['view']);
+    expect(catalog.find('t-a', 'viewer')?.permissions).toEqual(['view', 'incidents:view']);
     expect(catalog.find('t-a', 'toString')).toBeUndefined();
     expect(catalog.find('t-a', '__proto__')).toBeUndefined();
     expect(catalog.custom('t-b')).toEqual([]);

@@ -6,7 +6,7 @@ export const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9_-]{8,128}$/;
 export const isIdempotencyKey = (value: unknown): value is string =>
   typeof value === 'string' && IDEMPOTENCY_KEY_PATTERN.test(value);
 
-export type BffMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
+export type BffMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 /** How a route is protected. `session-csrf` also requires the session-bound token on state changes. */
 export type BffRouteKind = 'public' | 'pre-session' | 'session' | 'session-csrf';
@@ -37,6 +37,7 @@ export const BFF_ERRORS = {
   invalid_employee: { status: 422, message: 'Unprocessable request' },
   invalid_hierarchy: { status: 422, message: 'Unprocessable request' },
   invalid_responsible: { status: 422, message: 'Unprocessable request' },
+  rule_violation: { status: 422, message: 'Unprocessable request' },
   missing_requirements: { status: 422, message: 'Unprocessable request' },
   payload_too_large: { status: 413, message: 'Payload too large' },
   unsupported_media_type: { status: 415, message: 'Unsupported media type' },
@@ -56,12 +57,22 @@ export interface BffErrorBody {
    * `sub_areas`, `vehicles` or `people`), `invalid_area` (`area_id`), `invalid_owner`
    * (`owner_id`), `invalid_vehicle` (`vehicle_id`), `invalid_employee` (`employee_id`),
    * `principal_taken` (`vehicle_id` when the vehicle already has a current principal,
-   * `employee_id` when the driver is already principal of another vehicle) and `already_assigned`
-   * (`employee_id`); never a value or a count.
+   * `employee_id` when the driver is already principal of another vehicle), `already_assigned`
+   * (`employee_id`) and `rule_violation` (the id of the broken business rule, for example
+   * `occurred_at_in_future`); never a value or a count.
    */
   readonly field?: string;
   /** Only on `missing_requirements`: stable ids of the workflow requirements still missing. */
   readonly missingRequirements?: readonly string[];
+  /**
+   * Only on `bad_request` of the incident routes: the rejected fields by name and reason, never the
+   * values that were sent. `rule_violation` carries the id of the broken business rule in `field`.
+   */
+  readonly fieldErrors?: readonly BffFieldError[];
+}
+export interface BffFieldError {
+  readonly field: string;
+  readonly code: 'required' | 'invalid' | 'unknown_property' | 'conflict';
 }
 
 export const isBffErrorBody = (value: unknown): value is BffErrorBody => {
@@ -76,7 +87,16 @@ export const isBffErrorBody = (value: unknown): value is BffErrorBody => {
     (body.field === undefined || typeof body.field === 'string') &&
     (body.missingRequirements === undefined ||
       (Array.isArray(body.missingRequirements) &&
-        body.missingRequirements.every((item) => typeof item === 'string')))
+        body.missingRequirements.every((item) => typeof item === 'string'))) &&
+    (body.fieldErrors === undefined ||
+      (Array.isArray(body.fieldErrors) &&
+        body.fieldErrors.every(
+          (item) =>
+            typeof item === 'object' &&
+            item !== null &&
+            typeof (item as BffFieldError).field === 'string' &&
+            typeof (item as BffFieldError).code === 'string',
+        )))
   );
 };
 

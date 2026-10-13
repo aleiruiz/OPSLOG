@@ -25,6 +25,10 @@ import {
   WORK_ORDER_TABLES,
 } from '../../../packages/persistence/maintenance/orders/src/index.js';
 import {
+  INCIDENT_RUNTIME_ACCOUNT,
+  INCIDENT_TABLES,
+} from '../../../packages/persistence/incidents/cases/src/index.js';
+import {
   createFleetMigrationModules,
   openFleetRuntimeStores,
   runFleetAuditMigrations,
@@ -111,6 +115,12 @@ const grants = {
     { table: WORK_ORDER_TABLES.files, privileges: ['SELECT', 'INSERT', 'DELETE'] },
     { table: WORK_ORDER_TABLES.idempotency, privileges: ['SELECT', 'INSERT', 'DELETE'] },
   ],
+  incidents: [
+    { table: INCIDENT_TABLES.incidents, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
+    { table: INCIDENT_TABLES.folios, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
+    { table: INCIDENT_TABLES.transitions, privileges: ['SELECT', 'INSERT'] },
+    { table: INCIDENT_TABLES.idempotency, privileges: ['SELECT', 'INSERT', 'DELETE'] },
+  ],
 } satisfies Record<string, readonly Grant[]>;
 
 type Module = keyof typeof grants;
@@ -126,6 +136,7 @@ const modules: readonly Module[] = [
   'imports',
   'files',
   'maintenance',
+  'incidents',
 ];
 
 export interface FleetTenantDatabase {
@@ -188,6 +199,8 @@ async function startTenantDatabase(label: string): Promise<FleetTenantDatabase> 
     throw new Error('synthetic Fleet files runtime account name is invalid');
   if (!MAINTENANCE_RUNTIME_ACCOUNT.test(runtime.maintenance.username))
     throw new Error('synthetic Fleet maintenance runtime account name is invalid');
+  if (!INCIDENT_RUNTIME_ACCOUNT.test(runtime.incidents.username))
+    throw new Error('synthetic Fleet incidents runtime account name is invalid');
   const accounts = { ...runtime, auditRuntime, auditRelay } as Accounts;
   const users: string[] = [];
   const connection = await mysql.createConnection({ ...admin, database: 'mysql' });
@@ -283,6 +296,13 @@ async function startTenantDatabase(label: string): Promise<FleetTenantDatabase> 
     );
     await connection.query(
       `GRANT EXECUTE ON PROCEDURE ${identifier(databaseName)}.\`opslog_enqueue_tenant_outbox\` TO '${runtime.maintenance.username}'@'%'`,
+    );
+    // Incidents enqueue their allowlisted events in the same transaction as the case.
+    await connection.query(
+      `GRANT SELECT ON ${identifier(databaseName)}.${identifier(AUDIT_TABLES.outbox)} TO '${runtime.incidents.username}'@'%'`,
+    );
+    await connection.query(
+      `GRANT EXECUTE ON PROCEDURE ${identifier(databaseName)}.\`opslog_enqueue_tenant_outbox\` TO '${runtime.incidents.username}'@'%'`,
     );
 
     for (const account of [auditRuntime, auditRelay]) {

@@ -14,6 +14,12 @@ export const permissionLabels: Record<Permission, string> = {
   view_audit: 'Ver la auditoría',
   approve: 'Aprobar solicitudes',
   reopen: 'Reabrir registros cerrados',
+  'incidents:view': 'Consultar siniestros',
+  'incidents:create': 'Crear borradores de siniestros',
+  'incidents:edit': 'Editar y gestionar siniestros',
   'incidents:report': 'Reportar siniestros',
   'incidents:approve': 'Aprobar cierres costosos y siniestros',
+  'incidents:close': 'Cerrar siniestros resueltos',
+  'incidents:reopen': 'Reabrir siniestros cerrados',
+  'incidents:view_costs': 'Ver costos de siniestros',
 };

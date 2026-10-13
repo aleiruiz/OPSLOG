@@ -1003,7 +1003,10 @@ describe('permissions', () => {
   it('denies administration to a viewer with 403 and still serves their own session and drafts', async () => {
     await fixture();
     const viewer = await world.loginAs('subject-viewer-a');
-    expect((await viewer.get('/api/auth/session')).json.permissions).toEqual(['view']);
+    expect((await viewer.get('/api/auth/session')).json.permissions).toEqual([
+      'view',
+      'incidents:view',
+    ]);
     expectUniformError(await viewer.get('/api/users'), 403, 'forbidden');
     expectUniformError(await viewer.get('/api/roles'), 403, 'forbidden');
     expectUniformError(await viewer.get('/api/company/settings'), 403, 'forbidden');
@@ -1198,6 +1201,7 @@ describe('roles', () => {
       'viewer',
       'auditor',
       'pii_reader',
+      'incident_manager',
     ]);
     expect(items.find((r) => r.id === 'admin')?.memberCount).toBe(1);
     expect(items.find((r) => r.id === 'viewer')?.memberCount).toBe(1);
@@ -1210,7 +1214,7 @@ describe('roles', () => {
       name: 'Editor regional',
       kind: 'custom',
       memberCount: 0,
-      permissions: ['view', 'create', 'edit'],
+      permissions: ['view', 'create', 'edit', 'incidents:view'],
     });
     expect(copy.json.id).toMatch(/^custom-/);
     // A copy of a copy works; names are unique per tenant, case-insensitively, and cannot shadow templates.
@@ -1236,7 +1240,7 @@ describe('roles', () => {
       404,
       'not_found',
     );
-    expect(((await admin.get('/api/roles')).json.items as unknown[]).length).toBe(7);
+    expect(((await admin.get('/api/roles')).json.items as unknown[]).length).toBe(8);
   });
 
   it('caps custom roles per tenant', async () => {

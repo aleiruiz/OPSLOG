@@ -14,6 +14,7 @@ import type { PolicyStore } from '../../../../../packages/domain/insurance/src/i
 import type { PlanStore } from '../../../../../packages/domain/maintenance/plans/src/index.js';
 import type { WorkshopStore } from '../../../../../packages/domain/maintenance/workshops/src/index.js';
 import type { MechanicStore } from '../../../../../packages/domain/maintenance/mechanics/src/index.js';
+import type { IncidentStore } from '../../../../../packages/domain/incidents/cases/src/index.js';
 import type { WorkOrderStore } from '../../../../../packages/domain/maintenance/orders/src/index.js';
 import type { PiiCipher } from '../../../../../packages/platform/pii/src/index.js';
 import type {
@@ -66,6 +67,8 @@ export interface PlatformAdapters {
   readonly maintenanceWorkshops?: WorkshopStore;
   readonly maintenanceMechanics?: MechanicStore;
   readonly maintenanceOrders?: WorkOrderStore;
+  /** Persistent incident store (the TypeORM adapter of `packages/persistence/incidents/cases`); in-memory by default. */
+  readonly incidents?: IncidentStore;
   /**
    * Personal-data protection (SPECS D23): envelope encryption plus blind indexes. Defaults to the
    * local development KMS with a random per-process key, which refuses production-mode

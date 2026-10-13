@@ -34,6 +34,7 @@ async function fixture(w: World): Promise<Fixture> {
     viewer: await w.member(a.admin, 'viewer', 'subject-viewer-a'),
     auditor: await w.member(a.admin, 'auditor', 'subject-auditor-a'),
     pii_reader: await w.member(a.admin, 'pii_reader', 'subject-pii-a'),
+    incident_manager: await w.member(a.admin, 'incident_manager', 'subject-incident-a'),
   } as const;
   return { a, b, roles, adminB: b.admin };
 }
@@ -332,6 +333,7 @@ const ROLE_GRANTS: Readonly<Record<RoleName, readonly string[]>> = {
   viewer: ['view'],
   auditor: ['view'],
   pii_reader: ['view', 'create'],
+  incident_manager: ['view'],
 };
 
 describe('role matrix over the existing generic permissions', () => {

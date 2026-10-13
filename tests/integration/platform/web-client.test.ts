@@ -628,6 +628,34 @@ describe('typed client against the real BFF', () => {
       }),
     ).toMatchObject({ ok: false, error: { code: 'not_found' } });
 
+    // Incident cases through their BFF contract routes.
+    const incident = await client.call('incidents.create', {
+      body: { vehicleId: truck.value.id, type: 'collision' },
+    });
+    if (!incident.ok) throw new Error(`incident create failed: ${JSON.stringify(incident)}`);
+    expect(incident.value).toMatchObject({ status: 'draft', version: 1 });
+    expect(await client.call('incidents.list', { query: { limit: 25 } })).toMatchObject({
+      ok: true,
+      value: { total: 1, items: [expect.objectContaining({ id: incident.value.id })] },
+    });
+    expect(
+      await client.call('incidents.get', { params: { incidentId: incident.value.id } }),
+    ).toMatchObject({ ok: true, value: { id: incident.value.id } });
+    expect(
+      await client.call('incidents.update', {
+        params: { incidentId: incident.value.id },
+        body: { version: 1, description: 'Golpe lateral' },
+      }),
+    ).toMatchObject({ ok: true, value: { version: 2, description: 'Golpe lateral' } });
+    expect(
+      await client.call('incidents.timeline', { params: { incidentId: incident.value.id } }),
+    ).toMatchObject({ ok: true });
+    expect(
+      await client.call('incidents.suggestions', {
+        query: { vehicleId: truck.value.id, occurredAt: '2026-10-13T12:00:00.000Z' },
+      }),
+    ).toMatchObject({ ok: true });
+
     // Insurance policies through the typed client.
     const insurance = createInsuranceClient(client);
     const policy = await insurance.create({

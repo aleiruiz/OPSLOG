@@ -284,6 +284,12 @@ function writes(f: Fixture): [string, string, unknown?][] {
       '/api/v1/work-orders/00000000-0000-4000-8000-000000000001/files/00000000-0000-4000-8000-000000000002/detach',
       { version: 1 },
     ],
+    ['POST', '/api/v1/incidents', { vehicleId: f.vehicleId, type: 'collision' }],
+    [
+      'PATCH',
+      '/api/v1/incidents/00000000-0000-4000-8000-000000000001',
+      { version: 1, description: 'Golpe lateral' },
+    ],
   ];
 }
 
@@ -596,6 +602,7 @@ describe('session lifecycle through HTTP', () => {
       'view',
       'create',
       'edit',
+      'incidents:view',
     ]);
     await world.platform.suspendTenant(f.a.tenantId);
     expect((await f.adminA.get('/api/users')).status).toBe(401);

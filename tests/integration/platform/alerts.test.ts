@@ -59,6 +59,7 @@ async function fixture(w: World): Promise<Fixture> {
     viewer: await w.member(a.admin, 'viewer', 'subject-viewer-a'),
     auditor: await w.member(a.admin, 'auditor', 'subject-auditor-a'),
     pii_reader: await w.member(a.admin, 'pii_reader', 'subject-pii-a'),
+    incident_manager: await w.member(a.admin, 'incident_manager', 'subject-incident-a'),
   } as const;
   const vehicleOf = async (session: Session, areaId: string): Promise<string> => {
     serial += 1;
