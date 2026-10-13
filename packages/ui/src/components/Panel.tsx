@@ -67,12 +67,25 @@ export function Panel({
             py: 2,
             borderBottom: flush ? 1 : 0,
             borderColor: 'divider',
+            '& form[role="search"]': { mb: 0 },
           }}
         >
           {toolbar}
         </Box>
       )}
-      <Box sx={flush ? {} : { px: { xs: 2, sm: 2.5 }, py: 2 }}>{children}</Box>
+      <Box
+        sx={{
+          ...(flush ? {} : { px: { xs: 2, sm: 2.5 }, py: 2 }),
+          // Spacing between blocks is for the page; inside a card the padding already separates them.
+          '& > * + *': { mt: 2 },
+          // A toolbar card (filters only) needs no space under its last row: the padding does that.
+          '& > :last-child form[role="search"], & > form[role="search"]:last-child': { mb: 0 },
+          '& > .MuiAlert-root:first-child': { mt: 0 },
+          '& > .MuiAlert-root:last-child': { mb: 0 },
+        }}
+      >
+        {children}
+      </Box>
     </Card>
   );
 }

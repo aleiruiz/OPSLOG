@@ -12,10 +12,9 @@ import NotificationsActiveOutlined from '@mui/icons-material/NotificationsActive
 import TuneOutlined from '@mui/icons-material/TuneOutlined';
 import UploadFileOutlined from '@mui/icons-material/UploadFileOutlined';
 import VerifiedUserOutlined from '@mui/icons-material/VerifiedUserOutlined';
-import type { SvgIconComponent } from '@mui/icons-material';
 
 /** Decorative icon of each navigation entry, by route id. The label is always visible next to it. */
-export const navIcons: Readonly<Record<string, SvgIconComponent>> = {
+export const navIcons: Readonly<Record<string, typeof HomeOutlined>> = {
   home: HomeOutlined,
   employees: BadgeOutlined,
   areas: AccountTreeOutlined,

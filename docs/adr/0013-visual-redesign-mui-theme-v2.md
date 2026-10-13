@@ -60,6 +60,15 @@ Cada fase es un PR pequeño con su revisión de código, capturas antes/después
 
 M4 (siniestros) sigue en pausa por indicación del propietario; cuando se reanude, sus pantallas nacen con el tema v2.
 
+## Regresión visual fuera del CI
+
+El 2026-10-13 (01:13 UTC) el propietario pidió «sacar las snapshots de los targets de quality». Desde este PR:
+
+- El workflow `quality` ya no ejecuta `pnpm test:visual`. Sigue construyendo Storybook (`pnpm storybook:build`), así que una story rota sigue fallando el CI.
+- `pnpm quality` no incluía las snapshots y no cambia.
+- Las capturas y los comandos `pnpm test:visual` y `pnpm test:visual:update` se conservan como herramienta local para comparar antes y después de un cambio visual.
+- Esto modifica la verificación de ADR-0010 (regresión visual como gate de CI) por decisión del propietario. SPECS §9.1 sigue pidiendo regresión visual: queda cubierta de forma local, no como bloqueo del CI.
+
 ## Lo que esta decisión no hace
 
 - No cambia contratos, permisos, datos ni flujos: solo presentación (el resumen de Alertas usa la misma lectura `alerts.list` que ya usa Inicio).

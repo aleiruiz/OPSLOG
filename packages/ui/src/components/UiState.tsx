@@ -83,6 +83,7 @@ export function UiState({ kind, title, description, actionLabel, onAction }: UiS
       severity={state.severity}
       role={kind === 'error' ? 'alert' : 'status'}
       icon={kind === 'loading' ? <CircularProgress size={20} aria-label="Cargando" /> : undefined}
+      sx={{ my: 2 }}
     >
       <Stack spacing={1}>
         <Typography component="h2" variant="subtitle1">

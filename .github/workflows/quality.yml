@@ -35,8 +35,9 @@ jobs:
       - run: pnpm --filter @opslog/ui typecheck # also type-checks packages/ui/.storybook
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e
-      # Storybook static build (offline) + pixel snapshots of every story (SPECS §9.1, ADR-0010).
-      - run: pnpm test:visual
+      # Storybook must still build (offline). Pixel snapshots are no longer a CI gate (ADR-0013): run
+      # `pnpm test:visual` locally, and `pnpm test:visual:update` when a change is meant to look different.
+      - run: pnpm storybook:build
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:

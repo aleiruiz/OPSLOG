@@ -25,7 +25,8 @@ export function FilterBar({
       alignItems={{ sm: 'center' }}
       role="search"
       aria-label="Filtros"
-      sx={{ '& .MuiFormControl-root': { minWidth: { sm: 200 } } }}
+      // The filters always sit above what they filter: keep them apart even where the screen does not.
+      sx={{ mb: 2, '& .MuiFormControl-root': { minWidth: { sm: 200 } } }}
     >
       {children}
       {onClear && (

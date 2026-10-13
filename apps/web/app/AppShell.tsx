@@ -294,7 +294,18 @@ export function AppShell({
             py: { xs: 2.5, md: 3.5 },
           }}
         >
-          <Box sx={{ maxWidth: layout.contentMaxWidth, mx: 'auto' }}>{children}</Box>
+          <Box
+            sx={{
+              maxWidth: layout.contentMaxWidth,
+              mx: 'auto',
+              // Standard gap between the blocks of every screen (header, filters, notices, lists). Screens
+              // render fragments, so their blocks land here or in the per-session wrapper of App; their own
+              // margins still win and collapse.
+              '& > * + *, & > div:last-child > * + *': { mt: 2 },
+            }}
+          >
+            {children}
+          </Box>
         </Box>
       </Box>
     </Box>
