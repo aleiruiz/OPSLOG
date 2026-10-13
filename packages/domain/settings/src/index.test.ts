@@ -14,6 +14,8 @@ import {
   parseExpectedVersion,
   isMaintenanceEvidenceRequirement,
   isValidTimeZone,
+  parseIncidentInactivityDays,
+  parseIncidentSlaDays,
   parseSettings,
 } from './index.js';
 import { EXPIRING_WINDOW_DAYS } from '../../documents/src/index.js';
@@ -35,6 +37,54 @@ const code = async (work: () => Promise<unknown> | unknown): Promise<unknown> =>
 const service = (store = new InMemorySettingsStore()) =>
   ({ store, service: new SettingsService(store, { now: () => NOW }) }) as const;
 const valid = { expiryWindowDays: 15, recipientRoles: ['editor', 'admin'] };
+
+describe('incident SLA settings', () => {
+  const days = { critical: 3, high: 10, medium: 20, low: 40 };
+  it('defaults to D17 and N = 5 for a company that never saved', () => {
+    expect(defaultSettings(A)).toMatchObject({
+      incidentSlaDays: { critical: 7, high: 15, medium: 30, low: 45 },
+      incidentInactivityDays: 5,
+    });
+    expect(parseSettings(valid)).not.toHaveProperty('incidentSlaDays');
+    expect(parseSettings(valid)).not.toHaveProperty('incidentInactivityDays');
+  });
+  it('accepts whole days from 1 to 365 per severity and 1 to 60 of inactivity', () => {
+    expect(
+      parseSettings({ ...valid, incidentSlaDays: days, incidentInactivityDays: 60 }),
+    ).toMatchObject({ incidentSlaDays: days, incidentInactivityDays: 60 });
+    expect(parseIncidentSlaDays({ ...days, critical: 1, low: 365 })).toEqual({
+      ...days,
+      critical: 1,
+      low: 365,
+    });
+    expect(parseIncidentInactivityDays(1)).toBe(1);
+  });
+  it.each([
+    { ...days, critical: 0 },
+    { ...days, critical: 366 },
+    { ...days, high: 1.5 },
+    { ...days, medium: '7' },
+    { critical: 1, high: 2, medium: 3 },
+    { ...days, extra: 1 },
+    null,
+    [1, 2, 3, 4],
+  ])('rejects the SLA days %j', (bad) => {
+    expect(() => parseSettings({ ...valid, incidentSlaDays: bad })).toThrow();
+    expect(parseIncidentSlaDays(bad)).toBeNull();
+  });
+  it.each([0, 61, 2.5, '5', null])('rejects %j days of inactivity', (bad) => {
+    expect(() => parseSettings({ ...valid, incidentInactivityDays: bad })).toThrow();
+    expect(parseIncidentInactivityDays(bad)).toBeNull();
+  });
+  it('keeps the stored values when a later replacement leaves the fields out', async () => {
+    const { service: s } = service();
+    await s.update(A, ACTOR, 0, { ...valid, incidentSlaDays: days, incidentInactivityDays: 9 });
+    const kept = await s.update(A, ACTOR, 1, valid);
+    expect(kept).toMatchObject({ incidentSlaDays: days, incidentInactivityDays: 9 });
+    const changed = await s.update(A, ACTOR, 2, { ...valid, incidentInactivityDays: 2 });
+    expect(changed).toMatchObject({ incidentSlaDays: days, incidentInactivityDays: 2 });
+  });
+});
 
 describe('constants', () => {
   it('keeps the window inside the 30 days of the expiry helpers and exposes the role guard', () => {
@@ -207,6 +257,8 @@ describe('SettingsService', () => {
       maintenanceEvidence: 'none',
       closeCostThreshold: null,
       incidentReportPhoto: 'photo_or_justification',
+      incidentSlaDays: { critical: 7, high: 15, medium: 30, low: 45 },
+      incidentInactivityDays: 5,
       timeZone: 'UTC',
       version: 1,
       updatedBy: ACTOR,

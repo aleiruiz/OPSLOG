@@ -337,6 +337,8 @@ describe('alert settings over HTTP', () => {
       maintenanceEvidence: 'none',
       closeCostThreshold: null,
       incidentReportPhoto: 'photo_or_justification',
+      incidentSlaDays: { critical: 7, high: 15, medium: 30, low: 45 },
+      incidentInactivityDays: 5,
       timeZone: 'UTC',
       version: 0,
       updatedBy: null,
@@ -390,6 +392,48 @@ describe('alert settings over HTTP', () => {
     expect((await adminA.get(S)).json).toMatchObject({ version: 1, expiryWindowDays: 7 });
     expect((await adminA.send('POST', S, { json: full() })).status).toBe(405);
     expect((await adminA.send('DELETE', S)).status).toBe(405);
+  });
+
+  it('saves the incident SLA days and the days without movement, and validates them (acceptance 11)', async () => {
+    const { adminA, adminB } = await fixture();
+    const days = { critical: 3, high: 10, medium: 20, low: 40 };
+    const saved = await adminA.send('PUT', S, {
+      json: full({ incidentSlaDays: days, incidentInactivityDays: 9 }),
+    });
+    expect(saved.status).toBe(200);
+    expect(saved.json).toMatchObject({
+      incidentSlaDays: days,
+      incidentInactivityDays: 9,
+      version: 1,
+    });
+    // A form that does not send them keeps them.
+    const kept = await adminA.send('PUT', S, { json: full({ version: 1, expiryWindowDays: 9 }) });
+    expect(kept.json).toMatchObject({
+      incidentSlaDays: days,
+      incidentInactivityDays: 9,
+      version: 2,
+    });
+    for (const json of [
+      full({ version: 2, incidentSlaDays: { ...days, critical: 0 } }),
+      full({ version: 2, incidentSlaDays: { ...days, critical: 366 } }),
+      full({ version: 2, incidentSlaDays: { ...days, low: 1.5 } }),
+      full({ version: 2, incidentSlaDays: { critical: 5 } }),
+      full({ version: 2, incidentSlaDays: { ...days, urgent: 5 } }),
+      full({ version: 2, incidentSlaDays: 7 }),
+      full({ version: 2, incidentInactivityDays: 0 }),
+      full({ version: 2, incidentInactivityDays: 61 }),
+      full({ version: 2, incidentInactivityDays: '5' }),
+    ])
+      expect((await adminA.send('PUT', S, { json })).status, JSON.stringify(json)).toBe(400);
+    const stale = await adminA.send('PUT', S, {
+      json: full({ version: 1, incidentSlaDays: days }),
+    });
+    expect(stale.status).toBe(409);
+    // Another company is unaffected and reads the D17 defaults.
+    expect((await adminB.get(S)).json).toMatchObject({
+      incidentSlaDays: { critical: 7, high: 15, medium: 30, low: 45 },
+      incidentInactivityDays: 5,
+    });
   });
 
   it('saves the maintenance evidence requirement, the D20 threshold and the zone, and keeps omitted ones', async () => {

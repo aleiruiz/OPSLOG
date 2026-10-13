@@ -7,6 +7,8 @@ import {
   isMaintenanceEvidenceRequirement,
   isValidTimeZone,
   normalizeRoles,
+  parseIncidentInactivityDays,
+  parseIncidentSlaDays,
   type CompanySettings,
   type SettingsStore,
 } from '../../../domain/settings/src/index.js';
@@ -51,6 +53,17 @@ function thresholdOf(row: SettingsEntity): CompanySettings['closeCostThreshold']
   return { amountMinor: String(minor), currency };
 }
 
+function slaDaysOf(row: SettingsEntity): CompanySettings['incidentSlaDays'] {
+  return (
+    parseIncidentSlaDays({
+      critical: row.incidentSlaCritical,
+      high: row.incidentSlaHigh,
+      medium: row.incidentSlaMedium,
+      low: row.incidentSlaLow,
+    }) ?? integrity()
+  );
+}
+
 const toSettings = (row: SettingsEntity): CompanySettings => ({
   tenantId: row.tenantId,
   expiryWindowDays: row.expiryWindowDays,
@@ -63,6 +76,8 @@ const toSettings = (row: SettingsEntity): CompanySettings => ({
   incidentReportPhoto: isIncidentReportPhoto(row.incidentReportPhoto)
     ? row.incidentReportPhoto
     : integrity(),
+  incidentSlaDays: slaDaysOf(row),
+  incidentInactivityDays: parseIncidentInactivityDays(row.incidentInactivityDays) ?? integrity(),
   version: row.version,
   updatedBy: row.updatedBy,
   updatedAt: row.updatedAt.toISOString(),
@@ -77,6 +92,11 @@ const mutableColumns = (settings: CompanySettings) => ({
   closeThresholdCurrency: settings.closeCostThreshold?.currency ?? null,
   timeZone: settings.timeZone,
   incidentReportPhoto: settings.incidentReportPhoto,
+  incidentSlaCritical: settings.incidentSlaDays.critical,
+  incidentSlaHigh: settings.incidentSlaDays.high,
+  incidentSlaMedium: settings.incidentSlaDays.medium,
+  incidentSlaLow: settings.incidentSlaDays.low,
+  incidentInactivityDays: settings.incidentInactivityDays,
   version: settings.version,
   updatedBy: settings.updatedBy as string,
   updatedAt: new Date(settings.updatedAt as string),

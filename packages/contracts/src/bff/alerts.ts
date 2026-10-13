@@ -77,6 +77,14 @@ export interface BffCloseCostThreshold {
   readonly currency: string;
 }
 
+/** Calendar days of the incident SLA per severity (D17); each a whole number from 1 to 365. */
+export interface BffIncidentSlaDays {
+  readonly critical: number;
+  readonly high: number;
+  readonly medium: number;
+  readonly low: number;
+}
+
 /**
  * The company's alert settings. `version` is the concurrency token: 0 while the company has never
  * saved (the values are then the defaults: 30 days, administrators and editors).
@@ -92,6 +100,10 @@ export interface BffAlertSettings {
   readonly timeZone: string;
   /** Photo evidence reporting an incident requires (default `photo_or_justification`). The server always sends it. */
   readonly incidentReportPhoto?: BffIncidentReportPhoto;
+  /** Incident SLA target per severity (default 7/15/30/45). The server always sends it. */
+  readonly incidentSlaDays?: BffIncidentSlaDays;
+  /** Days without movement before a case is flagged, escalated at twice that (1 to 60, default 5). The server always sends it. */
+  readonly incidentInactivityDays?: number;
   readonly version: number;
   readonly updatedBy: string | null;
   readonly updatedAt: ISODateTime | null;
@@ -107,6 +119,9 @@ export interface BffAlertSettingsInput {
   readonly closeCostThreshold?: BffCloseCostThreshold | null;
   readonly timeZone?: string;
   readonly incidentReportPhoto?: BffIncidentReportPhoto;
+  /** All four severities when sent; a bad or partial object is a 400. Left out keeps the stored values. */
+  readonly incidentSlaDays?: BffIncidentSlaDays;
+  readonly incidentInactivityDays?: number;
 }
 
 /** Request and response types of the alerts routes. */

@@ -1009,6 +1009,8 @@ describe('typed client against the real BFF', () => {
         maintenanceEvidence: 'none',
         closeCostThreshold: null,
         incidentReportPhoto: 'photo_or_justification',
+        incidentSlaDays: { critical: 7, high: 15, medium: 30, low: 45 },
+        incidentInactivityDays: 5,
         timeZone: 'UTC',
         version: 0,
         updatedBy: null,

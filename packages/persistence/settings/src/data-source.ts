@@ -3,6 +3,7 @@ import { DataSource, type DataSourceOptions } from 'typeorm';
 import { SETTINGS_ENTITIES } from './entities.js';
 import {
   AddIncidentCompanySettings2026101500030,
+  AddIncidentSlaCompanySettings2026101700040,
   AddMaintenanceCompanySettings2026101300010,
   CreateCompanySettings2026100600090,
   SETTINGS_MIGRATIONS_TABLE,
@@ -33,6 +34,7 @@ const common = {
     CreateCompanySettings2026100600090,
     AddMaintenanceCompanySettings2026101300010,
     AddIncidentCompanySettings2026101500030,
+    AddIncidentSlaCompanySettings2026101700040,
   ],
   migrationsTableName: SETTINGS_MIGRATIONS_TABLE,
   synchronize: false,
