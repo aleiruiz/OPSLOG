@@ -2,6 +2,7 @@ import {
   BFF_ERRORS,
   type BffErrorBody,
   type BffErrorCode,
+  type BffFieldError,
 } from '../../../../packages/contracts/src/index.js';
 
 export type HeaderValue = string | readonly string[] | undefined;
@@ -70,6 +71,7 @@ export function errorResponse(
   extra: Readonly<Record<string, string | readonly string[]>> = {},
   field?: string,
   missingRequirements?: readonly string[],
+  fieldErrors?: readonly BffFieldError[],
 ): BffResponse {
   const { status, message } = ERRORS[code];
   const body: ErrorBody = {
@@ -79,6 +81,7 @@ export function errorResponse(
     correlationId,
     ...(field === undefined ? {} : { field }),
     ...(missingRequirements === undefined ? {} : { missingRequirements }),
+    ...(fieldErrors === undefined ? {} : { fieldErrors }),
   };
   return respond(status, body, correlationId, extra);
 }

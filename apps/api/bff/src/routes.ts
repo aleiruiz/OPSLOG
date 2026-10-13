@@ -13,6 +13,7 @@ import { AREA_ROUTES } from './routes/areas.js';
 import { MAINTENANCE_ROUTES } from './routes/maintenance.js';
 import { MAINTENANCE_ALERT_ROUTES } from './routes/maintenance-alerts.js';
 import { WORK_ORDER_ROUTES } from './routes/work-orders.js';
+import { INCIDENT_ROUTES } from './routes/incidents.js';
 
 export type { Route, RouteContext, RouteKind } from './routes/shared.js';
 
@@ -31,4 +32,5 @@ export const ROUTES: readonly Route[] = [
   ...MAINTENANCE_ROUTES,
   ...MAINTENANCE_ALERT_ROUTES,
   ...WORK_ORDER_ROUTES,
+  ...INCIDENT_ROUTES,
 ];

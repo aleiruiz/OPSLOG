@@ -20,6 +20,8 @@ import type { MaintenanceRouteTypes } from './bff/maintenance.js';
 import { MAINTENANCE_ROUTES } from './bff/maintenance.js';
 import type { WorkOrderRouteTypes } from './bff/work-orders.js';
 import { WORK_ORDER_ROUTES } from './bff/work-orders.js';
+import type { IncidentRouteTypes } from './bff/incidents.js';
+import { INCIDENT_ROUTES } from './bff/incidents.js';
 import type { BffRouteDefinition } from './bff/shared.js';
 
 /**
@@ -43,6 +45,7 @@ export type {
   BffRouteKind,
   BffErrorCode,
   BffErrorBody,
+  BffFieldError,
   BffRouteDefinition,
 } from './bff/shared.js';
 export type {
@@ -213,6 +216,34 @@ export type {
   BffWorkOrderFileUpload,
 } from './bff/work-orders.js';
 export {
+  BFF_INCIDENT_STATUSES,
+  BFF_INCIDENT_SEVERITIES,
+  BFF_INCIDENT_TYPES,
+  BFF_DAMAGE_ZONES,
+  BFF_INCIDENT_SORT_FIELDS,
+} from './bff/incidents.js';
+export type {
+  BffIncidentStatus,
+  BffIncidentSeverity,
+  BffIncidentType,
+  BffDamageZone,
+  BffIncidentSortField,
+  BffCoverageStatus,
+  BffCoverageAlert,
+  BffIncidentPerson,
+  BffIncidentPolicy,
+  BffIncidentLocation,
+  BffIncidentDamage,
+  BffIncidentField,
+  BffIncident,
+  BffIncidentInput,
+  BffIncidentPatch,
+  BffIncidentsQuery,
+  BffIncidentSuggestionsQuery,
+  BffIncidentTimelineEntry,
+  BffIncidentSuggestions,
+} from './bff/incidents.js';
+export {
   BFF_IDEMPOTENCY_REQUIRED_COMMANDS,
   BFF_WORK_ORDER_FILE_KINDS,
   BFF_WORK_ORDER_FILE_MAX_BYTES,
@@ -231,7 +262,8 @@ export interface BffRouteTypes
     AlertsRouteTypes,
     AreasRouteTypes,
     MaintenanceRouteTypes,
-    WorkOrderRouteTypes {}
+    WorkOrderRouteTypes,
+    IncidentRouteTypes {}
 
 export type BffRouteId = keyof BffRouteTypes;
 
@@ -247,6 +279,7 @@ export const BFF_ROUTES = {
   ...AREAS_ROUTES,
   ...MAINTENANCE_ROUTES,
   ...WORK_ORDER_ROUTES,
+  ...INCIDENT_ROUTES,
 } as const satisfies Record<BffRouteId, BffRouteDefinition>;
 
 type Parts<K extends BffRouteId> = Omit<BffRouteTypes[K], 'response'>;

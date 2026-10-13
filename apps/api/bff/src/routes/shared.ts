@@ -4,6 +4,7 @@ import {
   type BffResponseOf,
   type BffRouteId,
   type BffRouteKind,
+  type BffFieldError,
 } from '../../../../../packages/contracts/src/index.js';
 import type { Platform, PlatformResponse, SessionDetails } from '../../../composition/src/index.js';
 import { parseObject } from '../body.js';
@@ -33,7 +34,7 @@ export interface RouteContext {
 /** Method, path and protection come from the contract; only parameter patterns and the handler live here. */
 export interface Route {
   readonly id: BffRouteId;
-  readonly method: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  readonly method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   readonly path: readonly string[];
   readonly kind: RouteKind;
   /** Body limit of this route when it needs more than the handler's default. */
@@ -66,7 +67,16 @@ export const SCOPE = /^[A-Za-z0-9][A-Za-z0-9:._-]{0,63}$/;
 /** Maps a composition failure to a uniform error. Unknown codes are internal errors, never echoed. */
 export function failure(
   ctx: RouteContext,
-  error: { code: string; field?: string; missingRequirements?: readonly string[] } | undefined,
+  error:
+    | {
+        code: string;
+        field?: string;
+        missingRequirements?: readonly string[];
+        fieldErrors?: readonly BffFieldError[];
+        /** Id of the broken business rule of a 422; travels in `field`. */
+        rule?: string;
+      }
+    | undefined,
 ): BffResponse {
   const map: Readonly<Record<string, ErrorCode>> = {
     invalid_input: 'bad_request',
@@ -92,6 +102,7 @@ export function failure(
     area_in_use: 'area_in_use',
     invalid_hierarchy: 'invalid_hierarchy',
     invalid_responsible: 'invalid_responsible',
+    rule_violation: 'rule_violation',
     missing_requirements: 'missing_requirements',
   };
   const code = map[error?.code ?? ''] ?? 'internal_error';
@@ -108,8 +119,11 @@ export function failure(
       code === 'principal_taken' ||
       code === 'already_assigned'
       ? error?.field
-      : undefined,
+      : code === 'rule_violation'
+        ? error?.rule
+        : undefined,
     code === 'missing_requirements' ? (error?.missingRequirements ?? []) : undefined,
+    code === 'bad_request' ? error?.fieldErrors : undefined,
   );
 }
 

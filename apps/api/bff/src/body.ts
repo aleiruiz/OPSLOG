@@ -68,6 +68,18 @@ export function parseObject(
   return record;
 }
 
+/** Any JSON object in valid UTF-8; its shape is validated by the domain, which names each bad field. */
+export function parseLooseObject(bytes: Uint8Array): Record<string, unknown> {
+  let value: unknown;
+  try {
+    value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+  } catch {
+    throw new InvalidBody();
+  }
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new InvalidBody();
+  return value as Record<string, unknown>;
+}
+
 export function text(value: unknown, max: number): string {
   if (typeof value !== 'string' || value.trim().length === 0 || value.length > max)
     throw new InvalidBody();

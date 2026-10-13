@@ -149,7 +149,12 @@ describe('contract', () => {
     expect([...BFF_ALERT_RECIPIENT_ROLES]).toEqual([...ALERT_RECIPIENT_ROLES]);
   });
   it('lists every role template of the composition as a possible recipient', () => {
-    expect(Object.keys(ROLE_PERMISSIONS).sort()).toEqual([...ALERT_RECIPIENT_ROLES].sort());
+    // The incident manager is a case role (INC-CASES), not a recipient of expiry alerts.
+    expect(
+      Object.keys(ROLE_PERMISSIONS)
+        .filter((role) => role !== 'incident_manager')
+        .sort(),
+    ).toEqual([...ALERT_RECIPIENT_ROLES].sort());
   });
   it('protects every alert route: reads need a session, the write also the CSRF token', () => {
     const routes = Object.entries(BFF_ROUTES).filter(([id]) => id.startsWith('alerts.'));
