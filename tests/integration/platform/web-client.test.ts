@@ -656,6 +656,55 @@ describe('typed client against the real BFF', () => {
       }),
     ).toMatchObject({ ok: true });
 
+    const thirdParty = await client.call('incidents.thirdParties.create', {
+      params: { incidentId: incident.value.id },
+      body: { version: 2, kind: 'person', name: 'Tercero Sintético' },
+    });
+    expect(thirdParty).toMatchObject({ ok: true, value: { version: 3 } });
+    expect(
+      await client.call('incidents.thirdParties.list', {
+        params: { incidentId: incident.value.id },
+      }),
+    ).toMatchObject({ ok: true, value: { items: [expect.objectContaining({ kind: 'person' })] } });
+    if (!thirdParty.ok) throw new Error('third party create failed');
+    const params = { incidentId: incident.value.id, partyId: thirdParty.value.item.id };
+    expect(
+      await client.call('incidents.thirdParties.update', {
+        params,
+        body: { version: 3, injuries: true },
+      }),
+    ).toMatchObject({ ok: true, value: { version: 4 } });
+    expect(
+      await client.call('incidents.thirdParties.remove', { params, body: { version: 4 } }),
+    ).toMatchObject({ ok: true, value: { version: 5 } });
+    const evidence = await client.call('incidents.evidence.upload', {
+      params: { incidentId: incident.value.id },
+      body: {
+        version: 5,
+        category: 'photo',
+        stage: 'on_site',
+        name: 'foto.png',
+        contentType: 'image/png',
+        contentBase64: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]).toString(
+          'base64',
+        ),
+      },
+    });
+    if (!evidence.ok) throw new Error(`evidence upload failed: ${JSON.stringify(evidence)}`);
+    const evidenceParams = { incidentId: incident.value.id, evidenceId: evidence.value.item.id };
+    expect(
+      await client.call('incidents.evidence.list', { params: { incidentId: incident.value.id } }),
+    ).toMatchObject({ ok: true, value: { items: [expect.objectContaining({ counts: false })] } });
+    expect(
+      await client.call('incidents.evidence.content', { params: evidenceParams }),
+    ).toMatchObject({ ok: false, error: { code: 'invalid_transition' } });
+    expect(
+      await client.call('incidents.evidence.detach', {
+        params: evidenceParams,
+        body: { version: 6 },
+      }),
+    ).toMatchObject({ ok: true, value: { version: 7 } });
+
     // Insurance policies through the typed client.
     const insurance = createInsuranceClient(client);
     const policy = await insurance.create({
