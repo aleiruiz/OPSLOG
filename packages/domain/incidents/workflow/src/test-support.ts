@@ -3,6 +3,7 @@ import {
   IncidentService,
   type Incident,
   type IncidentActor,
+  type NewIncidentTransition,
 } from '../../cases/src/index.js';
 import {
   FakeReferences,
@@ -16,7 +17,13 @@ import {
   actorOf,
 } from '../../cases/src/test-support.js';
 import { FAIL_CLOSED_COSTS, FAIL_CLOSED_REPAIRS, FAIL_CLOSED_TOTALS } from './fail-closed.js';
+import {
+  InMemoryIncidentClosures,
+  type ClosureCostsRequest,
+  type IncidentClosureCosts,
+} from './closures.js';
 import type {
+  IncidentVehicleBlocks,
   CostPresence,
   CostTotals,
   CostThreshold,
@@ -78,8 +85,9 @@ export class FakeEvidence implements IncidentEvidenceFacts {
     category: EvidenceFact['category'],
     clean = true,
     stage: EvidenceFact['stage'] = 'on_site',
+    pending = !clean,
   ) {
-    this.items.push({ id: `ev-${this.items.length + 1}`, category, stage, clean });
+    this.items.push({ id: `ev-${this.items.length + 1}`, category, stage, clean, pending });
   }
 }
 export class FakeRepairs implements IncidentRepairs {
@@ -96,6 +104,23 @@ export class FakeCosts implements IncidentCostPresence, IncidentCostTotals {
   }
   public async totals(): Promise<CostTotals> {
     return this.borne;
+  }
+}
+export class FakeBlocks implements IncidentVehicleBlocks {
+  public blocked_ = false;
+  public fail = false;
+  public async blocked(): Promise<boolean> {
+    if (this.fail) throw new Error('blocks unavailable');
+    return this.blocked_;
+  }
+}
+/** Records the snapshots INC-COSTS would keep; can be told to fail, to prove the closure is atomic. */
+export class FakeClosureCosts implements IncidentClosureCosts {
+  public readonly taken: ClosureCostsRequest[] = [];
+  public fail = false;
+  public async snapshot(request: ClosureCostsRequest): Promise<void> {
+    if (this.fail) throw new Error('cost snapshot failed');
+    this.taken.push(request);
   }
 }
 export class FakeSettings implements WorkflowSettings {
@@ -133,6 +158,9 @@ export function setup(now: () => Date = () => NOW) {
   const costs = new FakeCosts();
   const settings = new FakeSettings();
   const members = new FakeMembers();
+  const blocks = new FakeBlocks();
+  const closures = new InMemoryIncidentClosures();
+  const closureCosts = new FakeClosureCosts();
   let n = 0;
   const cases = new IncidentService(store, refs, { now, newId: () => `incident-${++n}` });
   const ports: WorkflowPorts = {
@@ -143,6 +171,9 @@ export function setup(now: () => Date = () => NOW) {
     repairs,
     costs,
     totals: costs,
+    blocks,
+    closures,
+    closureCosts,
   };
   const workflow = new IncidentWorkflowService(store, ports, { now });
   const process = new IncidentProcessService(store, ports, { now });
@@ -164,6 +195,9 @@ export function setup(now: () => Date = () => NOW) {
     costs,
     settings,
     members,
+    blocks,
+    closures,
+    closureCosts,
     cases,
     workflow,
     process,
@@ -193,13 +227,14 @@ export async function put(
   world: World,
   incident: Incident,
   patch: Partial<Incident>,
+  transitions: readonly NewIncidentTransition[] = [],
 ): Promise<Incident> {
   const current = (await world.store.get(incident.tenantId, incident.id)) as Incident;
   const result = await world.store.apply({
     incident: { ...current, ...patch, version: current.version + 1 },
     expectedVersion: current.version,
     folioYear: null,
-    transitions: [],
+    transitions,
     auditActions: [],
     events: [],
   });
@@ -217,3 +252,15 @@ export async function reload(world: World, incident: Incident): Promise<Incident
   return (await world.store.get(incident.tenantId, incident.id)) as Incident;
 }
 export type { Incident, IncidentActor };
+
+/** A `resolve` entry in the timeline, so a case put in `resolved` has the route the closure revalidates. */
+export const resolvedFrom = (origin: Incident['status']): NewIncidentTransition => ({
+  command: 'resolve',
+  from: origin,
+  to: 'resolved',
+  actorId: ADMIN.id,
+  comment: null,
+  occurredAt: NOW.toISOString(),
+  changedFields: ['resolvedAt', 'status'],
+  before: null,
+});

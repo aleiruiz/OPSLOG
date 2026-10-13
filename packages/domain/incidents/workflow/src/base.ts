@@ -5,6 +5,7 @@ import {
   can,
   isMechanicScoped,
   type IdempotencyClaim,
+  type IncidentExtraWrite,
   type Incident,
   type IncidentActor,
   type IncidentEvent,
@@ -47,6 +48,8 @@ export interface Commit {
   readonly comment: string | null;
   readonly event: (written: Incident) => IncidentEvent;
   readonly claim?: IdempotencyClaim;
+  /** A write that commits or fails with the case, and a last check inside its transaction. */
+  readonly extra?: IncidentExtraWrite;
 }
 
 /** What the commands and the process data share: who sees a case, and the single atomic write. */
@@ -90,26 +93,29 @@ export abstract class WorkflowBase {
       updatedAt: time,
       updatedBy: actor.id,
     };
-    const result = await this.store.apply({
-      incident: written,
-      expectedVersion: incident.version,
-      folioYear: null,
-      transitions: [
-        {
-          command: commit.command,
-          from: incident.status,
-          to: written.status,
-          actorId: actor.id,
-          comment: commit.comment,
-          occurredAt: time,
-          changedFields: [...commit.changed].sort(),
-          before: workflowBefore(incident),
-        },
-      ],
-      auditActions: [`incident.${commit.command}`],
-      events: [commit.event(written)],
-      ...(commit.claim ? { idempotency: commit.claim } : {}),
-    });
+    const result = await this.store.apply(
+      {
+        incident: written,
+        expectedVersion: incident.version,
+        folioYear: null,
+        transitions: [
+          {
+            command: commit.command,
+            from: incident.status,
+            to: written.status,
+            actorId: actor.id,
+            comment: commit.comment,
+            occurredAt: time,
+            changedFields: [...commit.changed].sort(),
+            before: workflowBefore(incident),
+          },
+        ],
+        auditActions: [`incident.${commit.command}`],
+        events: [commit.event(written)],
+        ...(commit.claim ? { idempotency: commit.claim } : {}),
+      },
+      commit.extra,
+    );
     if (!result.applied) throw new IncidentError('stale_version');
     return result.incident;
   }

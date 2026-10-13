@@ -76,6 +76,7 @@ export function buildWorkOrderApi(
   vehicleService: VehicleService,
   settings: SettingsService,
   files: WorkOrderFileSupport,
+  vehicleBlocks?: WorkOrderReferences['vehicleBlocks'],
 ): WorkOrderApi {
   const store = adapters.maintenanceOrders ?? new InMemoryWorkOrderStore();
   const workshops = adapters.maintenanceWorkshops ?? new InMemoryWorkshopStore();
@@ -130,6 +131,7 @@ export function buildWorkOrderApi(
     // supervisor approval, whatever the final cost; with none configured nothing is asked.
     closeApprovalRequired: async (tenantId) =>
       (await settings.get(tenantId)).closeCostThreshold !== null,
+    ...(vehicleBlocks ? { vehicleBlocks } : {}),
     // SPECS:184: calendar dates follow the company's IANA zone.
     timeZone: async (tenantId) => (await settings.get(tenantId)).timeZone,
     fileRequirements: async (tenantId) => {

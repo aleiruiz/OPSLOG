@@ -8,11 +8,15 @@ import {
   FAIL_CLOSED_COSTS,
   FAIL_CLOSED_REPAIRS,
   FAIL_CLOSED_TOTALS,
+  NO_CLOSURE_COSTS,
+  type IncidentClosures,
   type IncidentEvidenceFacts,
   type WorkflowPorts,
 } from '../../../../../packages/domain/incidents/workflow/src/index.js';
 import {
+  INCIDENT_STATUSES,
   IncidentService,
+  TERMINAL_STATUSES,
   type IncidentStore,
 } from '../../../../../packages/domain/incidents/cases/src/index.js';
 import { InMemoryMechanicStore } from '../../../../../packages/domain/maintenance/mechanics/src/index.js';
@@ -24,8 +28,9 @@ import { createMechanicScope } from './mechanic-scope.js';
 import type { PlatformAdapters } from './types.js';
 
 /**
- * Evidence of a case as the workflow reads it: category, stage and whether the file is `clean`.
- * A file the files module forgot is not clean, so it never satisfies a requirement.
+ * Evidence of a case as the workflow reads it: category, stage, whether the file is `clean` and
+ * whether it still waits for its scan. A file the files module forgot is neither, so it never
+ * satisfies a requirement.
  */
 export function evidenceFacts(
   children: IncidentChildStore,
@@ -34,28 +39,69 @@ export function evidenceFacts(
   return {
     evidence: async (tenantId, incidentId) =>
       Promise.all(
-        (await children.evidence(tenantId, incidentId)).map(async (row) => ({
-          id: row.id,
-          category: row.category,
-          stage: row.stage,
-          clean: (await files.record(tenantId, row.fileId))?.status === 'clean',
-        })),
+        (await children.evidence(tenantId, incidentId)).map(async (row) => {
+          const status = (await files.record(tenantId, row.fileId))?.status;
+          return {
+            id: row.id,
+            category: row.category,
+            stage: row.stage,
+            clean: status === 'clean',
+            // Waiting for the scan or for the bytes: nobody has judged the file yet.
+            pending: status === 'pending_scan' || status === 'pending_upload',
+          };
+        }),
       ),
   };
 }
 
 /**
- * Ports of the workflow. The repairs, the costs and their totals belong to INC-COSTS, which does
- * not exist yet: they are the fail-closed ports, so nothing that depends on them can pass.
+ * Whether the vehicle is held by another open case that says it cannot operate (D11, SPECS §5.3).
+ * Every non-terminal case counts, drafts included; the case asking is left out. The store caps the
+ * page size, never the number of cases.
  */
-export function workflowPorts(
-  kernel: PlatformKernel,
-  services: IncidentServices,
-  evidence: IncidentEvidenceFacts,
-): WorkflowPorts {
+export async function incidentHoldsVehicle(
+  store: IncidentStore,
+  tenantId: string,
+  vehicleId: string,
+  exceptIncidentId: string | null,
+): Promise<boolean> {
+  const open = INCIDENT_STATUSES.filter((status) => !TERMINAL_STATUSES.includes(status));
+  const query = {
+    filter: { vehicleId, statuses: open },
+    sort: 'createdAt',
+    direction: 'asc',
+    limit: 100,
+    offset: 0,
+  } as const;
+  for (let offset = 0; ; offset += 100) {
+    const page = await store.list(tenantId, { ...query, offset });
+    if (page.items.some((item) => item.id !== exceptIncidentId && item.vehicleOperable === false))
+      return true;
+    if (offset + 100 >= page.total || page.items.length === 0) return false;
+  }
+}
+
+/** What the workflow, and the evidence guard, share: one set of ports, so INC-COSTS plugs in once. */
+export interface WorkflowPortSources {
+  readonly kernel: PlatformKernel;
+  readonly services: IncidentServices;
+  readonly store: IncidentStore;
+  readonly evidence: IncidentEvidenceFacts;
+  /** Open workshop orders of the vehicle (MNT-ORDERS). */
+  readonly openWorkshopOrders: (tenantId: string, vehicleId: string) => Promise<number>;
+  readonly closures: IncidentClosures;
+}
+
+/**
+ * Ports of the workflow. The repairs, the costs, their totals and their closure snapshot belong to
+ * INC-COSTS, which does not exist yet: they are the fail-closed ports, so nothing that depends on
+ * them can pass. Swap them here and every consumer follows.
+ */
+export function workflowPorts(sources: WorkflowPortSources): WorkflowPorts {
+  const { kernel, services, store } = sources;
   return {
     references: incidentReferences(services),
-    evidence,
+    evidence: sources.evidence,
     settings: {
       reportPhoto: async (tenantId) => (await services.settings.get(tenantId)).incidentReportPhoto,
       closeCostThreshold: async (tenantId) =>
@@ -71,6 +117,13 @@ export function workflowPorts(
     repairs: FAIL_CLOSED_REPAIRS,
     costs: FAIL_CLOSED_COSTS,
     totals: FAIL_CLOSED_TOTALS,
+    blocks: {
+      blocked: async (tenantId, vehicleId, exceptIncidentId) =>
+        (await sources.openWorkshopOrders(tenantId, vehicleId)) > 0 ||
+        (await incidentHoldsVehicle(store, tenantId, vehicleId, exceptIncidentId)),
+    },
+    closures: sources.closures,
+    closureCosts: NO_CLOSURE_COSTS,
   };
 }
 
@@ -80,10 +133,9 @@ export function buildIncidentWorkflowApi(
   adapters: PlatformAdapters,
   services: IncidentServices,
   store: IncidentStore,
-  evidence: IncidentEvidenceFacts,
+  ports: WorkflowPorts,
 ): IncidentWorkflowApi {
   const scope = createMechanicScope(adapters.maintenanceMechanics ?? new InMemoryMechanicStore());
-  const ports = workflowPorts(kernel, services, evidence);
   const options = { now: kernel.now };
   return new IncidentWorkflowApi({
     incidents: new IncidentService(store, incidentReferences(services), options),

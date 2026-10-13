@@ -12,14 +12,21 @@ import {
   type IncidentFiles,
 } from '../../../../../packages/domain/incidents/third-parties/src/index.js';
 import {
-  FAIL_CLOSED_REPAIRS,
   GuardedEvidenceService,
+  InMemoryIncidentClosures,
+  type IncidentClosures,
+  type WorkflowPorts,
 } from '../../../../../packages/domain/incidents/workflow/src/index.js';
+import { InMemoryWorkOrderStore } from '../../../../../packages/domain/maintenance/orders/src/index.js';
 import { InMemoryMechanicStore } from '../../../../../packages/domain/maintenance/mechanics/src/index.js';
 import type { PiiCipher } from '../../../../../packages/platform/pii/src/index.js';
 import { IncidentChildApi } from '../../../incidents/third-parties/src/index.js';
 import { ROLE_LABELS } from '../directory.js';
-import { buildIncidentWorkflowApi, evidenceFacts } from './incident-workflow-apis.js';
+import {
+  buildIncidentWorkflowApi,
+  evidenceFacts,
+  workflowPorts,
+} from './incident-workflow-apis.js';
 import {
   UNKNOWN_MEMBER_LABEL,
   buildIncidentApi,
@@ -35,13 +42,21 @@ import { UPLOAD_REJECTIONS, type WorkOrderFileSupport } from './work-order-apis.
 export function incidentStores(adapters: PlatformAdapters): {
   readonly store: IncidentStore;
   readonly children: IncidentChildStore;
+  readonly closures: IncidentClosures;
 } {
-  // A persistent case with in-memory children (or the reverse) would lose them on restart and
-  // skip the one-link-per-file key: the two travel together.
-  if (Boolean(adapters.incidents) !== Boolean(adapters.incidentChildren))
-    throw new Error('adapters.incidents and adapters.incidentChildren must be injected together');
+  // A persistent case with in-memory children or closures (or the reverse) would lose them on
+  // restart and skip the one-link-per-file key and the one-closure-per-cycle key: they travel together.
+  const injected = [adapters.incidents, adapters.incidentChildren, adapters.incidentClosures];
+  if (injected.some(Boolean) && !injected.every(Boolean))
+    throw new Error(
+      'adapters.incidents, adapters.incidentChildren and adapters.incidentClosures must be injected together',
+    );
   const store = adapters.incidents ?? new InMemoryIncidentStore();
-  return { store, children: adapters.incidentChildren ?? new InMemoryIncidentChildStore(store) };
+  return {
+    store,
+    children: adapters.incidentChildren ?? new InMemoryIncidentChildStore(store),
+    closures: adapters.incidentClosures ?? new InMemoryIncidentClosures(),
+  };
 }
 
 /** A file that cannot be served maps to the closest case error; nothing of the files module leaks. */
@@ -99,6 +114,7 @@ export function buildIncidentChildApi(
   stores: ReturnType<typeof incidentStores>,
   pii: PiiCipher,
   support: WorkOrderFileSupport,
+  ports: WorkflowPorts,
 ): IncidentChildApi {
   const scope = createMechanicScope(adapters.maintenanceMechanics ?? new InMemoryMechanicStore());
   const options = { now: kernel.now };
@@ -114,10 +130,8 @@ export function buildIncidentChildApi(
       stores.store,
       stores.children,
       incidentFiles(support),
-      {
-        evidence: evidenceFacts(stores.children, incidentFiles(support)),
-        repairs: FAIL_CLOSED_REPAIRS,
-      },
+      // The same ports as the workflow: INC-COSTS plugs in once.
+      ports,
       options,
     ),
     authorize: async (token, correlationId) => {
@@ -149,24 +163,32 @@ export function buildIncidentChildApi(
   });
 }
 
-/** Incidents with their third parties and evidence, over one shared store. */
+/** Incidents with their third parties and evidence, over one shared store and one set of workflow ports. */
 export function buildIncidentApis(
   kernel: PlatformKernel,
   adapters: PlatformAdapters,
   services: IncidentServices,
   pii: PiiCipher,
   support: WorkOrderFileSupport,
+  stores: ReturnType<typeof incidentStores> = incidentStores(adapters),
 ): IncidentDomainApis {
-  const stores = incidentStores(adapters);
+  const ports = workflowPorts({
+    kernel,
+    services,
+    store: stores.store,
+    evidence: evidenceFacts(stores.children, incidentFiles(support)),
+    openWorkshopOrders: async (tenantId, vehicleId) =>
+      (
+        await (adapters.maintenanceOrders ?? new InMemoryWorkOrderStore()).openWorkshopOrders(
+          tenantId,
+          vehicleId,
+        )
+      ).length,
+    closures: stores.closures,
+  });
   return {
     incidents: buildIncidentApi(kernel, adapters, services, stores.store),
-    incidentChildren: buildIncidentChildApi(kernel, adapters, stores, pii, support),
-    incidentWorkflow: buildIncidentWorkflowApi(
-      kernel,
-      adapters,
-      services,
-      stores.store,
-      evidenceFacts(stores.children, incidentFiles(support)),
-    ),
+    incidentChildren: buildIncidentChildApi(kernel, adapters, stores, pii, support, ports),
+    incidentWorkflow: buildIncidentWorkflowApi(kernel, adapters, services, stores.store, ports),
   };
 }

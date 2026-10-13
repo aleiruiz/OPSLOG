@@ -1,4 +1,5 @@
 import type { IncidentReferences } from '../../cases/src/index.js';
+import type { IncidentClosureCosts, IncidentClosures } from './closures.js';
 import type { EvidenceCategory, EvidenceStage } from '../../third-parties/src/index.js';
 
 /** The evidence linked to a case, as far as the requirements care: where it belongs and whether it is clean. */
@@ -9,6 +10,8 @@ export interface EvidenceFact {
   readonly stage: EvidenceStage;
   /** Only a `clean` file counts: one in quarantine or a rejected one never satisfies a requirement. */
   readonly clean: boolean;
+  /** The file still waits for its scan: a case cannot close with evidence nobody has judged. */
+  readonly pending: boolean;
 }
 export interface IncidentEvidenceFacts {
   evidence(tenantId: string, incidentId: string): Promise<readonly EvidenceFact[]>;
@@ -53,7 +56,8 @@ export type CostTotals =
   | { readonly available: false };
 /** What the company bears by currency: repairs plus expenses minus recoveries (ADR-0014). */
 export interface IncidentCostTotals {
-  totals(tenantId: string, incidentId: string): Promise<CostTotals>;
+  /** `tx` joins the transaction of the command that decides on the totals (the store's, or nothing in memory). */
+  totals(tenantId: string, incidentId: string, tx?: unknown): Promise<CostTotals>;
 }
 
 export interface CostThreshold {
@@ -72,6 +76,15 @@ export interface ResponsibleDirectory {
   permissionsOf(tenantId: string, memberId: string): Promise<readonly string[] | null>;
 }
 
+/**
+ * Other causes that keep a vehicle out of service (SPECS §5.3, D11): an open workshop order of the
+ * vehicle, or another case that is not over and says the vehicle cannot operate. A read that fails is
+ * an error (500), never "free".
+ */
+export interface IncidentVehicleBlocks {
+  blocked(tenantId: string, vehicleId: string, exceptIncidentId: string): Promise<boolean>;
+}
+
 export interface WorkflowPorts {
   readonly references: Pick<IncidentReferences, 'policyRevisions' | 'timeZone'>;
   readonly evidence: IncidentEvidenceFacts;
@@ -80,4 +93,9 @@ export interface WorkflowPorts {
   readonly repairs: IncidentRepairs;
   readonly costs: IncidentCostPresence;
   readonly totals: IncidentCostTotals;
+  readonly blocks: IncidentVehicleBlocks;
+  /** Where the snapshot of a closed cycle is kept, in the transaction of the closure. */
+  readonly closures: IncidentClosures;
+  /** INC-COSTS keeps its own snapshot of the closed cycle in the same transaction. */
+  readonly closureCosts: IncidentClosureCosts;
 }

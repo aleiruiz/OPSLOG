@@ -141,6 +141,8 @@ export const INCIDENT_UPDATED_EVENT = 'incident.updated';
 export const INCIDENT_STATUS_CHANGED_EVENT = 'incident.status_changed';
 export const INCIDENT_ASSIGNED_EVENT = 'incident.assigned';
 export const INCIDENT_CANCELLED_EVENT = 'incident.cancelled';
+export const INCIDENT_CLOSED_EVENT = 'incident.closed';
+export const INCIDENT_REOPENED_EVENT = 'incident.reopened';
 export interface IncidentEvent {
   readonly type: string;
   readonly payload: Readonly<Record<string, string | number>>;

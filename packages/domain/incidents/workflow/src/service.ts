@@ -1,6 +1,9 @@
 import {
   INCIDENT_ASSIGNED_EVENT,
   INCIDENT_CANCELLED_EVENT,
+  INCIDENT_CLOSED_EVENT,
+  INCIDENT_REOPENED_EVENT,
+  INCIDENT_UPDATED_EVENT,
   INCIDENT_STATUS_CHANGED_EVENT,
   IncidentError,
   RULES,
@@ -14,6 +17,7 @@ import {
   type IncidentStore,
 } from '../../cases/src/index.js';
 import { allowedCommands, mayRun } from './access.js';
+import { closureOf, inTransaction } from './closing.js';
 import { IDEMPOTENCY_REQUIRED_COMMANDS, transitionAllowed } from './commands.js';
 import { effectOf, changedFieldsOf } from './effects.js';
 import { WorkflowBase, type WorkflowOptions } from './base.js';
@@ -35,6 +39,13 @@ function eventOf(command: IncidentCommand, written: Incident): IncidentEvent {
   const base = { incidentId: written.id, version: written.version };
   if (command === 'assign') return { type: INCIDENT_ASSIGNED_EVENT, payload: base };
   if (command === 'cancel') return { type: INCIDENT_CANCELLED_EVENT, payload: base };
+  if (command === 'close')
+    return { type: INCIDENT_CLOSED_EVENT, payload: { ...base, vehicleId: written.vehicleId } };
+  if (command === 'reopen')
+    return { type: INCIDENT_REOPENED_EVENT, payload: { ...base, cycle: written.cycle } };
+  // An approval changes the case without changing its status.
+  if (command === 'approve_assumption' || command === 'approve_close')
+    return { type: INCIDENT_UPDATED_EVENT, payload: base };
   return {
     type: INCIDENT_STATUS_CHANGED_EVENT,
     payload: { ...base, vehicleId: written.vehicleId, status: written.status },
@@ -58,7 +69,7 @@ export class IncidentWorkflowService extends WorkflowBase {
     id: string,
   ): Promise<readonly NextStep[]> {
     const incident = await this.visible(tenantId, actor, id);
-    const loader = new FactLoader(this.ports, tenantId, incident);
+    const loader = new FactLoader(this.ports, this.store, tenantId, incident);
     const steps: NextStep[] = [];
     for (const command of allowedCommands(incident, actor))
       steps.push({
@@ -144,17 +155,26 @@ export class IncidentWorkflowService extends WorkflowBase {
     keyed: { readonly key: string; readonly hash: string } | undefined,
   ): Promise<Incident> {
     const { command } = parsed;
-    assertNotTerminal(incident.status);
+    // A closed case accepts only `reopen`; the table says so, and a cancelled one accepts nothing.
+    if (incident.status === 'cancelled' || command !== 'reopen') assertNotTerminal(incident.status);
     if (!transitionAllowed(incident, command)) throw new IncidentError('invalid_transition');
     if (incident.version !== parsed.version) throw new IncidentError('stale_version');
-    const facts = await new FactLoader(this.ports, tenantId, incident).forCommand(command);
+    const facts = await new FactLoader(this.ports, this.store, tenantId, incident).forCommand(
+      command,
+    );
     const missing = missingRequirements(command, incident, facts, parsed);
+    // The vehicle cannot return to `active` while another cause holds it (D11): a rule, not a gap.
+    if (missing.includes('vehicle_blocked'))
+      throw new IncidentError('rule_violation', [], RULES.vehicleBlocked);
     if (missing.length > 0) throw new IncidentError('missing_requirements', [], null, missing);
     const responsible =
       command === 'assign'
         ? await this.responsible(tenantId, parsed.responsibleId as string)
         : null;
     if (command === 'assign' && responsible === incident.responsibleId) return incident;
+    // Recording an approval that already stands changes nothing.
+    if (command === 'approve_assumption' && incident.assumptionApproval !== null) return incident;
+    if (command === 'approve_close' && incident.closeApproval !== null) return incident;
     const time = this.now().toISOString();
     const changes = effectOf(command, incident, {
       time,
@@ -162,11 +182,14 @@ export class IncidentWorkflowService extends WorkflowBase {
       responsibleId: responsible,
       reason: parsed.reason,
     });
+    const closure = command === 'close' ? closureOf(incident, facts, { time, actor }) : null;
+    const extra = inTransaction(command, this.ports, incident, closure);
     return this.commit({
       tenantId,
       actor,
       incident,
       next: { ...incident, ...changes },
+      ...(extra ? { extra } : {}),
       command,
       changed: changedFieldsOf(incident, changes),
       comment: parsed.comment ?? parsed.reason,

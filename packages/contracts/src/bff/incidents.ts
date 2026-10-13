@@ -185,9 +185,12 @@ export interface BffIncident {
     readonly policy: BffIncidentPolicy | null;
     readonly alert: BffCoverageAlert | null;
   };
-  /** A suggestion while the vehicle cannot operate; the incident never changes the vehicle by itself (D11). */
+  /**
+   * A suggestion while the vehicle cannot operate, or `decommissioned` after a total loss; the
+   * incident never changes the vehicle by itself (D11).
+   */
   readonly vehicleProposal: {
-    readonly suggestedStatus: 'out_of_service';
+    readonly suggestedStatus: 'out_of_service' | 'decommissioned';
     readonly reason: string;
   } | null;
   readonly insurance: BffIncidentInsurance;

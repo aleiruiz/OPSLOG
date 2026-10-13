@@ -28,6 +28,7 @@ import {
   INCIDENT_RUNTIME_ACCOUNT,
   INCIDENT_TABLES,
 } from '../../../packages/persistence/incidents/cases/src/index.js';
+import { INCIDENT_WORKFLOW_TABLES } from '../../../packages/persistence/incidents/workflow/src/index.js';
 import { INCIDENT_CHILD_TABLES } from '../../../packages/persistence/incidents/third-parties/src/index.js';
 import {
   createFleetMigrationModules,
@@ -123,6 +124,7 @@ const grants = {
     { table: INCIDENT_TABLES.idempotency, privileges: ['SELECT', 'INSERT', 'DELETE'] },
     { table: INCIDENT_CHILD_TABLES.thirdParties, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
     { table: INCIDENT_CHILD_TABLES.evidence, privileges: ['SELECT', 'INSERT', 'DELETE'] },
+    { table: INCIDENT_WORKFLOW_TABLES.closures, privileges: ['SELECT', 'INSERT'] },
   ],
 } satisfies Record<string, readonly Grant[]>;
 

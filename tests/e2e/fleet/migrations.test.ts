@@ -13,6 +13,7 @@ import { FILE_TABLES } from '../../../packages/persistence/files/src/index.js';
 import { MAINTENANCE_TABLES } from '../../../packages/persistence/maintenance/plans/src/index.js';
 import { WORK_ORDER_TABLES } from '../../../packages/persistence/maintenance/orders/src/index.js';
 import { INCIDENT_TABLES } from '../../../packages/persistence/incidents/cases/src/index.js';
+import { INCIDENT_WORKFLOW_TABLES } from '../../../packages/persistence/incidents/workflow/src/index.js';
 import { INCIDENT_CHILD_TABLES } from '../../../packages/persistence/incidents/third-parties/src/index.js';
 import { adminUrl, startFleetDatabase, type FleetDatabase } from './mysql.js';
 
@@ -43,6 +44,7 @@ suite('fleet tenant migration composition on real MySQL', () => {
       'maintenance:2026101200010',
       'maintenance-orders:2026101200030',
       'incident-cases:2026101500020',
+      'incident-workflow:2026101600010',
       'audit:2026100700010',
     ]);
     expect(database.databaseName).toMatch(/^opslog_t_[a-f0-9]+$/);
@@ -83,6 +85,7 @@ suite('fleet tenant migration composition on real MySQL', () => {
         ...Object.values(WORK_ORDER_TABLES),
         ...Object.values(INCIDENT_TABLES),
         ...Object.values(INCIDENT_CHILD_TABLES),
+        ...Object.values(INCIDENT_WORKFLOW_TABLES),
         'opslog_audit_local',
         'opslog_audit_delivery',
         'opslog_audit_log',

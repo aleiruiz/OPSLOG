@@ -8,6 +8,7 @@
   "include": [
     "src/**/*.ts",
     "../cases/src/**/*.ts",
+    "../workflow/src/entities.ts",
     "../../../domain/incidents/cases/src/**/*.ts",
     "../../../domain/incidents/third-parties/src/**/*.ts",
     "../../../domain/maintenance/orders/src/**/*.ts",

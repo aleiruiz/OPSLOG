@@ -38,4 +38,5 @@ export const RULES = {
   occurredBeforeRegistration: 'occurred_before_vehicle_registration',
   policyNotCovering: 'policy_not_covering_event_day',
   responsibleNotEligible: 'responsible_not_eligible',
+  vehicleBlocked: 'vehicle_blocked',
 } as const;

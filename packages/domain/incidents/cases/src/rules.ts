@@ -45,13 +45,22 @@ export function assertEventTime(
   return day;
 }
 
-/** Shown while the vehicle cannot operate; the incident never changes the vehicle by itself (D11). */
+/**
+ * Shown while the case is open and the vehicle cannot operate, or after a total loss; the incident
+ * never changes the vehicle by itself (D11): applying the status is a command of the vehicles module.
+ */
 export interface VehicleProposal {
-  readonly suggestedStatus: 'out_of_service';
+  readonly suggestedStatus: 'out_of_service' | 'decommissioned';
   readonly reason: string;
 }
 export function vehicleProposal(incident: Incident): VehicleProposal | null {
-  return incident.vehicleOperable === false && !TERMINAL_STATUSES.includes(incident.status)
+  if (TERMINAL_STATUSES.includes(incident.status)) return null;
+  if (incident.totalLoss === true)
+    return {
+      suggestedStatus: 'decommissioned',
+      reason: `Pérdida total, siniestro ${incident.folio}`,
+    };
+  return incident.vehicleOperable === false
     ? { suggestedStatus: 'out_of_service', reason: `Siniestro ${incident.folio}` }
     : null;
 }

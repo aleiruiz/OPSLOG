@@ -15,6 +15,7 @@ import type { PlanStore } from '../../../../../packages/domain/maintenance/plans
 import type { WorkshopStore } from '../../../../../packages/domain/maintenance/workshops/src/index.js';
 import type { MechanicStore } from '../../../../../packages/domain/maintenance/mechanics/src/index.js';
 import type { IncidentStore } from '../../../../../packages/domain/incidents/cases/src/index.js';
+import type { IncidentClosures } from '../../../../../packages/domain/incidents/workflow/src/index.js';
 import type { IncidentChildStore } from '../../../../../packages/domain/incidents/third-parties/src/index.js';
 import type { WorkOrderStore } from '../../../../../packages/domain/maintenance/orders/src/index.js';
 import type { PiiCipher } from '../../../../../packages/platform/pii/src/index.js';
@@ -75,6 +76,8 @@ export interface PlatformAdapters {
    * written through `incidents`; in-memory by default. Both are persistent or neither is.
    */
   readonly incidentChildren?: IncidentChildStore;
+  /** Persistent snapshots of closed cycles (`packages/persistence/incidents/workflow`), written with the case; in-memory by default. All three travel together. */
+  readonly incidentClosures?: IncidentClosures;
   /**
    * Personal-data protection (SPECS D23): envelope encryption plus blind indexes. Defaults to the
    * local development KMS with a random per-process key, which refuses production-mode

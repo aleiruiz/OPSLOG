@@ -1,3 +1,4 @@
+import type { IncidentClosureCosts } from './closures.js';
 import type {
   CostPresence,
   CostTotals,
@@ -21,3 +22,10 @@ export const FAIL_CLOSED_COSTS: IncidentCostPresence = {
 export const FAIL_CLOSED_TOTALS: IncidentCostTotals = {
   totals: async (): Promise<CostTotals> => ({ available: false }),
 };
+
+/**
+ * Without INC-COSTS no cost exists, so there is nothing to snapshot with the closure. The risk of
+ * closing without reading costs is covered by `FAIL_CLOSED_TOTALS`: with a D20 threshold, the closure
+ * asks for an approval.
+ */
+export const NO_CLOSURE_COSTS: IncidentClosureCosts = { snapshot: async (): Promise<void> => {} };

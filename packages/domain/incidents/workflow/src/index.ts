@@ -1,11 +1,12 @@
 export * from './access.js';
+export * from './closures.js';
 export * from './commands.js';
 export * from './d20.js';
 export * from './evidence-guard.js';
 export * from './fail-closed.js';
 export type { Commit, WorkflowOptions } from './base.js';
 export { workflowBefore } from './base.js';
-export { FactLoader } from './facts.js';
+export { FactLoader, approvalNeeded } from './facts.js';
 export {
   VEHICLE_STATUS_DECISIONS,
   WORKFLOW_LIMITS,

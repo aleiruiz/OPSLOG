@@ -108,15 +108,6 @@ export const TRANSITIONS: Readonly<Record<IncidentCommand, CommandRule>> = {
   },
 };
 
-/** Commands with behavior in this delivery. The rest of the table answers 409 and is never offered. */
-export const IMPLEMENTED_COMMANDS: readonly IncidentCommand[] = INCIDENT_COMMANDS.filter(
-  (command) =>
-    command !== 'approve_assumption' &&
-    command !== 'approve_close' &&
-    command !== 'close' &&
-    command !== 'reopen',
-);
-
 /** Commands that need an `Idempotency-Key`; the rest accept one. */
 export const IDEMPOTENCY_REQUIRED_COMMANDS: readonly IncidentCommand[] = INCIDENT_COMMANDS.filter(
   (command) => TRANSITIONS[command].idempotencyRequired,
@@ -139,10 +130,9 @@ export function routeAllows(
   return true;
 }
 
-/** Whether the table, the route of the type and this delivery let the command run on the case now. */
+/** Whether the table and the route of the type let the command run on the case now. */
 export function transitionAllowed(incident: Incident, command: IncidentCommand): boolean {
   return (
-    IMPLEMENTED_COMMANDS.includes(command) &&
     TRANSITIONS[command].from.includes(incident.status) &&
     routeAllows(command, incident.status, incident.type)
   );

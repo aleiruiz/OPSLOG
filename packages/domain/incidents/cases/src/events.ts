@@ -3,7 +3,9 @@ import { INCIDENT_STATUSES } from './catalog.js';
 import {
   INCIDENT_ASSIGNED_EVENT,
   INCIDENT_CANCELLED_EVENT,
+  INCIDENT_CLOSED_EVENT,
   INCIDENT_CREATED_EVENT,
+  INCIDENT_REOPENED_EVENT,
   INCIDENT_STATUS_CHANGED_EVENT,
   INCIDENT_UPDATED_EVENT,
   type IncidentEvent,
@@ -26,6 +28,8 @@ const SCHEMAS: Readonly<Record<string, Readonly<Record<string, (value: unknown) 
   },
   [INCIDENT_ASSIGNED_EVENT]: { incidentId: id, version: count },
   [INCIDENT_CANCELLED_EVENT]: { incidentId: id, version: count },
+  [INCIDENT_CLOSED_EVENT]: { incidentId: id, vehicleId: id, version: count },
+  [INCIDENT_REOPENED_EVENT]: { incidentId: id, version: count, cycle: count },
 };
 
 export function validateIncidentEvent(event: IncidentEvent): IncidentEvent {

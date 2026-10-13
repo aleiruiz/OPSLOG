@@ -23,6 +23,7 @@
     { "path": "../../../packages/persistence/maintenance/orders" },
     { "path": "../../../packages/persistence/incidents/cases" },
     { "path": "../../../packages/persistence/incidents/third-parties" },
+    { "path": "../../../packages/persistence/incidents/workflow" },
     { "path": "../../../packages/platform/pii" }
   ]
 }

@@ -1,4 +1,9 @@
-import { INCIDENT_TYPE_RULES, type Incident, type IncidentCommand } from '../../cases/src/index.js';
+import {
+  INCIDENT_TYPE_RULES,
+  type Incident,
+  type IncidentCommand,
+  type IncidentStatus,
+} from '../../cases/src/index.js';
 import type {
   CostPresence,
   EvidenceFact,
@@ -18,6 +23,14 @@ export interface Facts {
   readonly costs?: CostPresence;
   /** D20 asks for an approval of the cost assumption now. */
   readonly assumptionApprovalRequired?: boolean;
+  /** D20 asks for an approval of the closure now (final costs against the threshold). */
+  readonly closeApprovalRequired?: boolean;
+  /** The company configured a D20 threshold, so there is something to approve. */
+  readonly thresholdConfigured?: boolean;
+  /** The state the last `resolve` came from: the route the closing cycle took (`null`: unknown). */
+  readonly origin?: IncidentStatus | null;
+  /** Another cause keeps the vehicle out of service, so `active` cannot be decided. */
+  readonly vehicleBlocked?: boolean;
 }
 
 /** Data a command receives in its body, as opposed to what the case already holds. */
@@ -106,8 +119,34 @@ function resolve(incident: Incident, facts: Facts): Checks {
         (item) => item.clean && (item.stage === 'post_repair' || item.category === 'invoice'),
       ),
     }),
+    // Returning the vehicle to `active` never ignores another open cause (D11, SPECS §5.3).
+    vehicle_blocked: !(
+      incident.vehicleStatusDecision === 'active' && facts.vehicleBlocked === true
+    ),
   };
 }
+
+/**
+ * Closing revalidates what resolving asked, on the route this cycle took, and adds what only a
+ * closure asks. The assumption approval is not asked again: the closure approval covers the final costs.
+ */
+function close(incident: Incident, facts: Facts): Checks {
+  const origin = facts.origin ?? null;
+  if (origin === null) return { resolve_origin: false };
+  const repairs = facts.repairs;
+  return {
+    ...resolve({ ...incident, status: origin }, facts),
+    no_pending_evidence: !facts.evidence.some((item) => item.pending),
+    // Without INC-COSTS no order can be linked; a route through `repair` still fails closed above.
+    repair_orders_closed:
+      repairs?.available === true
+        ? activeOrders(repairs).every((order) => order.status === 'closed')
+        : origin !== 'repair',
+    close_approval: facts.closeApprovalRequired === false || incident.closeApproval !== null,
+  };
+}
+
+const approval = (facts: Facts): Checks => ({ d20_configured: facts.thresholdConfigured === true });
 
 function cancel(incident: Incident, facts: Facts): Checks {
   // A draft has no linked orders or costs by model, so it cancels without asking INC-COSTS.
@@ -136,8 +175,11 @@ const CHECKS: Partial<Record<IncidentCommand, (incident: Incident, facts: Facts)
     rejection_letter: hasClean(facts, 'rejection_letter'),
   }),
   appeal: (incident) => ({ appeal_note: filled(incident.appealNote) }),
+  approve_assumption: (_incident, facts) => approval(facts),
   repair,
   resolve,
+  approve_close: (_incident, facts) => approval(facts),
+  close,
   cancel,
 };
 
@@ -154,7 +196,7 @@ export function missingRequirements(
   const own: Checks = input
     ? {
         ...when(command === 'assign', { responsible: input.responsibleId !== null }),
-        ...when(command === 'cancel', { reason: filled(input.reason) }),
+        ...when(command === 'cancel' || command === 'reopen', { reason: filled(input.reason) }),
       }
     : {};
   const checks = { ...own, ...(CHECKS[command]?.(incident, facts) ?? {}) };
