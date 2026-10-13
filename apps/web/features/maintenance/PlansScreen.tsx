@@ -1,3 +1,4 @@
+import AddOutlined from '@mui/icons-material/AddOutlined';
 import React from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -5,13 +6,14 @@ import Card from '@mui/material/Card';
 import Link from '@mui/material/Link';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import { Button, DataTable, PageHeader, StatusBadge, UiState } from '@opslog/ui';
+import { Button, DataTable, PageHeader, Panel, StatusBadge, UiState } from '@opslog/ui';
 import type {
   BffMaintenanceMechanic,
   BffMaintenancePlan,
   BffMaintenanceWorkshop,
 } from '@opslog/contracts';
 import { useDirectory, vehicleLabel } from './directory';
+import { linkSx } from '../../app/router';
 import { formatDate, formatKm } from './labels';
 import { MaintenanceAlertsPanel } from './MaintenanceAlertsPanel';
 import { PlanForm } from './PlanForm';
@@ -49,11 +51,12 @@ export function PlansScreen({
   const [form, setForm] = React.useState<'create' | 'edit' | null>(null);
   const header = (
     <PageHeader
+      eyebrow="Mantenimiento"
       title="Planes de mantenimiento"
       description="Por vehículo, por fecha y/o kilometraje: la orden se crea al alcanzar el primer objetivo."
       actions={
         viewer.permissions.includes('create') && form === null ? (
-          <Button variant="contained" onClick={() => setForm('create')}>
+          <Button variant="contained" startIcon={<AddOutlined />} onClick={() => setForm('create')}>
             Nuevo plan
           </Button>
         ) : undefined
@@ -94,48 +97,55 @@ export function PlansScreen({
           }}
         />
       )}
-      {plans.length === 0 ? (
-        <UiState
-          kind="empty"
-          title="Aún no hay planes"
-          description="Crea un plan para que las órdenes preventivas se generen solas."
-        />
-      ) : (
-        <Box sx={{ overflowX: 'auto' }}>
-          <DataTable
-            caption={`${plans.length} planes`}
-            rows={plans.map((plan) => ({ ...plan, plan }))}
-            columns={[
-              {
-                key: 'vehicleId',
-                label: 'Vehículo',
-                render: (_value, row) => (
-                  <Link component="button" type="button" onClick={() => setSelected(row.id)}>
-                    {vehicleLabel(directory, row.vehicleId)}
-                  </Link>
-                ),
-              },
-              { key: 'plan', label: 'Intervalo', render: (_value, row) => intervals(row.plan) },
-              {
-                key: 'lastServiceDate',
-                label: 'Último servicio',
-                render: (_value, row) =>
-                  `${formatDate(row.lastServiceDate ?? null)} · ${formatKm(row.lastServiceKm ?? null)}`,
-              },
-              {
-                key: 'state',
-                label: 'Estado',
-                render: (_value, row) => (
-                  <StatusBadge
-                    label={row.state === 'active' ? 'Activo' : 'Pausado'}
-                    tone={row.state === 'active' ? 'success' : 'neutral'}
-                  />
-                ),
-              },
-            ]}
+      <Panel title="Planes" flush={plans.length > 0}>
+        {plans.length === 0 ? (
+          <UiState
+            kind="empty"
+            title="Aún no hay planes"
+            description="Crea un plan para que las órdenes preventivas se generen solas."
           />
-        </Box>
-      )}
+        ) : (
+          <Box sx={{ overflowX: 'auto' }}>
+            <DataTable
+              caption={`${plans.length} planes`}
+              rows={plans.map((plan) => ({ ...plan, plan }))}
+              columns={[
+                {
+                  key: 'vehicleId',
+                  label: 'Vehículo',
+                  render: (_value, row) => (
+                    <Link
+                      component="button"
+                      type="button"
+                      onClick={() => setSelected(row.id)}
+                      sx={{ ...linkSx, typography: 'body2', textAlign: 'left' }}
+                    >
+                      {vehicleLabel(directory, row.vehicleId)}
+                    </Link>
+                  ),
+                },
+                { key: 'plan', label: 'Intervalo', render: (_value, row) => intervals(row.plan) },
+                {
+                  key: 'lastServiceDate',
+                  label: 'Último servicio',
+                  render: (_value, row) =>
+                    `${formatDate(row.lastServiceDate ?? null)} · ${formatKm(row.lastServiceKm ?? null)}`,
+                },
+                {
+                  key: 'state',
+                  label: 'Estado',
+                  render: (_value, row) => (
+                    <StatusBadge
+                      label={row.state === 'active' ? 'Activo' : 'Pausado'}
+                      tone={row.state === 'active' ? 'success' : 'neutral'}
+                    />
+                  ),
+                },
+              ]}
+            />
+          </Box>
+        )}
+      </Panel>
       {current && (
         <PlanSchedule
           ports={ports}
@@ -186,7 +196,11 @@ function PlanSchedule({
     onExpired,
   );
   return (
-    <Card component="section" aria-label={`Próximo servicio de ${vehicle}`} sx={{ p: 2, mt: 3 }}>
+    <Card
+      component="section"
+      aria-label={`Próximo servicio de ${vehicle}`}
+      sx={{ p: { xs: 2, sm: 2.5 }, mb: 3 }}
+    >
       <Typography component="h2" variant="h6">
         Próximo servicio de {vehicle}
       </Typography>

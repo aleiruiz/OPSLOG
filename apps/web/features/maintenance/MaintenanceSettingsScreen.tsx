@@ -86,7 +86,16 @@ function SettingsForm({
       component="form"
       aria-label="Configuración de mantenimiento"
       onSubmit={submit}
-      sx={{ p: 2 }}
+      sx={{
+        p: { xs: 2, sm: 2.5 },
+        maxWidth: 760,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'flex-start',
+        gap: 2,
+        '& > *': { alignSelf: 'stretch' },
+        '& > button': { alignSelf: 'flex-start' },
+      }}
     >
       <FormSection
         title="Requisitos de las órdenes"
@@ -139,7 +148,7 @@ function SettingsForm({
           {notice.text}
         </Alert>
       )}
-      <Button type="submit" disabled={busy || amountError || currencyError}>
+      <Button type="submit" variant="contained" disabled={busy || amountError || currencyError}>
         Guardar configuración
       </Button>
     </Card>
@@ -158,6 +167,7 @@ export function MaintenanceSettingsScreen({
   return (
     <section aria-label="Configuración de mantenimiento">
       <PageHeader
+        eyebrow="Mantenimiento"
         title="Configuración de mantenimiento"
         description="Evidencia, aprobación de cierres y zona horaria."
       />

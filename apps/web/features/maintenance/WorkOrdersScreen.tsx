@@ -1,3 +1,4 @@
+import AddOutlined from '@mui/icons-material/AddOutlined';
 import React from 'react';
 import Box from '@mui/material/Box';
 import Link from '@mui/material/Link';
@@ -11,6 +12,7 @@ import {
   Field,
   FilterBar,
   PageHeader,
+  Panel,
   StatusBadge,
   UiState,
 } from '@opslog/ui';
@@ -21,6 +23,7 @@ import { errorKind, useResult } from './useResult';
 import type { MaintenanceViewer } from './workflow';
 import { CorrectiveOrderForm } from './CorrectiveOrderForm';
 import { useDirectory, vehicleLabel } from './directory';
+import { linkSx } from '../../app/router';
 
 export interface WorkOrdersScreenProps {
   readonly ports: MaintenancePorts;
@@ -62,11 +65,12 @@ export function WorkOrdersScreen({ ports, viewer, onOpen, onExpired }: WorkOrder
 
   const header = (
     <PageHeader
+      eyebrow="Mantenimiento"
       title="Órdenes de mantenimiento"
       description="Preventivas generadas por planes y correctivas registradas por el equipo."
       actions={
         canCreate && !creating ? (
-          <Button variant="contained" onClick={() => setCreating(true)}>
+          <Button variant="contained" startIcon={<AddOutlined />} onClick={() => setCreating(true)}>
             Nueva orden correctiva
           </Button>
         ) : undefined
@@ -93,7 +97,12 @@ export function WorkOrdersScreen({ ports, viewer, onOpen, onExpired }: WorkOrder
     .map((id) => ({ id, label: vehicleLabel(directory, id) }))
     .sort((a, b) => a.label.localeCompare(b.label, 'es'));
   const open = (order: BffWorkOrder) => (
-    <Link component="button" type="button" onClick={() => onOpen(order.id)}>
+    <Link
+      component="button"
+      type="button"
+      onClick={() => onOpen(order.id)}
+      sx={{ ...linkSx, typography: 'body2', textAlign: 'left' }}
+    >
       {order.description ?? `Orden ${KIND_LABELS[order.kind].toLowerCase()}`}
     </Link>
   );
@@ -130,142 +139,146 @@ export function WorkOrdersScreen({ ports, viewer, onOpen, onExpired }: WorkOrder
           }}
         />
       )}
-      <FilterBar onClear={() => setFilters(NO_FILTERS)}>
-        <Field
-          select
-          id="mnt-filter-status"
-          label="Estado"
-          value={filters.status}
-          onChange={(event) =>
-            setFilters({ ...filters, status: event.target.value as Filters['status'] })
-          }
-          sx={{ minWidth: 180 }}
-        >
-          <MenuItem value="">Todos</MenuItem>
-          {(Object.keys(STATUS_LABELS) as BffWorkOrderStatus[]).map((value) => (
-            <MenuItem key={value} value={value}>
-              {STATUS_LABELS[value]}
-            </MenuItem>
-          ))}
-        </Field>
-        <Field
-          select
-          id="mnt-filter-vehicle"
-          label="Vehículo"
-          value={filters.vehicleId}
-          onChange={(event) => setFilters({ ...filters, vehicleId: event.target.value })}
-          sx={{ minWidth: 180 }}
-        >
-          <MenuItem value="">Todos</MenuItem>
-          {vehicles.map((vehicle) => (
-            <MenuItem key={vehicle.id} value={vehicle.id}>
-              {vehicle.label}
-            </MenuItem>
-          ))}
-        </Field>
-        <Field
-          id="mnt-filter-month"
-          label="Mes programado"
-          type="month"
-          value={filters.month}
-          onChange={(event) => setFilters({ ...filters, month: event.target.value })}
-          InputLabelProps={{ shrink: true }}
+      <Panel>
+        <FilterBar onClear={() => setFilters(NO_FILTERS)}>
+          <Field
+            select
+            id="mnt-filter-status"
+            label="Estado"
+            value={filters.status}
+            onChange={(event) =>
+              setFilters({ ...filters, status: event.target.value as Filters['status'] })
+            }
+            sx={{ minWidth: 180 }}
+          >
+            <MenuItem value="">Todos</MenuItem>
+            {(Object.keys(STATUS_LABELS) as BffWorkOrderStatus[]).map((value) => (
+              <MenuItem key={value} value={value}>
+                {STATUS_LABELS[value]}
+              </MenuItem>
+            ))}
+          </Field>
+          <Field
+            select
+            id="mnt-filter-vehicle"
+            label="Vehículo"
+            value={filters.vehicleId}
+            onChange={(event) => setFilters({ ...filters, vehicleId: event.target.value })}
+            sx={{ minWidth: 180 }}
+          >
+            <MenuItem value="">Todos</MenuItem>
+            {vehicles.map((vehicle) => (
+              <MenuItem key={vehicle.id} value={vehicle.id}>
+                {vehicle.label}
+              </MenuItem>
+            ))}
+          </Field>
+          <Field
+            id="mnt-filter-month"
+            label="Mes programado"
+            type="month"
+            value={filters.month}
+            onChange={(event) => setFilters({ ...filters, month: event.target.value })}
+            InputLabelProps={{ shrink: true }}
+          />
+        </FilterBar>
+      </Panel>
+      <Panel title="Órdenes">
+        <DetailTabs
+          value={tab}
+          onChange={setTab}
+          tabs={[
+            {
+              id: 'list',
+              label: 'Lista',
+              content:
+                shown.length === 0 ? (
+                  empty
+                ) : (
+                  <Box sx={{ overflowX: 'auto' }}>
+                    <DataTable
+                      caption={`${shown.length} órdenes`}
+                      rows={rows}
+                      columns={[
+                        { key: 'order', label: 'Orden', render: (_value, row) => open(row.order) },
+                        {
+                          key: 'kind',
+                          label: 'Tipo',
+                          render: (_value, row) => KIND_LABELS[row.kind],
+                        },
+                        {
+                          key: 'vehicleId',
+                          label: 'Vehículo',
+                          render: (_value, row) => vehicleLabel(directory, row.vehicleId),
+                        },
+                        {
+                          key: 'status',
+                          label: 'Estado',
+                          render: (_value, row) => status(row.order),
+                        },
+                        {
+                          key: 'scheduledDate',
+                          label: 'Fecha programada',
+                          render: (_value, row) => formatDate(row.scheduledDate),
+                        },
+                      ]}
+                    />
+                  </Box>
+                ),
+            },
+            {
+              id: 'calendar',
+              label: 'Calendario',
+              content:
+                shown.length === 0 ? (
+                  empty
+                ) : (
+                  <Stack spacing={3}>
+                    {days.map(([day, items]) => (
+                      <Box
+                        component="section"
+                        key={day}
+                        aria-label={`Programadas el ${formatDate(day)}`}
+                      >
+                        <Typography component="h3" variant="h6">
+                          {formatDate(day)}
+                        </Typography>
+                        <Stack component="ul" spacing={1} sx={{ pl: 2 }}>
+                          {items.map((order) => (
+                            <li key={order.id}>
+                              <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap">
+                                {open(order)} {status(order)}
+                              </Stack>
+                            </li>
+                          ))}
+                        </Stack>
+                      </Box>
+                    ))}
+                    {undated.length > 0 && (
+                      <Box component="section" aria-label="Sin fecha programada">
+                        <Typography component="h3" variant="h6">
+                          Sin fecha programada
+                        </Typography>
+                        <Typography color="text.secondary">
+                          Aparecerán en el calendario cuando se asignen con una fecha.
+                        </Typography>
+                        <Stack component="ul" spacing={1} sx={{ pl: 2 }}>
+                          {undated.map((order) => (
+                            <li key={order.id}>
+                              <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap">
+                                {open(order)} {status(order)}
+                              </Stack>
+                            </li>
+                          ))}
+                        </Stack>
+                      </Box>
+                    )}
+                  </Stack>
+                ),
+            },
+          ]}
         />
-      </FilterBar>
-      <DetailTabs
-        value={tab}
-        onChange={setTab}
-        tabs={[
-          {
-            id: 'list',
-            label: 'Lista',
-            content:
-              shown.length === 0 ? (
-                empty
-              ) : (
-                <Box sx={{ overflowX: 'auto' }}>
-                  <DataTable
-                    caption={`${shown.length} órdenes`}
-                    rows={rows}
-                    columns={[
-                      { key: 'order', label: 'Orden', render: (_value, row) => open(row.order) },
-                      {
-                        key: 'kind',
-                        label: 'Tipo',
-                        render: (_value, row) => KIND_LABELS[row.kind],
-                      },
-                      {
-                        key: 'vehicleId',
-                        label: 'Vehículo',
-                        render: (_value, row) => vehicleLabel(directory, row.vehicleId),
-                      },
-                      {
-                        key: 'status',
-                        label: 'Estado',
-                        render: (_value, row) => status(row.order),
-                      },
-                      {
-                        key: 'scheduledDate',
-                        label: 'Fecha programada',
-                        render: (_value, row) => formatDate(row.scheduledDate),
-                      },
-                    ]}
-                  />
-                </Box>
-              ),
-          },
-          {
-            id: 'calendar',
-            label: 'Calendario',
-            content:
-              shown.length === 0 ? (
-                empty
-              ) : (
-                <Stack spacing={3}>
-                  {days.map(([day, items]) => (
-                    <Box
-                      component="section"
-                      key={day}
-                      aria-label={`Programadas el ${formatDate(day)}`}
-                    >
-                      <Typography component="h2" variant="h6">
-                        {formatDate(day)}
-                      </Typography>
-                      <Stack component="ul" spacing={1} sx={{ pl: 2 }}>
-                        {items.map((order) => (
-                          <li key={order.id}>
-                            <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap">
-                              {open(order)} {status(order)}
-                            </Stack>
-                          </li>
-                        ))}
-                      </Stack>
-                    </Box>
-                  ))}
-                  {undated.length > 0 && (
-                    <Box component="section" aria-label="Sin fecha programada">
-                      <Typography component="h2" variant="h6">
-                        Sin fecha programada
-                      </Typography>
-                      <Typography color="text.secondary">
-                        Aparecerán en el calendario cuando se asignen con una fecha.
-                      </Typography>
-                      <Stack component="ul" spacing={1} sx={{ pl: 2 }}>
-                        {undated.map((order) => (
-                          <li key={order.id}>
-                            <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap">
-                              {open(order)} {status(order)}
-                            </Stack>
-                          </li>
-                        ))}
-                      </Stack>
-                    </Box>
-                  )}
-                </Stack>
-              ),
-          },
-        ]}
-      />
+      </Panel>
     </Box>
   );
 }

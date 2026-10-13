@@ -109,7 +109,7 @@ export function MaintenanceArea({
           aria-label="Secciones de mantenimiento"
           variant="scrollable"
           scrollButtons="auto"
-          sx={{ mb: 2 }}
+          sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
         >
           {VIEWS.filter((item) => !item.permission || permissions.includes(item.permission)).map(
             (item) => (

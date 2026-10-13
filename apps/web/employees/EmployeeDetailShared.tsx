@@ -5,7 +5,6 @@ import { DescriptionList, Notifications, opslogTokens } from '@opslog/ui';
 import { BackLink as BackTo } from '../app/BackLink';
 import { employeesPath } from './EmployeeMessages';
 
-export { linkSx } from '../app/router';
 export function Mono({ children }: { children: React.ReactNode }) {
   return (
     <Typography component="span" sx={{ fontFamily: opslogTokens.typography.monoFamily }}>

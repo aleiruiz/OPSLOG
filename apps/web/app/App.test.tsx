@@ -146,6 +146,7 @@ describe('shell: session, company and user', () => {
     await screen.findByRole('heading', { name: 'Inicio', level: 1 });
     const toggle = screen.getByRole('button', { name: 'Menú' });
     click('Menú');
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
     const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
     event.preventDefault();
     act(() => {

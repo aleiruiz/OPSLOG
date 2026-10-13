@@ -6,6 +6,8 @@ import { expect, test, type Page } from '@playwright/test';
 const wcag = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 
 async function expectNoViolations(page: Page) {
+  // A click's ripple fades over the button for a moment; axe would measure contrast against it.
+  await expect(page.locator('.MuiTouchRipple-child')).toHaveCount(0);
   const results = await new AxeBuilder({ page }).withTags(wcag).analyze();
   expect(results.violations).toEqual([]);
 }

@@ -28,7 +28,9 @@ export function MyOrdersScreen({
 }) {
   const directory = useDirectory();
   const { state, reload } = useResult(() => ports.orders.list(), [ports], onExpired);
-  const header = <PageHeader title="Mis órdenes" description="Órdenes asignadas a ti." />;
+  const header = (
+    <PageHeader eyebrow="Mantenimiento" title="Mis órdenes" description="Órdenes asignadas a ti." />
+  );
   if (state.status === 'loading')
     return (
       <Box>
