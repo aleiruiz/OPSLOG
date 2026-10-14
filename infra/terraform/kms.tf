@@ -5,6 +5,10 @@ resource "aws_kms_key" "main" {
   enable_key_rotation     = true
   deletion_window_in_days = 30
   tags                    = local.tags
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_kms_alias" "main" {

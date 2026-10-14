@@ -39,6 +39,22 @@ resource "aws_iam_role_policy_attachment" "ssm" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
+resource "aws_iam_role_policy" "logs" {
+  count = var.enable_compute ? 1 : 0
+
+  name = "logs"
+  role = aws_iam_role.app[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+      Resource = "${aws_cloudwatch_log_group.app[0].arn}:*"
+    }]
+  })
+}
+
 resource "aws_iam_instance_profile" "app" {
   count = var.enable_compute ? 1 : 0
 

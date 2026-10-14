@@ -48,7 +48,8 @@ resource "aws_db_instance" "main" {
 
   identifier                  = local.name
   engine                      = "mysql"
-  engine_version              = "8.0"
+  engine_version              = var.database_engine_version
+  engine_lifecycle_support    = "open-source-rds-extended-support-disabled"
   instance_class              = var.database_instance_class
   allocated_storage           = var.database_allocated_storage
   storage_type                = "gp3"

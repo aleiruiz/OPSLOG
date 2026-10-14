@@ -13,7 +13,7 @@ Este directorio **no autoriza** aprovisionar nada. Aplicar lo decide una persona
 | Cognito: pool invite-only, correo para recuperación, contraseña mínima 12, TOTP opcional, protección contra borrado; cliente confidencial (authorization code + PKCE, sin flujos de contraseña) | `cognito_domain_prefix`: dominio alojado |
 | | `enable_compute`: una instancia `t4g` (IMDSv2, disco cifrado, sin SSH, acceso por SSM), Elastic IP y rol con la política de la app |
 | | `enable_cdn`: bucket privado del SPA + CloudFront (OAC); con cómputo, enruta `api_path_pattern` a la instancia |
-| | `enable_database`: MySQL Single-AZ privado, credenciales maestras en Secrets Manager |
+| | `enable_database`: MySQL 8.4 Single-AZ privado, credenciales maestras en Secrets Manager |
 
 Las etapas 0–2 de ADR-0012 están cubiertas (`stage` ajusta retención de logs y de copias). Las etapas 3–4 (Fargate, ALB, Multi-AZ) no están implementadas: `stage` solo acepta 0, 1 y 2.
 
@@ -61,10 +61,12 @@ terraform import 'aws_iam_user.app[0]' opslog-app-<entorno>
 # Cognito
 terraform import aws_cognito_user_pool.main <user-pool-id>
 terraform import aws_cognito_user_pool_client.bff <user-pool-id>/<client-id>
+terraform import 'aws_cognito_user_pool_domain.main[0]' <prefijo-del-dominio>   # solo si tiene dominio alojado y fija cognito_domain_prefix
 ```
 
 Después, `terraform plan` debe mostrar solo **altas** (ciclo de vida, política administrada de la app y su asociación, protección contra borrado del pool) y ajustes en sitio. Revise antes de aplicar:
 
+- **Reemplazos:** ante cualquier «must be replaced» del **pool** de Cognito (destruiría a todos los usuarios), del bucket o de la clave, deténgase y alinee las variables; los recursos críticos llevan `prevent_destroy`. El pool declara `username_configuration` sin distinguir mayúsculas; si la demo difiere, el plan lo mostrará.
 - **Cliente de Cognito:** `generate_secret` fuerza reemplazo. Si el plan quiere **reemplazar** el cliente, deténgase: cambiaría `client_id` y secreto. Compruebe con `aws cognito-idp describe-user-pool-client` si el cliente existente tiene secreto y alinee la configuración.
 - **Política del usuario IAM:** la demo tiene una política en línea. Terraform crea una administrada con el mismo alcance y la asocia; tras aplicar, borre la en línea a mano (`aws iam delete-user-policy`) para no duplicar.
 - **Nivel de Cognito y ajustes finos:** si el plan propone cambios en el pool (nivel, atributos), ajuste las variables a lo existente en vez de aplicar a ciegas; algunos atributos del pool no se pueden cambiar tras la creación.
@@ -79,6 +81,6 @@ Las claves son `tenants/<tenant>/<quarantine|released>/…`; una regla de ciclo 
 ## Salvedades
 
 - Escrito sin acceso a AWS: validado con `fmt`, `validate` y un plan simulado, **no aplicado** contra una cuenta real. Los atributos del proveedor (p. ej. `user_pool_tier`) y qué funciones ofrece cada nivel de Cognito (TOTP, etc.) deben confirmarse en el primer `plan` real.
-- `.terraform.lock.hcl` no se versiona aún: se genera con `terraform init` contra el registro oficial y conviene fijarlo en el primer despliegue real.
-- Con CloudFront, el certificado TLS de la instancia debe coincidir con `api_origin_domain`; con el DNS por defecto de la Elastic IP, CloudFront devolverá 502.
+- `.terraform.lock.hcl` no se versiona: se genera con `terraform init` contra el registro oficial (está en `.gitignore`); la versión del proveedor se acota con `~> 5.100`.
+- Con CloudFront, CloudFront no reenvía la cabecera Host al origen; el certificado TLS de la instancia debe coincidir con `api_origin_domain`; con el DNS por defecto de la Elastic IP, CloudFront devolverá 502.
 - Los importes de ADR-0012 son estimaciones sin verificar; revise `terraform plan` y los guardarraíles de costo antes de aplicar.

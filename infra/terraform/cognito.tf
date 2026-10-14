@@ -7,6 +7,15 @@ resource "aws_cognito_user_pool" "main" {
   username_attributes      = ["email"]
   auto_verified_attributes = ["email"]
 
+  username_configuration {
+    case_sensitive = false
+  }
+
+  # A replaced pool deletes every user: never let a plan do it silently.
+  lifecycle {
+    prevent_destroy = true
+  }
+
   # Invite-only: users are created by OPSLOG (admin-create), never self-registered.
   admin_create_user_config {
     allow_admin_create_user_only = true

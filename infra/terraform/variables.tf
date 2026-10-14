@@ -110,12 +110,6 @@ variable "allow_object_tagging" {
   default     = true
 }
 
-variable "cors_allowed_origins" {
-  description = "Origins allowed to use presigned URLs from a browser. Empty means no CORS configuration."
-  type        = list(string)
-  default     = []
-}
-
 # ---- Cognito --------------------------------------------------------------------------------
 
 variable "cognito_callback_urls" {
@@ -235,4 +229,10 @@ variable "api_path_pattern" {
   description = "CloudFront path pattern routed to the instance; everything else is the SPA."
   type        = string
   default     = "/api/*"
+}
+
+variable "database_engine_version" {
+  description = "MySQL engine version (SPECS reference: 8.4; 8.0 is past RDS standard support)."
+  type        = string
+  default     = "8.4"
 }

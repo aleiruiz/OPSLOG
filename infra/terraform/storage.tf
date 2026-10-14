@@ -1,6 +1,10 @@
 resource "aws_s3_bucket" "files" {
   bucket = local.bucket_name
   tags   = local.tags
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_s3_bucket_public_access_block" "files" {
@@ -98,6 +102,10 @@ resource "aws_s3_bucket_lifecycle_configuration" "files" {
 
     filter {}
 
+    expiration {
+      expired_object_delete_marker = true
+    }
+
     noncurrent_version_expiration {
       noncurrent_days = var.noncurrent_version_expiry_days
     }
@@ -105,17 +113,5 @@ resource "aws_s3_bucket_lifecycle_configuration" "files" {
     abort_incomplete_multipart_upload {
       days_after_initiation = 7
     }
-  }
-}
-
-resource "aws_s3_bucket_cors_configuration" "files" {
-  count  = length(var.cors_allowed_origins) > 0 ? 1 : 0
-  bucket = aws_s3_bucket.files.id
-
-  cors_rule {
-    allowed_methods = ["GET", "PUT"]
-    allowed_origins = var.cors_allowed_origins
-    allowed_headers = ["*"]
-    max_age_seconds = 600
   }
 }

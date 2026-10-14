@@ -58,7 +58,24 @@ data "aws_cloudfront_cache_policy" "disabled" {
 
 data "aws_cloudfront_origin_request_policy" "all_viewer" {
   count = var.enable_cdn ? 1 : 0
-  name  = "Managed-AllViewer"
+  name  = "Managed-AllViewerExceptHostHeader"
+}
+
+# SPA fallback only on the web behaviour: extensionless paths serve the shell. A distribution-wide
+# custom_error_response would also turn API 403/404 into 200 HTML, so it is deliberately not used.
+resource "aws_cloudfront_function" "spa" {
+  count = var.enable_cdn ? 1 : 0
+
+  name    = "${local.name}-spa"
+  runtime = "cloudfront-js-2.0"
+  publish = true
+  code    = <<-JS
+    function handler(event) {
+      var request = event.request;
+      if (request.uri.indexOf('.') === -1) request.uri = '/index.html';
+      return request;
+    }
+  JS
 }
 
 resource "aws_cloudfront_distribution" "main" {
@@ -70,6 +87,13 @@ resource "aws_cloudfront_distribution" "main" {
   price_class         = "PriceClass_100"
   http_version        = "http2and3"
   tags                = local.tags
+
+  lifecycle {
+    precondition {
+      condition     = length(var.cdn_aliases) == 0 || var.acm_certificate_arn != null
+      error_message = "cdn_aliases requires acm_certificate_arn (certificate in us-east-1)."
+    }
+  }
 
   origin {
     origin_id                = "web"
@@ -100,6 +124,11 @@ resource "aws_cloudfront_distribution" "main" {
     cached_methods         = ["GET", "HEAD"]
     compress               = true
     cache_policy_id        = data.aws_cloudfront_cache_policy.optimized[0].id
+
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.spa[0].arn
+    }
   }
 
   dynamic "ordered_cache_behavior" {
@@ -114,19 +143,6 @@ resource "aws_cloudfront_distribution" "main" {
       cache_policy_id          = data.aws_cloudfront_cache_policy.disabled[0].id
       origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer[0].id
     }
-  }
-
-  # SPA routing: unknown paths fall back to the shell.
-  custom_error_response {
-    error_code         = 403
-    response_code      = 200
-    response_page_path = "/index.html"
-  }
-
-  custom_error_response {
-    error_code         = 404
-    response_code      = 200
-    response_page_path = "/index.html"
   }
 
   restrictions {

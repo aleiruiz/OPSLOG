@@ -14,7 +14,7 @@ data "aws_iam_policy_document" "app" {
     content {
       sid       = "DataKey"
       effect    = "Allow"
-      actions   = ["kms:GenerateDataKey", "kms:Decrypt", "kms:Encrypt"]
+      actions   = ["kms:GenerateDataKey", "kms:Decrypt"]
       resources = [aws_kms_key.main[0].arn]
     }
   }
