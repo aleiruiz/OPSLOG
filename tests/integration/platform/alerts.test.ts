@@ -440,6 +440,30 @@ describe('role matrix', () => {
       }
     });
 
+  it('refuses to set the close-cost threshold to a caller who may not see costs', async () => {
+    const context = { tenantId: 't', actor: { subject: 's' } };
+    const settings = (mayViewCosts: boolean) =>
+      new CompanySettingsApi({
+        service: new SettingsService(new InMemorySettingsStore()),
+        authorize: (async () => context) as never,
+        mayViewCosts: async () => mayViewCosts,
+        audit: () => undefined,
+      });
+    const blind = settings(false);
+    for (const closeCostThreshold of [null, { amountMinor: '1', currency: 'MXN' }])
+      expect(
+        (await blind.update('t', 'c', 0, { ...SETTINGS, closeCostThreshold })).error,
+      ).toMatchObject({
+        code: 'forbidden',
+        status: 403,
+      });
+    expect((await blind.get('t', 'c')).value?.version).toBe(0);
+    expect((await blind.update('t', 'c', 0, SETTINGS)).ok).toBe(true);
+    expect(
+      (await settings(true).update('t', 'c', 0, { ...SETTINGS, closeCostThreshold: null })).ok,
+    ).toBe(true);
+  });
+
   it('asks the authorizer for the documented permissions on every operation', async () => {
     const asked: string[][] = [];
     const authorize = async (_token: string, _correlation: string, required: readonly string[]) => {

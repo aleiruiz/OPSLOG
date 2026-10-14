@@ -160,6 +160,11 @@ export class CompanySettingsApi {
   ): Promise<PlatformResponse<CompanySettingsView>> {
     try {
       const context = await this.deps.authorize(token, correlationId, SETTINGS_PERMISSIONS.update);
+      // The D20 threshold is an amount: only a caller who may see costs may set it. Omitting the key
+      // (keeping the stored value) is free.
+      const setsThreshold =
+        typeof input === 'object' && input !== null && Object.hasOwn(input, 'closeCostThreshold');
+      if (setsThreshold && !(await this.mayViewCosts(context))) throw new AuthError('forbidden');
       const saved = await this.deps.service.update(
         context.tenantId,
         `user-${context.actor.subject}`,

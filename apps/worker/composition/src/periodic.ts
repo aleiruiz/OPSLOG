@@ -81,7 +81,8 @@ export class PeriodicScheduler {
   public start(): void {
     if (this.handles.length > 0) return;
     this.handles = this.jobs.map((job) =>
-      this.timers.set(() => void this.tick(job.name), job.intervalMs),
+      // A failed tick waits for the next one; it never becomes an unhandled rejection.
+      this.timers.set(() => void this.tick(job.name).catch(() => undefined), job.intervalMs),
     );
   }
 
