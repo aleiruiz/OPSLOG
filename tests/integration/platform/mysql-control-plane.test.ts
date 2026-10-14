@@ -101,6 +101,23 @@ suite('durable control plane', () => {
     await admin.end();
   }, 60_000);
 
+  it('leaves the schema-owning migrator accounts locked after migrate, and migrate is repeatable', async () => {
+    const locked = async () => {
+      const [rows] = await admin.query(
+        'SELECT user, account_locked AS locked FROM mysql.user WHERE user IN (?)',
+        [
+          [accounts.auditMigrator, accounts.filesMigrator, accounts.maintenanceMigrator].map(
+            (a) => a.username,
+          ),
+        ],
+      );
+      return (rows as { user: string; locked: string }[]).map((row) => row.locked);
+    };
+    expect(await locked()).toEqual(['Y', 'Y', 'Y']);
+    await migrateFleetDatabase(endpoint, database, accounts);
+    expect(await locked()).toEqual(['Y', 'Y', 'Y']);
+  }, 120_000);
+
   it('keeps suspension, removal and role changes across restarts', async () => {
     const first = await boot();
     const tenantId = first.platform.tenantId;

@@ -243,6 +243,59 @@ suite('API on MySQL across a restart', () => {
     ).toBe(false);
   }, 180_000);
 
+  it('starts the server when the configured bootstrap admin can no longer sign in', async () => {
+    const before = await boot();
+    const { world } = before;
+    // A second administrator removes the original one: the bootstrap subject has no membership left.
+    const second = await world.member('subject-admin', 'admin', 'subject-admin-2');
+    const token = (await world.platform.signIn(await world.principal('subject-admin-2'))).value
+      ?.token as string;
+    const members = (await world.platform.listMembers(token, 'corr-m')).value?.members ?? [];
+    const original = members.find(
+      (member) => member.roleId === 'admin' && member.id !== second.identityId,
+    );
+    expect(original).toBeDefined();
+    expect((await world.platform.removeMember(token, 'corr-rm', original?.id as string)).ok).toBe(
+      true,
+    );
+    expect((await world.platform.signIn(await world.principal('subject-admin'))).ok).toBe(false);
+    const tenantsBefore = world.platform.tenants.all().length;
+    await shutdown();
+
+    const serverEnv = {
+      ...env,
+      OPSLOG_ENV: 'staging',
+      OPSLOG_PERSISTENCE: 'mysql',
+      OPSLOG_PUBLIC_ORIGIN: 'http://localhost:8081',
+      OPSLOG_BFF_SECRET: 'b'.repeat(32),
+      OPSLOG_GRANT_SECRET: 'g'.repeat(32),
+      OPSLOG_BOOTSTRAP_COMPANY: 'Empresa Persistente',
+      OPSLOG_BOOTSTRAP_ADMIN_SUB: 'subject-admin',
+      PORT: '0',
+      HOST: '127.0.0.1',
+    };
+    const lines: string[] = [];
+    const running = await startServer(
+      serverEnv,
+      readConfig(serverEnv),
+      JSON.parse(
+        readFileSync(new URL('../../../infra/runtime/staging.json', import.meta.url), 'utf8'),
+      ) as RuntimeDescriptor,
+      (line) => lines.push(line),
+    );
+    try {
+      expect(lines).toContain(
+        'bootstrap_skipped company already exists (configured admin cannot sign in)',
+      );
+    } finally {
+      await running.stop();
+    }
+    const [rows] = await admin.query(
+      `SELECT COUNT(*) AS n FROM ${identifier(database)}.opslog_control_tenants`,
+    );
+    expect((rows as { n: number }[])[0]?.n).toBe(tenantsBefore);
+  }, 120_000);
+
   it('starts the server on MySQL, answers the health check and closes cleanly', async () => {
     const serverEnv = {
       ...env,

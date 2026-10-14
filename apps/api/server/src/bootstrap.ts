@@ -3,7 +3,7 @@ import {
   type ExternalClaims,
   type OidcVerifier,
 } from '../../../../packages/platform/auth/src/index.js';
-import type { Platform } from '../../composition/src/index.js';
+import { PersistentTenantStore, type Platform } from '../../composition/src/index.js';
 
 const NONCE = 'bootstrap';
 
@@ -18,7 +18,7 @@ class ConfiguredSubjectVerifier implements OidcVerifier {
 /**
  * Creates the first company and its administrator, because Cognito is invite-only and a fresh stack
  * has nobody who could invite. Idempotent: when the subject already signs in (an active membership),
- * nothing is created. Returns one log line without personal data.
+ * nothing is created; when a persistent deployment already hosts its company it is skipped too. Returns one log line without personal data.
  */
 export async function bootstrapFirstCompany(
   platform: Platform,
@@ -36,6 +36,15 @@ export async function bootstrapFirstCompany(
     await platform.signOut(existing.value.token);
     return 'bootstrap_skipped admin already has an active membership';
   }
+  // A persistent deployment hosts exactly one company: if it exists but the configured subject can no
+  // longer sign in (membership revoked, subject changed), failing here would crash-loop the container.
+  if (
+    platform.tenants instanceof PersistentTenantStore &&
+    platform.tenants
+      .all()
+      .some((tenant) => tenant.status === 'active' || tenant.status === 'suspended')
+  )
+    return 'bootstrap_skipped company already exists (configured admin cannot sign in)';
   const created = await platform.bootstrapTenant({
     name: input.companyName,
     adminPrincipal: principal,

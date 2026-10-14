@@ -131,6 +131,21 @@ export async function provisionMigrators(
   );
 }
 
+/**
+ * Unlocks or locks the DDL-capable migrator accounts. They stay locked outside `migrateFleetDatabase`,
+ * so a process that merely holds the derivation secret (the API) cannot sign in as a schema owner.
+ */
+export async function setMigratorsLocked(
+  admin: AdminConnection,
+  set: FleetAccountSet,
+  locked: boolean,
+): Promise<void> {
+  for (const migrator of migratorAccounts(set))
+    await admin.query(
+      `ALTER USER ${quoteUser(migrator.username)} ACCOUNT ${locked ? 'LOCK' : 'UNLOCK'}`,
+    );
+}
+
 const APPEND_AUDIT = 'opslog_append_local_audit_and_delivery';
 const ENQUEUE_OUTBOX = 'opslog_enqueue_tenant_outbox';
 
@@ -227,7 +242,7 @@ export function migrationCredentials(
  * One-shot, idempotent provisioning of a deployment database with the admin account: creates the
  * database and the migrator accounts, applies every migration in order (fleet modules, files,
  * maintenance, incidents, audit, identity and control plane), then creates the runtime accounts with
- * their grants. Safe to run on every deploy; the API runtime accounts never run DDL.
+ * their grants. The migrator accounts are unlocked only while it runs. Safe to run on every deploy; the API runtime accounts never run DDL.
  */
 export async function migrateFleetDatabase(
   admin: MysqlAdminEndpoint,
@@ -247,6 +262,7 @@ export async function migrateFleetDatabase(
       `CREATE DATABASE IF NOT EXISTS ${quoteName(database)} CHARACTER SET utf8mb4`,
     );
     await provisionMigrators(connection, database, set);
+    await setMigratorsLocked(connection, set, false);
     const credentials = migrationCredentials(admin, database, set);
     const applied = await runFleetMigrations(credentials);
     log(`fleet migrations applied: ${applied.join(', ')}`);
@@ -256,6 +272,10 @@ export async function migrateFleetDatabase(
     await provisionIdentityAccount(connection, database, set);
     return [...applied, 'audit', 'identity', 'control-plane'];
   } finally {
-    await connection.end();
+    try {
+      await setMigratorsLocked(connection, set, true);
+    } finally {
+      await connection.end();
+    }
   }
 }
