@@ -27,7 +27,29 @@ proveedor real requiere una asignación posterior que reactive AWS y autorice el
 ## Pendiente (no se declara cumplido)
 
 - Adaptador TypeORM/MySQL persistente de identidad (`IdentityStore`) y de membresías/roles.
-- Verificador OIDC real (código de autorización + PKCE, firma, audiencia) y entrega de correo.
+- Entrega de correo. (El verificador OIDC real contra Cognito ya existe; ver abajo.)
 - BFF HTTP: rutas, cookie de sesión, CSRF, límites de tasa; cliente web generado en lugar del mock.
 - S3 real, KMS e IAM (rol de aplicación con prefijo por tenant), cola durable y reconciliador de escaneos.
 - Despliegue real a un entorno de pruebas (cómputo, red, secretos, observabilidad) y cualquier uso de producción.
+
+## Inicio de sesión real con Cognito (demo)
+
+El BFF puede verificar identidades contra Amazon Cognito con `createCognitoVerifier` (`packages/platform/auth`):
+código de autorización + PKCE S256, cliente confidencial, firma RS256 contra el JWKS del pool, `iss`, `aud`, `token_use=id`,
+vigencia y `nonce`. Los tokens nunca llegan al navegador. El navegador solo guarda, en `sessionStorage` y durante el intento,
+el verificador PKCE, `state` y `nonce`; se consumen al volver.
+
+Variables de entorno del BFF (ninguna se versiona; el secreto va solo en el entorno de despliegue):
+
+| Variable                    | Valor                                                                      |
+| --------------------------- | -------------------------------------------------------------------------- |
+| `OPSLOG_OIDC_ISSUER`        | `https://cognito-idp.<región>.amazonaws.com/<id del pool>`                 |
+| `OPSLOG_OIDC_DOMAIN`        | dominio del Hosted UI, `https://<prefijo>.auth.<región>.amazoncognito.com` |
+| `OPSLOG_OIDC_CLIENT_ID`     | id del cliente confidencial                                                |
+| `OPSLOG_OIDC_CLIENT_SECRET` | secreto del cliente                                                        |
+| `OPSLOG_OIDC_REDIRECT_URI`  | `https://<dominio de la demo>/auth/callback`                               |
+
+`cognitoConfigFromEnv(process.env)` las lee y valida; la plataforma se compone con `verifier: createCognitoVerifier(config)` y
+`issuer: config.issuer`. Para la web, en la compilación de producción: `VITE_OIDC_DOMAIN` (igual que arriba) y `VITE_OIDC_CLIENT_ID`
+(públicos). Sin ellos la compilación falla cerrada. La ruta de retorno de la web es `/auth/callback`: esa URL exacta debe estar
+registrada como Callback URL del cliente de Cognito (y la de cierre de sesión no se usa todavía).

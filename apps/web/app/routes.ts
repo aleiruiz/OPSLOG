@@ -14,6 +14,7 @@ export interface RouteDefinition {
     | 'home'
     | 'login'
     | 'invitation'
+    | 'authCallback'
     | 'company'
     | 'users'
     | 'roles'
@@ -77,6 +78,8 @@ export const routes: readonly RouteDefinition[] = [
     nav: { group: 'Inicio', label: 'Inicio' },
   },
   { id: 'login', pattern: '/iniciar-sesion', title: 'Iniciar sesión', access: 'public' },
+  // Return address of a redirecting identity provider (registered there as the callback URL).
+  { id: 'authCallback', pattern: '/auth/callback', title: 'Verificando acceso', access: 'public' },
   {
     id: 'invitation',
     pattern: '/invitacion/:token',

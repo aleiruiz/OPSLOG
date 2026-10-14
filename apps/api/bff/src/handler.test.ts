@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { serializeApiError } from '../../../../packages/contracts/src/index.js';
 import { ERRORS } from './http.js';
 import * as bff from './index.js';
@@ -159,6 +159,30 @@ describe('login, session and logout', () => {
       'text',
     ])
       expectUniformError(await browser.post('/api/auth/login', { json }), 400, 'bad_request');
+  });
+
+  it('passes a well-formed PKCE verifier to the verifier and rejects malformed ones', async () => {
+    await fixture();
+    const browser = world.browser();
+    await world.prepare(browser);
+    const verify = vi.spyOn(world.verifier, 'verify');
+    const codeVerifier = 'a'.repeat(43);
+    const ok = await browser.post('/api/auth/login', {
+      json: { ...world.credentials('subject-admin-a'), codeVerifier },
+    });
+    expect(ok.status).toBe(200);
+    expect((verify.mock.calls[0] as unknown[])[3]).toBe(codeVerifier);
+    for (const bad of ['short', 'a'.repeat(129), `${'a'.repeat(42)} `, 7, null]) {
+      const attempt = world.browser();
+      await world.prepare(attempt);
+      expectUniformError(
+        await attempt.post('/api/auth/login', {
+          json: { ...world.credentials('subject-admin-a'), codeVerifier: bad },
+        }),
+        400,
+        'bad_request',
+      );
+    }
   });
 
   it('logs out: clears the cookie and revokes the session on the server', async () => {

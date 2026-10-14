@@ -20,6 +20,8 @@ export interface BffCsrfResponse {
 export interface BffOidcCredentials {
   readonly code: string;
   readonly nonce: string;
+  /** PKCE verifier of the authorization request; the BFF presents it when it redeems the code. */
+  readonly codeVerifier?: string | undefined;
 }
 
 export interface BffSession {

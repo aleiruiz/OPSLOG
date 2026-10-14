@@ -261,15 +261,15 @@ export class Platform {
     );
   }
 
-  /** Verifies an authorization code through the injected OIDC verifier and seals the principal. */
+  /** Verifies an authorization code (and PKCE verifier) through the injected OIDC verifier and seals the principal. */
   public async verifyPrincipal(
     code: string,
     nonce: string,
+    verifier?: string,
   ): Promise<PlatformResponse<VerifiedExternalPrincipal>> {
+    const { verifier: oidc, issuer } = this.options;
     try {
-      return success(
-        await verifyExternalPrincipal(this.options.verifier, code, this.options.issuer, nonce),
-      );
+      return success(await verifyExternalPrincipal(oidc, code, issuer, nonce, verifier));
     } catch {
       return failure(new PlatformError('unauthorized'));
     }

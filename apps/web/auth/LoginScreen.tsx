@@ -25,7 +25,7 @@ export function LoginScreen() {
     }
     setSubmitting(true);
     setProblem(null);
-    const result = await signIn(hint);
+    const result = await signIn(hint, { next: router.search.get('siguiente') ?? undefined });
     setSubmitting(false);
     if (result.ok) {
       router.navigate(safeNextPath(router.search.get('siguiente')), { replace: true });

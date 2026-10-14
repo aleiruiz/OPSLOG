@@ -1,6 +1,7 @@
 import React from 'react';
 import { UiState } from '@opslog/ui';
 import { InvitationScreen } from '../auth/InvitationScreen';
+import { AuthCallbackScreen } from '../auth/AuthCallbackScreen';
 import { LoginScreen } from '../auth/LoginScreen';
 import { SessionExpiredPanel } from '../auth/SessionExpiredPanel';
 import { SessionProvider, useSession } from '../auth/session';
@@ -140,6 +141,12 @@ function Routes() {
           />
         </main>
       );
+    if (match?.route.id === 'authCallback')
+      return (
+        <main>
+          <AuthCallbackScreen />
+        </main>
+      );
     if (match?.route.id === 'login')
       return (
         <main>
@@ -154,7 +161,7 @@ function Routes() {
 
   const { session } = state;
   const expired = state.status === 'expired';
-  if (match?.route.id === 'login') return <Redirect to="/" />;
+  if (match?.route.id === 'login' || match?.route.id === 'authCallback') return <Redirect to="/" />;
 
   const allowed = match ? isAllowed(match.route.access, can) : true;
   let screen: React.ReactNode;

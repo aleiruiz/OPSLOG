@@ -194,7 +194,22 @@ export interface AuthPort {
  */
 export interface OidcPort {
   readonly hintLabel?: string | undefined;
-  authorize(hint: string): Promise<Result<OidcCredentials>>;
+  /** True when `authorize` sends the browser away and the sign-in finishes in `complete` on return. */
+  readonly redirects?: boolean | undefined;
+  authorize(hint: string, context?: OidcContext): Promise<Result<OidcCredentials>>;
+  /** Redirecting providers only: reads the provider's answer from the callback address. */
+  complete?(search: URLSearchParams): Result<OidcCompletion>;
+}
+
+/** What the person was doing when the browser left for the provider; restored on return. */
+export interface OidcContext {
+  readonly invitationToken?: string | undefined;
+  readonly next?: string | undefined;
+}
+
+export interface OidcCompletion {
+  readonly credentials: OidcCredentials;
+  readonly context: OidcContext;
 }
 
 export interface TenantAdminPort {
