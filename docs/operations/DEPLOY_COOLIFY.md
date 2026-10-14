@@ -16,7 +16,7 @@ El worker corre dentro de `api` porque hoy todos los adaptadores son en memoria:
 
 ## Variables de entorno
 
-Se definen en Coolify (Environment Variables de la aplicación) o en un `.env` local (`deploy/env.example`). Nunca se versionan valores reales.
+Se definen en Coolify (Environment Variables de la aplicación) o en un `.env` local (`deploy/variables.example`). Nunca se versionan valores reales.
 
 | Variable                                                                                         | Obligatoria   | Qué es                                                                                                                                                 |
 | ------------------------------------------------------------------------------------------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -42,7 +42,7 @@ Se definen en Coolify (Environment Variables de la aplicación) o en un `.env` l
 ## Prueba local
 
 ```sh
-cp deploy/env.example .env   # rellenar los secretos
+cp deploy/variables.example .env   # rellenar los secretos
 docker compose -f docker-compose.yml -f deploy/compose.local.yml up --build
 # http://localhost:8081/healthz  y  http://localhost:8081/api/auth/csrf
 ```

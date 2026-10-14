@@ -13,7 +13,7 @@ Tasks.md
 .agent-workspaces
 .env
 .env.*
-!.env.example
+!deploy/variables.example
 docs
 e2e
 tests
