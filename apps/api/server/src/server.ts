@@ -1,0 +1,93 @@
+import type { Server } from 'node:http';
+import { createBffHandler, createBffServer, type BffHandler } from '../../bff/src/index.js';
+import { InMemoryAuditStore } from '../../../../packages/platform/audit/src/index.js';
+import {
+  createPlatform,
+  FakeOidcVerifier,
+  InMemoryTenantStore,
+  s3ObjectStorageFromEnv,
+} from '../../composition/src/index.js';
+import { assertStagingOnly, type RuntimeDescriptor } from '../../../../infra/runtime/src/index.js';
+import type { ServerConfig, Env } from './config.js';
+import { startWorkerLoop, type WorkerLoop } from './worker-loop.js';
+
+/** Liveness endpoint for the container health check; answered before the BFF so it needs no session. */
+export const HEALTH_PATH = '/healthz';
+
+const HEALTH_RESPONSE = {
+  status: 200,
+  headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
+  body: '{"status":"ok"}',
+} as const;
+
+function withHealth(handler: BffHandler): BffHandler {
+  return (request) =>
+    request.method === 'GET' && request.url === HEALTH_PATH
+      ? Promise.resolve(HEALTH_RESPONSE)
+      : handler(request);
+}
+
+export interface RunningServer {
+  readonly server: Server;
+  readonly port: number;
+  /** Runs one worker tick now; the loop runs the same tick on a timer. */
+  tick(): Promise<void>;
+  stop(): Promise<void>;
+}
+
+const stdout = (line: string): void => void process.stdout.write(`${line}\n`);
+
+/**
+ * Composes the platform (in-memory adapters, see docs/operations/DEPLOY_COOLIFY.md), the BFF and the
+ * in-process worker loop, and starts listening. Staging only: the guard refuses to start otherwise.
+ */
+export async function startServer(
+  env: Env,
+  config: ServerConfig,
+  descriptor: RuntimeDescriptor,
+  log: (line: string) => void = stdout,
+): Promise<RunningServer> {
+  assertStagingOnly(env, descriptor);
+  const verifier = new FakeOidcVerifier();
+  const platform = createPlatform({
+    verifier,
+    issuer: verifier.issuer,
+    grantSecret: config.grantSecret,
+    environment: 'staging',
+    adapters: {
+      tenants: new InMemoryTenantStore(),
+      ...(config.objectStorage === 's3' ? { storage: s3ObjectStorageFromEnv(env) } : {}),
+      audit: new InMemoryAuditStore(),
+      // In memory there is no separate projection to relay to; the relay stage is a no-op.
+      auditRelay: { runBatch: async () => 0 },
+    },
+  });
+  const handler = createBffHandler({
+    platform,
+    secret: config.bffSecret,
+    allowedOrigins: [config.publicOrigin],
+    // Only the correlation id, the route id and the error class are ever logged.
+    onError: (event) => log(`bff_error ${event.correlationId} ${event.route} ${event.errorClass}`),
+  });
+  const server = createBffServer(withHealth(handler));
+  const worker: WorkerLoop = startWorkerLoop(platform.runtime, log);
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(config.port, config.host, resolve);
+  });
+  const address = server.address();
+  const port = typeof address === 'object' && address ? address.port : config.port;
+  log(`opslog api listening on ${config.host}:${port}`);
+  return {
+    server,
+    port,
+    tick: worker.tick,
+    stop: async () => {
+      await worker.stop();
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+        server.closeAllConnections();
+      });
+    },
+  };
+}

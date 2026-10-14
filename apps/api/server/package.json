@@ -1,0 +1,9 @@
+{
+  "name": "@opslog/api-server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:bundle": "node build.mjs",
+    "test:unit": "vitest run"
+  }
+}

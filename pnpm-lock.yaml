@@ -118,6 +118,8 @@ importers:
 
   apps/api/maintenance/plans: {}
 
+  apps/api/server: {}
+
   apps/api/tenants:
     dependencies:
       '@opslog/domain-tenants':
@@ -182,12 +184,6 @@ importers:
   apps/worker/incident-sla: {}
 
   apps/worker/maintenance-plans: {}
-
-  infra/storage:
-    dependencies:
-      '@aws-sdk/client-s3':
-        specifier: ^3.1150.0
-        version: 3.1150.0
 
   packages/contracts:
     devDependencies:

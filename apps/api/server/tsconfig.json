@@ -1,0 +1,16 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../../",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo",
+    "resolveJsonModule": true
+  },
+  "include": ["src/**/*.ts", "../../../infra/runtime/staging.json"],
+  "exclude": ["src/**/*.test.ts"],
+  "references": [
+    { "path": "../composition" },
+    { "path": "../bff" },
+    { "path": "../../../infra/runtime" }
+  ]
+}

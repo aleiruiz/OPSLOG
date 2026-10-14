@@ -1,0 +1,13 @@
+# Variables of the demo stack (docker-compose.yml). Copy to .env for a local run; on Coolify set
+# them in the application's Environment Variables. Never commit real values.
+OPSLOG_PUBLIC_ORIGIN=http://localhost:8081
+# openssl rand -base64 48
+OPSLOG_BFF_SECRET=
+OPSLOG_GRANT_SECRET=
+OPSLOG_MYSQL_ROOT_PASSWORD=
+# Optional: real file storage. OPSLOG_OBJECT_STORAGE=s3 plus the four values below.
+OPSLOG_OBJECT_STORAGE=memory
+OPSLOG_S3_BUCKET=
+OPSLOG_S3_REGION=
+OPSLOG_S3_ACCESS_KEY_ID=
+OPSLOG_S3_SECRET_ACCESS_KEY=
