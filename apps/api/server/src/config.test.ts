@@ -106,7 +106,10 @@ describe('readConfig', () => {
           ...cognito,
           OPSLOG_OIDC_REDIRECT_URI: 'https://other.example.test/auth/callback',
         }),
-      ).toThrow('OPSLOG_OIDC_REDIRECT_URI must be on OPSLOG_PUBLIC_ORIGIN');
+      ).toThrow('OPSLOG_OIDC_REDIRECT_URI must be OPSLOG_PUBLIC_ORIGIN + /auth/callback');
+      expect(() =>
+        readConfig({ ...cognito, OPSLOG_OIDC_REDIRECT_URI: 'https://demo.example.test/callback' }),
+      ).toThrow('OPSLOG_OIDC_REDIRECT_URI must be OPSLOG_PUBLIC_ORIGIN + /auth/callback');
     });
   });
 

@@ -31,7 +31,7 @@ Se definen en Coolify (Environment Variables de la aplicación) o en un `.env` l
 | `OPSLOG_OIDC_DOMAIN`                                                                             | con `cognito` | Dominio del Hosted UI: `https://<prefijo>.auth.<región>.amazoncognito.com`. También se usa al compilar la web (`VITE_OIDC_DOMAIN`).                                                             |
 | `OPSLOG_OIDC_CLIENT_ID`                                                                          | con `cognito` | Id del app client. También se usa al compilar la web (`VITE_OIDC_CLIENT_ID`); no es secreto.                                                                                                    |
 | `OPSLOG_OIDC_CLIENT_SECRET`                                                                      | con `cognito` | Secreto del app client (cliente confidencial). Solo lo lee la API; cargarlo como secreto en Coolify.                                                                                            |
-| `OPSLOG_OIDC_REDIRECT_URI`                                                                       | con `cognito` | `https://opslog.northsoftmx.com/auth/callback`; debe estar en el origen de `OPSLOG_PUBLIC_ORIGIN`.                                                                                              |
+| `OPSLOG_OIDC_REDIRECT_URI`                                                                       | con `cognito` | Exactamente `OPSLOG_PUBLIC_ORIGIN` + `/auth/callback` (`https://opslog.northsoftmx.com/auth/callback`).                                                                                         |
 | `OPSLOG_BOOTSTRAP_COMPANY`, `OPSLOG_BOOTSTRAP_ADMIN_SUB`                                         | opcionales    | Nombre de la primera empresa y `sub` de Cognito de su administrador. Se definen las dos o ninguna. Ver «Primer administrador».                                                                  |
 
 `OPSLOG_ENV=staging` ya está fijo en el compose. No definir `AWS_*` ni `NODE_ENV=production`: la guarda de arranque lo rechaza. Las claves de S3 van como `OPSLOG_S3_*`, no `AWS_*`.
@@ -67,8 +67,10 @@ Se definen en Coolify (Environment Variables de la aplicación) o en un `.env` l
 
 ## Prueba local
 
+Aviso para una app de Coolify ya creada: el compose usa `cognito` por defecto, así que sin las `OPSLOG_OIDC_*` la API no arranca y el error nombra la variable que falta.
+
 ```sh
-cp deploy/variables.example .env   # rellenar los secretos
+cp deploy/variables.example .env   # rellenar los secretos; trae OPSLOG_AUTH_MODE=synthetic
 docker compose -f docker-compose.yml -f deploy/compose.local.yml up --build
 # http://localhost:8081/healthz  y  http://localhost:8081/api/auth/csrf
 ```

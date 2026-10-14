@@ -82,8 +82,9 @@ export function readConfig(env: Env): ServerConfig {
           : 'OPSLOG_OIDC_ISSUER, OPSLOG_OIDC_DOMAIN and OPSLOG_OIDC_REDIRECT_URI must be URLs',
       );
     }
-    if (new URL(oidc.redirectUri).origin !== origin)
-      throw new Error('OPSLOG_OIDC_REDIRECT_URI must be on OPSLOG_PUBLIC_ORIGIN');
+    // The web app always returns to `${origin}/auth/callback`; any other value fails every code exchange.
+    if (oidc.redirectUri !== `${origin}/auth/callback`)
+      throw new Error('OPSLOG_OIDC_REDIRECT_URI must be OPSLOG_PUBLIC_ORIGIN + /auth/callback');
   }
 
   const companyName = env.OPSLOG_BOOTSTRAP_COMPANY?.trim();
