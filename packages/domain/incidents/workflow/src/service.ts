@@ -24,7 +24,7 @@ import { WorkflowBase, type WorkflowOptions } from './base.js';
 import { FactLoader } from './facts.js';
 import { parseCommand, type ParsedCommand } from './input.js';
 import type { WorkflowPorts } from './ports.js';
-import { missingRequirements } from './requirements.js';
+import { missingRequirements, type Facts } from './requirements.js';
 
 /** What a caller still has to do before a command can run (SPECS §6, US-032). */
 export interface NextStep {
@@ -57,6 +57,18 @@ function eventOf(command: IncidentCommand, written: Incident): IncidentEvent {
  * command checks the caller, the state and the route of the type, the version, and then every
  * requirement at once, and writes the case, the timeline, the audit and the event in one transaction.
  */
+/**
+ * An approval is offered only while it is due (D20 by amount, ADR-0014): the company bears more than
+ * the threshold and no standing approval still covers it. Otherwise it is not a step at all.
+ */
+function approvalIsDue(command: IncidentCommand, incident: Incident, facts: Facts): boolean {
+  if (command !== 'approve_assumption' && command !== 'approve_close') return true;
+  const close = command === 'approve_close';
+  const required = close ? facts.closeApprovalRequired : facts.assumptionApprovalRequired;
+  const standing = close ? incident.closeApproval : incident.assumptionApproval;
+  return required === true && (standing === null || facts.approvalStale === true);
+}
+
 export class IncidentWorkflowService extends WorkflowBase {
   public constructor(store: IncidentStore, ports: WorkflowPorts, options: WorkflowOptions = {}) {
     super(store, ports, options);
@@ -71,15 +83,11 @@ export class IncidentWorkflowService extends WorkflowBase {
     const incident = await this.visible(tenantId, actor, id);
     const loader = new FactLoader(this.ports, this.store, tenantId, incident);
     const steps: NextStep[] = [];
-    for (const command of allowedCommands(incident, actor))
-      steps.push({
-        command,
-        missingRequirements: missingRequirements(
-          command,
-          incident,
-          await loader.forCommand(command),
-        ),
-      });
+    for (const command of allowedCommands(incident, actor)) {
+      const facts = await loader.forCommand(command);
+      if (!approvalIsDue(command, incident, facts)) continue;
+      steps.push({ command, missingRequirements: missingRequirements(command, incident, facts) });
+    }
     return steps;
   }
 

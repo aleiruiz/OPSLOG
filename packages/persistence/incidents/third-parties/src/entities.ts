@@ -6,8 +6,14 @@ export const INCIDENT_CHILD_TABLES = {
 } as const;
 
 const bin = 'utf8mb4_0900_bin';
-/** Longest envelope a column holds (`pii1.` + key id + wrapped key + iv + ciphertext and tag, base64url). */
-export const SEALED_LENGTH = 1024;
+/**
+ * Longest envelope a column holds (`pii1.` + key id + wrapped key + iv + ciphertext and tag, base64url).
+ * The worst case is a 200-character contact of four-byte characters: 800 bytes of plaintext seal to
+ * about 1,090 characters of ciphertext, and a real KMS adds a key id of up to 171 characters and a wrapped
+ * key of a few hundred more (about 1,530 in all). 2,048 holds that with room; the first migration
+ * created 1,024 and `WidenIncidentSealedColumns2026101500030` widens it.
+ */
+export const SEALED_LENGTH = 2048;
 
 const text = (name: string, length: number, nullable = false) => ({
   name,

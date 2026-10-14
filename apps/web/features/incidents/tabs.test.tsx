@@ -501,6 +501,8 @@ describe('evidence', () => {
     await waitFor(() => expect(upload).toHaveBeenCalledTimes(3));
     const keys = upload.mock.calls.map((call) => call[2]);
     expect(new Set(keys).size).toBe(1);
+    // The version is part of what the server hashes: a retry repeats the one the first attempt sent.
+    expect(new Set(upload.mock.calls.map((call) => call[1].version)).size).toBe(1);
     expect(
       (await screen.findAllByText(/pequena.png/, undefined, { timeout: 3000 })).length,
     ).toBeGreaterThan(0);
@@ -569,7 +571,7 @@ describe('evidence', () => {
   });
 
   it('reports a failed download and a failed removal', async () => {
-    const { fake } = setup({ pollMs: 20, compress: async (f) => f });
+    const { fake, onExpired } = setup({ pollMs: 20, compress: async (f) => f });
     await screen.findByRole('region', { name: 'Agregar evidencia' });
     pick(
       'Adjuntar archivos',
@@ -581,6 +583,11 @@ describe('evidence', () => {
     fake.failNext('evidence.content', 404, 'not_found');
     press('Descargar a.pdf');
     expect(await screen.findByText('No pudimos descargar el archivo.')).toBeInTheDocument();
+    expect(onExpired).not.toHaveBeenCalled();
+    // An expired session during a download goes to the shared session handling.
+    fake.failNext('evidence.content', 401, 'unauthorized');
+    press('Descargar a.pdf');
+    await waitFor(() => expect(onExpired).toHaveBeenCalledTimes(1));
     fake.failNext('evidence.detach', 500);
     press('Quitar a.pdf');
     expect(await screen.findByText(/No pudimos quitar el archivo/)).toBeInTheDocument();

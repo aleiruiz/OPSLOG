@@ -82,7 +82,10 @@ export function EvidenceTab({
     const result = await env.ports.evidence.content(incident.id, item.id);
     if (result.ok)
       save(result.value.displayName, result.value.contentType, result.value.contentBase64);
-    else setProblem('No pudimos descargar el archivo.');
+    else {
+      if (result.error.status === 401) env.onExpired();
+      setProblem('No pudimos descargar el archivo.');
+    }
   };
   const detach = async (item: BffIncidentEvidence) => {
     setBusy(true);

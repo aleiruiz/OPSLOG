@@ -42,6 +42,8 @@ interface Filters {
   readonly type: string;
   readonly responsible: boolean;
   readonly createdBy: boolean;
+  /** The vehicle sheet's "Siniestros" link: only the cases of that vehicle. */
+  readonly vehicleId: string;
   readonly limit: Size;
 }
 const NONE: Filters = {
@@ -50,6 +52,7 @@ const NONE: Filters = {
   type: '',
   responsible: false,
   createdBy: false,
+  vehicleId: '',
   limit: 25,
 };
 const OPEN = OPEN_STATUSES.join(',');
@@ -69,6 +72,7 @@ function readFilters(search: URLSearchParams): Filters {
     type: search.get('type') ?? '',
     responsible: search.get('responsible') === 'me',
     createdBy: search.get('createdBy') === 'me',
+    vehicleId: search.get('vehicleId') ?? '',
     limit: SIZES.find((size) => size === limit) ?? 25,
   };
 }
@@ -79,6 +83,7 @@ function toQuery(filters: Filters): string {
   if (filters.type) params.set('type', filters.type);
   if (filters.responsible) params.set('responsible', 'me');
   if (filters.createdBy) params.set('createdBy', 'me');
+  if (filters.vehicleId) params.set('vehicleId', filters.vehicleId);
   if (filters.limit !== 25) params.set('limit', String(filters.limit));
   const text = params.toString();
   return text ? `?${text}` : '';
@@ -95,6 +100,7 @@ function apiQuery(filters: Filters, cursor?: string): BffIncidentsQuery {
     ...(filters.type ? { type: filters.type as BffIncidentType } : {}),
     ...(filters.responsible ? { responsible: 'me' as const } : {}),
     ...(filters.createdBy ? { createdBy: 'me' as const } : {}),
+    ...(filters.vehicleId ? { vehicleId: filters.vehicleId } : {}),
     sort: 'occurredAt',
     direction: 'desc',
   };
@@ -266,6 +272,14 @@ export function IncidentListScreen() {
       {header}
       <IncidentAlertsPanel compact />
       <Panel>
+        {filters.vehicleId && (
+          <InlineAlert severity="info">
+            Mostrando solo los siniestros de un vehículo.{' '}
+            <Button size="small" variant="text" onClick={() => apply({ vehicleId: '' })}>
+              Ver todos los siniestros
+            </Button>
+          </InlineAlert>
+        )}
         <Stack
           direction="row"
           gap={1}
@@ -286,7 +300,12 @@ export function IncidentListScreen() {
                   apply(
                     active
                       ? undoQuick(quick.filters)
-                      : { ...NONE, ...quick.filters, limit: filters.limit },
+                      : {
+                          ...NONE,
+                          ...quick.filters,
+                          vehicleId: filters.vehicleId,
+                          limit: filters.limit,
+                        },
                   )
                 }
               >

@@ -64,7 +64,8 @@ export interface CompanySettingsView {
   readonly expiryWindowDays: number;
   readonly recipientRoles: readonly AlertRecipientRole[];
   readonly maintenanceEvidence: MaintenanceEvidenceRequirement;
-  readonly closeCostThreshold: CloseCostThreshold | null;
+  /** Left out (not null) for a caller without `incidents:view_costs`: an amount is a cost. */
+  readonly closeCostThreshold?: CloseCostThreshold | null;
   readonly timeZone: string;
   readonly incidentReportPhoto: IncidentReportPhoto;
   readonly incidentSlaDays: IncidentSlaDays;
@@ -88,6 +89,11 @@ export interface CompanySettingsApiDeps {
     correlationId: string,
     required: readonly Permission[],
   ) => Promise<TenantContext>;
+  /**
+   * Whether the session may see cost amounts (`incidents:view_costs`). Without it the answer leaves
+   * the close-cost threshold out; a dependency that is missing counts as no.
+   */
+  readonly mayViewCosts?: (context: TenantContext) => Promise<boolean>;
   /** Appends an audit event of the session's tenant and actor. Entity ids only, never field values. */
   readonly audit: (
     context: TenantContext,
@@ -107,11 +113,11 @@ export const SETTINGS_PERMISSIONS = {
   update: ['manage_config'],
 } as const satisfies Record<string, readonly Permission[]>;
 
-const viewOf = (settings: CompanySettings): CompanySettingsView => ({
+const viewOf = (settings: CompanySettings, withCosts: boolean): CompanySettingsView => ({
   expiryWindowDays: settings.expiryWindowDays,
   recipientRoles: settings.recipientRoles,
   maintenanceEvidence: settings.maintenanceEvidence,
-  closeCostThreshold: settings.closeCostThreshold,
+  ...(withCosts ? { closeCostThreshold: settings.closeCostThreshold } : {}),
   timeZone: settings.timeZone,
   incidentReportPhoto: settings.incidentReportPhoto,
   incidentSlaDays: settings.incidentSlaDays,
@@ -129,13 +135,18 @@ const viewOf = (settings: CompanySettings): CompanySettingsView => ({
 export class CompanySettingsApi {
   public constructor(private readonly deps: CompanySettingsApiDeps) {}
 
+  private async mayViewCosts(context: TenantContext): Promise<boolean> {
+    return (await this.deps.mayViewCosts?.(context)) === true;
+  }
+
   public async get(
     token: string,
     correlationId: string,
   ): Promise<PlatformResponse<CompanySettingsView>> {
     try {
       const context = await this.deps.authorize(token, correlationId, SETTINGS_PERMISSIONS.read);
-      return { ok: true, value: viewOf(await this.deps.service.get(context.tenantId)) };
+      const settings = await this.deps.service.get(context.tenantId);
+      return { ok: true, value: viewOf(settings, await this.mayViewCosts(context)) };
     } catch (error) {
       return failure(error);
     }
@@ -156,7 +167,7 @@ export class CompanySettingsApi {
         input,
       );
       await this.deps.audit(context, 'company_settings.updated', context.tenantId, correlationId);
-      return { ok: true, value: viewOf(saved) };
+      return { ok: true, value: viewOf(saved, await this.mayViewCosts(context)) };
     } catch (error) {
       return failure(error);
     }

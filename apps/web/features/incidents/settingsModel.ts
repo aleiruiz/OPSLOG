@@ -82,8 +82,13 @@ export function toInput(settings: BffAlertSettings, values: SettingsValues): Bff
       low: Number(values.days.low),
     },
     incidentInactivityDays: Number(values.inactivity),
-    closeCostThreshold:
-      amount === null ? null : { amountMinor: amount, currency: values.thresholdCurrency },
+    // Absent without `incidents:view_costs`: the stored threshold stays as it is.
+    ...(settings.closeCostThreshold === undefined
+      ? {}
+      : {
+          closeCostThreshold:
+            amount === null ? null : { amountMinor: amount, currency: values.thresholdCurrency },
+        }),
   };
 }
 

@@ -110,14 +110,14 @@ export interface IncidentPorts {
   };
   /**
    * The maintenance orders a repair can be linked to, from the maintenance module (generic `view` lists them,
-   * generic `create` registers a corrective one). The order endpoint takes no `Idempotency-Key` yet.
+   * generic `create` registers a corrective one, under an `Idempotency-Key` so a repeat never makes a second order).
    */
   readonly orders: {
     list(): Promise<Result<readonly BffWorkOrder[]>>;
-    createCorrective(body: {
-      vehicleId: string;
-      description: string;
-    }): Promise<Result<BffWorkOrder>>;
+    createCorrective(
+      body: { vehicleId: string; description: string },
+      idempotencyKey?: string,
+    ): Promise<Result<BffWorkOrder>>;
   };
   /** Company settings that drive incidents (SLA days, inactivity days, photo rule, D20 threshold). */
   readonly settings: {
@@ -196,7 +196,10 @@ export function createIncidentPorts(client: BffClient): IncidentPorts {
     },
     orders: {
       list: () => call('workOrders.list'),
-      createCorrective: (body) => call('workOrders.create', { body }),
+      createCorrective: (body, idempotencyKey) =>
+        idempotencyKey === undefined
+          ? call('workOrders.create', { body })
+          : call('workOrders.create', { body, idempotencyKey }),
     },
     settings: {
       get: () => call('alerts.settings.get'),

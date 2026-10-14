@@ -39,7 +39,7 @@ export const archiveClosed: ArchiveDialogState = { open: false, busy: false };
 
 export interface VehicleDetailViewProps {
   readonly state: ResourceState<Vehicle>;
-  readonly can: (permission: 'edit' | 'delete') => boolean;
+  readonly can: (permission: 'edit' | 'delete' | 'incidents:view') => boolean;
   readonly notice?: string | null;
   readonly archive: ArchiveDialogState;
   readonly onRetry: () => void;
@@ -118,6 +118,14 @@ export function VehicleDetailView({
               description={`${vehicle.make} ${vehicle.model} ${vehicle.year}`}
               actions={
                 <>
+                  {can('incidents:view') && (
+                    <RouterButton
+                      to={`/incidents?vehicleId=${encodeURIComponent(vehicle.id)}`}
+                      variant="outlined"
+                    >
+                      Siniestros del vehículo
+                    </RouterButton>
+                  )}
                   {can('edit') && isEditable(vehicle) && (
                     <RouterButton
                       to={`/flota/vehiculos/${encodeURIComponent(vehicle.id)}/editar`}

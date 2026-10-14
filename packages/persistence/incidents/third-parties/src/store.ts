@@ -1,11 +1,15 @@
 import 'reflect-metadata';
 import { IsNull, type DataSource, type EntityManager } from 'typeorm';
-import type {
-  IncidentApplyResult,
-  IncidentMutation,
-  IncidentStore,
+import {
+  IncidentError,
+  type IncidentApplyResult,
+  type IncidentMutation,
+  type IncidentStore,
 } from '../../../../domain/incidents/cases/src/index.js';
 import {
+  CHILD_RULES,
+  MAX_EVIDENCE,
+  MAX_THIRD_PARTIES,
   PROTECTED_FIELDS,
   isSealed,
   type ChildChange,
@@ -67,10 +71,20 @@ export class TypeOrmIncidentChildStore implements IncidentChildStore {
 
   private async write(manager: EntityManager, change: ChildChange): Promise<boolean> {
     switch (change.kind) {
-      case 'third_party_add':
+      case 'third_party_add': {
         assertSealed(change.party);
+        // Counted in the transaction, after the case row was locked by its version check: two
+        // concurrent additions cannot both pass the cap (the service checks first, for a quick answer).
+        const live = await manager.getRepository(ThirdPartySchema).countBy({
+          tenantId: change.party.tenantId,
+          incidentId: change.party.incidentId,
+          removedAt: IsNull(),
+        });
+        if (live >= MAX_THIRD_PARTIES)
+          throw new IncidentError('rule_violation', [], CHILD_RULES.thirdPartyLimit);
         await manager.getRepository(ThirdPartySchema).insert(thirdPartyRow(change.party));
         return true;
+      }
       case 'third_party_update': {
         assertSealed(change.party);
         const { party } = change;
@@ -86,10 +100,17 @@ export class TypeOrmIncidentChildStore implements IncidentChildStore {
         );
         return changed.affected === 1;
       }
-      case 'evidence_attach':
+      case 'evidence_attach': {
+        const linked = await manager.getRepository(EvidenceSchema).countBy({
+          tenantId: change.evidence.tenantId,
+          incidentId: change.evidence.incidentId,
+        });
+        if (linked >= MAX_EVIDENCE)
+          throw new IncidentError('rule_violation', [], CHILD_RULES.evidenceLimit);
         // A second link of the same file trips the unique key (ER_DUP_ENTRY) and rolls everything back.
         await manager.getRepository(EvidenceSchema).insert(evidenceRow(change.evidence));
         return true;
+      }
       case 'evidence_detach': {
         const removed = await manager.getRepository(EvidenceSchema).delete({
           tenantId: change.tenantId,

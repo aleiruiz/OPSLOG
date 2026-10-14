@@ -197,6 +197,8 @@ suite('incident cases on real MySQL with two synthetic tenants', () => {
     expect((await fleet.adminB.post(E, { json: upload })).status).toBe(404);
     const audited = JSON.stringify(await database.rows('SELECT * FROM opslog_audit_local'));
     expect(audited).toContain('incident.evidence_downloaded');
+    // The row names the link (case and evidence ids) and nothing of the file.
+    expect(audited).toContain(`${id}.${evidenceId}`);
     const links = await database.rows<{ file_id: string }>(
       'SELECT file_id FROM opslog_incident_evidence WHERE incident_id = ?',
       [id],

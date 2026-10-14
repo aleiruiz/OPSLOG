@@ -103,6 +103,26 @@ describe('case list', () => {
     );
   });
 
+  it('shows only the cases of one vehicle from the vehicle sheet link, and lets the person leave it', async () => {
+    const cases = [
+      completeEvent({ id: 'inc-1', folio: 'SIN-2026-000001', vehicle: { id: 'veh-001' } as never }),
+      completeEvent({ id: 'inc-2', folio: 'SIN-2026-000002', vehicle: { id: 'veh-002' } as never }),
+    ];
+    const { fake } = renderIncident(<IncidentListScreen />, {
+      path: '/incidents?vehicleId=veh-002',
+      options: { incidents: cases },
+    });
+    const list = vi.spyOn(fake.ports, 'list');
+    expect(await screen.findByRole('table', { name: '1 siniestros' })).toBeInTheDocument();
+    expect(screen.getByText('SIN-2026-000002')).toBeInTheDocument();
+    expect(screen.queryByText('SIN-2026-000001')).toBeNull();
+    expect(screen.getByText(/Mostrando solo los siniestros de un vehículo/)).toBeInTheDocument();
+    press('Ver todos los siniestros');
+    await waitFor(() => expect(window.location.search).toBe(''));
+    expect(await screen.findByRole('table', { name: '2 siniestros' })).toBeInTheDocument();
+    expect(list.mock.calls.length).toBeGreaterThan(0);
+  });
+
   it('names a combined state filter instead of showing a list of ids', async () => {
     renderIncident(<IncidentListScreen />, {
       path: '/incidents?status=draft,reported',

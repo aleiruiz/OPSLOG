@@ -74,7 +74,7 @@ export function IncidentsScreen({
       setZone(result.value.timeZone);
       setPhotoRequired(result.value.incidentReportPhoto === 'photo_required');
       // Held only for callers who may see amounts: the settings route also answers those who may not.
-      setThreshold(mayViewCosts(permissions) ? result.value.closeCostThreshold : null);
+      setThreshold(mayViewCosts(permissions) ? (result.value.closeCostThreshold ?? null) : null);
     });
     void loadDriverOptions(ports.employees).then((result) => {
       if (current && result.ok)

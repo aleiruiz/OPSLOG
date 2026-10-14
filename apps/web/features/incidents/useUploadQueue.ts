@@ -27,6 +27,8 @@ interface Job {
   readonly category: BffEvidenceCategory;
   readonly stage: BffEvidenceStage;
   readonly keys: SubmitKeys;
+  /** The case version of an attempt whose outcome is unknown: a retry sends it again, so the key replays. */
+  pendingVersion?: number;
   prepared?: Prepared;
   base64?: string;
 }
@@ -113,8 +115,11 @@ export function useUploadQueue({
     const prepared = job.prepared;
     const contentBase64 = job.base64;
     for (let attempt = 0; ; attempt += 1) {
+      // The same attempt keeps its version until the server answers for good: the server hashes the version
+      // into the key, so a retry after a lost answer must repeat it to be recognised and not store a second copy.
+      job.pendingVersion ??= latest.current;
       const body = {
-        version: latest.current,
+        version: job.pendingVersion,
         category: job.category,
         stage: job.stage,
         ...(prepared.capturedAt === null ? {} : { capturedAt: prepared.capturedAt }),
@@ -124,12 +129,11 @@ export function useUploadQueue({
         contentBase64,
       };
       patch(job.id, { progress: 60 });
-      // The content never changes for a job: the version and the name tell one attempt from another.
-      const result = await sendKeyed(
-        job.keys,
-        [body.version, body.name, contentBase64.length],
-        (key) => ports.evidence.upload(incidentId, body, key),
+      // The content never changes for a job, so the file alone tells it from another upload (not the version).
+      const result = await sendKeyed(job.keys, [job.id, body.name, contentBase64.length], (key) =>
+        ports.evidence.upload(incidentId, body, key),
       );
+      if (result.ok || result.error.status < 500) delete job.pendingVersion;
       if (result.ok) {
         latest.current = Math.max(latest.current, result.value.version);
         onUploaded(result.value.version);

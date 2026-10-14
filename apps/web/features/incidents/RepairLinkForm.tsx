@@ -9,6 +9,7 @@ import { outcomeOf } from './outcome';
 import { RecordForm } from './RecordForm';
 import { CreateOrderForm } from './CreateOrderForm';
 import { linkableOrders, linkOrder, orderLabel } from './repairLinking';
+import type { OrderDraft } from './orderDraft';
 import { SubmitKeys } from './submit';
 import { useLive } from './useLive';
 
@@ -20,11 +21,13 @@ import { useLive } from './useLive';
 export function RepairLinkForm({
   incident,
   links,
+  draft,
   onLinked,
   onReload,
   onClose,
 }: {
   incident: BffIncident;
+  draft: OrderDraft;
   links: readonly BffRepairLink[];
   onLinked: (version: number, message: string) => void;
   onReload: () => void;
@@ -109,6 +112,7 @@ export function RepairLinkForm({
       {mayCreate ? (
         <CreateOrderForm
           incident={incident}
+          draft={draft}
           onLinked={onLinked}
           onReload={onReload}
           describe={(error) => describeError(error, 'registrar la orden')}

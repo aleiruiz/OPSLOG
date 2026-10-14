@@ -234,9 +234,10 @@ export class WorkOrderApi {
     token: string,
     correlationId: string,
     input: unknown,
+    idempotencyKey?: string,
   ): Promise<WorkOrderApiResponse<WorkOrderView>> {
     return this.view(token, correlationId, (tenantId, actor) =>
-      this.deps.orders.createCorrective(tenantId, actor, input),
+      this.deps.orders.createKeyed(tenantId, actor, input, idempotencyKey),
     );
   }
   public adoptPreventive(

@@ -169,28 +169,30 @@ export function IncidentSettingsForm({
             onChange={(event) => setEdits({ ...edits, inactivity: event.target.value })}
           />
         </FormSection>
-        <FormSection
-          title="Aprobación de costos"
-          description="Si el costo a cargo de la empresa pasa de este umbral, el cierre y la asunción piden la aprobación de una persona supervisora. Déjalo vacío para no pedirla."
-        >
-          <Field
-            id={`${id}-threshold`}
-            label="Umbral de aprobación (opcional)"
-            value={values.thresholdAmount}
-            inputProps={{ inputMode: 'decimal' }}
-            {...note('threshold')}
-            onChange={(event) => setEdits({ ...edits, thresholdAmount: event.target.value })}
-          />
-          <Field
-            id={`${id}-currency`}
-            label="Moneda del umbral"
-            value={values.thresholdCurrency}
-            {...note('currency')}
-            onChange={(event) =>
-              setEdits({ ...edits, thresholdCurrency: event.target.value.toUpperCase() })
-            }
-          />
-        </FormSection>
+        {settings.closeCostThreshold !== undefined && (
+          <FormSection
+            title="Aprobación de costos"
+            description="Si el costo a cargo de la empresa pasa de este umbral, el cierre y la asunción piden la aprobación de una persona supervisora. Déjalo vacío para no pedirla."
+          >
+            <Field
+              id={`${id}-threshold`}
+              label="Umbral de aprobación (opcional)"
+              value={values.thresholdAmount}
+              inputProps={{ inputMode: 'decimal' }}
+              {...note('threshold')}
+              onChange={(event) => setEdits({ ...edits, thresholdAmount: event.target.value })}
+            />
+            <Field
+              id={`${id}-currency`}
+              label="Moneda del umbral"
+              value={values.thresholdCurrency}
+              {...note('currency')}
+              onChange={(event) =>
+                setEdits({ ...edits, thresholdCurrency: event.target.value.toUpperCase() })
+              }
+            />
+          </FormSection>
+        )}
         <Box>
           <Button type="submit" variant="contained" loading={busy} disabled={!dirty}>
             Guardar configuración

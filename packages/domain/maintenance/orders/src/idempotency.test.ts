@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { WorkOrderError } from './errors.js';
+import { WORK_ORDER_CREATED_EVENT } from './types.js';
 import { IDEMPOTENCY_TTL_MS, canonicalJson, idempotencyKey, payloadHash } from './idempotency.js';
-import { ADMIN, FLEET, MECHANIC, TENANT, harness } from './test-support.js';
+import { ADMIN, FLEET, MECHANIC, TENANT, VIEWER, harness } from './test-support.js';
 import type { WorkOrderActor } from './workflow.js';
 
 const code = async (work: Promise<unknown>) => {
@@ -328,5 +329,58 @@ describe('Idempotency-Key on work order commands', () => {
     );
     expect(loser).toEqual(winner);
     expect(loser.status).toBe('closed');
+  });
+});
+
+describe('creating a corrective order under an Idempotency-Key', () => {
+  const input = { vehicleId: 'vehicle-1', description: 'Frenos' };
+  const key = 'create-key-0001';
+
+  it('replays the first order for the same key and body: one order, one event', async () => {
+    const h = harness();
+    const first = await h.service.createKeyed(TENANT, FLEET, input, key);
+    const again = await h.service.createKeyed(TENANT, FLEET, { ...input }, key);
+    expect(again.id).toBe(first.id);
+    expect(await h.service.list(TENANT, FLEET)).toHaveLength(1);
+    expect(h.store.events.filter((e) => e.event.type === WORK_ORDER_CREATED_EVENT)).toHaveLength(1);
+  });
+
+  it('answers idempotency_conflict for another body, and scopes the key to the actor', async () => {
+    const h = harness();
+    await h.service.createKeyed(TENANT, FLEET, input, key);
+    expect(
+      await code(h.service.createKeyed(TENANT, FLEET, { ...input, description: 'Otra' }, key)),
+    ).toBe('idempotency_conflict');
+    const first = (await h.service.list(TENANT, FLEET))[0];
+    const other = await h.service.createKeyed(TENANT, ADMIN, input, key);
+    expect(other.id).not.toBe(first?.id);
+    expect(await h.service.list(TENANT, FLEET)).toHaveLength(2);
+  });
+
+  it('creates a new order without a key, rejects a bad key and needs the create permission', async () => {
+    const h = harness();
+    await h.service.createKeyed(TENANT, FLEET, input);
+    await h.service.createKeyed(TENANT, FLEET, input);
+    expect(await h.service.list(TENANT, FLEET)).toHaveLength(2);
+    expect(await code(h.service.createKeyed(TENANT, FLEET, input, 'short'))).toBe('invalid_input');
+    expect(await code(h.service.createKeyed(TENANT, VIEWER, input, key))).toBe('forbidden');
+  });
+
+  it('a concurrent duplicate replays the winner', async () => {
+    const h = harness();
+    const [a, b] = await Promise.all([
+      h.service.createKeyed(TENANT, FLEET, input, key),
+      h.service.createKeyed(TENANT, FLEET, input, key),
+    ]);
+    expect(b.id).toBe(a.id);
+    expect(await h.service.list(TENANT, FLEET)).toHaveLength(1);
+  });
+
+  it('expires after the TTL: the same key then creates a new order', async () => {
+    const h = harness();
+    const first = await h.service.createKeyed(TENANT, FLEET, input, key);
+    h.clock.now = new Date(h.clock.now.getTime() + IDEMPOTENCY_TTL_MS + 1000);
+    const second = await h.service.createKeyed(TENANT, FLEET, input, key);
+    expect(second.id).not.toBe(first.id);
   });
 });

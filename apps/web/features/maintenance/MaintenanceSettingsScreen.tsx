@@ -24,7 +24,7 @@ export function toMinorUnits(text: string): string | null {
   const minor = `${match[1]}${(match[2] ?? '').padEnd(2, '0')}`.replace(/^0+(?=\d)/, '');
   return minor;
 }
-const fromMinorUnits = (threshold: BffCloseCostThreshold | null): string => {
+const fromMinorUnits = (threshold: BffCloseCostThreshold | null | undefined): string => {
   if (!threshold) return '';
   const digits = threshold.amountMinor.padStart(3, '0');
   return `${digits.slice(0, -2)}.${digits.slice(-2)}`;
@@ -44,6 +44,8 @@ function SettingsForm({
   const [amount, setAmount] = React.useState(fromMinorUnits(settings.closeCostThreshold));
   const [currency, setCurrency] = React.useState(settings.closeCostThreshold?.currency ?? 'MXN');
   const [zone, setZone] = React.useState(settings.timeZone);
+  // Absent without `incidents:view_costs`: the field is hidden and a save leaves the stored value.
+  const hasThreshold = current.closeCostThreshold !== undefined;
   const [busy, setBusy] = React.useState(false);
   const [notice, setNotice] = React.useState<{ ok: boolean; text: string } | null>(null);
   const minor = amount.trim() === '' ? null : toMinorUnits(amount);
@@ -59,7 +61,9 @@ function SettingsForm({
       expiryWindowDays: current.expiryWindowDays,
       recipientRoles: current.recipientRoles,
       maintenanceEvidence: evidence,
-      closeCostThreshold: minor === null ? null : { amountMinor: minor, currency },
+      ...(hasThreshold
+        ? { closeCostThreshold: minor === null ? null : { amountMinor: minor, currency } }
+        : {}),
       timeZone: zone.trim(),
     });
     setBusy(false);
@@ -114,27 +118,33 @@ function SettingsForm({
             </MenuItem>
           ))}
         </Field>
-        <Field
-          id="mnt-set-amount"
-          label="Umbral de cierre costoso (opcional)"
-          helperText={
-            amountError
-              ? 'Escribe un monto con hasta dos decimales.'
-              : 'Si lo defines, todo cierre requiere aprobación previa. Déjalo vacío para no exigirla.'
-          }
-          error={amountError}
-          value={amount}
-          inputProps={{ inputMode: 'decimal' }}
-          onChange={(event) => setAmount(event.target.value)}
-        />
-        <Field
-          id="mnt-set-currency"
-          label="Moneda del umbral"
-          helperText={currencyError ? 'Usa un código de tres letras, por ejemplo MXN.' : undefined}
-          error={currencyError}
-          value={currency}
-          onChange={(event) => setCurrency(event.target.value.toUpperCase())}
-        />
+        {hasThreshold && (
+          <>
+            <Field
+              id="mnt-set-amount"
+              label="Umbral de cierre costoso (opcional)"
+              helperText={
+                amountError
+                  ? 'Escribe un monto con hasta dos decimales.'
+                  : 'Si lo defines, todo cierre requiere aprobación previa. Déjalo vacío para no exigirla.'
+              }
+              error={amountError}
+              value={amount}
+              inputProps={{ inputMode: 'decimal' }}
+              onChange={(event) => setAmount(event.target.value)}
+            />
+            <Field
+              id="mnt-set-currency"
+              label="Moneda del umbral"
+              helperText={
+                currencyError ? 'Usa un código de tres letras, por ejemplo MXN.' : undefined
+              }
+              error={currencyError}
+              value={currency}
+              onChange={(event) => setCurrency(event.target.value.toUpperCase())}
+            />
+          </>
+        )}
         <Field
           id="mnt-set-zone"
           label="Zona horaria de la empresa"

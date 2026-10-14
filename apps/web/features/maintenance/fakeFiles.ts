@@ -92,10 +92,11 @@ export function createFakeFiles(deps: {
         expiryWindowDays: body.expiryWindowDays,
         recipientRoles: body.recipientRoles,
         maintenanceEvidence: body.maintenanceEvidence ?? settings.maintenanceEvidence,
-        closeCostThreshold:
-          body.closeCostThreshold === undefined
-            ? settings.closeCostThreshold
-            : body.closeCostThreshold,
+        ...(body.closeCostThreshold === undefined
+          ? settings.closeCostThreshold === undefined
+            ? {}
+            : { closeCostThreshold: settings.closeCostThreshold }
+          : { closeCostThreshold: body.closeCostThreshold }),
         timeZone: body.timeZone ?? settings.timeZone,
         version: settings.version + 1,
         updatedBy: 'user-admin',

@@ -57,6 +57,12 @@ const canonical = (roles: readonly AlertRecipientRole[]): AlertRecipientRole[] =
 const daysUntil = (day: string, today: string): number =>
   Math.round((Date.parse(`${day}T00:00:00.000Z`) - Date.parse(`${today}T00:00:00.000Z`)) / DAY_MS);
 
+/** The threshold key only when there is a value to send: the server leaves it out without `incidents:view_costs`. */
+const optionalThreshold = (
+  value: AlertSettings['closeCostThreshold'],
+): Pick<AlertSettings, 'closeCostThreshold'> | Record<string, never> =>
+  value === undefined ? {} : { closeCostThreshold: value };
+
 export function createMockAlertsStore(options: {
   documents: () => readonly Document[];
   policies: () => readonly InsurancePolicy[];
@@ -205,10 +211,11 @@ export function createMockAlertsStore(options: {
         recipientRoles: canonical(recipientRoles as AlertRecipientRole[]),
         maintenanceEvidence: (evidence ??
           stored.maintenanceEvidence) as AlertSettings['maintenanceEvidence'],
-        closeCostThreshold:
+        ...optionalThreshold(
           threshold === undefined
             ? stored.closeCostThreshold
             : (threshold as AlertSettings['closeCostThreshold']),
+        ),
         timeZone: (zone as string | undefined) ?? stored.timeZone,
         version: stored.version + 1,
         updatedBy: actorId(),

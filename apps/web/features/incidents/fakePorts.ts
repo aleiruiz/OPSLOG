@@ -201,6 +201,7 @@ export function createFakeIncidentPorts(options: FakeIncidentOptions = {}) {
         .map(view)
         .filter((item) => !statuses || statuses.includes(item.status))
         .filter((item) => !query?.severity || item.severity === query.severity)
+        .filter((item) => !query?.vehicleId || item.vehicle.id === query.vehicleId)
         .filter((item) => query?.responsible !== 'me' || item.responsible?.id === userId())
         .filter((item) => query?.createdBy !== 'me' || item.createdBy.id === userId());
       const start = query?.cursor ? Number(query.cursor) : 0;

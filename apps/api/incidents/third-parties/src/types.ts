@@ -22,12 +22,16 @@ export interface IncidentChildApiDeps extends SessionDeps {
   readonly files: {
     readonly read: (token: string, correlationId: string, fileId: string) => Promise<Uint8Array>;
   };
-  /** Records a download in the audit trail. Not best effort: without the record, no bytes. */
+  /**
+   * Records a download in the audit trail: the entity is the evidence link (`<incident id>.<evidence id>`,
+   * ids only, no name or content). Not best effort: without the record, no bytes.
+   */
   readonly audit: (
     context: TenantContext,
     action: string,
     entityId: string,
     correlationId: string,
+    entityType?: string,
   ) => Promise<void>;
 }
 

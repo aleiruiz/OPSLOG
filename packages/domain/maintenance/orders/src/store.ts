@@ -1,8 +1,7 @@
 import { validateWorkOrderEvent } from './events.js';
-import type { IdempotencyRecord } from './idempotency.js';
+import type { IdempotencyRecord, IdempotentCommand } from './idempotency.js';
 import type {
   WorkOrderAttachment,
-  WorkOrderCommand,
   WorkOrder,
   WorkOrderEvent,
   WorkOrderMutation,
@@ -95,7 +94,7 @@ export class InMemoryWorkOrderStore implements WorkOrderStore {
   public async idempotency(
     tenantId: string,
     actorId: string,
-    command: WorkOrderCommand,
+    command: IdempotentCommand,
     key: string,
   ): Promise<IdempotencyRecord | null> {
     const record = this.keys.get(JSON.stringify([tenantId, actorId, command, key]));

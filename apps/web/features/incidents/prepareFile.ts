@@ -11,7 +11,10 @@ export const isPhoto = (type: string): boolean => PHOTO_TYPES.includes(type);
 export const limitFor = (type: string): number =>
   type.startsWith('image/') ? MAX_IMAGE_BYTES : MAX_DOCUMENT_BYTES;
 
-/** Re-encodes an image into a JPEG of at most `target` bytes; rejects when the browser cannot. */
+/**
+ * Re-encodes an image into a JPEG of at most `target` bytes (a PNG when the image has transparency, because
+ * a JPEG has no alpha and would turn it black); rejects when the browser cannot.
+ */
 export type Compressor = (file: Blob, target: number) => Promise<Blob>;
 
 /** The file as it will be sent. */
@@ -22,6 +25,17 @@ export interface Prepared {
   /** Declared to the server; informative, not proof. */
   readonly clientCompressed: boolean;
   readonly capturedAt: string | null;
+}
+
+/** True when any pixel is not fully opaque: such an image must stay a PNG. */
+function hasTransparency(
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+): boolean {
+  const { data } = context.getImageData(0, 0, width, height);
+  for (let index = 3; index < data.length; index += 4) if (data[index] !== 255) return true;
+  return false;
 }
 
 /** JPEG, then lower quality, then smaller, until it fits. A `canvas` is all it needs. */
@@ -43,9 +57,11 @@ async function fitJpeg(bitmap: ImageBitmap, target: number): Promise<Blob> {
     const context = canvas.getContext('2d');
     if (!context) throw new Error('no canvas');
     context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    for (const quality of [0.85, 0.7, 0.55]) {
+    const png = hasTransparency(context, canvas.width, canvas.height);
+    // A PNG has no quality to lower: only the size shrinks, round after round.
+    for (const quality of png ? [undefined] : [0.85, 0.7, 0.55]) {
       const blob = await new Promise<Blob | null>((resolve) =>
-        canvas.toBlob(resolve, 'image/jpeg', quality),
+        canvas.toBlob(resolve, png ? 'image/png' : 'image/jpeg', quality),
       );
       if (blob && blob.size <= target) return blob;
     }
@@ -76,7 +92,8 @@ export async function captureTime(file: File): Promise<string | null> {
   return file.lastModified > 0 ? new Date(file.lastModified).toISOString() : null;
 }
 
-const jpegName = (name: string): string => `${name.replace(/\.[^./\\]+$/, '')}.jpg`;
+const reencodedName = (name: string, png: boolean): string =>
+  `${name.replace(/\.[^./\\]+$/, '')}.${png ? 'png' : 'jpg'}`;
 
 /**
  * Gets a file ready to send. A photo (JPEG, PNG or WebP) above about 2 MB is compressed in the browser;
@@ -91,14 +108,16 @@ export async function prepareFile(
   if (isPhoto(file.type) && file.size > COMPRESS_TARGET_BYTES) {
     try {
       const blob = await compress(file, COMPRESS_TARGET_BYTES);
-      if (blob.size < file.size)
+      if (blob.size < file.size) {
+        const png = blob.type === 'image/png';
         return {
           blob,
-          name: jpegName(file.name),
-          contentType: 'image/jpeg',
+          name: reencodedName(file.name, png),
+          contentType: png ? 'image/png' : 'image/jpeg',
           clientCompressed: true,
           capturedAt,
         };
+      }
     } catch {
       // Falls through to the original.
     }
