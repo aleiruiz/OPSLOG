@@ -17,6 +17,7 @@ describe('readConfig', () => {
       grantSecret: base.OPSLOG_GRANT_SECRET,
       authMode: 'synthetic',
       objectStorage: 'memory',
+      persistence: 'memory',
     });
     expect(readConfig({ ...base, PORT: '9000', HOST: '127.0.0.1' })).toMatchObject({
       port: 9000,
@@ -138,5 +139,54 @@ describe('readConfig', () => {
         readConfig({ ...base, ...ok, OPSLOG_BOOTSTRAP_ADMIN_SUB: 'x'.repeat(201) }),
       ).toThrow('OPSLOG_BOOTSTRAP_ADMIN_SUB');
     });
+  });
+
+  it('reads the MySQL persistence variables only when asked for', () => {
+    const mysql = {
+      ...base,
+      OPSLOG_PERSISTENCE: 'mysql',
+      OPSLOG_MYSQL_SECRET: 's'.repeat(32),
+      OPSLOG_PII_MASTER_KEY: Buffer.alloc(32, 7).toString('base64'),
+    };
+    expect(readConfig(mysql)).toMatchObject({
+      persistence: 'mysql',
+      mysql: {
+        host: 'mysql',
+        port: 3306,
+        database: 'opslog_t_main',
+        secret: mysql.OPSLOG_MYSQL_SECRET,
+        piiMasterKey: mysql.OPSLOG_PII_MASTER_KEY,
+      },
+    });
+    expect(
+      readConfig({
+        ...mysql,
+        OPSLOG_MYSQL_HOST: 'db.internal',
+        OPSLOG_MYSQL_PORT: '3307',
+        OPSLOG_MYSQL_DATABASE: 'opslog_t_demo',
+      }).mysql,
+    ).toMatchObject({ host: 'db.internal', port: 3307, database: 'opslog_t_demo' });
+    expect(readConfig({ ...base, OPSLOG_PERSISTENCE: 'memory' })).not.toHaveProperty('mysql');
+    expect(() => readConfig({ ...base, OPSLOG_PERSISTENCE: 'redis' })).toThrow('memory or mysql');
+  });
+
+  it.each([
+    [{ OPSLOG_MYSQL_SECRET: '' }, 'OPSLOG_MYSQL_SECRET is required'],
+    [{ OPSLOG_MYSQL_SECRET: 'short' }, 'OPSLOG_MYSQL_SECRET needs at least 32'],
+    [{ OPSLOG_PII_MASTER_KEY: '' }, 'OPSLOG_PII_MASTER_KEY is required'],
+    [{ OPSLOG_PII_MASTER_KEY: 'c2hvcnQ=' }, 'at least 32 bytes'],
+    [{ OPSLOG_MYSQL_PORT: 'x' }, 'OPSLOG_MYSQL_PORT'],
+    [{ OPSLOG_MYSQL_PORT: '0' }, 'OPSLOG_MYSQL_PORT'],
+    [{ OPSLOG_MYSQL_DATABASE: 'opslog' }, 'opslog_t_<name>'],
+    [{ OPSLOG_MYSQL_DATABASE: 'opslog_t_x; DROP' }, 'opslog_t_<name>'],
+  ])('rejects invalid MySQL settings %j without echoing values', (override, message) => {
+    const env = {
+      ...base,
+      OPSLOG_PERSISTENCE: 'mysql',
+      OPSLOG_MYSQL_SECRET: 's'.repeat(32),
+      OPSLOG_PII_MASTER_KEY: Buffer.alloc(32, 7).toString('base64'),
+      ...override,
+    };
+    expect(() => readConfig(env)).toThrow(message);
   });
 });

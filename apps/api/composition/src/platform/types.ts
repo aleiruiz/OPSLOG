@@ -40,7 +40,12 @@ import type {
   ScanQueue,
   VirusScanner,
 } from '../../../../../packages/platform/files/src/index.js';
-import type { DraftValues, MfaPolicy, RoleDirectoryStore } from '../directory.js';
+import type {
+  DraftValues,
+  MfaPolicy,
+  RoleDirectoryStore,
+  TenantSettingsStore,
+} from '../directory.js';
 import type { InMemoryTenantStore } from '../tenancy.js';
 
 export interface PlatformAdapters {
@@ -114,6 +119,8 @@ export interface PlatformAdapters {
   readonly auditRelay?: { runBatch(max?: number): Promise<number> };
   readonly outbox?: OutboxStore;
   readonly tenants?: InMemoryTenantStore;
+  /** Company name, MFA policy and idle hours; durable when the host injects a persistent store. */
+  readonly tenantSettings?: TenantSettingsStore;
   readonly recoveryNotifier?: RecoveryNotifier;
 }
 

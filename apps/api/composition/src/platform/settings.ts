@@ -56,7 +56,7 @@ export async function updateSettings(
     const securityChanged = current.mfa !== input.mfa || current.sessionIdleHours !== hours;
     if (securityChanged && !(typeof reason === 'string' && reason.trim()))
       throw new PlatformError('invalid_input');
-    k.settings.set(context.tenantId, {
+    await k.settings.update(context.tenantId, {
       name,
       mfa: input.mfa as MfaPolicy,
       sessionIdleHours: hours,

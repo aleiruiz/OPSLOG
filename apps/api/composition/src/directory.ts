@@ -33,6 +33,15 @@ export class TenantSettingsStore {
   public set(tenantId: string, settings: TenantSettings): void {
     this.byTenant.set(tenantId, settings);
   }
+  /** Stores then applies the settings: a durable subclass that cannot write leaves them unchanged. */
+  public async update(tenantId: string, settings: TenantSettings): Promise<void> {
+    await this.write(tenantId, settings);
+    this.set(tenantId, settings);
+  }
+  /** Persistence hook of durable subclasses; the in-memory store has nothing to write. */
+  protected write(_tenantId: string, _settings: TenantSettings): Promise<void> {
+    return Promise.resolve();
+  }
 }
 
 export interface CustomRole {

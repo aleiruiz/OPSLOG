@@ -3,13 +3,33 @@ import {
   AuthError,
   type TenantContext,
 } from '../../../../../packages/domain/identity/src/index.js';
-import { isVerifiedExternalPrincipal } from '../../../../../packages/platform/auth/src/index.js';
+import {
+  isVerifiedExternalPrincipal,
+  verifyExternalPrincipal,
+  type VerifiedExternalPrincipal,
+} from '../../../../../packages/platform/auth/src/index.js';
 import { subjectId, type TenantId } from '../../../../../packages/domain/tenants/src/index.js';
 import { ROLE_LABELS } from '../directory.js';
 import { PlatformError, failure, success, type PlatformResponse } from './errors.js';
 import { sessionIdOf } from './gate.js';
 import type { PlatformKernel } from './kernel.js';
-import type { SessionDetails } from './types.js';
+import type { PlatformOptions, SessionDetails } from './types.js';
+
+/** Verifies an authorization code (and PKCE verifier) through the injected OIDC verifier and seals the principal. */
+export async function verifyPrincipal(
+  options: Pick<PlatformOptions, 'verifier' | 'issuer'>,
+  code: string,
+  nonce: string,
+  verifier?: string,
+): Promise<PlatformResponse<VerifiedExternalPrincipal>> {
+  try {
+    return success(
+      await verifyExternalPrincipal(options.verifier, code, options.issuer, nonce, verifier),
+    );
+  } catch {
+    return failure(new PlatformError('unauthorized'));
+  }
+}
 
 /**
  * Creates an active tenant and its first administrator from a verified external principal.
@@ -26,7 +46,7 @@ export async function bootstrapTenant(
     if (!isVerifiedExternalPrincipal(input.adminPrincipal)) throw new PlatformError('unauthorized');
     if (typeof input.name !== 'string' || !input.name.trim() || input.name.trim().length > 160)
       throw new PlatformError('invalid_input');
-    const tenant = k.tenants.provisionVerified(input.name);
+    const tenant = await k.tenants.provision(input.name);
     try {
       const invitation = await k.identity.issueInvitation(tenant.id);
       // The persisted role is set while the membership is pending, so activation grants it directly.

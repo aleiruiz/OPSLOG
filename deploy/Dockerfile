@@ -24,6 +24,8 @@ RUN node apps/api/server/build.mjs && node apps/web/build.mjs
 FROM node:22-bookworm-slim AS api
 WORKDIR /app
 COPY --from=build /repo/apps/api/server/bundle/server.mjs ./server.mjs
+# The one-shot job of docker-compose.yml (`migrate` service) runs the same image: node migrate.mjs.
+COPY --from=build /repo/apps/api/server/bundle/migrate.mjs ./migrate.mjs
 USER node
 ENV PORT=8080
 EXPOSE 8080

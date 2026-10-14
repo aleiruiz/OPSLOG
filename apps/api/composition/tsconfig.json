@@ -56,6 +56,7 @@
     { "path": "../../../packages/persistence/imports" },
     { "path": "../../../packages/persistence/files" },
     { "path": "../../../packages/persistence/audit" },
+    { "path": "../../../packages/persistence/identity" },
     { "path": "../../../packages/domain/maintenance/plans" },
     { "path": "../../../packages/domain/maintenance/workshops" },
     { "path": "../../../packages/domain/maintenance/mechanics" },
