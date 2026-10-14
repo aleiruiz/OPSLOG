@@ -6,12 +6,12 @@ import { Button, DataTable, Panel, StatusBadge, UiState } from '@opslog/ui';
 import type { BffMaintenanceAlert } from '@opslog/contracts';
 import { ALERT_KIND_LABELS, alertReason, alertTarget, odometerAge } from './alertLabels';
 import { useDirectory, vehicleLabel } from './directory';
-import { formatDate } from './labels';
+import { formatInstantDay } from './labels';
 import type { MaintenancePorts } from './ports';
 import { errorKind, useResult } from './useResult';
 
 const PAGE_SIZE = 25;
-const day = (iso: string) => formatDate(iso.slice(0, 10));
+const day = (iso: string) => formatInstantDay(iso);
 
 /**
  * The in-app alert records of maintenance plans (MNT-UI acceptance #8), newest first and paged by

@@ -7,6 +7,7 @@ import type {
   BffWorkOrderStatus,
   BffWorkOrderTransition,
 } from '@opslog/contracts';
+import { formatDateTime } from '../incidents/time';
 
 /** Spanish labels for the English snake_case states of SPECS §6.1; always shown as text, not color only. */
 export const STATUS_LABELS: Readonly<Record<BffWorkOrderStatus, string>> = {
@@ -96,3 +97,14 @@ export const formatDate = (value: string | null): string =>
   value ? `${value.slice(8, 10)}/${value.slice(5, 7)}/${value.slice(0, 4)}` : 'Sin fecha';
 export const formatKm = (value: number | null): string =>
   value === null ? 'Sin dato' : `${value.toLocaleString('es-MX')} km`;
+
+/** The browser's IANA zone: maintenance has no company zone, so instants show in the viewer's local time. */
+const localZone = (): string => Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+/** An instant as `12/10/2026 14:37` in the viewer's zone (or the given one); never the raw UTC text. */
+export const formatInstant = (iso: string, zone: string = localZone()): string =>
+  formatDateTime(iso, zone);
+
+/** The calendar day of an instant in the viewer's zone (or the given one), as `12/10/2026`. */
+export const formatInstantDay = (iso: string, zone: string = localZone()): string =>
+  formatInstant(iso, zone).slice(0, 10);

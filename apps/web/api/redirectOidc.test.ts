@@ -125,3 +125,25 @@ describe('redirecting identity provider: corrupt pending record', () => {
     expect(oidc.complete?.(new URLSearchParams({ code: 'a', state: 's' })).ok).toBe(false);
   });
 });
+
+describe('redirecting identity provider: end of session', () => {
+  it('leaves for the hosted logout page, returning to the site root', () => {
+    const { oidc, navigate } = setup();
+    oidc.endSession?.();
+    const url = new URL(navigate.mock.calls[0]?.[0] as string);
+    expect(`${url.origin}${url.pathname}`).toBe('https://login.example.test/logout');
+    expect(url.searchParams.get('client_id')).toBe('client-1');
+    expect(url.searchParams.get('logout_uri')).toBe(`${window.location.origin}/`);
+  });
+
+  it('honours a configured logout address', () => {
+    const navigate = vi.fn();
+    const oidc = createRedirectOidc(
+      { ...config, logoutUri: 'https://app.example.test/bye/' },
+      { navigate },
+    );
+    oidc.endSession?.();
+    const url = new URL(navigate.mock.calls[0]?.[0] as string);
+    expect(url.searchParams.get('logout_uri')).toBe('https://app.example.test/bye/');
+  });
+});

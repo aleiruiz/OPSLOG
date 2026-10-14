@@ -7,6 +7,8 @@ export interface RedirectOidcConfig {
   readonly clientId: string;
   /** Where the provider sends the browser back; must be registered at the provider. */
   readonly redirectUri: string;
+  /** Where the provider returns after sign-out; must be registered there. Defaults to `<origin>/`. */
+  readonly logoutUri?: string;
 }
 
 export interface RedirectOidcEnv {
@@ -84,6 +86,14 @@ export function createRedirectOidc(
       navigate(url.toString());
       // The page is leaving: the person comes back through the callback route, not through this call.
       return new Promise<never>(() => undefined);
+    },
+    endSession: () => {
+      const url = new URL(`${config.domain}/logout`);
+      url.search = new URLSearchParams({
+        client_id: config.clientId,
+        logout_uri: config.logoutUri ?? `${window.location.origin}/`,
+      }).toString();
+      navigate(url.toString());
     },
     complete: (search): Result<OidcCompletion> => {
       let raw: string | null = null;

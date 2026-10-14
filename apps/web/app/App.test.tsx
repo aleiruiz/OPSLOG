@@ -130,6 +130,38 @@ describe('shell: session, company and user', () => {
     expect(api.controls.isSignedIn()).toBe(false);
   });
 
+  it('ends the provider session after signing out of a redirecting provider', async () => {
+    const endSession = vi.fn();
+    const base = createMockApi();
+    const api = { ...base, oidc: { ...base.oidc, redirects: true, endSession } };
+    await renderApp({ api });
+    await screen.findByRole('heading', { name: 'Inicio', level: 1 });
+    click('Cerrar sesión');
+    await waitFor(() => expect(endSession).toHaveBeenCalledTimes(1));
+  });
+
+  it('does not end the provider session when the sign-out fails', async () => {
+    const endSession = vi.fn();
+    const base = createMockApi();
+    const api = { ...base, oidc: { ...base.oidc, redirects: true, endSession } };
+    await renderApp({ api });
+    await screen.findByRole('heading', { name: 'Inicio', level: 1 });
+    api.controls.failNext('logout');
+    click('Cerrar sesión');
+    await screen.findByRole('alert');
+    expect(endSession).not.toHaveBeenCalled();
+  });
+
+  it('does not end a provider session that never redirected', async () => {
+    const endSession = vi.fn();
+    const base = createMockApi();
+    await renderApp({ api: { ...base, oidc: { ...base.oidc, endSession } } });
+    await screen.findByRole('heading', { name: 'Inicio', level: 1 });
+    click('Cerrar sesión');
+    await screen.findByRole('heading', { name: 'Iniciar sesión', level: 1 });
+    expect(endSession).not.toHaveBeenCalled();
+  });
+
   it('closes the navigation menu with Escape and returns focus to its button', async () => {
     await renderApp();
     await screen.findByRole('heading', { name: 'Inicio', level: 1 });

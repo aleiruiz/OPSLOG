@@ -10,6 +10,7 @@ const container = document.getElementById('root');
 if (container) {
   const domain = import.meta.env?.VITE_OIDC_DOMAIN;
   const clientId = import.meta.env?.VITE_OIDC_CLIENT_ID;
+  const logoutUri = import.meta.env?.VITE_OIDC_LOGOUT_URI;
   if (import.meta.env?.DEV === true) {
     const mode = document.querySelector('meta[name="opslog-api"]')?.getAttribute('content');
     void Promise.all([import('../api/ports'), import('../api/fakeOidc'), import('./mockApi')]).then(
@@ -26,6 +27,7 @@ if (container) {
               domain,
               clientId,
               redirectUri: `${window.location.origin}/auth/callback`,
+              ...(logoutUri ? { logoutUri } : {}),
             }),
           ),
         ),
