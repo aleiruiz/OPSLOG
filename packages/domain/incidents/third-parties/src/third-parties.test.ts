@@ -7,6 +7,7 @@ import {
   EDITOR,
   GENERIC_EDITOR,
   MANAGER,
+  NOW,
   OTHER_REPORTER,
   PARTY,
   PII_READER,
@@ -428,6 +429,7 @@ describe('Idempotency-Key', () => {
       world.store,
       new InMemoryIncidentChildStore(world.store),
       new IdentityVault(world.cipher),
+      { now: () => NOW },
     );
     expect(
       await rejection(empty.create(TENANT_A, MANAGER, incident.id, body, 'gone-key-1')),
