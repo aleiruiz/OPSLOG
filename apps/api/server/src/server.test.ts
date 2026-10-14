@@ -82,7 +82,7 @@ describe('startWorkerLoop', () => {
     const loop = startWorkerLoop(value, () => undefined, 1000);
     await vi.advanceTimersByTimeAsync(1000);
     expect(calls).toEqual(['start', 'drain', 'scans', 'relay']);
-    loop.stop();
+    await loop.stop();
     expect(calls.at(-1)).toBe('stop');
   });
 
@@ -94,6 +94,6 @@ describe('startWorkerLoop', () => {
     await vi.advanceTimersByTimeAsync(2000);
     expect(reports).toEqual(['worker_tick_failed Error', 'worker_tick_failed Error']);
     expect(calls.filter((c) => c === 'drain')).toHaveLength(2);
-    loop.stop();
+    await loop.stop();
   });
 });

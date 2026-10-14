@@ -3,7 +3,8 @@ import type { WorkerRuntime } from '../../../worker/composition/src/index.js';
 export interface WorkerLoop {
   /** Runs one tick now (the timer calls the same function); resolves when it finished. */
   tick(): Promise<void>;
-  stop(): void;
+  /** Stops the timers and resolves once a tick that was running has finished. */
+  stop(): Promise<void>;
 }
 
 const TICK_MS = 5_000;
@@ -18,28 +19,33 @@ export function startWorkerLoop(
   report: (message: string) => void,
   tickMs = TICK_MS,
 ): WorkerLoop {
-  let busy = false;
-  const tick = async (): Promise<void> => {
-    if (busy) return;
-    busy = true;
+  let running: Promise<void> | undefined;
+  const run = async (): Promise<void> => {
     try {
       await runtime.drainOutbox();
       await runtime.runScans();
       await runtime.runAuditRelay();
     } catch (error) {
       report(`worker_tick_failed ${error instanceof Error ? error.name : 'Error'}`);
-    } finally {
-      busy = false;
     }
+  };
+  const tick = (): Promise<void> => {
+    if (running) return running;
+    const current = run().finally(() => {
+      running = undefined;
+    });
+    running = current;
+    return current;
   };
   runtime.periodic.start();
   const handle = setInterval(() => void tick(), tickMs);
   handle.unref();
   return {
     tick,
-    stop: () => {
+    stop: async () => {
       clearInterval(handle);
       runtime.periodic.stop();
+      await running;
     },
   };
 }

@@ -18,15 +18,17 @@ El worker corre dentro de `api` porque hoy todos los adaptadores son en memoria:
 
 Se definen en Coolify (Environment Variables de la aplicación) o en un `.env` local (`.env.example`). Nunca se versionan valores reales.
 
-| Variable                     | Obligatoria | Qué es                                                                                                                                       |
-| ---------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `OPSLOG_PUBLIC_ORIGIN`       | sí          | Origen público con https, sin ruta: `https://opslog.northsoftmx.com`. El BFF solo acepta peticiones de ese origen.                           |
-| `OPSLOG_BFF_SECRET`          | sí          | Secreto de CSRF y cursores, 32+ caracteres (`openssl rand -base64 48`).                                                                      |
-| `OPSLOG_GRANT_SECRET`        | sí          | Secreto de las descargas firmadas, 32+ caracteres. Distinto del anterior.                                                                    |
-| `OPSLOG_MYSQL_ROOT_PASSWORD` | sí          | Contraseña root de MySQL.                                                                                                                    |
-| `OPSLOG_AUTH_MODE`           | no          | Solo `synthetic` en esta versión. El verificador real de Cognito lo añade su propio cambio (se configurará con las variables de ese cambio). |
+| Variable                                                                                         | Obligatoria   | Qué es                                                                                                                                                 |
+| ------------------------------------------------------------------------------------------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `OPSLOG_PUBLIC_ORIGIN`                                                                           | sí            | Origen público con https, sin ruta: `https://opslog.northsoftmx.com`. El BFF solo acepta peticiones de ese origen.                                     |
+| `OPSLOG_BFF_SECRET`                                                                              | sí            | Secreto de CSRF y cursores, 32+ caracteres (`openssl rand -base64 48`).                                                                                |
+| `OPSLOG_GRANT_SECRET`                                                                            | sí            | Secreto de las descargas firmadas, 32+ caracteres. Distinto del anterior.                                                                              |
+| `OPSLOG_MYSQL_ROOT_PASSWORD`                                                                     | sí            | Contraseña root de MySQL.                                                                                                                              |
+| `OPSLOG_OBJECT_STORAGE`                                                                          | no            | `memory` (por defecto) o `s3`. Con `s3` son obligatorias las cuatro siguientes.                                                                        |
+| `OPSLOG_S3_BUCKET`, `OPSLOG_S3_REGION`, `OPSLOG_S3_ACCESS_KEY_ID`, `OPSLOG_S3_SECRET_ACCESS_KEY` | solo con `s3` | Bucket privado de staging y credenciales de la aplicación (usuario IAM acotado a `tenants/*`). Se cargan como secretos en Coolify; nunca se versionan. |
+| `OPSLOG_AUTH_MODE`                                                                               | no            | Solo `synthetic` en esta versión. El verificador real de Cognito lo añade su propio cambio (se configurará con las variables de ese cambio).           |
 
-`OPSLOG_ENV=staging` ya está fijo en el compose. No definir `AWS_*` ni `NODE_ENV=production`: la guarda de arranque lo rechaza. Las claves de S3 llegarán como `OPSLOG_S3_*` con el adaptador S3.
+`OPSLOG_ENV=staging` ya está fijo en el compose. No definir `AWS_*` ni `NODE_ENV=production`: la guarda de arranque lo rechaza. Las claves de S3 van como `OPSLOG_S3_*`, no `AWS_*`.
 
 ## Pasos en Coolify
 
@@ -51,4 +53,4 @@ Para construir detrás de un proxy que inspecciona TLS: `docker build --secret i
 
 - **Sin inicio de sesión real todavía.** La compilación de producción de la web falla cerrada («El inicio de sesión no está disponible») hasta que llegue el login con Cognito; la API usa el verificador sintético. La pila arranca y responde, pero aún no se puede entrar.
 - **Estado en memoria:** reiniciar `api` borra empresas, usuarios y datos. MySQL está desplegado pero sin conectar: la persistencia (control de tenants e identidad, y la base por empresa con sus cuentas y migraciones) es un cambio aparte, y ahí se añadirán las migraciones al desplegar.
-- **Archivos:** en memoria hasta que se active el adaptador S3 (`OPSLOG_S3_*`).
+- **Archivos:** en memoria salvo que se active `OPSLOG_OBJECT_STORAGE=s3` (adaptador S3 ya disponible; no probado contra AWS real desde aquí).

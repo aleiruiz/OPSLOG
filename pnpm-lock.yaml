@@ -185,12 +185,6 @@ importers:
 
   apps/worker/maintenance-plans: {}
 
-  infra/storage:
-    dependencies:
-      '@aws-sdk/client-s3':
-        specifier: ^3.1150.0
-        version: 3.1150.0
-
   packages/contracts:
     devDependencies:
       vitest:

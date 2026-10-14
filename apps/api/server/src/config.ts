@@ -9,6 +9,8 @@ export interface ServerConfig {
   /** Secret for download grants (at least 32 characters). */
   readonly grantSecret: string;
   readonly authMode: 'synthetic';
+  /** `s3` also needs the OPSLOG_S3_* variables (read by the S3 adapter itself). */
+  readonly objectStorage: 'memory' | 's3';
 }
 
 export type Env = Readonly<Record<string, string | undefined>>;
@@ -47,6 +49,13 @@ export function readConfig(env: Env): ServerConfig {
   if (grantSecret.length < MIN_SECRET)
     throw new Error(`OPSLOG_GRANT_SECRET needs at least ${MIN_SECRET} characters`);
 
+  if (bffSecret === grantSecret)
+    throw new Error('OPSLOG_GRANT_SECRET must differ from OPSLOG_BFF_SECRET');
+
+  const objectStorage = env.OPSLOG_OBJECT_STORAGE?.trim() || 'memory';
+  if (objectStorage !== 'memory' && objectStorage !== 's3')
+    throw new Error('OPSLOG_OBJECT_STORAGE must be memory or s3');
+
   const authMode = env.OPSLOG_AUTH_MODE?.trim() || 'synthetic';
   // The real Cognito verifier is added by its own change; until then only the synthetic one exists.
   if (authMode !== 'synthetic') throw new Error('OPSLOG_AUTH_MODE must be synthetic in this build');
@@ -58,5 +67,6 @@ export function readConfig(env: Env): ServerConfig {
     bffSecret,
     grantSecret,
     authMode,
+    objectStorage,
   };
 }

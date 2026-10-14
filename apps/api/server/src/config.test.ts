@@ -16,6 +16,7 @@ describe('readConfig', () => {
       bffSecret: base.OPSLOG_BFF_SECRET,
       grantSecret: base.OPSLOG_GRANT_SECRET,
       authMode: 'synthetic',
+      objectStorage: 'memory',
     });
     expect(readConfig({ ...base, PORT: '9000', HOST: '127.0.0.1' })).toMatchObject({
       port: 9000,
@@ -52,6 +53,11 @@ describe('readConfig', () => {
     expect(() => readConfig({ ...base, OPSLOG_GRANT_SECRET: 'short' })).toThrow(
       'OPSLOG_GRANT_SECRET',
     );
+    expect(() => readConfig({ ...base, OPSLOG_GRANT_SECRET: base.OPSLOG_BFF_SECRET })).toThrow(
+      'must differ',
+    );
+    expect(readConfig({ ...base, OPSLOG_OBJECT_STORAGE: 's3' }).objectStorage).toBe('s3');
+    expect(() => readConfig({ ...base, OPSLOG_OBJECT_STORAGE: 'gcs' })).toThrow('memory or s3');
     expect(() => readConfig({ ...base, PORT: 'abc' })).toThrow('PORT');
     expect(() => readConfig({ ...base, PORT: '70000' })).toThrow('PORT');
     expect(() => readConfig({ ...base, OPSLOG_AUTH_MODE: 'cognito' })).toThrow('synthetic');

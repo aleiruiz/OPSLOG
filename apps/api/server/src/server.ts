@@ -5,6 +5,7 @@ import {
   createPlatform,
   FakeOidcVerifier,
   InMemoryTenantStore,
+  s3ObjectStorageFromEnv,
 } from '../../composition/src/index.js';
 import { assertStagingOnly, type RuntimeDescriptor } from '../../../../infra/runtime/src/index.js';
 import type { ServerConfig, Env } from './config.js';
@@ -55,6 +56,7 @@ export async function startServer(
     environment: 'staging',
     adapters: {
       tenants: new InMemoryTenantStore(),
+      ...(config.objectStorage === 's3' ? { storage: s3ObjectStorageFromEnv(env) } : {}),
       audit: new InMemoryAuditStore(),
       // In memory there is no separate projection to relay to; the relay stage is a no-op.
       auditRelay: { runBatch: async () => 0 },
@@ -81,7 +83,7 @@ export async function startServer(
     port,
     tick: worker.tick,
     stop: async () => {
-      worker.stop();
+      await worker.stop();
       await new Promise<void>((resolve) => {
         server.close(() => resolve());
         server.closeAllConnections();
