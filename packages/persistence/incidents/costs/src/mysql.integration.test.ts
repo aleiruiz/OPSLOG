@@ -173,8 +173,13 @@ suite('incident costs and repair links on disposable MySQL 8.4', () => {
       await db.rows(`SELECT * FROM ${AUDIT_TABLES.local}`),
       await db.rows(`SELECT * FROM ${AUDIT_TABLES.outbox}`),
     ]);
-    for (const secret of [SECRET_NOTE, '999999999999999', '777'])
-      expect(dump).not.toContain(secret);
+    for (const secret of [SECRET_NOTE, '999999999999999']) expect(dump).not.toContain(secret);
+    // Random ids, hashes and timestamps may contain "777" by chance; only the amount matters.
+    const noIds = dump
+      .replace(/\d{4}-\d{2}-\d{2}T[\d:.]+Z/g, '')
+      .replace(/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}/g, '')
+      .replace(/[0-9a-f]{16,}/g, '');
+    expect(noIds).not.toContain('777');
     const events = await db.rows<{ payload: Record<string, unknown> }>(
       `SELECT payload FROM ${AUDIT_TABLES.outbox} WHERE tenant_id=? AND entity_id=? AND type='incident.costs_changed'`,
       [tenantA, incident.id],
