@@ -14,10 +14,16 @@ describe('s3ObjectStorageFromEnv', () => {
     expect(
       s3ObjectStorageFromEnv({
         ...env,
+        NODE_ENV: 'test',
         OPSLOG_S3_ENDPOINT: 'http://127.0.0.1:1',
         OPSLOG_S3_KMS_KEY_ID: 'k',
       }),
     ).toBeDefined();
+  });
+  it('refuses a custom endpoint outside tests', () => {
+    expect(() =>
+      s3ObjectStorageFromEnv({ ...env, NODE_ENV: 'production', OPSLOG_S3_ENDPOINT: 'http://x' }),
+    ).toThrow('only allowed');
   });
   it.each(Object.keys(env))('requires %s and ignores ambient AWS_* credentials', (name) => {
     const missing = { ...env, [name]: ' ', AWS_ACCESS_KEY_ID: 'ambient' };

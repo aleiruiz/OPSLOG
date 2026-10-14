@@ -90,7 +90,7 @@ describe('staging descriptor guards', () => {
         mutate({ forbiddenEnv: descriptor.forbiddenEnv.filter((n) => n !== 'AWS_PROFILE') }),
       ),
     ).toEqual(['forbiddenEnv must include AWS_PROFILE']);
-    expect(validateDescriptor(mutate({ forbiddenEnv: undefined }))).toHaveLength(8);
+    expect(validateDescriptor(mutate({ forbiddenEnv: undefined }))).toHaveLength(11);
     expect(validateDescriptor(mutate({ guards: ['Staging only.'] }))).toEqual([
       'guards must state: aws is deferred',
       'guards must state: not production',

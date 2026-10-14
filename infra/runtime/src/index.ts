@@ -59,6 +59,10 @@ export const REQUIRED_FORBIDDEN_ENV: readonly string[] = [
   'AWS_ROLE_ARN',
   'AWS_WEB_IDENTITY_TOKEN_FILE',
   'AWS_CONTAINER_CREDENTIALS_*',
+  // Ambient SDK settings that could redirect signed requests or load credentials from files.
+  'AWS_ENDPOINT_URL*',
+  'AWS_CONFIG_FILE',
+  'AWS_SHARED_CREDENTIALS_FILE',
 ];
 
 /** Returns human-readable problems; an empty list means the descriptor meets the staging-only rules. */

@@ -59,7 +59,8 @@ export class AwsS3ObjectClient implements S3ObjectClient {
       );
       return out.Body ? await out.Body.transformToByteArray() : null;
     } catch (error) {
-      if (statusOf(error) === 404) return null;
+      // Without s3:ListBucket (the app role has none) S3 answers a missing key with 403.
+      if (statusOf(error) === 404 || statusOf(error) === 403) return null;
       throw error;
     }
   }

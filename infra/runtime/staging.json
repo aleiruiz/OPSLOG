@@ -39,12 +39,15 @@
     "AWS_PROFILE",
     "AWS_ROLE_ARN",
     "AWS_WEB_IDENTITY_TOKEN_FILE",
-    "AWS_CONTAINER_CREDENTIALS_*"
+    "AWS_CONTAINER_CREDENTIALS_*",
+    "AWS_ENDPOINT_URL*",
+    "AWS_CONFIG_FILE",
+    "AWS_SHARED_CREDENTIALS_FILE"
   ],
   "guards": [
     "Staging only: this descriptor is not production and does not authorize a production deployment.",
     "AWS is deferred (ADR-0002): no cloud resource, account, region, endpoint, role or credential is described here.",
-    "Only objectStorage may call a real cloud service (private S3 bucket, scoped credentials from OPSLOG_S3_* env); every other adapter is in-memory or synthetic and state is lost on restart.",
+    "Only objectStorage may call a real cloud service (private S3 bucket, application credentials limited to the tenants/ prefix, from OPSLOG_S3_* env; see ADR-0012 amendment); every other adapter is in-memory or synthetic and state is lost on restart.",
     "Synthetic data only: no real customer, employee, vehicle or document data."
   ],
   "pending": [

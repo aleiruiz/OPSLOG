@@ -20,6 +20,8 @@ export function s3ObjectStorageFromEnv(
     return value;
   };
   const endpoint = env.OPSLOG_S3_ENDPOINT?.trim();
+  if (endpoint && env.NODE_ENV !== 'test')
+    throw new Error('OPSLOG_S3_ENDPOINT is only allowed when NODE_ENV=test');
   const kmsKeyId = env.OPSLOG_S3_KMS_KEY_ID?.trim();
   return new S3ObjectStorage({
     bucket: read('OPSLOG_S3_BUCKET'),

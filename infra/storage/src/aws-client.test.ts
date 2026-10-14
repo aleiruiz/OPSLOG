@@ -7,6 +7,7 @@ import { AwsS3ObjectClient } from './aws-client.js';
 const objects = new Map<string, Buffer>();
 const seen: { method: string; headers: Record<string, unknown> }[] = [];
 let failing = false;
+let forbidden = false;
 let server: Server;
 let endpoint = '';
 
@@ -17,7 +18,11 @@ beforeAll(async () => {
     req.on('end', () => {
       seen.push({ method: req.method ?? '', headers: req.headers });
       const key = req.url?.split('?')[0] ?? '';
-      if (failing) {
+      if (forbidden) {
+        res
+          .writeHead(403, { 'content-type': 'application/xml' })
+          .end('<Error><Code>AccessDenied</Code></Error>');
+      } else if (failing) {
         res.writeHead(500).end();
       } else if (req.method === 'PUT') {
         if (req.headers['if-none-match'] === '*' && objects.has(key)) {
@@ -91,5 +96,10 @@ describe('AwsS3ObjectClient against an S3-compatible stub', () => {
       client().getObject({ bucket: 'b', key: 'tenants/t/quarantine/originals/g' }),
     ).rejects.toThrow();
     failing = false;
+    forbidden = true;
+    expect(
+      await client().getObject({ bucket: 'b', key: 'tenants/t/quarantine/originals/h' }),
+    ).toBeNull();
+    forbidden = false;
   });
 });
