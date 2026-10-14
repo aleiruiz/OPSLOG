@@ -39,6 +39,37 @@ describe('startServer', () => {
     expect(lines.filter((line) => line.startsWith('worker_tick_failed'))).toEqual([]);
   });
 
+  it('bootstraps the first company on start and logs it without personal data', async () => {
+    const lines: string[] = [];
+    const boot = {
+      OPSLOG_BOOTSTRAP_COMPANY: 'Demo SA',
+      OPSLOG_BOOTSTRAP_ADMIN_SUB: 'sub-secret-1',
+    };
+    const withBoot = { ...env, ...boot };
+    running = await startServer(withBoot, readConfig(withBoot), staging, (l) => lines.push(l));
+    expect(lines.filter((l) => l.startsWith('bootstrap_created'))).toHaveLength(1);
+    expect(lines.join('\n')).not.toContain('sub-secret-1');
+  });
+
+  it('starts in cognito mode without contacting the identity provider', async () => {
+    const cognito = {
+      ...env,
+      OPSLOG_AUTH_MODE: 'cognito',
+      OPSLOG_OIDC_ISSUER: 'https://cognito-idp.us-east-1.amazonaws.com/us-east-1_pool',
+      OPSLOG_OIDC_DOMAIN: 'https://demo.auth.us-east-1.amazoncognito.com',
+      OPSLOG_OIDC_CLIENT_ID: 'client-id',
+      OPSLOG_OIDC_CLIENT_SECRET: 'client-secret-value',
+      OPSLOG_OIDC_REDIRECT_URI: 'http://localhost:8081/auth/callback',
+      OPSLOG_BOOTSTRAP_COMPANY: 'Demo SA',
+      OPSLOG_BOOTSTRAP_ADMIN_SUB: 'sub-1',
+    };
+    const lines: string[] = [];
+    running = await startServer(cognito, readConfig(cognito), staging, (l) => lines.push(l));
+    expect(lines.some((l) => l.startsWith('bootstrap_created'))).toBe(true);
+    const base = `http://127.0.0.1:${running.port}`;
+    expect((await fetch(`${base}/api/auth/csrf`)).status).toBe(200);
+  });
+
   it('refuses to start outside staging or with cloud credentials', async () => {
     await expect(
       startServer({ ...env, OPSLOG_ENV: 'production' }, readConfig(env), staging),

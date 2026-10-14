@@ -7,8 +7,10 @@ import {
   InMemoryTenantStore,
   s3ObjectStorageFromEnv,
 } from '../../composition/src/index.js';
+import { createCognitoVerifier } from '../../../../packages/platform/auth/src/cognito.js';
 import { assertStagingOnly, type RuntimeDescriptor } from '../../../../infra/runtime/src/index.js';
 import type { ServerConfig, Env } from './config.js';
+import { bootstrapFirstCompany } from './bootstrap.js';
 import { startWorkerLoop, type WorkerLoop } from './worker-loop.js';
 
 /** Liveness endpoint for the container health check; answered before the BFF so it needs no session. */
@@ -48,10 +50,11 @@ export async function startServer(
   log: (line: string) => void = stdout,
 ): Promise<RunningServer> {
   assertStagingOnly(env, descriptor);
-  const verifier = new FakeOidcVerifier();
+  const fake = new FakeOidcVerifier();
+  const verifier = config.oidc ? createCognitoVerifier(config.oidc) : fake;
   const platform = createPlatform({
     verifier,
-    issuer: verifier.issuer,
+    issuer: config.oidc?.issuer ?? fake.issuer,
     grantSecret: config.grantSecret,
     environment: 'staging',
     adapters: {
@@ -62,6 +65,10 @@ export async function startServer(
       auditRelay: { runBatch: async () => 0 },
     },
   });
+  if (config.bootstrap)
+    log(
+      await bootstrapFirstCompany(platform, config.oidc?.issuer ?? fake.issuer, config.bootstrap),
+    );
   const handler = createBffHandler({
     platform,
     secret: config.bffSecret,

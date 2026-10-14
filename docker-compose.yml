@@ -12,7 +12,16 @@ services:
       OPSLOG_PUBLIC_ORIGIN: ${OPSLOG_PUBLIC_ORIGIN:?public https origin, e.g. https://opslog.example.com}
       OPSLOG_BFF_SECRET: ${OPSLOG_BFF_SECRET:?at least 32 characters}
       OPSLOG_GRANT_SECRET: ${OPSLOG_GRANT_SECRET:?at least 32 characters}
-      OPSLOG_AUTH_MODE: ${OPSLOG_AUTH_MODE:-synthetic}
+      # cognito (default here: real sign-in, needs the OPSLOG_OIDC_* values) or synthetic (local only).
+      OPSLOG_AUTH_MODE: ${OPSLOG_AUTH_MODE:-cognito}
+      OPSLOG_OIDC_ISSUER: ${OPSLOG_OIDC_ISSUER:-}
+      OPSLOG_OIDC_DOMAIN: ${OPSLOG_OIDC_DOMAIN:-}
+      OPSLOG_OIDC_CLIENT_ID: ${OPSLOG_OIDC_CLIENT_ID:-}
+      OPSLOG_OIDC_CLIENT_SECRET: ${OPSLOG_OIDC_CLIENT_SECRET:-}
+      OPSLOG_OIDC_REDIRECT_URI: ${OPSLOG_OIDC_REDIRECT_URI:-}
+      # Optional first company + its administrator (Cognito sub); set both or neither.
+      OPSLOG_BOOTSTRAP_COMPANY: ${OPSLOG_BOOTSTRAP_COMPANY:-}
+      OPSLOG_BOOTSTRAP_ADMIN_SUB: ${OPSLOG_BOOTSTRAP_ADMIN_SUB:-}
       # memory (default) or s3; with s3 the OPSLOG_S3_* values below are required.
       OPSLOG_OBJECT_STORAGE: ${OPSLOG_OBJECT_STORAGE:-memory}
       OPSLOG_S3_BUCKET: ${OPSLOG_S3_BUCKET:-}
@@ -27,6 +36,10 @@ services:
       context: .
       dockerfile: deploy/Dockerfile
       target: web
+      # Public settings of the redirect login (no secret); empty keeps the production web fail-closed.
+      args:
+        VITE_OIDC_DOMAIN: ${OPSLOG_OIDC_DOMAIN:-}
+        VITE_OIDC_CLIENT_ID: ${OPSLOG_OIDC_CLIENT_ID:-}
     restart: unless-stopped
     depends_on:
       api:
