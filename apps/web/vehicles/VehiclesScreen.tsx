@@ -1,8 +1,8 @@
 import React from 'react';
 import { useResource, type ResourceState } from '../app/resource';
 import type { Vehicle, VehicleListQuery } from '../app/types';
+import { loadAllAreas } from '../areas/loadAreas';
 import { useSession } from '../auth/session';
-import { OPAQUE_ID } from './rules';
 import {
   noFilters,
   VehicleListView,
@@ -16,19 +16,18 @@ const PAGE_SIZE = 25;
 export function VehiclesScreen() {
   const { ports, can, markExpired } = useSession();
   const [filters, setFilters] = React.useState<VehicleFilters>(noFilters);
-  const area = filters.areaId.trim();
-  const areaValid = area === '' || OPAQUE_ID.test(area);
-  const appliedArea = areaValid ? area : '';
-  const queryKey = JSON.stringify([filters.status, appliedArea, filters.includeArchived]);
+  const queryKey = JSON.stringify([filters.status, filters.areaId, filters.includeArchived]);
   const query = (cursor?: string): VehicleListQuery => ({
     limit: PAGE_SIZE,
     ...(cursor === undefined ? {} : { cursor }),
     ...(filters.status === '' ? {} : { status: filters.status }),
-    ...(appliedArea === '' ? {} : { areaId: appliedArea }),
+    ...(filters.areaId === '' ? {} : { areaId: filters.areaId }),
     ...(filters.includeArchived ? { includeArchived: 'true' as const } : {}),
   });
 
   const first = useResource(() => ports.vehicles.list(query()), [ports, queryKey]);
+  // The structure only names the areas and fills the filter: the list works without it (ids are shown instead).
+  const catalog = useResource(() => loadAllAreas(ports.areas, true), [ports]);
   const [extra, setExtra] = React.useState<{ items: Vehicle[]; cursor: string | null } | null>(
     null,
   );
@@ -77,13 +76,9 @@ export function VehiclesScreen() {
     <VehicleListView
       state={state}
       filters={filters}
-      areaError={
-        areaValid
-          ? undefined
-          : 'Usa letras, números, guion o guion bajo (hasta 64). El filtro no se aplica hasta que sea válido.'
-      }
+      areas={catalog.state.status === 'ready' ? catalog.state.data.areas : []}
       can={can}
-      filtersActive={filters.status !== '' || appliedArea !== '' || filters.includeArchived}
+      filtersActive={filters.status !== '' || filters.areaId !== '' || filters.includeArchived}
       loadingMore={loadingMore}
       notice={notice}
       onFiltersChange={setFilters}

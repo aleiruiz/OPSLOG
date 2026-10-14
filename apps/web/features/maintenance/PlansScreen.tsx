@@ -14,6 +14,7 @@ import type {
 } from '@opslog/contracts';
 import { useDirectory, vehicleLabel } from './directory';
 import { linkSx } from '../../app/router';
+import { dayIn } from '../incidents/time';
 import { formatDate, formatKm } from './labels';
 import { MaintenanceAlertsPanel } from './MaintenanceAlertsPanel';
 import { PlanForm } from './PlanForm';
@@ -195,6 +196,16 @@ function PlanSchedule({
     [ports, plan.id, plan.version],
     onExpired,
   );
+  // The company's zone decides what "today" is for a date target; the browser's zone while it is unknown.
+  const settings = useResult(() => ports.settings.get(), [ports], onExpired);
+  const zone =
+    settings.state.status === 'ready'
+      ? settings.state.data.timeZone
+      : Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const reached =
+    state.status === 'ready' &&
+    state.data.nextTargetDate !== null &&
+    state.data.nextTargetDate <= dayIn(Date.now(), zone);
   return (
     <Card
       component="section"
@@ -238,7 +249,9 @@ function PlanSchedule({
             </>
           ) : (
             <Typography color="text.secondary">
-              Todavía no se alcanza ningún objetivo; la orden se crea al alcanzar el primero.
+              {reached
+                ? 'Objetivo alcanzado; la orden preventiva se generará en la próxima revisión automática.'
+                : 'Todavía no se alcanza ningún objetivo; la orden se crea al alcanzar el primero.'}
             </Typography>
           )}
         </Stack>

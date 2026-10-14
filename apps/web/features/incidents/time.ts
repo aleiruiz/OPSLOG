@@ -53,6 +53,12 @@ export function formatDateTime(iso: string | null, zone: string): string {
   return `${two(wall.day)}/${two(wall.month)}/${wall.year} ${two(wall.hour)}:${two(wall.minute)}`;
 }
 
+/** The calendar day `2026-10-13` of an instant on the wall clock of the given zone (UTC if the zone is unknown). */
+export function dayIn(instant: number, zone: string): string {
+  const wall = wallTime(instant, zone);
+  return `${wall.year}-${two(wall.month)}-${two(wall.day)}`;
+}
+
 /** A calendar day `2026-10-12` as `12/10/2026`: calendar days never shift with a zone. */
 export const formatDay = (day: string | null): string =>
   day ? `${day.slice(8, 10)}/${day.slice(5, 7)}/${day.slice(0, 4)}` : 'Sin fecha';

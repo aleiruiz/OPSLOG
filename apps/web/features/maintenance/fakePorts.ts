@@ -31,6 +31,8 @@ export interface FakeMaintenanceOptions {
   readonly failLists?: boolean;
   /** Plans whose schedule reports a generated, not yet opened preventive order. */
   readonly generated?: readonly string[];
+  /** Date target reported by the schedule of a plan without a generated order (default 2026-11-01). */
+  readonly nextTargetDate?: string;
 }
 
 const at = '2026-10-12T12:00:00.000Z';
@@ -333,7 +335,7 @@ export function createFakeMaintenancePorts(options: FakeMaintenanceOptions = {})
                   }
                 : {
                     planId: id,
-                    nextTargetDate: '2026-11-01',
+                    nextTargetDate: options.nextTargetDate ?? '2026-11-01',
                     nextTargetKm: 15000,
                     occurrence: null,
                     order: null,

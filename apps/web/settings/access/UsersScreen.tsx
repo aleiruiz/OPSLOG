@@ -152,7 +152,18 @@ export function UsersScreen() {
                       <DataTable<UserRow>
                         caption={`Usuarios (${page.total})`}
                         columns={[
-                          { key: 'id', label: 'Identificador' },
+                          {
+                            key: 'id',
+                            label: 'Persona',
+                            render: (value) => {
+                              const id = String(value);
+                              return id === currentUserId ? (
+                                <span title={id}>Tú</span>
+                              ) : (
+                                <span title={id}>{`Usuario · ${id.slice(-6)}`}</span>
+                              );
+                            },
+                          },
                           { key: 'roleLabel', label: 'Rol' },
                           {
                             key: 'status',

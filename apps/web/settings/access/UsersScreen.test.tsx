@@ -11,6 +11,7 @@ import {
   screen,
   type,
   waitFor,
+  within,
   findSessionExpired,
 } from '../../app/test/utils';
 import { UsersScreen } from './UsersScreen';
@@ -28,7 +29,12 @@ describe('UsersScreen', () => {
     expect(await screen.findByRole('heading', { name: 'Cargando' })).toBeInTheDocument();
     await act(async () => gate.resolve());
     const table = await screen.findByRole('table', { name: 'Usuarios (28)' });
-    expect(table).toHaveTextContent('user-admin');
+    expect(table).toHaveTextContent('Tú');
+    expect(table).toHaveTextContent('Usuario · ');
+    expect(table).not.toHaveTextContent('user-admin');
+    expect(within(table).getByTitle('user-admin')).toHaveTextContent('Tú');
+    expect(within(table).getByTitle('user-dispatch')).toHaveTextContent('Usuario · spatch');
+    expect(within(table).getByRole('columnheader', { name: 'Persona' })).toBeInTheDocument();
     expect(table).not.toHaveTextContent('@');
     expect(table).toHaveTextContent('Administrador de empresa');
     expect(table).not.toHaveTextContent('manage_users');
