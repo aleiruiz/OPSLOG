@@ -16,10 +16,7 @@ import {
 import { isDurableAuditAdapterSet } from './platform/durable-audit.js';
 import { hasPersistentBusinessStores } from './platform/persistence-flags.js';
 import { TypeOrmFileSagaStore } from '../../../../packages/persistence/files/src/index.js';
-import {
-  verifyExternalPrincipal,
-  type VerifiedExternalPrincipal,
-} from '../../../../packages/platform/auth/src/index.js';
+import type { VerifiedExternalPrincipal } from '../../../../packages/platform/auth/src/index.js';
 import {
   InMemoryOutboxStore,
   type OutboxStore,
@@ -63,7 +60,7 @@ import type { IncidentRepairApi } from '../../incidents/repairs/src/index.js';
 import type { IncidentWorkflowApi } from '../../incidents/workflow/src/index.js';
 import { buildDomainApis } from './platform/apis.js';
 import { acceptInvitation, inspectInvitation, inviteUser } from './platform/invitations.js';
-import { PlatformError, failure, success, type PlatformResponse } from './platform/errors.js';
+import type { PlatformResponse } from './platform/errors.js';
 import { listAudit, publish } from './platform/events.js';
 import { GatedIdentityService, TenantGate } from './platform/gate.js';
 import { PlatformKernel } from './platform/kernel.js';
@@ -78,6 +75,7 @@ import {
   signIn,
   signOut,
   suspendTenant,
+  verifyPrincipal,
 } from './platform/sessions.js';
 import { getSettings, updateSettings } from './platform/settings.js';
 import type {
@@ -130,7 +128,7 @@ export class Platform {
   public readonly pipeline: FilePipeline;
   public readonly scanQueue: TenantAwareScanQueue;
   public readonly runtime: WorkerRuntime;
-  public readonly settings = new TenantSettingsStore();
+  public readonly settings: TenantSettingsStore;
   public readonly roles: RoleDirectory;
   public readonly drafts = new DraftStore();
   private readonly kernel: PlatformKernel;
@@ -142,6 +140,7 @@ export class Platform {
     this.now = options.now ?? (() => new Date());
     const adapters = options.adapters ?? {};
     this.tenants = adapters.tenants ?? new InMemoryTenantStore(this.now);
+    this.settings = adapters.tenantSettings ?? new TenantSettingsStore();
     const identityStore = adapters.identityStore ?? new InMemoryIdentityStore();
     const persistentIdentity = !(identityStore instanceof InMemoryIdentityStore);
     const requiresDurableAudit = persistentIdentity || hasPersistentBusinessStores(adapters);
@@ -262,17 +261,12 @@ export class Platform {
   }
 
   /** Verifies an authorization code (and PKCE verifier) through the injected OIDC verifier and seals the principal. */
-  public async verifyPrincipal(
+  public verifyPrincipal(
     code: string,
     nonce: string,
     verifier?: string,
   ): Promise<PlatformResponse<VerifiedExternalPrincipal>> {
-    const { verifier: oidc, issuer } = this.options;
-    try {
-      return success(await verifyExternalPrincipal(oidc, code, issuer, nonce, verifier));
-    } catch {
-      return failure(new PlatformError('unauthorized'));
-    }
+    return verifyPrincipal(this.options, code, nonce, verifier);
   }
 
   /**

@@ -37,25 +37,49 @@ const workspacePlugin = {
   resolveId: (id) => sources.get(id) ?? null,
 };
 
-await build({
-  configFile: false,
-  root: here('.'),
-  logLevel: 'warn',
-  plugins: [workspacePlugin],
-  ssr: { noExternal: true, target: 'node' },
-  build: {
-    ssr: here('src/main.ts'),
-    outDir: here('bundle'),
-    emptyOutDir: true,
-    target: 'node22',
-    minify: false,
-    sourcemap: false,
-    rollupOptions: {
-      // Optional drivers of TypeORM that this deployment never loads.
-      external: [
-        /^(pg|pg-native|pg-query-stream|oracledb|sqlite3|better-sqlite3|sql\.js|mongodb|mssql|mysql|redis|ioredis|react-native-sqlite-storage|typeorm-aurora-data-api-driver|@sap\/hana-client|hdb-pool|@google-cloud\/spanner)(\/|$)/,
-      ],
-      output: { entryFileNames: 'server.mjs', format: 'es' },
-    },
+/**
+ * TypeORM loads its MySQL driver with `require(name)` on a variable, which a bundler cannot see
+ * (the bundle would fail with "Mysql package has not been found"). A literal `require('mysql2')`
+ * in front of it makes the driver part of the bundle.
+ */
+const mysqlDriverPlugin = {
+  name: 'opslog-typeorm-mysql2',
+  enforce: 'pre',
+  transform(code, id) {
+    if (!/typeorm[\\/]platform[\\/]PlatformTools\.js$/.test(id)) return null;
+    const needle = 'return require(name);';
+    if (!code.includes(needle)) throw new Error('typeorm PlatformTools changed: update build.mjs');
+    return code.replace(needle, 'if (name === "mysql2") return require("mysql2"); ' + needle);
   },
-});
+};
+
+/** Each entry becomes one self-contained file: the server, and the one-shot migrate job. */
+const entries = [
+  { source: 'src/main.ts', file: 'server.mjs' },
+  { source: 'src/migrate.ts', file: 'migrate.mjs' },
+];
+
+for (const [index, entry] of entries.entries()) {
+  await build({
+    configFile: false,
+    root: here('.'),
+    logLevel: 'warn',
+    plugins: [workspacePlugin, mysqlDriverPlugin],
+    ssr: { noExternal: true, target: 'node' },
+    build: {
+      ssr: here(entry.source),
+      outDir: here('bundle'),
+      emptyOutDir: index === 0,
+      target: 'node22',
+      minify: false,
+      sourcemap: false,
+      rollupOptions: {
+        // Optional drivers of TypeORM that this deployment never loads.
+        external: [
+          /^(pg|pg-native|pg-query-stream|oracledb|sqlite3|better-sqlite3|sql\.js|mongodb|mssql|mysql|redis|ioredis|react-native-sqlite-storage|typeorm-aurora-data-api-driver|@sap\/hana-client|hdb-pool|@google-cloud\/spanner)(\/|$)/,
+        ],
+        output: { entryFileNames: entry.file, format: 'es' },
+      },
+    },
+  });
+}

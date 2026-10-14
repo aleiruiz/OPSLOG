@@ -2,6 +2,7 @@ import {
   cognitoConfigFromEnv,
   type CognitoOidcConfig,
 } from '../../../../packages/platform/auth/src/cognito.js';
+import { readMysqlConfig, type MysqlServerConfig } from './mysql-config.js';
 
 /** Everything the server reads from the environment, validated once at start-up. */
 export interface ServerConfig {
@@ -21,6 +22,10 @@ export interface ServerConfig {
   readonly bootstrap?: { readonly companyName: string; readonly adminSubject: string };
   /** `s3` also needs the OPSLOG_S3_* variables (read by the S3 adapter itself). */
   readonly objectStorage: 'memory' | 's3';
+  /** `mysql` keeps every record in the database (see `mysql`); `memory` loses them on restart. */
+  readonly persistence: 'memory' | 'mysql';
+  /** Present exactly when `persistence` is `mysql`. */
+  readonly mysql?: MysqlServerConfig;
 }
 
 export type Env = Readonly<Record<string, string | undefined>>;
@@ -96,6 +101,10 @@ export function readConfig(env: Env): ServerConfig {
   if (adminSubject && adminSubject.length > 200)
     throw new Error('OPSLOG_BOOTSTRAP_ADMIN_SUB is longer than 200 characters');
 
+  const persistence = env.OPSLOG_PERSISTENCE?.trim() || 'memory';
+  if (persistence !== 'memory' && persistence !== 'mysql')
+    throw new Error('OPSLOG_PERSISTENCE must be memory or mysql');
+
   return {
     host: env.HOST?.trim() || '0.0.0.0',
     port,
@@ -106,5 +115,7 @@ export function readConfig(env: Env): ServerConfig {
     ...(oidc ? { oidc } : {}),
     ...(companyName && adminSubject ? { bootstrap: { companyName, adminSubject } } : {}),
     objectStorage,
+    persistence,
+    ...(persistence === 'mysql' ? { mysql: readMysqlConfig(env) } : {}),
   };
 }

@@ -6,11 +6,13 @@ import {
   FakeOidcVerifier,
   InMemoryTenantStore,
   s3ObjectStorageFromEnv,
+  type MysqlPlatform,
 } from '../../composition/src/index.js';
 import { createCognitoVerifier } from '../../../../packages/platform/auth/src/cognito.js';
 import { assertStagingOnly, type RuntimeDescriptor } from '../../../../infra/runtime/src/index.js';
 import type { ServerConfig, Env } from './config.js';
 import { bootstrapFirstCompany } from './bootstrap.js';
+import { openPersistentAdapters } from './persistence.js';
 import { startWorkerLoop, type WorkerLoop } from './worker-loop.js';
 
 /** Liveness endpoint for the container health check; answered before the BFF so it needs no session. */
@@ -50,21 +52,45 @@ export async function startServer(
   log: (line: string) => void = stdout,
 ): Promise<RunningServer> {
   assertStagingOnly(env, descriptor);
+  const persistent = config.mysql ? await openPersistentAdapters(config.mysql) : undefined;
+  try {
+    return await listen(env, config, log, persistent);
+  } catch (error) {
+    await persistent?.close();
+    throw error;
+  }
+}
+
+async function listen(
+  env: Env,
+  config: ServerConfig,
+  log: (line: string) => void,
+  persistent: MysqlPlatform | undefined,
+): Promise<RunningServer> {
   const fake = new FakeOidcVerifier();
   const verifier = config.oidc ? createCognitoVerifier(config.oidc) : fake;
+  const storage = config.objectStorage === 's3' ? { storage: s3ObjectStorageFromEnv(env) } : {};
+  if (persistent && !('storage' in storage))
+    log(
+      'warning: OPSLOG_PERSISTENCE=mysql with OPSLOG_OBJECT_STORAGE=memory loses file contents on restart',
+    );
   const platform = createPlatform({
     verifier,
     issuer: config.oidc?.issuer ?? fake.issuer,
     grantSecret: config.grantSecret,
     environment: 'staging',
-    adapters: {
-      tenants: new InMemoryTenantStore(),
-      ...(config.objectStorage === 's3' ? { storage: s3ObjectStorageFromEnv(env) } : {}),
-      audit: new InMemoryAuditStore(),
-      // In memory there is no separate projection to relay to; the relay stage is a no-op.
-      auditRelay: { runBatch: async () => 0 },
-    },
+    adapters: persistent
+      ? { ...persistent.adapters, ...storage }
+      : {
+          tenants: new InMemoryTenantStore(),
+          ...storage,
+          audit: new InMemoryAuditStore(),
+          // In memory there is no separate projection to relay to; the relay stage is a no-op.
+          auditRelay: { runBatch: async () => 0 },
+        },
   });
+  // Restore the access directory before the bootstrap: after a restart the administrator must sign in.
+  if (persistent) log(`restored ${await persistent.hydrate(platform)} active memberships`);
   if (config.bootstrap)
     log(
       await bootstrapFirstCompany(platform, config.oidc?.issuer ?? fake.issuer, config.bootstrap),
@@ -95,6 +121,7 @@ export async function startServer(
         server.close(() => resolve());
         server.closeAllConnections();
       });
+      await persistent?.close();
     },
   };
 }

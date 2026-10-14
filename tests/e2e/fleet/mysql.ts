@@ -1,42 +1,15 @@
 import mysql from 'mysql2/promise';
 import { randomBytes } from 'node:crypto';
-import { AUDIT_TABLES } from '../../../packages/persistence/audit/src/index.js';
-import { AREA_TABLES } from '../../../packages/persistence/areas/src/index.js';
-import { VEHICLE_TABLES } from '../../../packages/persistence/vehicles/src/index.js';
-import { EMPLOYEE_TABLES } from '../../../packages/persistence/employees/src/index.js';
-import { DOCUMENT_TABLES } from '../../../packages/persistence/documents/src/index.js';
-import { POLICY_TABLES } from '../../../packages/persistence/insurance/src/index.js';
-import { ASSIGNMENT_TABLES } from '../../../packages/persistence/assignments/src/index.js';
-import { SETTINGS_TABLES } from '../../../packages/persistence/settings/src/index.js';
-import { IMPORT_TABLES } from '../../../packages/persistence/imports/src/index.js';
+import { FILES_MIGRATIONS_TABLE } from '../../../packages/persistence/files/src/index.js';
+import { MAINTENANCE_MIGRATIONS_TABLE } from '../../../packages/persistence/maintenance/plans/src/index.js';
+import { WORK_ORDER_MIGRATIONS_TABLE } from '../../../packages/persistence/maintenance/orders/src/index.js';
 import {
-  FILE_TABLES,
-  FILES_MIGRATOR_ACCOUNT,
-  FILES_MIGRATIONS_TABLE,
-  FILES_RUNTIME_ACCOUNT,
-} from '../../../packages/persistence/files/src/index.js';
-import {
-  MAINTENANCE_TABLES,
-  MAINTENANCE_MIGRATIONS_TABLE,
-  MAINTENANCE_RUNTIME_ACCOUNT,
-} from '../../../packages/persistence/maintenance/plans/src/index.js';
-import {
-  WORK_ORDER_MIGRATIONS_TABLE,
-  WORK_ORDER_TABLES,
-} from '../../../packages/persistence/maintenance/orders/src/index.js';
-import {
-  INCIDENT_RUNTIME_ACCOUNT,
-  INCIDENT_TABLES,
-} from '../../../packages/persistence/incidents/cases/src/index.js';
-import { INCIDENT_REPAIR_TABLES } from '../../../packages/persistence/incidents/repairs/src/index.js';
-import { INCIDENT_COST_TABLES } from '../../../packages/persistence/incidents/costs/src/index.js';
-import { INCIDENT_SLA_TABLES } from '../../../packages/persistence/incidents/sla/src/index.js';
-import { INCIDENT_WORKFLOW_TABLES } from '../../../packages/persistence/incidents/workflow/src/index.js';
-import { INCIDENT_CHILD_TABLES } from '../../../packages/persistence/incidents/third-parties/src/index.js';
-import {
+  buildFleetAccounts,
   createFleetMigrationModules,
   openFleetRuntimeStores,
   runFleetAuditMigrations,
+  provisionFleetRuntimeAccounts,
+  provisionMigrators,
   runFleetMigrations,
   type FleetMigrationCredentials,
   type FleetRuntimeCredentials,
@@ -65,95 +38,7 @@ function adminConfig(value: string) {
   };
 }
 
-type Grant = { readonly table: string; readonly privileges: readonly string[] };
-const grants = {
-  areas: [
-    { table: AREA_TABLES.areas, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
-    { table: AREA_TABLES.responsibles, privileges: ['SELECT', 'INSERT', 'DELETE'] },
-    { table: AREA_TABLES.history, privileges: ['SELECT', 'INSERT'] },
-    { table: AREA_TABLES.locks, privileges: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] },
-  ],
-  vehicles: [
-    { table: VEHICLE_TABLES.vehicles, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
-    { table: VEHICLE_TABLES.statusHistory, privileges: ['SELECT', 'INSERT'] },
-  ],
-  employees: [
-    { table: EMPLOYEE_TABLES.employees, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
-    { table: EMPLOYEE_TABLES.history, privileges: ['SELECT', 'INSERT'] },
-  ],
-  documents: [
-    { table: DOCUMENT_TABLES.documents, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
-    { table: DOCUMENT_TABLES.revisions, privileges: ['SELECT', 'INSERT'] },
-  ],
-  insurance: [
-    { table: POLICY_TABLES.policies, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
-    { table: POLICY_TABLES.revisions, privileges: ['SELECT', 'INSERT'] },
-  ],
-  assignments: [
-    { table: ASSIGNMENT_TABLES.assignments, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
-    { table: ASSIGNMENT_TABLES.events, privileges: ['SELECT', 'INSERT'] },
-  ],
-  settings: [{ table: SETTINGS_TABLES.settings, privileges: ['SELECT', 'INSERT', 'UPDATE'] }],
-  imports: [
-    { table: IMPORT_TABLES.jobs, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
-    { table: IMPORT_TABLES.rows, privileges: ['SELECT', 'INSERT'] },
-    { table: IMPORT_TABLES.events, privileges: ['SELECT', 'INSERT'] },
-  ],
-  files: [
-    { table: FILE_TABLES.records, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
-    { table: FILE_TABLES.history, privileges: ['SELECT', 'INSERT'] },
-    { table: FILE_TABLES.saga, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
-  ],
-  maintenance: [
-    { table: MAINTENANCE_TABLES.plans, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
-    { table: MAINTENANCE_TABLES.versions, privileges: ['SELECT', 'INSERT'] },
-    { table: MAINTENANCE_TABLES.occurrences, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
-    { table: MAINTENANCE_TABLES.orders, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
-    { table: MAINTENANCE_TABLES.alerts, privileges: ['SELECT', 'INSERT'] },
-    { table: MAINTENANCE_TABLES.workshops, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
-    { table: MAINTENANCE_TABLES.mechanics, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
-    { table: WORK_ORDER_TABLES.orders, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
-    { table: WORK_ORDER_TABLES.tasks, privileges: ['SELECT', 'INSERT', 'DELETE'] },
-    { table: WORK_ORDER_TABLES.parts, privileges: ['SELECT', 'INSERT', 'DELETE'] },
-    { table: WORK_ORDER_TABLES.costs, privileges: ['SELECT', 'INSERT', 'DELETE'] },
-    { table: WORK_ORDER_TABLES.transitions, privileges: ['SELECT', 'INSERT'] },
-    { table: WORK_ORDER_TABLES.files, privileges: ['SELECT', 'INSERT', 'DELETE'] },
-    { table: WORK_ORDER_TABLES.idempotency, privileges: ['SELECT', 'INSERT', 'DELETE'] },
-  ],
-  incidents: [
-    { table: INCIDENT_TABLES.incidents, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
-    { table: INCIDENT_TABLES.folios, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
-    { table: INCIDENT_TABLES.transitions, privileges: ['SELECT', 'INSERT'] },
-    { table: INCIDENT_TABLES.idempotency, privileges: ['SELECT', 'INSERT', 'DELETE'] },
-    { table: INCIDENT_CHILD_TABLES.thirdParties, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
-    { table: INCIDENT_CHILD_TABLES.evidence, privileges: ['SELECT', 'INSERT', 'DELETE'] },
-    { table: INCIDENT_WORKFLOW_TABLES.closures, privileges: ['SELECT', 'INSERT'] },
-    { table: INCIDENT_REPAIR_TABLES.links, privileges: ['SELECT', 'INSERT', 'DELETE'] },
-    { table: INCIDENT_COST_TABLES.lines, privileges: ['SELECT', 'INSERT', 'DELETE'] },
-    { table: INCIDENT_COST_TABLES.estimates, privileges: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] },
-    { table: INCIDENT_COST_TABLES.snapshots, privileges: ['SELECT', 'INSERT'] },
-    { table: INCIDENT_COST_TABLES.approvals, privileges: ['SELECT', 'INSERT', 'DELETE'] },
-    { table: INCIDENT_SLA_TABLES.cycles, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
-    { table: INCIDENT_SLA_TABLES.alerts, privileges: ['SELECT', 'INSERT'] },
-    { table: INCIDENT_SLA_TABLES.deliveries, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
-  ],
-} satisfies Record<string, readonly Grant[]>;
-
-type Module = keyof typeof grants;
 type Accounts = FleetRuntimeCredentials['accounts'];
-const modules: readonly Module[] = [
-  'areas',
-  'vehicles',
-  'employees',
-  'documents',
-  'insurance',
-  'assignments',
-  'settings',
-  'imports',
-  'files',
-  'maintenance',
-  'incidents',
-];
 
 export interface FleetTenantDatabase {
   readonly databaseName: string;
@@ -180,44 +65,9 @@ async function startTenantDatabase(label: string): Promise<FleetTenantDatabase> 
   const suffix = randomBytes(6).toString('hex');
   const databaseName = `opslog_t_${suffix}`;
   const auditSuffix = randomBytes(5).toString('hex').slice(0, 9);
-  const runtime = Object.fromEntries(
-    modules.map((name) => [
-      name,
-      {
-        username: `opslog_${name}_${suffix}`,
-        password: randomBytes(24).toString('base64url'),
-      },
-    ]),
-  ) as Omit<Accounts, 'auditRuntime' | 'auditRelay'>;
-  const auditRuntime = {
-    username: `opslog_audit_runtime_${auditSuffix}`,
-    password: randomBytes(24).toString('base64url'),
-  };
-  const auditRelay = {
-    username: `opslog_audit_relay_${auditSuffix}`,
-    password: randomBytes(24).toString('base64url'),
-  };
-  const auditMigrator = {
-    username: `opslog_audit_migrator_${auditSuffix}`,
-    password: randomBytes(24).toString('base64url'),
-  };
-  const filesMigrator = {
-    username: `opslog_files_migrator_${auditSuffix}`,
-    password: randomBytes(24).toString('base64url'),
-  };
-  const maintenanceMigrator = {
-    username: `opslog_migrator_${auditSuffix}`,
-    password: randomBytes(24).toString('base64url'),
-  };
-  if (!FILES_MIGRATOR_ACCOUNT.test(filesMigrator.username))
-    throw new Error('synthetic Fleet files migrator account name is invalid');
-  if (!FILES_RUNTIME_ACCOUNT.test(runtime.files.username))
-    throw new Error('synthetic Fleet files runtime account name is invalid');
-  if (!MAINTENANCE_RUNTIME_ACCOUNT.test(runtime.maintenance.username))
-    throw new Error('synthetic Fleet maintenance runtime account name is invalid');
-  if (!INCIDENT_RUNTIME_ACCOUNT.test(runtime.incidents.username))
-    throw new Error('synthetic Fleet incidents runtime account name is invalid');
-  const accounts = { ...runtime, auditRuntime, auditRelay } as Accounts;
+  const set = buildFleetAccounts(suffix, auditSuffix, () => randomBytes(24).toString('base64url'));
+  const { auditMigrator, filesMigrator, maintenanceMigrator } = set;
+  const accounts = set.runtime;
   const users: string[] = [];
   const connection = await mysql.createConnection({ ...admin, database: 'mysql' });
   let stores: FleetRuntimeStores | undefined;
@@ -235,25 +85,8 @@ async function startTenantDatabase(label: string): Promise<FleetTenantDatabase> 
       filesMigrator,
       maintenanceMigrator,
     };
-    await connection.query(`CREATE USER '${filesMigrator.username}'@'%' IDENTIFIED BY ?`, [
-      filesMigrator.password,
-    ]);
-    users.push(filesMigrator.username);
-    await connection.query(
-      `GRANT CREATE, ALTER, DROP, INDEX, SELECT, INSERT, REFERENCES ON ${identifier(databaseName)}.* TO '${filesMigrator.username}'@'%'`,
-    );
-    await connection.query(`CREATE USER '${maintenanceMigrator.username}'@'%' IDENTIFIED BY ?`, [
-      maintenanceMigrator.password,
-    ]);
-    users.push(maintenanceMigrator.username);
-    await connection.query(
-      `GRANT CREATE, ALTER, DROP, INDEX, SELECT, INSERT, REFERENCES ON ${identifier(databaseName)}.* TO '${maintenanceMigrator.username}'@'%'`,
-    );
-    // BackfillOccurrenceLifecycle2026101300020 updates legacy occurrence rows, so the schema owner
-    // needs UPDATE (tables do not exist yet to grant per table).
-    await connection.query(
-      `GRANT UPDATE ON ${identifier(databaseName)}.* TO '${maintenanceMigrator.username}'@'%'`,
-    );
+    users.push(filesMigrator.username, maintenanceMigrator.username, auditMigrator.username);
+    await provisionMigrators(connection, databaseName, set);
     const appliedMigrations = await runFleetMigrations(migrationCredentials);
     await connection.query(
       `GRANT DELETE ON ${identifier(databaseName)}.${identifier(FILES_MIGRATIONS_TABLE)} TO '${filesMigrator.username}'@'%'`,
@@ -281,84 +114,10 @@ async function startTenantDatabase(label: string): Promise<FleetTenantDatabase> 
         await module.source.destroy();
       }
     }
-    await connection.query(`CREATE USER '${auditMigrator.username}'@'%' IDENTIFIED BY ?`, [
-      auditMigrator.password,
-    ]);
-    users.push(auditMigrator.username);
-    await connection.query(
-      `GRANT CREATE, ALTER, INDEX, SELECT, INSERT, CREATE ROUTINE, ALTER ROUTINE ON ${identifier(databaseName)}.* TO '${auditMigrator.username}'@'%'`,
-    );
     await runFleetAuditMigrations(migrationCredentials);
     await runFleetAuditMigrations(migrationCredentials);
-    for (const name of modules) {
-      const account = runtime[name];
-      await connection.query(`CREATE USER '${account.username}'@'%' IDENTIFIED BY ?`, [
-        account.password,
-      ]);
-      users.push(account.username);
-      for (const grant of grants[name]) {
-        const table = `${identifier(databaseName)}.${identifier(grant.table)}`;
-        await connection.query(
-          `GRANT ${grant.privileges.join(', ')} ON ${table} TO '${account.username}'@'%'`,
-        );
-      }
-      await connection.query(
-        `GRANT EXECUTE ON PROCEDURE ${identifier(databaseName)}.\`opslog_append_local_audit_and_delivery\` TO '${account.username}'@'%'`,
-      );
-    }
-    // The maintenance worker commits alert/scan events through the durable tenant outbox.
-    await connection.query(
-      `GRANT SELECT ON ${identifier(databaseName)}.${identifier(AUDIT_TABLES.outbox)} TO '${runtime.maintenance.username}'@'%'`,
-    );
-    await connection.query(
-      `GRANT EXECUTE ON PROCEDURE ${identifier(databaseName)}.\`opslog_enqueue_tenant_outbox\` TO '${runtime.maintenance.username}'@'%'`,
-    );
-    // Incidents enqueue their allowlisted events in the same transaction as the case.
-    await connection.query(
-      `GRANT SELECT ON ${identifier(databaseName)}.${identifier(AUDIT_TABLES.outbox)} TO '${runtime.incidents.username}'@'%'`,
-    );
-    await connection.query(
-      `GRANT EXECUTE ON PROCEDURE ${identifier(databaseName)}.\`opslog_enqueue_tenant_outbox\` TO '${runtime.incidents.username}'@'%'`,
-    );
-
-    for (const account of [auditRuntime, auditRelay]) {
-      await connection.query(`CREATE USER '${account.username}'@'%' IDENTIFIED BY ?`, [
-        account.password,
-      ]);
-      users.push(account.username);
-    }
-    const table = (name: string) => `${identifier(databaseName)}.${identifier(name)}`;
-    await connection.query(
-      `GRANT EXECUTE ON PROCEDURE ${identifier(databaseName)}.\`opslog_append_local_audit_and_delivery\` TO '${auditRuntime.username}'@'%'`,
-    );
-    await connection.query(
-      `GRANT SELECT ON ${table(AUDIT_TABLES.projection)} TO '${auditRuntime.username}'@'%'`,
-    );
-    await connection.query(
-      `GRANT SELECT ON ${table(AUDIT_TABLES.local)} TO '${auditRelay.username}'@'%'`,
-    );
-    await connection.query(
-      `GRANT SELECT ON ${table(AUDIT_TABLES.delivery)} TO '${auditRelay.username}'@'%'`,
-    );
-    await connection.query(
-      `GRANT SELECT, INSERT ON ${table(AUDIT_TABLES.registry)} TO '${auditRelay.username}'@'%'`,
-    );
-    await connection.query(
-      `GRANT INSERT ON ${table(AUDIT_TABLES.projection)} TO '${auditRelay.username}'@'%'`,
-    );
-    await connection.query(
-      `GRANT UPDATE ON ${table(AUDIT_TABLES.delivery)} TO '${auditRelay.username}'@'%'`,
-    );
-    // Durable outbox: the audit runtime enqueues/reads, the relay claims and settles deliveries.
-    await connection.query(
-      `GRANT SELECT ON ${table(AUDIT_TABLES.outbox)} TO '${auditRuntime.username}'@'%'`,
-    );
-    await connection.query(
-      `GRANT EXECUTE ON PROCEDURE ${identifier(databaseName)}.\`opslog_enqueue_tenant_outbox\` TO '${auditRuntime.username}'@'%'`,
-    );
-    await connection.query(
-      `GRANT SELECT, UPDATE (status, attempts, available_at, lease_until, fencing, worker_id, last_error, handler_completed) ON ${table(AUDIT_TABLES.outbox)} TO '${auditRelay.username}'@'%'`,
-    );
+    users.push(...Object.values(accounts).map((account) => account.username));
+    await provisionFleetRuntimeAccounts(connection, databaseName, set);
 
     stores = await openFleetRuntimeStores({
       host: admin.host,

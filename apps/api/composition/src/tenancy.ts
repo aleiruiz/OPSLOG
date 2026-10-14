@@ -25,12 +25,44 @@ const pair = (tenantId: string, subject: string): string =>
  * It is a test/staging double: the durable adapter is `TypeOrmTenantStore`.
  */
 export class InMemoryTenantStore implements TenantStore, TenantDirectory {
-  private readonly tenants = new Map<string, Tenant>();
-  private readonly locations = new Map<string, TenantDatabaseLocation>();
-  private readonly memberships = new Map<string, Membership>();
+  protected readonly tenants = new Map<string, Tenant>();
+  protected readonly locations = new Map<string, TenantDatabaseLocation>();
+  protected readonly memberships = new Map<string, Membership>();
   private readonly sessions = new Map<string, Session>();
   private databases = 0;
-  public constructor(private readonly now: () => Date = () => new Date()) {}
+  public constructor(protected readonly now: () => Date = () => new Date()) {}
+
+  /**
+   * Registers a tenant together with its verified location. Used by `provisionVerified` and by
+   * durable subclasses that rehydrate their cache from storage.
+   */
+  protected adoptTenant(tenant: Tenant): void {
+    this.databases += 1;
+    this.tenants.set(tenant.id, tenant);
+    this.locations.set(tenant.id, {
+      tenantId: tenant.id,
+      databaseName: `opslog_t_synthetic_${this.databases}`,
+      credentialRef: 'ref:in-memory',
+      secretVersion: 1,
+      migrationVersion: TENANT_DATABASE_MIGRATION_VERSION,
+      runtimeRoleVerified: true,
+      isolationProbeVerified: true,
+      verifiedAt: this.now(),
+    });
+  }
+
+  /** Registers a membership projection as stored (rehydration only; no monotonic check). */
+  protected adoptMembership(membership: Membership): void {
+    this.memberships.set(pair(membership.tenantId, membership.subjectId), membership);
+  }
+
+  /**
+   * Async entry point used by the bootstrap flow. The in-memory store provisions synchronously;
+   * durable stores override it to persist the tenant before it is reported as created.
+   */
+  public async provision(name: string): Promise<Tenant> {
+    return this.provisionVerified(name);
+  }
 
   /**
    * Mirrors the outcome of a successful provisioning run: an active tenant with a verified
@@ -45,18 +77,7 @@ export class InMemoryTenantStore implements TenantStore, TenantDirectory {
       status: 'active',
       createdAt: this.now(),
     };
-    this.databases += 1;
-    this.tenants.set(tenant.id, tenant);
-    this.locations.set(tenant.id, {
-      tenantId: tenant.id,
-      databaseName: `opslog_t_synthetic_${this.databases}`,
-      credentialRef: 'ref:in-memory',
-      secretVersion: 1,
-      migrationVersion: TENANT_DATABASE_MIGRATION_VERSION,
-      runtimeRoleVerified: true,
-      isolationProbeVerified: true,
-      verifiedAt: this.now(),
-    });
+    this.adoptTenant(tenant);
     return tenant;
   }
 

@@ -44,3 +44,17 @@ export {
   type StoreErrorEvent,
   type TypeOrmIdentityStoreOptions,
 } from './store.js';
+export {
+  CONTROL_PLANE_ENTITIES,
+  CONTROL_PLANE_MIGRATION_VERSION,
+  CONTROL_PLANE_TABLES,
+  CreateControlPlane2026101800010,
+  controlPlaneSchema,
+} from './control-plane-schema.js';
+export {
+  TypeOrmControlPlaneStore,
+  type ControlMembershipRecord,
+  type ControlSessionRecord,
+  type ControlSettingsRecord,
+  type ControlTenantRecord,
+} from './control-plane-store.js';
