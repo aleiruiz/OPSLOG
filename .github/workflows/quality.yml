@@ -149,10 +149,33 @@ jobs:
           path: test-results/**
           if-no-files-found: ignore
 
+  # Infrastructure as code (ADR-0015): format, validate and a mocked-provider plan. No credentials
+  # and no real plan/apply; the provider is downloaded from the registry, nothing touches an account.
+  terraform:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: infra/terraform
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: { persist-credentials: false }
+      - name: Install Terraform 1.9.8
+        working-directory: ${{ runner.temp }}
+        run: |
+          curl -sSfL -o terraform.zip https://releases.hashicorp.com/terraform/1.9.8/terraform_1.9.8_linux_amd64.zip
+          echo "186e0145f5e5f2eb97cbd785bc78f21bae4ef15119349f6ad4fa535b83b10df8  terraform.zip" | sha256sum -c -
+          unzip -q terraform.zip terraform
+          sudo mv terraform /usr/local/bin/terraform
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate
+      - run: terraform test
+
   # The required check. Passes when every job the change needed passed; skipped jobs count as
   # not needed. Keep this job's name: the protect-main ruleset requires `quality`.
   quality:
-    needs: [changes, docs, static, unit, integration, e2e]
+    needs: [changes, docs, static, unit, integration, e2e, terraform]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
