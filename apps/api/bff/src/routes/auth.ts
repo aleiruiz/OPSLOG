@@ -74,6 +74,14 @@ function cookieHeader(ctx: RouteContext): string | undefined {
   return singleHeader(ctx.headers, 'cookie');
 }
 
+/** RFC 7636 verifiers are 43-128 characters of the unreserved set; anything else is a bad request. */
+function verifierOf(input: Record<string, unknown>): string | undefined {
+  const value = input['codeVerifier'];
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || !/^[A-Za-z0-9._~-]{43,128}$/.test(value)) throw new Error('bad');
+  return value;
+}
+
 export const AUTH_ROUTES: readonly Route[] = [
   route('auth.csrf', async (ctx) => {
     // Always a fresh nonce: a client-supplied one is never re-issued (no fixation of the pre-login token).
@@ -83,16 +91,17 @@ export const AUTH_ROUTES: readonly Route[] = [
     return success(ctx, 'auth.csrf', csrf);
   }),
   route('auth.login', async (ctx) => {
-    const input = body(ctx, ['code', 'nonce']);
+    const input = body(ctx, ['code', 'nonce', 'codeVerifier'], ['code', 'nonce']);
     if (!input) return bad(ctx);
-    let code: string, nonce: string;
+    let code: string, nonce: string, codeVerifier: string | undefined;
     try {
       code = text(input['code'], 512);
       nonce = text(input['nonce'], 200);
+      codeVerifier = verifierOf(input);
     } catch {
       return bad(ctx);
     }
-    const principal = await ctx.platform.verifyPrincipal(code, nonce);
+    const principal = await ctx.platform.verifyPrincipal(code, nonce, codeVerifier);
     if (!principal.ok) return errorResponse('unauthorized', ctx.correlationId);
     return openSession(ctx, principal.value, 'auth.login');
   }),
@@ -126,17 +135,18 @@ export const AUTH_ROUTES: readonly Route[] = [
     );
   }),
   route('auth.invitation.accept', async (ctx) => {
-    const input = body(ctx, ['token', 'code', 'nonce']);
+    const input = body(ctx, ['token', 'code', 'nonce', 'codeVerifier'], ['token', 'code', 'nonce']);
     if (!input) return bad(ctx);
-    let token: string, code: string, nonce: string;
+    let token: string, code: string, nonce: string, codeVerifier: string | undefined;
     try {
       token = text(input['token'], 512);
       code = text(input['code'], 512);
       nonce = text(input['nonce'], 200);
+      codeVerifier = verifierOf(input);
     } catch {
       return bad(ctx);
     }
-    const principal = await ctx.platform.verifyPrincipal(code, nonce);
+    const principal = await ctx.platform.verifyPrincipal(code, nonce, codeVerifier);
     if (!principal.ok) return errorResponse('unauthorized', ctx.correlationId);
     const accepted = await ctx.platform.acceptInvitation(token, principal.value);
     // Unknown, used, expired or mismatched invitations are indistinguishable.

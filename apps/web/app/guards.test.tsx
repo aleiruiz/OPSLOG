@@ -24,9 +24,14 @@ describe('browser storage', () => {
   it('has no source reference to Web Storage, IndexedDB or document.cookie', () => {
     expect(sources.length).toBeGreaterThan(10);
     const client = resolve(webRoot, '../../packages/contracts/src/client.ts');
-    const offenders = [...sources, client].filter((path) =>
-      /localStorage|sessionStorage|indexedDB|document\.cookie/.test(read(path)),
-    );
+    // The one exception: the redirecting identity provider keeps the PKCE verifier, state and nonce of a
+    // single sign-in attempt in sessionStorage across the round trip to the hosted page (tab-scoped,
+    // consumed on return, expires in minutes; no session token, though it may hold an invitation token already present in the URL). Anything else
+    // must not touch Web Storage.
+    const tabScopedPkce = resolve(webRoot, 'api/redirectOidc.ts');
+    const offenders = [...sources, client]
+      .filter((path) => path !== tabScopedPkce)
+      .filter((path) => /localStorage|sessionStorage|indexedDB|document\.cookie/.test(read(path)));
     expect(offenders.map((path) => relative(webRoot, path))).toEqual([]);
   });
 

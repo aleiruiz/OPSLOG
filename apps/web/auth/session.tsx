@@ -1,5 +1,12 @@
 import React from 'react';
-import type { ApiError, ApiPorts, Permission, Result, SessionInfo } from '../app/types';
+import type {
+  ApiError,
+  ApiPorts,
+  OidcContext,
+  Permission,
+  Result,
+  SessionInfo,
+} from '../app/types';
 
 /**
  * Session state mirrored from the BFF. The credential is an httpOnly cookie the browser sends by itself;
@@ -29,14 +36,23 @@ interface SessionContextValue {
   readonly ports: ApiPorts;
   can(permission: Permission): boolean;
   /** Authorizes with the identity provider (`hint` selects the account of a fake provider), then signs in. */
-  signIn(hint: string): Promise<Result<SessionInfo>>;
+  signIn(hint: string, context?: OidcContext): Promise<Result<SessionInfo>>;
   acceptInvitation(token: string, hint: string): Promise<Result<SessionInfo>>;
+  /** Back from a redirecting provider: redeems its answer (sign-in or invitation) and returns where to go next. */
+  completeSignIn(search: URLSearchParams): Promise<Result<{ next: string | undefined }>>;
   /** Only a confirmed sign-out clears the session; on failure the person stays signed in. */
   logout(): Promise<Result<null>>;
   /** Called by any screen that receives a 401 from the API. */
   markExpired(): void;
   retry(): void;
 }
+
+const noProvider: ApiError = {
+  code: 'bad_request',
+  status: 400,
+  message: 'No hay un inicio de sesión en curso.',
+  correlationId: 'oidc-redirect',
+};
 
 const SessionContext = React.createContext<SessionContextValue | null>(null);
 
@@ -102,17 +118,29 @@ export function SessionProvider({
       can: (permission) =>
         (state.status === 'authenticated' || state.status === 'expired') &&
         state.session.permissions.includes(permission),
-      signIn: async (hint) => {
-        const credentials = await ports.oidc.authorize(hint);
+      signIn: async (hint, context) => {
+        const credentials = await ports.oidc.authorize(hint, context);
         return credentials.ok
           ? established(await ports.auth.login(credentials.value))
           : credentials;
       },
       acceptInvitation: async (token, hint) => {
-        const credentials = await ports.oidc.authorize(hint);
+        const credentials = await ports.oidc.authorize(hint, { invitationToken: token });
         return credentials.ok
           ? established(await ports.auth.acceptInvitation(token, credentials.value))
           : credentials;
+      },
+      completeSignIn: async (search) => {
+        const completion = ports.oidc.complete?.(search);
+        if (!completion) return { ok: false, error: noProvider };
+        if (!completion.ok) return completion;
+        const { credentials, context } = completion.value;
+        const result = established(
+          context.invitationToken
+            ? await ports.auth.acceptInvitation(context.invitationToken, credentials)
+            : await ports.auth.login(credentials),
+        );
+        return result.ok ? { ok: true, value: { next: context.next } } : result;
       },
       logout: async () => {
         const result = await ports.auth.logout();

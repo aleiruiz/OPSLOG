@@ -14,7 +14,13 @@ export interface ExternalClaims {
 }
 export interface OidcVerifier {
   /** Server-side adapter must validate the authorization code, token signature, audience and time claims before returning claims. */
-  verify(code: string, expectedIssuer: string, expectedNonce: string): Promise<ExternalClaims>;
+  verify(
+    code: string,
+    expectedIssuer: string,
+    expectedNonce: string,
+    /** PKCE verifier the browser generated for this authorization request. */
+    codeVerifier?: string,
+  ): Promise<ExternalClaims>;
 }
 
 const verifiedPrincipalBrand: unique symbol = Symbol('verified-external-principal');
@@ -53,11 +59,12 @@ export const verifyExternalPrincipal = async (
   code: string,
   expectedIssuer: string,
   expectedNonce: string,
+  codeVerifier?: string,
 ): Promise<VerifiedExternalPrincipal> => {
   if (!code.trim()) throw new Error('identity verification failed');
   let verifiedClaims: ExternalClaims;
   try {
-    verifiedClaims = await verifier.verify(code, expectedIssuer, expectedNonce);
+    verifiedClaims = await verifier.verify(code, expectedIssuer, expectedNonce, codeVerifier);
   } catch {
     throw new Error('identity verification failed');
   }

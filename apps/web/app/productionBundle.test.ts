@@ -57,13 +57,15 @@ async function bundle(mode: 'production' | 'development'): Promise<string> {
 }
 
 // What identifies the development-only modules in emitted code.
-const DEV_ONLY = ['createMockApi', 'createFakeOidc', 'fake-code', 'createHttpApi', 'cuenta-admin'];
+const DEV_ONLY = ['createMockApi', 'createFakeOidc', 'fake-code', 'cuenta-admin'];
 
 describe('web production bundle', () => {
-  it('contains no mock API, fake identity provider or BFF client, and fails closed', async () => {
+  it('contains no mock API or fake identity provider, and fails closed without OIDC settings', async () => {
     const production = await bundle('production');
     for (const marker of DEV_ONLY) expect(production, marker).not.toContain(marker);
     expect(production).toContain('El inicio de sesión no está disponible en esta compilación.');
+    // The BFF client and the redirecting provider are the production path.
+    expect(production).toContain('createRedirectOidc');
   }, 120_000);
 
   it('does contain them in a development build, so the check above is not vacuous', async () => {
