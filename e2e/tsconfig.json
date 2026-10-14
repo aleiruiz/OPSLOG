@@ -55,6 +55,7 @@
     "../apps/web/features/**/testing.tsx",
     "./real-api/**",
     "./maintenance-real.spec.ts",
-    "./incidents-real.spec.ts"
+    "./incidents-real.spec.ts",
+    "./incidents-journeys.spec.ts"
   ]
 }

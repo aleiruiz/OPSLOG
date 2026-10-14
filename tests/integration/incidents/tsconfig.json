@@ -1,0 +1,23 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "../../../dist/tests/integration/incidents",
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["**/*.ts"],
+  "references": [
+    {
+      "path": "../../e2e/incidents"
+    },
+    {
+      "path": "../../e2e/fleet"
+    },
+    {
+      "path": "../../../apps/api/bff"
+    },
+    {
+      "path": "../../../apps/api/composition"
+    }
+  ]
+}

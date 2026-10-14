@@ -335,7 +335,14 @@ describe('company settings through the platform', () => {
         'updatedAt',
       ].sort(),
     );
-    expect(ok(await platform.companySettings.get(f.roles.viewer.token, corr()))).toEqual(saved);
+    // The D20 threshold is an amount: a caller without incidents:view_costs does not get the field at all
+    // (omitted, not null, so that a write from a screen that never saw it keeps the stored value).
+    const redacted = Object.fromEntries(
+      Object.entries(saved).filter(([key]) => key !== 'closeCostThreshold'),
+    );
+    const asViewer = ok(await platform.companySettings.get(f.roles.viewer.token, corr()));
+    expect(asViewer).toEqual(redacted);
+    expect('closeCostThreshold' in asViewer).toBe(false);
     ok(
       await platform.companySettings.update(admin.token, corr(), 1, {
         expiryWindowDays: 14,

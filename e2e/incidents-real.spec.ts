@@ -962,6 +962,15 @@ test('acceptance 7: without incidents:view_costs there is no cost UI and no amou
   await expectNoViolations(page);
   expect(urls.some((url) => /\/costs/.test(url))).toBe(false);
   expect(bodies.join('\n')).not.toMatch(/amountMinor/);
+  // The company settings carry the D20 threshold: a caller without view_costs gets no such field.
+  const settingsOf = () =>
+    page.evaluate(async () => {
+      const reply = await fetch('/api/alerts/settings', { credentials: 'same-origin' });
+      return { status: reply.status, text: await reply.text() };
+    });
+  const withoutCosts = await settingsOf();
+  expect(withoutCosts.status).toBe(200);
+  expect(withoutCosts.text).not.toMatch(/closeCostThreshold|amountMinor/);
 
   // The manager has view_costs: the amounts shown are the ones the API returns.
   const apiTotals: string[] = [];
@@ -970,6 +979,7 @@ test('acceptance 7: without incidents:view_costs there is no cost UI and no amou
       apiTotals.push(await response.text());
   });
   await switchTo(page, a, 'e2e-manager-a', `/incidents/${repairCase}`);
+  expect((await settingsOf()).text).toContain('closeCostThreshold');
   await page.getByRole('tab', { name: 'Costos' }).click();
   const totals = page.getByRole('region', { name: 'Totales por moneda' });
   await expect(totals).toContainText('4,500.00 MXN');
