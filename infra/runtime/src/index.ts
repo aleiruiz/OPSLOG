@@ -12,7 +12,15 @@ export interface RuntimeService {
   readonly exposure: 'internal' | 'none';
 }
 
-export type AdapterKind = 'in-memory' | 'synthetic';
+export type AdapterKind = 'in-memory' | 'synthetic' | 's3';
+
+/** Env the s3 object storage adapter reads (names only; values never live in the descriptor). */
+export const S3_REQUIRED_ENV: readonly string[] = [
+  'OPSLOG_S3_BUCKET',
+  'OPSLOG_S3_REGION',
+  'OPSLOG_S3_ACCESS_KEY_ID',
+  'OPSLOG_S3_SECRET_ACCESS_KEY',
+];
 
 export interface RuntimeDescriptor {
   readonly schemaVersion: 1;
@@ -20,7 +28,8 @@ export interface RuntimeDescriptor {
   readonly environment: 'staging';
   readonly production: false;
   readonly awsDeferred: true;
-  readonly realCloudCalls: false;
+  /** True only while an adapter (today: objectStorage s3) calls a real cloud service. */
+  readonly realCloudCalls: boolean;
   readonly data: 'synthetic-only';
   readonly services: readonly RuntimeService[];
   readonly adapters: Readonly<Record<string, AdapterKind>>;
@@ -50,6 +59,10 @@ export const REQUIRED_FORBIDDEN_ENV: readonly string[] = [
   'AWS_ROLE_ARN',
   'AWS_WEB_IDENTITY_TOKEN_FILE',
   'AWS_CONTAINER_CREDENTIALS_*',
+  // Ambient SDK settings that could redirect signed requests or load credentials from files.
+  'AWS_ENDPOINT_URL*',
+  'AWS_CONFIG_FILE',
+  'AWS_SHARED_CREDENTIALS_FILE',
 ];
 
 /** Returns human-readable problems; an empty list means the descriptor meets the staging-only rules. */
@@ -62,7 +75,10 @@ export function validateDescriptor(value: unknown): readonly string[] {
   if (d.environment !== 'staging') problems.push('environment must be staging');
   if (d.production !== false) problems.push('production must be explicitly false');
   if (d.awsDeferred !== true) problems.push('awsDeferred must be explicitly true');
-  if (d.realCloudCalls !== false) problems.push('realCloudCalls must be explicitly false');
+  const adapterKinds = (d.adapters ?? null) as Record<string, unknown> | null;
+  const usesS3 = adapterKinds?.objectStorage === 's3';
+  if (d.realCloudCalls !== usesS3)
+    problems.push(`realCloudCalls must be explicitly ${String(usesS3)}`);
   if (d.data !== 'synthetic-only') problems.push('data must be synthetic-only');
 
   const services = Array.isArray(d.services) ? (d.services as unknown[]) : null;
@@ -85,11 +101,18 @@ export function validateDescriptor(value: unknown): readonly string[] {
   if (!adapters || typeof adapters !== 'object' || Object.keys(adapters).length === 0)
     problems.push('adapters are required');
   for (const [name, kind] of Object.entries(adapters ?? {}))
-    if (kind !== 'in-memory' && kind !== 'synthetic')
+    if (
+      kind !== 'in-memory' &&
+      kind !== 'synthetic' &&
+      !(name === 'objectStorage' && kind === 's3')
+    )
       problems.push(`adapter ${name} must be in-memory or synthetic (real adapters are pending)`);
 
   const required = Array.isArray(d.requiredEnv) ? (d.requiredEnv as unknown[]) : [];
   if (!required.includes('OPSLOG_ENV')) problems.push('requiredEnv must include OPSLOG_ENV');
+  if (usesS3)
+    for (const name of S3_REQUIRED_ENV)
+      if (!required.includes(name)) problems.push(`requiredEnv must include ${name}`);
   const forbidden = Array.isArray(d.forbiddenEnv) ? (d.forbiddenEnv as unknown[]) : [];
   for (const name of REQUIRED_FORBIDDEN_ENV)
     if (!forbidden.includes(name)) problems.push(`forbiddenEnv must include ${name}`);

@@ -40,7 +40,8 @@
     "../../../packages/platform/audit/src/**/*.ts",
     "../../../packages/platform/outbox/src/**/*.ts",
     "../../../packages/platform/files/src/**/*.ts",
-    "../../../infra/queues/src/**/*.ts"
+    "../../../infra/queues/src/**/*.ts",
+    "../../../infra/storage/src/**/*.ts"
   ],
   "references": [
     { "path": "../../../packages/domain/tenants" },

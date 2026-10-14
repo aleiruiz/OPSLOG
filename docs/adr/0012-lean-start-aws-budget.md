@@ -101,3 +101,7 @@ Cada pieza mejora de forma independiente: p. ej. Multi-AZ puede llegar antes que
 - La IaC (CDK) debe parametrizar la etapa para que cada mejora sea un cambio de configuración y no una reescritura.
 - Todas las cifras son estimaciones sin verificar; deben re-comprobarse en el inventario con precios vigentes antes de cualquier aprobación.
 - Este ADR no declara ningún gate pasado ni autoriza conexión, aprovisionamiento ni gasto en AWS.
+
+## Enmienda 2026-10-14: bucket S3 de staging
+
+Por instrucción directa de Alei (2026-10-14) se creó el primer recurso real: un bucket S3 privado de staging (versionado, SSE-S3, solo TLS) y un usuario IAM de aplicación limitado a `s3:GetObject/PutObject/DeleteObject` sobre `tenants/*`. El adaptador S3 de `objectStorage` queda autorizado solo para staging con datos sintéticos. El resto de AWS (RDS, KMS, Cognito, cómputo) sigue diferido y producción no está autorizada. Las credenciales del usuario son de aplicación, no por tenant: el aislamiento por tenant lo da `objectKey`.

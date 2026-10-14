@@ -18,7 +18,8 @@ describe('staging descriptor guards', () => {
     expect(descriptor.environment).toBe('staging');
     expect(descriptor.production).toBe(false);
     expect(descriptor.awsDeferred).toBe(true);
-    expect(descriptor.realCloudCalls).toBe(false);
+    expect(descriptor.adapters.objectStorage).toBe('s3');
+    expect(descriptor.realCloudCalls).toBe(true);
   });
 
   it('declares the explicit not-production and AWS-deferred guards', () => {
@@ -36,7 +37,7 @@ describe('staging descriptor guards', () => {
       [{ production: true }, 'production must be explicitly false'],
       [{ production: undefined }, 'production must be explicitly false'],
       [{ awsDeferred: false }, 'awsDeferred must be explicitly true'],
-      [{ realCloudCalls: true }, 'realCloudCalls must be explicitly false'],
+      [{ realCloudCalls: false }, 'realCloudCalls must be explicitly true'],
       [{ data: 'customer' }, 'data must be synthetic-only'],
       [{ services: [] }, 'at least one service is required'],
       [{ services: 'api' }, 'at least one service is required'],
@@ -51,10 +52,22 @@ describe('staging descriptor guards', () => {
   });
 
   it('rejects real adapters, public or replicated services and invalid compositions', () => {
-    const adapters = { ...descriptor.adapters, objectStorage: 's3' };
+    const adapters = { ...descriptor.adapters, identityStore: 's3' };
     expect(validateDescriptor(mutate({ adapters }))).toEqual([
-      'adapter objectStorage must be in-memory or synthetic (real adapters are pending)',
+      'adapter identityStore must be in-memory or synthetic (real adapters are pending)',
     ]);
+    const memory = { ...descriptor.adapters, objectStorage: 'in-memory' };
+    expect(validateDescriptor(mutate({ adapters: memory }))).toEqual([
+      'realCloudCalls must be explicitly false',
+    ]);
+    expect(validateDescriptor(mutate({ adapters: memory, realCloudCalls: false }))).toEqual([]);
+    expect(validateDescriptor(mutate({ requiredEnv: ['OPSLOG_ENV', 'OPSLOG_S3_BUCKET'] }))).toEqual(
+      [
+        'requiredEnv must include OPSLOG_S3_REGION',
+        'requiredEnv must include OPSLOG_S3_ACCESS_KEY_ID',
+        'requiredEnv must include OPSLOG_S3_SECRET_ACCESS_KEY',
+      ],
+    );
     const [api] = descriptor.services;
     const withService = (service: unknown) => validateDescriptor(mutate({ services: [service] }));
     expect(withService({ ...api, exposure: 'public' })).toEqual([
@@ -77,7 +90,7 @@ describe('staging descriptor guards', () => {
         mutate({ forbiddenEnv: descriptor.forbiddenEnv.filter((n) => n !== 'AWS_PROFILE') }),
       ),
     ).toEqual(['forbiddenEnv must include AWS_PROFILE']);
-    expect(validateDescriptor(mutate({ forbiddenEnv: undefined }))).toHaveLength(8);
+    expect(validateDescriptor(mutate({ forbiddenEnv: undefined }))).toHaveLength(11);
     expect(validateDescriptor(mutate({ guards: ['Staging only.'] }))).toEqual([
       'guards must state: aws is deferred',
       'guards must state: not production',

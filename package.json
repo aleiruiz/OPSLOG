@@ -26,6 +26,7 @@
     "test:fleet-integration": "vitest run tests/e2e/fleet tests/e2e/incidents tests/integration/incidents tests/e2e/maintenance --maxWorkers=4"
   },
   "devDependencies": {
+    "@aws-sdk/client-s3": "3.1150.0",
     "@axe-core/playwright": "4.10.2",
     "@emotion/react": "11.14.0",
     "@emotion/styled": "11.14.0",

@@ -4,7 +4,7 @@
   "environment": "staging",
   "production": false,
   "awsDeferred": true,
-  "realCloudCalls": false,
+  "realCloudCalls": true,
   "data": "synthetic-only",
   "services": [
     { "name": "api", "composition": "apps/api/composition", "replicas": 1, "exposure": "internal" },
@@ -18,13 +18,19 @@
   "adapters": {
     "identityStore": "in-memory",
     "tenantStore": "in-memory",
-    "objectStorage": "in-memory",
+    "objectStorage": "s3",
     "scanner": "synthetic",
     "outbox": "in-memory",
     "audit": "in-memory",
     "oidcVerifier": "synthetic"
   },
-  "requiredEnv": ["OPSLOG_ENV"],
+  "requiredEnv": [
+    "OPSLOG_ENV",
+    "OPSLOG_S3_BUCKET",
+    "OPSLOG_S3_REGION",
+    "OPSLOG_S3_ACCESS_KEY_ID",
+    "OPSLOG_S3_SECRET_ACCESS_KEY"
+  ],
   "forbiddenEnv": [
     "OPSLOG_ALLOW_PRODUCTION",
     "AWS_ACCESS_KEY_ID",
@@ -33,12 +39,15 @@
     "AWS_PROFILE",
     "AWS_ROLE_ARN",
     "AWS_WEB_IDENTITY_TOKEN_FILE",
-    "AWS_CONTAINER_CREDENTIALS_*"
+    "AWS_CONTAINER_CREDENTIALS_*",
+    "AWS_ENDPOINT_URL*",
+    "AWS_CONFIG_FILE",
+    "AWS_SHARED_CREDENTIALS_FILE"
   ],
   "guards": [
     "Staging only: this descriptor is not production and does not authorize a production deployment.",
     "AWS is deferred (ADR-0002): no cloud resource, account, region, endpoint, role or credential is described here.",
-    "No real cloud calls: every adapter is in-memory or synthetic and state is lost on restart.",
+    "Only objectStorage may call a real cloud service (private S3 bucket, application credentials limited to the tenants/ prefix, from OPSLOG_S3_* env; see ADR-0012 amendment); every other adapter is in-memory or synthetic and state is lost on restart.",
     "Synthetic data only: no real customer, employee, vehicle or document data."
   ],
   "pending": [

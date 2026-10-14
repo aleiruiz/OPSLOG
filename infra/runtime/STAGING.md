@@ -12,8 +12,8 @@ solo se usan datos sintéticos.
 
 ## Guardas (verificadas por `infra/runtime/src/index.test.ts`)
 
-- `environment` es `staging`; `production` es `false`; `awsDeferred` es `true`; `realCloudCalls` es `false`.
-- Cada adaptador es `in-memory` o `synthetic`. Un adaptador real (S3, RDS, Cognito, SES, SQS) hace fallar la validación.
+- `environment` es `staging`; `production` es `false`; `awsDeferred` es `true`; `realCloudCalls` es `false`, salvo cuando `objectStorage` es `s3` (enmienda de la ADR-0012 del 2026-10-14): entonces es `true`.
+- Cada adaptador es `in-memory` o `synthetic`. Un adaptador real (RDS, Cognito, SES, SQS) hace fallar la validación. La única excepción es `objectStorage: s3` (bucket privado, credenciales de aplicación acotadas al prefijo `tenants/`, no por tenant), que exige `OPSLOG_S3_BUCKET`, `OPSLOG_S3_REGION`, `OPSLOG_S3_ACCESS_KEY_ID` y `OPSLOG_S3_SECRET_ACCESS_KEY` en `requiredEnv`; los valores nunca se versionan y se usan nombres `OPSLOG_S3_*` (no `AWS_*`, que sigue prohibido).
 - Los servicios no se exponen públicamente (`internal` o `none`) y corren con una sola réplica, porque el estado es local.
 - El descriptor no puede contener ARNs, cuentas, regiones, endpoints, URLs, claves ni secretos.
 - `assertStagingOnly` (función de guarda, probada): valida el descriptor, exige `OPSLOG_ENV=staging` y se niega con `NODE_ENV=production` (sin distinguir mayúsculas ni espacios), `OPSLOG_ALLOW_PRODUCTION` o credenciales/identidad AWS (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_PROFILE`, `AWS_ROLE_ARN`, `AWS_WEB_IDENTITY_TOKEN_FILE`, `AWS_CONTAINER_CREDENTIALS_*`). **Hoy no está cableada a ningún proceso de arranque**: no existe entrypoint de API ni de worker; quien lo cree debe llamarla antes de componer la plataforma. El `.env` local no se carga.
