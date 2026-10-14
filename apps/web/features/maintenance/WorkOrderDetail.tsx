@@ -32,6 +32,7 @@ import {
   STATUS_TONES,
   VEHICLE_STATUS_LABELS,
   formatDate,
+  formatInstant,
   formatKm,
   formatMoney,
   historyTitle,
@@ -339,7 +340,7 @@ export function WorkOrderDetail({
                 items={history.state.data.map((entry) => ({
                   id: String(entry.sequence),
                   title: historyTitle(entry),
-                  date: entry.occurredAt.slice(0, 16).replace('T', ' '),
+                  date: formatInstant(entry.occurredAt),
                   ...(entry.comment ? { description: entry.comment } : {}),
                 }))}
               />

@@ -199,6 +199,8 @@ export interface OidcPort {
   authorize(hint: string, context?: OidcContext): Promise<Result<OidcCredentials>>;
   /** Redirecting providers only: reads the provider's answer from the callback address. */
   complete?(search: URLSearchParams): Result<OidcCompletion>;
+  /** Redirecting providers only: ends the provider's own session by leaving for its logout page. */
+  endSession?(): void;
 }
 
 /** What the person was doing when the browser left for the provider; restored on return. */

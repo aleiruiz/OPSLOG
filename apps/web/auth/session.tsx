@@ -152,6 +152,8 @@ export function SessionProvider({
         wipe();
         lastUser.current = null;
         setState({ status: 'anonymous' });
+        // The provider keeps its own session: end it too, or the next sign-in skips the password.
+        if (ports.oidc.redirects) ports.oidc.endSession?.();
         return result;
       },
       markExpired,

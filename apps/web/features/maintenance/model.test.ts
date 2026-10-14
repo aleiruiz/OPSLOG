@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { BffClient } from '@opslog/contracts';
 import { baseOrder } from './fakePorts';
-import { formatDate, formatKm, formatMoney, requirementLabel } from './labels';
+import {
+  formatDate,
+  formatInstant,
+  formatInstantDay,
+  formatKm,
+  formatMoney,
+  requirementLabel,
+} from './labels';
 import { createMaintenancePorts } from './ports';
 import { toMinor } from './WorkEditor';
 import { byScheduledDate, matches } from './WorkOrdersScreen';
@@ -13,6 +20,27 @@ const fleet = {
 };
 const editor = { permissions: ['view', 'create', 'edit'], mechanicIds: [] };
 const mechanic = { permissions: ['view'], mechanicIds: ['mec-1'] };
+
+describe('maintenance instants', () => {
+  it('shows an instant in the given zone, not as raw UTC text', () => {
+    expect(formatInstant('2026-10-12T20:37:00.000Z', 'America/Mexico_City')).toBe(
+      '12/10/2026 14:37',
+    );
+    expect(formatInstant('2026-10-12T20:37:00.000Z', 'UTC')).toBe('12/10/2026 20:37');
+    expect(formatInstantDay('2026-10-13T02:30:00.000Z', 'America/Mexico_City')).toBe('12/10/2026');
+  });
+
+  it('uses the viewer zone by default and leaves calendar dates alone', () => {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    expect(formatInstant('2026-10-12T20:37:00.000Z')).toBe(
+      formatInstant('2026-10-12T20:37:00.000Z', zone),
+    );
+    expect(formatInstantDay('2026-10-12T20:37:00.000Z')).toBe(
+      formatInstant('2026-10-12T20:37:00.000Z', zone).slice(0, 10),
+    );
+    expect(formatDate('2026-10-12')).toBe('12/10/2026');
+  });
+});
 
 describe('maintenance model', () => {
   it('formats exact money, dates and kilometers without floating point', () => {

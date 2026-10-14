@@ -4,5 +4,6 @@ interface ImportMeta {
     readonly DEV?: boolean;
     readonly VITE_OIDC_DOMAIN?: string;
     readonly VITE_OIDC_CLIENT_ID?: string;
+    readonly VITE_OIDC_LOGOUT_URI?: string;
   };
 }

@@ -189,6 +189,8 @@ const actions = (page: Page) => page.getByRole('region', { name: 'Acciones del c
 async function switchTo(page: Page, tenant: RealTenant, account: string, path: string) {
   await page.context().clearCookies();
   await signIn(page, tenant, account, path);
+  // The sign-in heading is itself a level-1 heading: wait until it is gone, so the session cookie exists.
+  await expect(page.getByRole('heading', { name: 'Iniciar sesión', level: 1 })).toHaveCount(0);
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 }
 async function adminToken(tenant: RealTenant, subject: string) {

@@ -59,6 +59,28 @@ describe('identity provider callback', () => {
     await screen.findByText('No pudimos iniciar sesión');
   });
 
+  it('explains a missing account on a 401 and removes the code from the address', async () => {
+    const api = withOidc(providerAnswering(completion()));
+    api.auth.login = async () => fail;
+    await renderApp({ api, account: null, path: '/auth/callback?code=c&state=s' });
+    await screen.findByText(/No encontramos una cuenta activa de OPSLOG/);
+    expect(window.location.search).toBe('');
+  });
+
+  it('keeps the generic copy when the provider answer itself is rejected', async () => {
+    const rejected: Result<never> = {
+      ok: false,
+      error: { code: 'bad_request', status: 401, message: 'x', correlationId: 'oidc-redirect' },
+    };
+    await renderApp({
+      api: withOidc(providerAnswering(rejected)),
+      account: null,
+      path: '/auth/callback?code=c&state=s',
+    });
+    await screen.findByText('No pudimos verificar tu identidad. Intenta nuevamente.');
+    expect(window.location.search).toBe('');
+  });
+
   it('fails closed when the provider cannot complete (fake provider)', async () => {
     await renderApp({ account: null, path: '/auth/callback?code=c&state=s' });
     await screen.findByText('No pudimos iniciar sesión');
