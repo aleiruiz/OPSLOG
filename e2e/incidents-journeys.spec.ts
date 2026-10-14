@@ -250,32 +250,10 @@ test('the company assumes the cost: an order created once from the sheet, approv
   await expectNoHorizontalScroll(page);
 
   await signIn(page, 'e2e-admin-a', `/incidents/${caseId}`);
+  await page.getByRole('tab', { name: 'Resumen' }).click();
   await page.getByRole('button', { name: 'Aprobar asunción del costo' }).click();
   await expect(page.getByText('Aprobar asunción del costo: listo.')).toBeVisible();
 
-  // A double click on "Crear orden y vincular" is one order, not two (the Idempotency-Key).
-  await page.getByRole('tab', { name: 'Reparación' }).click();
-  await page.getByRole('button', { name: 'Vincular orden' }).click();
-  await page
-    .getByRole('form', { name: 'Crear orden correctiva' })
-    .getByRole('button', { name: 'Crear orden y vincular' })
-    .dblclick();
-  await expect(page.getByText('Orden creada y vinculada.')).toBeVisible();
-  await expect(
-    page.getByRole('list', { name: 'Órdenes vinculadas' }).getByRole('listitem'),
-  ).toHaveCount(1);
-  expect(
-    (
-      await a.database.rows<{ n: number }>(
-        `SELECT COUNT(*) AS n FROM ${ORDERS} WHERE company_id = ?`,
-        [a.tenantId],
-      )
-    )[0]?.n,
-  ).toBe(1);
-  await expectNoHorizontalScroll(page);
-  await expectNoViolations(page);
-
-  await page.getByRole('tab', { name: 'Resumen' }).click();
   await page.getByRole('button', { name: 'Marcar como resuelto' }).click();
   await expect(status(page, 'Resuelto')).toBeVisible();
 
@@ -298,6 +276,30 @@ test('the company assumes the cost: an order created once from the sheet, approv
   await reopen.getByRole('button', { name: 'Reabrir caso' }).click();
   await expect(status(page, 'Reabierto')).toBeVisible();
   await expect(page.getByRole('heading', { name: folio, level: 1 })).toBeVisible();
+  // The reopened case needs a repair: the order is created from the sheet, and a double click makes one.
+  // (Orders still open would block a close, so this comes after the closure.)
+  // A double click on "Crear orden y vincular" is one order, not two (the Idempotency-Key).
+  await page.getByRole('tab', { name: 'Reparación' }).click();
+  await page.getByRole('button', { name: 'Vincular orden' }).click();
+  await page
+    .getByRole('form', { name: 'Crear orden correctiva' })
+    .getByRole('button', { name: 'Crear orden y vincular' })
+    .dblclick();
+  await expect(page.getByText('Orden creada y vinculada.')).toBeVisible();
+  await expect(
+    page.getByRole('list', { name: 'Órdenes vinculadas' }).getByRole('listitem'),
+  ).toHaveCount(1);
+  expect(
+    (
+      await a.database.rows<{ n: number }>(
+        `SELECT COUNT(*) AS n FROM ${ORDERS} WHERE company_id = ?`,
+        [a.tenantId],
+      )
+    )[0]?.n,
+  ).toBe(1);
+  await expectNoHorizontalScroll(page);
+  await expectNoViolations(page);
+
   await expectNoHorizontalScroll(page);
   await expectNoViolations(page);
 });

@@ -149,3 +149,18 @@ Base: `origin/main` en `642a947`. SHA final, comandos y resultados: ver la secci
 ### Alcance de los journeys frente al texto del paquete
 
 Ver «Brechas contra el texto del paquete» en `docs/traceability/incidents.md`. En resumen: el paso a `repair` con órdenes terminadas ya está probado en INC-COSTS y en `incidents-real.spec.ts`; los journeys de esta ola lo evitan para no depender del ciclo de vida de la orden de taller.
+
+### Corridas
+
+MySQL 8.4.11 sintético (contenedor local). Playwright con `--workers=1`.
+
+| Comando                                                         | Resultado                                               |
+| --------------------------------------------------------------- | ------------------------------------------------------- |
+| `pnpm typecheck`, `pnpm lint`, `pnpm format:check`              | verdes                                                  |
+| `pnpm test:unit`                                                | verde (web 1289 pruebas)                                |
+| `pnpm test:integration` (incluye `test:platform` con cobertura) | verde; `periodic.ts` 100 % de líneas, ramas y funciones |
+| `pnpm leak:scan`, `pnpm baseline:check`                         | verdes                                                  |
+| `e2e/incidents-real.spec.ts`                                    | 15 de 15, dos corridas seguidas                         |
+| `e2e/incidents-journeys.spec.ts`                                | 3 de 3, dos corridas seguidas                           |
+
+Hallazgo del journey de navegador: vincular una orden borra la aprobación de asunción y una orden abierta bloquea el cierre (`repair_orders_closed`); por eso el journey crea la orden desde la ficha tras la reapertura. No se ejecutaron `pnpm test:e2e` completo ni `pnpm test:visual`. El SHA queda registrado en el commit que contiene esta sección y en el informe de entrega.
