@@ -15,10 +15,12 @@ export function AuthCallbackScreen() {
   React.useEffect(() => {
     if (started.current) return;
     started.current = true;
-    void completeSignIn(router.search).then((result) => {
-      if (result.ok) router.navigate(safeNextPath(result.value.next ?? null), { replace: true });
-      else setFailed(true);
-    });
+    void completeSignIn(router.search)
+      .then((result) => {
+        if (result.ok) router.navigate(safeNextPath(result.value.next ?? null), { replace: true });
+        else setFailed(true);
+      })
+      .catch(() => setFailed(true));
   }, [completeSignIn, router]);
 
   return (

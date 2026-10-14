@@ -26,7 +26,7 @@ describe('browser storage', () => {
     const client = resolve(webRoot, '../../packages/contracts/src/client.ts');
     // The one exception: the redirecting identity provider keeps the PKCE verifier, state and nonce of a
     // single sign-in attempt in sessionStorage across the round trip to the hosted page (tab-scoped,
-    // consumed on return, expires in minutes; never a session token or personal data). Anything else
+    // consumed on return, expires in minutes; no session token, though it may hold an invitation token already present in the URL). Anything else
     // must not touch Web Storage.
     const tabScopedPkce = resolve(webRoot, 'api/redirectOidc.ts');
     const offenders = [...sources, client]

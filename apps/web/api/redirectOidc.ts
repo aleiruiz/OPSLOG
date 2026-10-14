@@ -96,6 +96,7 @@ export function createRedirectOidc(
       let pending: Pending;
       try {
         pending = JSON.parse(raw ?? '') as Pending;
+        if (typeof pending !== 'object' || pending === null) throw new Error('bad');
       } catch {
         return failure('No encontramos un inicio de sesión en curso.');
       }

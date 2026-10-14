@@ -117,3 +117,11 @@ describe('redirecting identity provider', () => {
     expect(blocked.complete?.(new URLSearchParams({ code: 'a' })).ok).toBe(false);
   });
 });
+
+describe('redirecting identity provider: corrupt pending record', () => {
+  it('treats a non-object stored value as no attempt in progress', () => {
+    const storage = memoryStorage({ 'opslog.oidc.pending': 'null' });
+    const oidc = createRedirectOidc(config, { storage, navigate: vi.fn() });
+    expect(oidc.complete?.(new URLSearchParams({ code: 'a', state: 's' })).ok).toBe(false);
+  });
+});
