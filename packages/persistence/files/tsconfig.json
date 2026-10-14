@@ -14,6 +14,7 @@
     "../../platform/files/src/saga-recovery.ts",
     "../../platform/files/src/scan-runner.ts",
     "../../platform/files/src/scanner.ts",
+    "../../platform/files/src/s3-storage.ts",
     "../../platform/files/src/storage.ts",
     "../../platform/audit/src/index.ts",
     "../audit/src/index.ts",

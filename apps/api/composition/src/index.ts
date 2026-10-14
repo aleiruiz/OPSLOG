@@ -18,3 +18,4 @@ export {
   createWorkerRuntime,
   type WorkerRuntime,
 } from '../../../worker/composition/src/index.js';
+export * from './object-storage.js';

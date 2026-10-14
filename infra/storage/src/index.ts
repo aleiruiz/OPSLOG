@@ -89,8 +89,9 @@ export function validateAppPolicy(
 }
 
 /**
- * Port for a future real S3 adapter (not implemented: AWS integration is deferred). Operations are
- * server-side only; the adapter must not return presigned URLs to browsers.
+ * Port of the S3 adapter (packages/platform/files/src/s3-storage.ts). Operations are server-side
+ * only; the adapter must not return presigned URLs to browsers. `putObject` is a conditional
+ * create (If-None-Match: *) and reports `exists` instead of overwriting.
  */
 export interface S3ObjectClient {
   putObject(input: {
@@ -99,8 +100,9 @@ export interface S3ObjectClient {
     body: Uint8Array;
     contentType: string;
     ifNoneMatch: '*';
-    kmsKeyId: string;
-  }): Promise<void>;
+    /** Omitted: the bucket default encryption (SSE-S3) applies. */
+    kmsKeyId?: string;
+  }): Promise<'created' | 'exists'>;
   getObject(input: { bucket: string; key: string }): Promise<Uint8Array | null>;
   deleteObject(input: { bucket: string; key: string }): Promise<void>;
 }
