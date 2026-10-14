@@ -18,6 +18,7 @@ describe('quality workflow change scope', () => {
     expect(areaOf('e2e/components.spec.ts')).toBe('web');
     expect(areaOf('apps/api/bff/src/http.ts')).toBe('server');
     expect(areaOf('packages/contracts/src/index.ts')).toBe('server');
+    expect(areaOf('infra/terraform/main.tf')).toBe('iac');
     // Markdown inside a package is read by its tests.
     expect(areaOf('infra/runtime/STAGING.md')).toBe('server');
   });
@@ -28,6 +29,10 @@ describe('quality workflow change scope', () => {
       integration: false,
     });
     expect(scopeOf([])).toEqual({ product: false, integration: false });
+    expect(scopeOf(['infra/terraform/storage.tf'])).toEqual({
+      product: false,
+      integration: false,
+    });
   });
 
   it('runs only the suites the changed areas can affect', () => {

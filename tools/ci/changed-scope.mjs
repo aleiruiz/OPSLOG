@@ -9,6 +9,7 @@ import { pathToFileURL } from 'node:url';
 // Areas, checked in order; the first match wins.
 // - config: shared tooling and gates; anything here can break every suite, so everything runs.
 // - docs: prose only (docs/, root Markdown, LICENSE); checked by the light docs job (baselines, leak scan, format).
+// - iac: Terraform under infra/terraform; checked by the terraform job (fmt, validate, mocked plan), not by the product suites.
 // - web: the browser app, the design system and the browser tests.
 // - server: everything else (API, worker, domain, persistence, platform, infra, contracts, tools).
 const RULES = [
@@ -19,6 +20,7 @@ const RULES = [
   // Markdown and docs/ count as prose.
   ['docs', (file) => file.startsWith('docs/') || file === 'LICENSE' || /^[^/]+\.md$/.test(file)],
   ['config', (file) => !file.includes('/')],
+  ['iac', (file) => file.startsWith('infra/terraform/')],
   ['web', (file) => ['packages/ui/', 'apps/web/', 'e2e/'].some((dir) => file.startsWith(dir))],
   ['server', () => true],
 ];
