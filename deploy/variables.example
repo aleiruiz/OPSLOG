@@ -11,3 +11,14 @@ OPSLOG_S3_BUCKET=
 OPSLOG_S3_REGION=
 OPSLOG_S3_ACCESS_KEY_ID=
 OPSLOG_S3_SECRET_ACCESS_KEY=
+# Sign-in. cognito (real, recommended on the VPS) or synthetic (local runs only, nobody can really log in).
+OPSLOG_AUTH_MODE=cognito
+# Cognito user pool and app client (confidential client, authorization code + PKCE).
+OPSLOG_OIDC_ISSUER=https://cognito-idp.<region>.amazonaws.com/<user pool id>
+OPSLOG_OIDC_DOMAIN=https://<prefix>.auth.<region>.amazoncognito.com
+OPSLOG_OIDC_CLIENT_ID=
+OPSLOG_OIDC_CLIENT_SECRET=
+OPSLOG_OIDC_REDIRECT_URI=http://localhost:8081/auth/callback
+# First company and its administrator (the Cognito sub); set both or neither. Safe to leave set.
+OPSLOG_BOOTSTRAP_COMPANY=
+OPSLOG_BOOTSTRAP_ADMIN_SUB=

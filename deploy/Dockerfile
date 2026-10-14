@@ -1,6 +1,7 @@
 # Images for the OPSLOG demo stack (staging only, synthetic data). Targets: api, web.
 #   docker build -f deploy/Dockerfile --target api -t opslog-api .
-#   docker build -f deploy/Dockerfile --target web -t opslog-web .
+#   docker build -f deploy/Dockerfile --target web -t opslog-web \
+#     --build-arg VITE_OIDC_DOMAIN=https://<prefix>.auth.<region>.amazoncognito.com --build-arg VITE_OIDC_CLIENT_ID=<client id> .
 # NODE_ENV is deliberately not set to production: the staging guard refuses to start under it.
 
 FROM node:22-bookworm-slim AS build
@@ -14,6 +15,10 @@ COPY . .
 RUN --mount=type=secret,id=extra-ca,required=false \
     if [ -f /run/secrets/extra-ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/extra-ca; fi; \
     pnpm install --frozen-lockfile
+# Public identity-provider settings baked into the web bundle (no secret): hosted UI domain and client id.
+ARG VITE_OIDC_DOMAIN=""
+ARG VITE_OIDC_CLIENT_ID=""
+ENV VITE_OIDC_DOMAIN=$VITE_OIDC_DOMAIN VITE_OIDC_CLIENT_ID=$VITE_OIDC_CLIENT_ID
 RUN node apps/api/server/build.mjs && node apps/web/build.mjs
 
 FROM node:22-bookworm-slim AS api

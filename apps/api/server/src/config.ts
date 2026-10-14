@@ -1,3 +1,8 @@
+import {
+  cognitoConfigFromEnv,
+  type CognitoOidcConfig,
+} from '../../../../packages/platform/auth/src/cognito.js';
+
 /** Everything the server reads from the environment, validated once at start-up. */
 export interface ServerConfig {
   readonly host: string;
@@ -8,7 +13,12 @@ export interface ServerConfig {
   readonly bffSecret: string;
   /** Secret for download grants (at least 32 characters). */
   readonly grantSecret: string;
-  readonly authMode: 'synthetic';
+  /** `synthetic` is for local runs only; `cognito` verifies real Amazon Cognito sign-ins. */
+  readonly authMode: 'synthetic' | 'cognito';
+  /** Present exactly when `authMode` is `cognito`. */
+  readonly oidc?: CognitoOidcConfig;
+  /** First company and its first administrator (Cognito `sub`), created at start-up when both are set. */
+  readonly bootstrap?: { readonly companyName: string; readonly adminSubject: string };
   /** `s3` also needs the OPSLOG_S3_* variables (read by the S3 adapter itself). */
   readonly objectStorage: 'memory' | 's3';
 }
@@ -57,8 +67,33 @@ export function readConfig(env: Env): ServerConfig {
     throw new Error('OPSLOG_OBJECT_STORAGE must be memory or s3');
 
   const authMode = env.OPSLOG_AUTH_MODE?.trim() || 'synthetic';
-  // The real Cognito verifier is added by its own change; until then only the synthetic one exists.
-  if (authMode !== 'synthetic') throw new Error('OPSLOG_AUTH_MODE must be synthetic in this build');
+  if (authMode !== 'synthetic' && authMode !== 'cognito')
+    throw new Error('OPSLOG_AUTH_MODE must be synthetic or cognito');
+  let oidc: CognitoOidcConfig | undefined;
+  if (authMode === 'cognito') {
+    try {
+      oidc = cognitoConfigFromEnv(env);
+    } catch (error) {
+      // cognitoConfigFromEnv names the variable; a malformed URL would echo nothing useful, so mask it.
+      const message = error instanceof Error ? error.message : '';
+      throw new Error(
+        /^OPSLOG_OIDC_[A-Z_]+ (is required|must be https)$/.test(message)
+          ? message
+          : 'OPSLOG_OIDC_ISSUER, OPSLOG_OIDC_DOMAIN and OPSLOG_OIDC_REDIRECT_URI must be URLs',
+      );
+    }
+    if (new URL(oidc.redirectUri).origin !== origin)
+      throw new Error('OPSLOG_OIDC_REDIRECT_URI must be on OPSLOG_PUBLIC_ORIGIN');
+  }
+
+  const companyName = env.OPSLOG_BOOTSTRAP_COMPANY?.trim();
+  const adminSubject = env.OPSLOG_BOOTSTRAP_ADMIN_SUB?.trim();
+  if (Boolean(companyName) !== Boolean(adminSubject))
+    throw new Error('OPSLOG_BOOTSTRAP_COMPANY and OPSLOG_BOOTSTRAP_ADMIN_SUB must be set together');
+  if (companyName && companyName.length > 160)
+    throw new Error('OPSLOG_BOOTSTRAP_COMPANY is longer than 160 characters');
+  if (adminSubject && adminSubject.length > 200)
+    throw new Error('OPSLOG_BOOTSTRAP_ADMIN_SUB is longer than 200 characters');
 
   return {
     host: env.HOST?.trim() || '0.0.0.0',
@@ -67,6 +102,8 @@ export function readConfig(env: Env): ServerConfig {
     bffSecret,
     grantSecret,
     authMode,
+    ...(oidc ? { oidc } : {}),
+    ...(companyName && adminSubject ? { bootstrap: { companyName, adminSubject } } : {}),
     objectStorage,
   };
 }
