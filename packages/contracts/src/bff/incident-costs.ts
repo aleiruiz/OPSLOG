@@ -110,6 +110,8 @@ export interface BffIncidentCosts {
   readonly totals: readonly BffCurrencyTotals[];
   readonly mixedCurrencies: boolean;
   readonly policyDeductible: BffPolicyDeductible | null;
+  /** Present (`true`) only when the policy could not be read; the totals are unaffected. */
+  readonly policyDeductibleUnavailable?: true;
   readonly snapshots: readonly BffCostSnapshot[];
   /** A linked order or a total is not what the last closure kept. */
   readonly differsFromLastClosure: boolean;

@@ -107,6 +107,7 @@ export abstract class WorkOrderServiceBase {
     actor: WorkOrderActor,
     order: WorkOrder,
     extra: readonly WorkOrderEvent[] = [],
+    idempotency?: IdempotencyClaim,
   ): Promise<WorkOrder> {
     const created = await this.store.apply({
       order,
@@ -114,6 +115,7 @@ export abstract class WorkOrderServiceBase {
       transition: this.timeline(order, 'create', null, actor, null, null),
       auditAction: 'maintenance.work_order.created',
       events: [this.event(WORK_ORDER_CREATED_EVENT, order), ...extra],
+      ...(idempotency ? { idempotency } : {}),
     });
     if (!created) throw new WorkOrderError('duplicate');
     return order;

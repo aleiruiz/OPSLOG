@@ -1,0 +1,77 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "../../../dist/tests/e2e/incidents",
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["**/*.ts"],
+  "references": [
+    {
+      "path": "../../../apps/api/composition"
+    },
+    {
+      "path": "../../../apps/api/bff"
+    },
+    {
+      "path": "../../../packages/persistence/identity"
+    },
+    {
+      "path": "../../../packages/persistence/vehicles"
+    },
+    {
+      "path": "../../../packages/persistence/areas"
+    },
+    {
+      "path": "../../../packages/persistence/employees"
+    },
+    {
+      "path": "../../../packages/persistence/documents"
+    },
+    {
+      "path": "../../../packages/persistence/insurance"
+    },
+    {
+      "path": "../../../packages/persistence/assignments"
+    },
+    {
+      "path": "../../../packages/persistence/imports"
+    },
+    {
+      "path": "../../../packages/persistence/files"
+    },
+    {
+      "path": "../../../packages/persistence/settings"
+    },
+    {
+      "path": "../../../packages/persistence/audit"
+    },
+    {
+      "path": "../../../packages/persistence/maintenance/orders"
+    },
+    {
+      "path": "../../../packages/persistence/incidents/cases"
+    },
+    {
+      "path": "../../../packages/persistence/incidents/third-parties"
+    },
+    {
+      "path": "../../../packages/persistence/incidents/workflow"
+    },
+    {
+      "path": "../../../packages/persistence/incidents/repairs"
+    },
+    {
+      "path": "../../../packages/persistence/incidents/costs"
+    },
+    {
+      "path": "../../../packages/persistence/incidents/sla"
+    },
+    {
+      "path": "../../../packages/platform/pii"
+    },
+    {
+      "path": "../fleet"
+    }
+  ]
+}

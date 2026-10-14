@@ -335,7 +335,14 @@ describe('company settings through the platform', () => {
         'updatedAt',
       ].sort(),
     );
-    expect(ok(await platform.companySettings.get(f.roles.viewer.token, corr()))).toEqual(saved);
+    // The D20 threshold is an amount: a caller without incidents:view_costs does not get the field at all
+    // (omitted, not null, so that a write from a screen that never saw it keeps the stored value).
+    const redacted = Object.fromEntries(
+      Object.entries(saved).filter(([key]) => key !== 'closeCostThreshold'),
+    );
+    const asViewer = ok(await platform.companySettings.get(f.roles.viewer.token, corr()));
+    expect(asViewer).toEqual(redacted);
+    expect('closeCostThreshold' in asViewer).toBe(false);
     ok(
       await platform.companySettings.update(admin.token, corr(), 1, {
         expiryWindowDays: 14,
@@ -432,6 +439,30 @@ describe('role matrix', () => {
         expect(ok(await world.platform.companySettings.get(session.token, corr())).version).toBe(0);
       }
     });
+
+  it('refuses to set the close-cost threshold to a caller who may not see costs', async () => {
+    const context = { tenantId: 't', actor: { subject: 's' } };
+    const settings = (mayViewCosts: boolean) =>
+      new CompanySettingsApi({
+        service: new SettingsService(new InMemorySettingsStore()),
+        authorize: (async () => context) as never,
+        mayViewCosts: async () => mayViewCosts,
+        audit: () => undefined,
+      });
+    const blind = settings(false);
+    for (const closeCostThreshold of [null, { amountMinor: '1', currency: 'MXN' }])
+      expect(
+        (await blind.update('t', 'c', 0, { ...SETTINGS, closeCostThreshold })).error,
+      ).toMatchObject({
+        code: 'forbidden',
+        status: 403,
+      });
+    expect((await blind.get('t', 'c')).value?.version).toBe(0);
+    expect((await blind.update('t', 'c', 0, SETTINGS)).ok).toBe(true);
+    expect(
+      (await settings(true).update('t', 'c', 0, { ...SETTINGS, closeCostThreshold: null })).ok,
+    ).toBe(true);
+  });
 
   it('asks the authorizer for the documented permissions on every operation', async () => {
     const asked: string[][] = [];

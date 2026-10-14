@@ -118,9 +118,13 @@ export const WORK_ORDER_ROUTES: readonly Route[] = [
   route('workOrders.create', async (ctx) => {
     const input = body(ctx, ['vehicleId', 'description']);
     if (!input) return bad(ctx);
+    // Optional: the same key and body replay the first order instead of creating a second one.
+    const key = singleHeader(ctx.headers, IDEMPOTENCY_KEY_HEADER);
+    if (ctx.headers[IDEMPOTENCY_KEY_HEADER] !== undefined && !isIdempotencyKey(key))
+      return bad(ctx);
     return answer(
       ctx,
-      api(ctx).createCorrective(ctx.token as string, ctx.correlationId, input),
+      api(ctx).createCorrective(ctx.token as string, ctx.correlationId, input, key),
       'workOrders.create',
     );
   }),

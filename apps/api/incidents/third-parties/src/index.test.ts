@@ -17,7 +17,7 @@ function world() {
   const base = setupChildren();
   const sessions = new Map<string, { tenantId: string; permissions: readonly string[] }>();
   const denials: string[] = [];
-  const audits: { action: string; entityId: string }[] = [];
+  const audits: { action: string; entityId: string; entityType?: string | undefined }[] = [];
   const reads: string[] = [];
   const api = new IncidentChildApi({
     thirdParties: base.thirdParties,
@@ -38,8 +38,8 @@ function world() {
     deny: async (_context, action) => {
       denials.push(action);
     },
-    audit: async (_context, action, entityId) => {
-      audits.push({ action, entityId });
+    audit: async (_context, action, entityId, _correlationId, entityType) => {
+      audits.push({ action, entityId, entityType });
     },
     files: {
       read: async (_token, _correlationId, fileId) => {
@@ -122,7 +122,13 @@ describe('IncidentChildApi evidence', () => {
     w.files.setStatus(TENANT_A, fileId, 'clean');
     const content = await w.api.evidenceContent('manager', 'c3', incident.id, evidenceId);
     expect(content.value).toMatchObject({ contentType: 'image/jpeg', contentBase64: b64(bytes) });
-    expect(w.audits).toEqual([{ action: 'incident.evidence_downloaded', entityId: incident.id }]);
+    expect(w.audits).toEqual([
+      {
+        action: 'incident.evidence_downloaded',
+        entityId: `${incident.id}.${evidenceId}`,
+        entityType: 'incident_evidence',
+      },
+    ]);
     const list = await w.api.listEvidence('manager', 'c4', incident.id);
     expect(list.value).toHaveLength(1);
     const detached = await w.api.detachEvidence('manager', 'c5', incident.id, evidenceId, {

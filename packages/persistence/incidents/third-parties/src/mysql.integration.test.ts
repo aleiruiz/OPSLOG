@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { DataSource } from 'typeorm';
 import {
@@ -97,7 +97,7 @@ suite('incident third parties and evidence on disposable MySQL 8.4', () => {
   const now = new Date('2026-10-13T18:00:00.000Z');
   const cipher = new EnvelopePiiCipher(LocalDevKms.ephemeral('test'));
   const files = new Files();
-  const world = (source: DataSource) => {
+  const world = (source: DataSource, sealing: EnvelopePiiCipher = cipher) => {
     const store = new TypeOrmIncidentStore(source);
     const children = new TypeOrmIncidentChildStore(source, store);
     const options = { now: () => now };
@@ -105,7 +105,7 @@ suite('incident third parties and evidence on disposable MySQL 8.4', () => {
       store,
       children,
       incidents: new IncidentService(store, refs, options),
-      parties: new ThirdPartyService(store, children, new IdentityVault(cipher), options),
+      parties: new ThirdPartyService(store, children, new IdentityVault(sealing), options),
       evidence: new EvidenceService(store, children, files, options),
     };
   };
@@ -193,6 +193,28 @@ suite('incident third parties and evidence on disposable MySQL 8.4', () => {
       command: 'third_party_added',
       changedFields: expect.arrayContaining(['name', 'plates']),
     });
+  });
+
+  it('stores the longest identity: 200 three-byte characters under a long key id seal past the first 1,024 characters', async () => {
+    const arn = `synthetic.key.${randomUUID()}.${'k'.repeat(70)}`;
+    const real = new EnvelopePiiCipher(
+      new LocalDevKms({ masterKey: randomBytes(32), environment: 'test', keyId: arn }),
+    );
+    const w = world(sourceA, real);
+    const incident = await w.incidents.create(tenantA, MANAGER, draft);
+    const contact = '\u6F22'.repeat(200);
+    const created = await w.parties.create(tenantA, MANAGER, incident.id, {
+      version: 1,
+      kind: 'person',
+      contact,
+    });
+    const [row] = await db.rows<{ contact_enc: string }>(
+      `SELECT contact_enc FROM ${T.thirdParties} WHERE company_id=? AND id=?`,
+      [tenantA, created.party.id],
+    );
+    expect(row?.contact_enc.length).toBeGreaterThan(1024);
+    const [listed] = await w.parties.list(tenantA, MANAGER, incident.id);
+    expect(listed?.contact).toBe(contact);
   });
 
   it('rejects a plaintext identity or a bad enum even from a buggy writer', async () => {

@@ -176,8 +176,8 @@ export function buildIncidentChildApi(
         return served.value.body;
       },
     },
-    audit: (context, action, entityId, correlationId) =>
-      kernel.auditNow(kernel.userActor(context), action, 'incident', entityId, correlationId),
+    audit: (context, action, entityId, correlationId, entityType = 'incident') =>
+      kernel.auditNow(kernel.userActor(context), action, entityType, entityId, correlationId),
     // A refused access is audited like any other denied attempt; the audit trail has no payload.
     deny: (context, action, entityId, correlationId) =>
       kernel.auditNow(kernel.userActor(context), action, 'incident', entityId, correlationId),

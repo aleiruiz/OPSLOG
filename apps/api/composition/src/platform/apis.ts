@@ -276,6 +276,8 @@ export function buildDomainApis(
   const companySettings = new CompanySettingsApi({
     service: settingsService,
     authorize: (token, correlationId, required) => kernel.authorize(token, correlationId, required),
+    mayViewCosts: async (context) =>
+      (await kernel.access.resolvePermissions(context)).includes('incidents:view_costs'),
     audit: settingsAuditInTransaction
       ? () => undefined
       : (context, action, entityId, correlationId) =>

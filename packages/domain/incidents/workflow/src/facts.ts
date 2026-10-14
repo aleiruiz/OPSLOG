@@ -39,8 +39,9 @@ function needsOf(command: IncidentCommand, incident: Incident): Needs {
   const active = incident.vehicleStatusDecision === 'active';
   switch (command) {
     case 'approve_assumption':
+      return { ...NONE, threshold: true, approval: true };
     case 'approve_close':
-      return { ...NONE, threshold: true };
+      return { ...NONE, threshold: true, closeApproval: true };
     case 'close':
       return {
         ...NONE,

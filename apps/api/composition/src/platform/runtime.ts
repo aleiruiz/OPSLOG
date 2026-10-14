@@ -1,6 +1,8 @@
 import type { FilePipeline } from '../../../../../packages/platform/files/src/index.js';
 import {
   createWorkerRuntime,
+  DEFAULT_SLA_SCAN_INTERVAL_MS,
+  type PeriodicTenantJob,
   type WorkerRuntime,
 } from '../../../../worker/composition/src/index.js';
 import { ROLE_PERMISSIONS } from '../access.js';
@@ -10,6 +12,9 @@ import type { MaintenancePlanWorker } from '../../../../../packages/domain/maint
 import { registerIncidentSlaHandlers } from '../../../../worker/incident-sla/src/index.js';
 import { registerMaintenancePlanHandlers } from '../../../../worker/maintenance-plans/src/index.js';
 
+/** Name of the periodic SLA scan job in `runtime.periodic`. */
+export const INCIDENT_SLA_SCAN_JOB = 'incident.sla.scan';
+
 /** Worker runtime over the platform's outbox, tenants and pipeline; the actor's current role gates each job. */
 export function buildWorkerRuntime(
   kernel: PlatformKernel,
@@ -17,8 +22,21 @@ export function buildWorkerRuntime(
   worker: PlatformOptions['worker'],
   auditRelay?: { runBatch(max?: number): Promise<number> },
   maintenancePlans?: MaintenancePlanWorker,
-  incidentSla?: Parameters<typeof registerIncidentSlaHandlers>[1],
+  incidentSla?: Parameters<typeof registerIncidentSlaHandlers>[1] & {
+    readonly enqueueScan: (tenantId: string) => Promise<void>;
+  },
 ): WorkerRuntime {
+  // The incident SLA scan is queued per active tenant on a local timer; the host calls
+  // `runtime.periodic.start()`. The cloud trigger (EventBridge or similar) stays deferred (ADR-0002).
+  const periodic: PeriodicTenantJob[] = incidentSla
+    ? [
+        {
+          name: INCIDENT_SLA_SCAN_JOB,
+          intervalMs: worker?.slaScanIntervalMs ?? DEFAULT_SLA_SCAN_INTERVAL_MS,
+          enqueue: (tenantId) => incidentSla.enqueueScan(tenantId),
+        },
+      ]
+    : [];
   const runtime = createWorkerRuntime({
     outbox: kernel.outbox,
     tenants: kernel.tenants,
@@ -37,8 +55,11 @@ export function buildWorkerRuntime(
     audit: kernel.audit,
     ...(auditRelay ? { auditRelay } : {}),
     pipeline: pipeline,
+    periodic,
+    tenantIds: () => kernel.tenants.all().map((tenant) => tenant.id),
     clock: () => kernel.now().getTime(),
-    ...worker,
+    ...(worker?.leaseMs === undefined ? {} : { leaseMs: worker.leaseMs }),
+    ...(worker?.maxAttempts === undefined ? {} : { maxAttempts: worker.maxAttempts }),
   });
   if (maintenancePlans) registerMaintenancePlanHandlers(runtime.worker, maintenancePlans);
   if (incidentSla) registerIncidentSlaHandlers(runtime.worker, incidentSla);

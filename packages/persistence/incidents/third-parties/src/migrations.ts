@@ -1,5 +1,8 @@
 import type { MigrationInterface, QueryRunner } from 'typeorm';
-import { INCIDENT_CHILD_TABLES as T, SEALED_LENGTH } from './entities.js';
+import { INCIDENT_CHILD_TABLES as T } from './entities.js';
+
+/** What the first migration created: a migration is a literal copy and never follows a constant. */
+const ORIGINAL_SEALED_LENGTH = 1024;
 
 export const INCIDENT_CHILDREN_MIGRATION_VERSION = '2026101500020';
 
@@ -11,7 +14,7 @@ const id = (name: string) => `${name} VARCHAR(64) ${BIN} NOT NULL`;
 const actor = (name: string) => `${name} VARCHAR(72) ${BIN} NOT NULL`;
 const varchar = (name: string, length: number, nullable = true) =>
   `${name} VARCHAR(${length}) ${BIN} ${nullable ? 'NULL' : 'NOT NULL'}`;
-const sealed = (name: string) => `${varchar(name, SEALED_LENGTH)}`;
+const sealed = (name: string, length = ORIGINAL_SEALED_LENGTH) => `${varchar(name, length)}`;
 const list = (values: readonly string[]) => values.map((value) => `'${value}'`).join(',');
 
 const KINDS = ['person', 'vehicle', 'property'] as const;
@@ -69,5 +72,27 @@ export class CreateIncidentChildren2026101500020 implements MigrationInterface {
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.dropTable(T.evidence);
     await queryRunner.dropTable(T.thirdParties);
+  }
+}
+
+export const INCIDENT_SEALED_WIDENING_VERSION = '2026101500030';
+const SEALED_COLUMNS = ['name_enc', 'contact_enc', 'plates_enc', 'policy_number_enc'] as const;
+
+/**
+ * Widens the four sealed columns of a third party from 1,024 to 2,048 characters, so a real KMS envelope
+ * of a 200-character contact in four-byte characters fits (the CHECK constraints stay as they are).
+ * `down` narrows them again and fails, by design, if a stored envelope no longer fits.
+ */
+export class WidenIncidentSealedColumns2026101500030 implements MigrationInterface {
+  public name = 'WidenIncidentSealedColumns2026101500030';
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await this.resize(queryRunner, 2048);
+  }
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await this.resize(queryRunner, ORIGINAL_SEALED_LENGTH);
+  }
+  private async resize(queryRunner: QueryRunner, length: number): Promise<void> {
+    const columns = SEALED_COLUMNS.map((column) => `MODIFY ${sealed(column, length)}`).join(', ');
+    await queryRunner.query(`ALTER TABLE \`${T.thirdParties}\` ${columns}`);
   }
 }

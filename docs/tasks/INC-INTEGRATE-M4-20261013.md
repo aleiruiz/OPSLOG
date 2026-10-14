@@ -33,7 +33,7 @@ write_paths:
 forbidden_paths:
   - SPECS.md, Orchestrator.md, docs/baselines/**, Tasks.md, .env*, AWS, producción
   - reglas de negocio en packages/domain/** (si falta una regla, se registra como pendiente)
-status: paquete preparado; espera todas las entregas de M4
+status: implementado en `wip/inc-integrate` sobre `642a947`; listo para PR y para la única auditoría independiente por SHA (ver «Estado y evidencia»)
 ```
 
 ## Objetivo y límites
@@ -98,3 +98,75 @@ git diff --check
 ```
 
 PR listo, CI verde y la única auditoría independiente por PR/SHA (ADR-0007, ADR-0011). Cada cambio de código invalida la auditoría anterior. La evidencia registra SHA, comando, resultado, versión de MySQL y reporte de Playwright.
+
+## Estado y evidencia
+
+Base: `origin/main` en `642a947`. SHA final, comandos y resultados: ver la sección «Corridas» al final de este documento.
+
+### Qué se entregó
+
+- **Cableado.** Los handlers de `apps/worker/incident-sla`, `incident.assigned` y el sumidero de correo de prueba ya estaban registrados por INC-SLA mediante `registerIncidentSlaHandlers` en `apps/api/composition/src/platform/runtime.ts`; este paquete añade lo que faltaba: el disparo periódico. `apps/worker/composition/src/periodic.ts` define `PeriodicScheduler`: un temporizador (`unref`) por trabajo, que recorre los tenants activos, aísla el fallo de un tenant, no solapa pasadas y exige un intervalo mínimo de 1 s. La composición registra `incident.sla.scan` (`INCIDENT_SLA_SCAN_JOB`) cada 15 min (`worker.slaScanIntervalMs`) y encola con `incidentSla.enqueueScan`. Prueba: `tests/integration/platform/periodic.test.ts`. El código movido a `periodic.ts` y `runtime.ts` deja `platform.ts` sin líneas nuevas (límite de 400).
+- **Pendiente del anfitrión.** El repositorio no tiene un `main` de servidor: quien levante el proceso debe llamar `platform.runtime.periodic.start()` y `stop()`. El disparador periódico en la nube y el envío real de correo siguen diferidos (ADR-0002). Hallazgo: los escaneos de planes de mantenimiento tampoco tienen planificador en el anfitrión (solo los encolan las fixtures de prueba); queda fuera de este paquete y se registra para el coordinador.
+- **Ficha de vehículo.** Enlace «Siniestros del vehículo» (visible con `incidents:view`) a `/incidents?vehicleId=<id>`; la lista aplica el filtro, lo muestra en un aviso con «Ver todos los siniestros» y los filtros rápidos lo conservan.
+- **Mundo de pruebas** (`tests/e2e/incidents/world.ts`, `steps.ts`): arnés de flota con tenants A y B, cuenta runtime de siniestros con los grants exactos de `tests/e2e/fleet/mysql.ts` (sin cambios: ya cubrían las tablas de siniestros), roles sintéticos `incident_supervisor` (`incidents:approve`, `close`, `reopen`, `view_costs`) e `incident_reporter` (`incidents:create`, `report`), registrados solo mientras corre la suite, y reloj determinista (`advance` mueve el reloj y renueva las sesiones).
+- **Journeys por API sobre MySQL 8.4:** aceptado, rechazado/apelado/asumido (D20 igual y un centavo por encima), sin seguro (orden creada con `Idempotency-Key`), pérdida total (`theft_total`) y reapertura. **Matriz A/B:** 19 rutas contra un caso inexistente, listas, filtros, sugerencias, vínculo de orden ajena, filas de B y grants de la cuenta de A. **Navegador:** `e2e/incidents-journeys.spec.ts` a 360 px.
+- **Trazabilidad:** `docs/traceability/incidents.md`.
+- **Regresión:** `tests/e2e/incidents` y `tests/integration/incidents` en `test:fleet-integration` y `test:platform`; `tests/e2e/incidents` y el documento de trazabilidad en `format:check`.
+
+### Correcciones consolidadas de las revisiones
+
+| Origen       | Hallazgo                                                           | Resultado                                                                                                                                                                                                            |
+| ------------ | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| G4 (umbral)  | `closeCostThreshold` visible en `GET /alerts/settings` sin permiso | Corregido: se omite el campo (no `null`) sin `incidents:view_costs`; una escritura que no lo envía conserva el valor guardado. La web oculta los campos y no los envía. Prueba en `alerts.test.ts` y en acceptance 7 |
+| MNT/INC-UI   | `POST work-orders` sin `Idempotency-Key`                           | Corregido: cabecera opcional (hash de carga, conflicto 409, repetición devuelve la misma orden, carrera resuelta); `CreateOrderForm` la usa y `RepairTab` conserva la orden creada al cerrar y reabrir el diálogo    |
+| INC-SLA      | Disparo periódico del escaneo                                      | Parcial: el planificador existe y está probado (ver «Cableado»), pero nada lo arranca hasta que exista un `main` de servidor; ver la fila ADR-0002 en «Diferido»                                                     |
+| INC-CASES    | Tamaño de las columnas selladas                                    | Corregido: migración `2026101500030` ensancha a 2048; prueba con clave larga y 200 caracteres de 3 bytes                                                                                                             |
+| INC-CASES    | Auditoría de descarga sin id de evidencia                          | Corregido: `entityType` `incident_evidence` con `incidentId.evidenceId`                                                                                                                                              |
+| INC-CASES    | Topes de hijos fuera de la transacción                             | Corregido: el conteo se hace dentro de la transacción (20 terceros vivos, 50 evidencias)                                                                                                                             |
+| INC-COSTS    | Deducible: `GET costs` daba 500 si fallaba la consulta             | Corregido: `policyDeductible: null` y `policyDeductibleUnavailable: true`; los totales no cambian; la web lo explica                                                                                                 |
+| INC-WORKFLOW | `next-steps` listaba `approve_*` sin necesidad                     | Corregido: solo se listan si el monto lo exige y falta la aprobación o quedó vencida (`approvalIsDue`)                                                                                                               |
+| INC-UI       | `setIncident(null)` del asistente                                  | Corregido: el borrador sale de `useLive`; sin estado local                                                                                                                                                           |
+| INC-UI       | Huella de `useUploadQueue` incluía `version`                       | Corregido: la huella no incluye la versión; la versión se fija por trabajo y se renueva solo tras un resultado definitivo                                                                                            |
+| INC-UI       | PNG transparente salía negro como JPEG                             | Corregido: con transparencia se emite PNG                                                                                                                                                                            |
+| INC-UI       | Descarga de evidencia con 401                                      | Corregido: vence la sesión (`onExpired`)                                                                                                                                                                             |
+| INC-UI       | Etiquetas de cobertura de `InsuranceTab`                           | Verificado, sin cambio: usa `coverageLabel` del módulo de seguros                                                                                                                                                    |
+
+### Diferido, con su razón (para el auditor G4)
+
+| Origen         | Hallazgo                                                                                                  | Razón                                                                                                                                                                                                                                          |
+| -------------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| INC-CASES      | Filtro de estado del `PATCH`; nombres de campo del audit                                                  | Decisiones documentadas: el sanitizador del audit es un diseño de plataforma compartido y los nombres de campo viven en el timeline. Cambiarlos toca contratos de otros paquetes                                                               |
+| INC-COSTS      | Lecturas de órdenes no serializables durante el cierre; verificaciones de vínculo fuera de la transacción | El estado de la orden pertenece a otro módulo y no puede entrar en la transacción del caso. Se vuelve a leer al decidir; el peor caso es un rechazo o una aceptación sobre una orden que cambió un instante antes                              |
+| INC-COSTS      | `PUT costs` puede dar 500 tras confirmar                                                                  | El disparador principal (el deducible) quedó corregido. Un fallo de lectura de la orden sigue siendo 500 por diseño («nunca un cero»); reintentar con la misma clave repite la respuesta                                                       |
+| INC-COSTS      | Un `PUT` sin cambios no registra su clave                                                                 | Registrarla exigiría una escritura sin subir la versión. Un `PUT` sin cambios es inocuo; reintentar tras otros cambios da 409 `stale_version`                                                                                                  |
+| INC-COSTS      | Validación ISO 4217                                                                                       | La forma `[A-Z]{3}` se valida igual en cuatro módulos (ajustes, seguros, órdenes y costos). Una lista cerrada debe compartirse y tiene otro dueño                                                                                              |
+| INC-SLA L1     | `void kernel.outbox.transaction`                                                                          | Se intentó una verificación de arranque que exige el outbox en memoria con el almacén SLA en memoria; rompía suites que combinan outbox MySQL con otros módulos y se revirtió. Sin riesgo de producción: el adaptador persistente lo sustituye |
+| INC-SLA L4     | Capacidad                                                                                                 | Nota: un escaneo de 500 incidentes tarda unos 16,5 s sobre MySQL; el presupuesto de SPECS §9.3 es de 15 min por tenant. Si crece, paginar más pequeño o escanear por caso                                                                      |
+| ADR-0014 §1    | D20 por monto en órdenes de mantenimiento                                                                 | Sigue **pendiente** (aceptación 10): hoy mantenimiento pide aprobación en todo cierre si hay umbral. Se desbloquea con un FIX de mantenimiento; no se implementa aquí                                                                          |
+| ADR-0002       | Disparador periódico en la nube y envío real de correo                                                    | Diferidos; el sumidero de prueba cuenta como implementado                                                                                                                                                                                      |
+| FR-124, FR-125 | Configuración por tipo; tareas dentro del caso                                                            | Prioridad S, diferidos; vistas guardadas también                                                                                                                                                                                               |
+
+### Revisión de INC-INTEGRATE (PR #118)
+
+- Corregido: `PUT /alerts/settings` rechaza con 403 un `closeCostThreshold` enviado por quien no tiene `incidents:view_costs` (omitir la clave sigue siendo libre). Prueba en `tests/integration/platform/alerts.test.ts`.
+- Corregido: un fallo de una pasada del planificador periódico ya no es un rechazo sin manejar.
+- Registrado para G4: la visibilidad del umbral en la configuración de mantenimiento depende de `incidents:view_costs` (hoy solo `admin` tiene `manage_config`); los escaneos encolados no se fusionan (seguros por idempotencia, ver la nota de capacidad de INC-SLA); el reloj de los journeys parte de la hora real; el `down` de la migración `2026101500030` depende de `sql_mode` estricto.
+
+### Alcance de los journeys frente al texto del paquete
+
+Ver «Brechas contra el texto del paquete» en `docs/traceability/incidents.md`. En resumen: el paso a `repair` con órdenes terminadas ya está probado en INC-COSTS y en `incidents-real.spec.ts`; los journeys de esta ola lo evitan para no depender del ciclo de vida de la orden de taller.
+
+### Corridas
+
+MySQL 8.4.11 sintético (contenedor local). Playwright con `--workers=1`.
+
+| Comando                                                         | Resultado                                               |
+| --------------------------------------------------------------- | ------------------------------------------------------- |
+| `pnpm typecheck`, `pnpm lint`, `pnpm format:check`              | verdes                                                  |
+| `pnpm test:unit`                                                | verde (web 1289 pruebas)                                |
+| `pnpm test:integration` (incluye `test:platform` con cobertura) | verde; `periodic.ts` 100 % de líneas, ramas y funciones |
+| `pnpm leak:scan`, `pnpm baseline:check`                         | verdes                                                  |
+| `e2e/incidents-real.spec.ts`                                    | 15 de 15, dos corridas seguidas                         |
+| `e2e/incidents-journeys.spec.ts`                                | 3 de 3, dos corridas seguidas                           |
+
+Hallazgo del journey de navegador: vincular una orden borra la aprobación de asunción y una orden abierta bloquea el cierre (`repair_orders_closed`); por eso el journey crea la orden desde la ficha tras la reapertura. No se ejecutaron `pnpm test:e2e` completo ni `pnpm test:visual`. El SHA queda registrado en el commit que contiene esta sección y en el informe de entrega.

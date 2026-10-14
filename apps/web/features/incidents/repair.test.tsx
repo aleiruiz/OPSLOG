@@ -122,6 +122,23 @@ describe('repair tab', () => {
     );
   });
 
+  it('keeps the created order when the dialog is closed and reopened: the next submit only links', async () => {
+    const { fake } = open(review(), { permissions: ADMIN });
+    await screen.findByText('Sin órdenes vinculadas');
+    press('Vincular orden');
+    const form = await screen.findByRole('form', { name: 'Crear orden correctiva' });
+    fake.failNext('repairs.link', 500);
+    fireEvent.click(within(form).getByRole('button', { name: 'Crear orden y vincular' }));
+    await screen.findByText(/La orden se creó, pero no pudimos vincularla/);
+    press('Cerrar');
+    expect(screen.queryByRole('form', { name: 'Crear orden correctiva' })).not.toBeInTheDocument();
+    press('Vincular orden');
+    const again = await screen.findByRole('form', { name: 'Crear orden correctiva' });
+    fireEvent.click(within(again).getByRole('button', { name: 'Vincular orden creada' }));
+    expect(await screen.findByText('Orden creada y vinculada.')).toBeInTheDocument();
+    expect(fake.calls.filter((call) => call === 'orders.createCorrective')).toHaveLength(1);
+  });
+
   it('asks for the description before creating anything', async () => {
     const { fake } = open();
     await screen.findByText('Sin órdenes vinculadas');

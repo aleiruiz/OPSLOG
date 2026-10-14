@@ -14,6 +14,8 @@ import type {
 } from '../../../../packages/platform/files/src/index.js';
 
 export type { ActorPermissionCheck, TenantDirectory };
+export * from './periodic.js';
+import { PeriodicScheduler, type PeriodicTenantJob, type PeriodicTimers } from './periodic.js';
 
 const MAX_REFILL_ROUNDS = 1000;
 
@@ -83,6 +85,10 @@ export interface WorkerRuntimeDeps {
   readonly workerId?: string;
   readonly leaseMs?: number;
   readonly maxAttempts?: number;
+  /** Per-tenant jobs the host runs on a timer (`runtime.periodic`); needs `tenantIds`. */
+  readonly periodic?: readonly PeriodicTenantJob[];
+  readonly tenantIds?: () => readonly string[];
+  readonly timers?: PeriodicTimers;
 }
 
 export interface WorkerRuntime {
@@ -93,6 +99,8 @@ export interface WorkerRuntime {
   runScans(): Promise<ScanRunSummary>;
   /** Relays tenant-local audit rows to each tenant's date-partitioned projection. */
   runAuditRelay(max?: number): Promise<number>;
+  /** The local periodic trigger of the registered per-tenant jobs; `start()` is the host's call. */
+  readonly periodic: PeriodicScheduler;
 }
 
 /**
@@ -110,8 +118,14 @@ export function createWorkerRuntime(deps: WorkerRuntimeDeps): WorkerRuntime {
     deps.clock,
     deps.actors,
   );
+  const tenantIds = deps.tenantIds ?? (() => []);
   return {
     worker,
+    periodic: new PeriodicScheduler(
+      { status: (id) => deps.tenants.status(id), ids: tenantIds },
+      deps.periodic ?? [],
+      deps.timers,
+    ),
     drainOutbox: (max) => drain(worker, max),
     runScans: () => deps.pipeline.processScans(),
     runAuditRelay: (max) => {

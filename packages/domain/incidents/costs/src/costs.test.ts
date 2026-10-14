@@ -483,8 +483,13 @@ describe('GET costs (case 1, 2 and 3)', () => {
       (await world.costService.get(TENANT_A, ADMIN, incident.id)).costs.policyDeductible,
     ).toEqual({ kind: 'percent', basisPoints: 500 });
     world.deductibles.fail = true;
-    await expect(world.costService.get(TENANT_A, ADMIN, incident.id)).rejects.toThrow(
-      'policy unavailable',
+    // The reference is flagged missing; the costs themselves still answer.
+    const degraded = (await world.costService.get(TENANT_A, ADMIN, incident.id)).costs;
+    expect(degraded).toMatchObject({ policyDeductible: null, policyDeductibleUnavailable: true });
+    expect(degraded.totals).toEqual([]);
+    world.deductibles.fail = false;
+    expect((await world.costService.get(TENANT_A, ADMIN, incident.id)).costs).not.toHaveProperty(
+      'policyDeductibleUnavailable',
     );
     const bare = await caseIn(world, 'under_review');
     expect(

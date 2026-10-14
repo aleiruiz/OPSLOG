@@ -45,6 +45,8 @@ export interface CostsView {
   readonly totals: readonly CurrencyTotals[];
   readonly mixedCurrencies: boolean;
   readonly policyDeductible: PolicyDeductible | null;
+  /** Set (and only then) when insurance could not be read: the reference is missing, the costs are not. */
+  readonly policyDeductibleUnavailable?: true;
   readonly snapshots: readonly {
     readonly cycle: number;
     readonly closedAt: string;
@@ -84,6 +86,20 @@ export class IncidentCostService extends IncidentWriteBase {
     ]);
     const snapshot = incident.policySnapshot;
     const last: CostSnapshot | undefined = snapshots[snapshots.length - 1];
+    // The deductible is a reference beside the totals, from another module: its failure must not take
+    // the costs (and their editing) down with it. The totals above never degrade to a guess.
+    let deductible: PolicyDeductible | null = null;
+    let unavailable = false;
+    if (snapshot)
+      try {
+        deductible = await this.deductibles.deductible(
+          tenantId,
+          snapshot.policyId,
+          snapshot.revision,
+        );
+      } catch {
+        unavailable = true;
+      }
     return {
       version: incident.version,
       lines: read.lines,
@@ -95,9 +111,8 @@ export class IncidentCostService extends IncidentWriteBase {
       })),
       totals: read.totals,
       mixedCurrencies: read.totals.length > 1,
-      policyDeductible: snapshot
-        ? await this.deductibles.deductible(tenantId, snapshot.policyId, snapshot.revision)
-        : null,
+      policyDeductible: deductible,
+      ...(unavailable ? { policyDeductibleUnavailable: true as const } : {}),
       snapshots: snapshots.map(({ cycle, closedAt, totals, orders }) => ({
         cycle,
         closedAt,

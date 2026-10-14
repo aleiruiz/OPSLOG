@@ -38,7 +38,12 @@ export default [
     // The real-API browser harness pulls in the whole server composition; parsing it with the
     // e2e type program exhausts CI memory. It is type-checked by tsc (e2e/real-api/tsconfig.json),
     // and no lint rule here needs type information.
-    files: ['e2e/real-api/**/*.ts', 'e2e/maintenance-real.spec.ts', 'e2e/incidents-real.spec.ts'],
+    files: [
+      'e2e/real-api/**/*.ts',
+      'e2e/maintenance-real.spec.ts',
+      'e2e/incidents-real.spec.ts',
+      'e2e/incidents-journeys.spec.ts',
+    ],
     languageOptions: { parserOptions: { project: false } },
   },
   prettier,

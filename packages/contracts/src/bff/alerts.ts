@@ -94,8 +94,12 @@ export interface BffAlertSettings {
   readonly recipientRoles: readonly BffAlertRecipientRole[];
   /** Evidence/invoice that completing and closing a maintenance order requires (default `none`). */
   readonly maintenanceEvidence: BffMaintenanceEvidenceRequirement;
-  /** D20: when set, every closure needs a prior supervisor approval. `null` (default): none is asked. */
-  readonly closeCostThreshold: BffCloseCostThreshold | null;
+  /**
+   * D20: when set, a closure whose company-borne cost exceeds it needs a prior supervisor approval.
+   * `null` (default): none is asked. Left out for a caller without `incidents:view_costs`; a write
+   * that leaves it out keeps the stored value.
+   */
+  readonly closeCostThreshold?: BffCloseCostThreshold | null;
   /** IANA zone of the company; calendar days are computed in it (default `UTC`). */
   readonly timeZone: string;
   /** Photo evidence reporting an incident requires (default `photo_or_justification`). The server always sends it. */

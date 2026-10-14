@@ -103,17 +103,26 @@ describe('canvasCompress', () => {
     globalThis.createImageBitmap = original.bitmap;
   });
   let closeBitmap = vi.fn();
-  const stubCanvas = (sizes: (quality: number, width: number) => number, hasContext = true) => {
+  const types: (string | undefined)[] = [];
+  const stubCanvas = (
+    sizes: (quality: number, width: number) => number,
+    hasContext = true,
+    transparent = false,
+  ) => {
     const draw = vi.fn();
+    types.length = 0;
+    // One transparent pixel is enough to tell: a JPEG would turn it black.
+    const data = Uint8ClampedArray.from([0, 0, 0, transparent ? 0 : 255]);
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((() =>
-      hasContext ? { drawImage: draw } : null) as never);
+      hasContext ? { drawImage: draw, getImageData: () => ({ data }) } : null) as never);
     vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(function (
       this: HTMLCanvasElement,
       callback: BlobCallback,
-      _type?: string,
+      type?: string,
       quality?: number,
     ) {
-      callback(new Blob([new Uint8Array(sizes(quality ?? 1, this.width))]));
+      types.push(type);
+      callback(new Blob([new Uint8Array(sizes(quality ?? 1, this.width))], { type: type ?? '' }));
     } as never);
     closeBitmap = vi.fn();
     globalThis.createImageBitmap = vi.fn(async () => ({
@@ -130,8 +139,17 @@ describe('canvasCompress', () => {
     );
     const blob = await canvasCompress(new Blob(['x']), 2_000_000);
     expect(blob.size).toBe(1_000_000);
+    expect(new Set(types)).toEqual(new Set(['image/jpeg']));
     expect(draw).toHaveBeenCalled();
     expect(closeBitmap).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps an image with transparency as a PNG, shrinking only its size', async () => {
+    stubCanvas((_quality, width) => (width > 2000 ? 5_000_000 : 1_000_000), true, true);
+    const blob = await canvasCompress(new Blob(['x']), 2_000_000);
+    expect(blob.type).toBe('image/png');
+    expect(blob.size).toBe(1_000_000);
+    expect(new Set(types)).toEqual(new Set(['image/png']));
   });
 
   it('gives up when the browser cannot reach the target or has no canvas', async () => {

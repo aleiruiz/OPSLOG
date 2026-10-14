@@ -74,6 +74,11 @@ describe('vehicle detail', () => {
       '/flota/vehiculos/veh-001/editar',
     );
     expect(screen.getByRole('button', { name: 'Archivar' })).toBeInTheDocument();
+    // The link to the cases of this vehicle follows the incidents permission, not the vehicle ones.
+    expect(screen.getByRole('link', { name: 'Siniestros del vehículo' })).toHaveAttribute(
+      'href',
+      '/incidents?vehicleId=veh-001',
+    );
     admin.unmount();
     const dispatch = await open('veh-001', { account: 'dispatch' });
     await screen.findByRole('heading', { name: 'Vehículo ECO-001', level: 1 });

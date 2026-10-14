@@ -12,12 +12,15 @@ import {
   EvidenceSchema,
   INCIDENT_CHILD_ENTITIES,
   INCIDENT_CHILD_TABLES,
+  SEALED_LENGTH,
   ThirdPartySchema,
 } from './entities.js';
 import { evidenceFrom, evidenceRow, thirdPartyFrom, thirdPartyRow } from './mapping.js';
 import {
   CreateIncidentChildren2026101500020,
   INCIDENT_CHILDREN_MIGRATION_VERSION,
+  INCIDENT_SEALED_WIDENING_VERSION,
+  WidenIncidentSealedColumns2026101500030,
 } from './migrations.js';
 import { TypeOrmIncidentChildStore } from './store.js';
 
@@ -88,11 +91,36 @@ describe('incident children schema (migration after the cases)', () => {
     expect(INCIDENT_CHILDREN_MIGRATION_VERSION).toBe('2026101500020');
   });
 
+  it('widens the sealed columns in a later migration, leaving the first one at its original size', async () => {
+    const statements: string[] = [];
+    const runner = {
+      query: async (sql: string) => void statements.push(sql),
+    } as unknown as QueryRunner;
+    const first = new CreateIncidentChildren2026101500020();
+    await first.up({ query: async (sql: string) => void statements.push(sql) } as QueryRunner);
+    expect(statements[0]).toContain('name_enc VARCHAR(1024)');
+    statements.length = 0;
+    const widen = new WidenIncidentSealedColumns2026101500030();
+    await widen.up(runner);
+    await widen.down(runner);
+    expect(SEALED_LENGTH).toBe(2048);
+    expect(INCIDENT_SEALED_WIDENING_VERSION).toBe('2026101500030');
+    for (const column of ['name_enc', 'contact_enc', 'plates_enc', 'policy_number_enc']) {
+      expect(statements[0]).toContain(`MODIFY ${column} VARCHAR(2048)`);
+      expect(statements[1]).toContain(`MODIFY ${column} VARCHAR(1024)`);
+    }
+    // 200 four-byte characters through the worst realistic envelope still fit.
+    const body = Math.ceil(((200 * 4 + 16) * 4) / 3);
+    const overhead = 'pii1.'.length + 171 + 1 + 400 + 1 + 16 + 1;
+    expect(body + overhead).toBeLessThan(SEALED_LENGTH);
+  });
+
   it('registers the entities and the migration after the cases one in the incidents data source', () => {
     const source = createIncidentDataSource({ ...endpoint, username: 'opslog_incidents_abc' });
     expect(source.options.migrations).toEqual([
       CreateIncidentCases2026101500010,
       CreateIncidentChildren2026101500020,
+      WidenIncidentSealedColumns2026101500030,
     ]);
     expect(source.options.entities).toEqual(
       expect.arrayContaining([ThirdPartySchema, EvidenceSchema]),
@@ -117,8 +145,10 @@ describe('incident children schema (migration after the cases)', () => {
 
   it('joins the transaction of the incident store and refuses plaintext identity', async () => {
     const inserted: unknown[] = [];
+    let live = 0;
     const manager = {
       getRepository: () => ({
+        countBy: async () => live,
         insert: async (row: unknown) => void inserted.push(row),
         update: async () => ({ affected: 0 }),
         delete: async () => ({ affected: 0 }),
@@ -160,6 +190,19 @@ describe('incident children schema (migration after the cases)', () => {
     await expect(
       store.apply(mutation, { kind: 'third_party_update', party: plain }),
     ).rejects.toThrow('must be sealed');
+    // The caps are counted again inside the transaction, after the case row was locked.
+    live = 20;
+    await expect(
+      store.apply(mutation, { kind: 'third_party_add', party: PARTY }),
+    ).rejects.toMatchObject({ code: 'rule_violation' });
+    live = 50;
+    await expect(
+      store.apply(mutation, { kind: 'evidence_attach', evidence: EVIDENCE }),
+    ).rejects.toMatchObject({ code: 'rule_violation' });
+    live = 19;
+    expect(await store.apply(mutation, { kind: 'third_party_add', party: PARTY })).toEqual({
+      applied: true,
+    });
     const migrator = createIncidentDataSource({ ...endpoint, username: 'opslog_incidents_abc' });
     (migrator.options as { synchronize: boolean }).synchronize = true;
     expect(() => new TypeOrmIncidentChildStore(migrator, base as never)).toThrow();

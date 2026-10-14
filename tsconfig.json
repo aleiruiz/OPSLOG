@@ -79,6 +79,8 @@
     { "path": "./apps/api/bff" },
     { "path": "./tests/integration/platform" },
     { "path": "./tests/e2e/fleet" },
+    { "path": "./tests/e2e/incidents" },
+    { "path": "./tests/integration/incidents" },
     { "path": "./tests/fixtures/maintenance" },
     { "path": "./tests/e2e/maintenance" }
   ]

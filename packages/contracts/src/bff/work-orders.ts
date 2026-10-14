@@ -189,6 +189,11 @@ export interface WorkOrderRouteTypes {
   'workOrders.list': { response: readonly BffWorkOrder[] };
   'workOrders.create': {
     body: { readonly vehicleId: string; readonly description: string };
+    /**
+     * Sent as the `Idempotency-Key` header, never in the body, and optional. The same key with the same
+     * body answers the order created the first time; with another body, 409 `idempotency_conflict`.
+     */
+    idempotencyKey?: string;
     response: BffWorkOrder;
   };
   'workOrders.adopt': {

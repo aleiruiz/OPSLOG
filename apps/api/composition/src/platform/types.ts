@@ -128,7 +128,12 @@ export interface PlatformOptions {
   readonly environment?: string;
   readonly adapters?: PlatformAdapters;
   readonly pipeline?: Omit<PipelineOptions, 'now'>;
-  readonly worker?: { readonly leaseMs?: number; readonly maxAttempts?: number };
+  readonly worker?: {
+    readonly leaseMs?: number;
+    readonly maxAttempts?: number;
+    /** Cadence of the periodic incident SLA scan (default 15 minutes). */
+    readonly slaScanIntervalMs?: number;
+  };
   /** How long the scan runner holds back jobs of non-active tenants. */
   readonly scanHoldMs?: number;
 }

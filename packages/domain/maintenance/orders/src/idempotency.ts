@@ -2,6 +2,9 @@ import { createHash } from 'node:crypto';
 import { WorkOrderError } from './errors.js';
 import type { WorkOrder, WorkOrderCommand } from './types.js';
 
+/** What a key can protect: a status command, or the creation of a corrective order. */
+export type IdempotentCommand = WorkOrderCommand | 'create';
+
 /** Header value format (SPECS:195): 8-128 characters of [A-Za-z0-9_-]. */
 export const IDEMPOTENCY_KEY = /^[A-Za-z0-9_-]{8,128}$/;
 /** A key is remembered for 24 hours; after that the same key is a new command. */
@@ -30,13 +33,17 @@ export function canonicalJson(value: unknown): string {
 }
 
 /** SHA-256 of the canonical command: the order, the command and the whole payload (version included). */
-export const payloadHash = (orderId: string, command: WorkOrderCommand, payload: unknown): string =>
+export const payloadHash = (
+  orderId: string,
+  command: IdempotentCommand,
+  payload: unknown,
+): string =>
   createHash('sha256').update(canonicalJson({ orderId, command, payload })).digest('hex');
 
 /** What a command claims in the mutation that applies it; the store records `order` as the response. */
 export interface IdempotencyClaim {
   readonly actorId: string;
-  readonly command: WorkOrderCommand;
+  readonly command: IdempotentCommand;
   readonly key: string;
   readonly orderId: string;
   readonly payloadHash: string;

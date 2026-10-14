@@ -45,6 +45,10 @@ const clamp = (value: string | null, hasDraft: boolean): number => {
   return Math.min(Math.max(parsed - 1, 0), LAST);
 };
 
+/** An answer replaces the shown draft unless it is an older version of the same one (a slow reload). */
+const notOlder = (next: BffIncident, shown: BffIncident | null): boolean =>
+  shown === null || shown.id !== next.id || next.version >= shown.version;
+
 /**
  * Nuevo siniestro. Step one creates the draft (the server needs the vehicle and the type); from then on the
  * draft and the step live in the address, so a reload or a return later resumes where the person was. The
@@ -56,7 +60,6 @@ export function IncidentWizard() {
   const router = useRouter();
   const draftId = router.search.get('borrador');
   const step = clamp(router.search.get('paso'), draftId !== null);
-  const [incident, setIncident] = React.useState<BffIncident | null>(null);
   const loaded = useLive(
     () =>
       draftId === null
@@ -67,12 +70,15 @@ export function IncidentWizard() {
         : env.ports.get(draftId),
     [env.ports, draftId],
     env.onExpired,
+    notOlder,
   );
   const keys = React.useRef(new SubmitKeys());
   const [notice, setNotice] = React.useState<string | null>(null);
   const [reportError, setReportError] = React.useState<string | null>(null);
   const [reporting, setReporting] = React.useState(false);
-  const draft = draftId === null ? null : incident?.id === draftId ? incident : loaded.data;
+  // One source: the last known draft stays until the reload answers, so a child change never drops back
+  // to an older version. Data of another draft (the address changed) is not shown.
+  const draft = draftId === null || loaded.data?.id !== draftId ? null : loaded.data;
   const suggestions = useSuggestions(draft?.vehicle.id ?? null, draft?.occurredAt ?? null);
   const steps = useLive(
     () =>
@@ -90,12 +96,13 @@ export function IncidentWizard() {
     if (id) router.navigate(draftPath(id, next + 1), { replace });
   };
   const moved = (next: BffIncident, message?: string) => {
-    setIncident(next);
+    loaded.set(next);
     setNotice(message ?? null);
   };
 
   if (draftId !== null && draft === null) {
-    if (loaded.loading) return <UiState kind="loading" />;
+    if (loaded.loading || (loaded.error === null && loaded.data?.id !== draftId))
+      return <UiState kind="loading" />;
     return (
       <Box>
         <BackLink to={incidentsPath}>Siniestros</BackLink>
@@ -131,7 +138,6 @@ export function IncidentWizard() {
 
   const reload = () => {
     loaded.reload();
-    setIncident(null);
     steps.reload();
   };
   const create = async (fields: EventFields): Promise<SubmitOutcome> => {
@@ -144,7 +150,7 @@ export function IncidentWizard() {
       result,
       env.onExpired,
       (created) => {
-        setIncident(created);
+        loaded.set(created);
         setNotice('Borrador guardado.');
         router.navigate(draftPath(created.id, 2), { replace: true });
       },
@@ -180,7 +186,6 @@ export function IncidentWizard() {
     onVersion: (_version: number, message?: string) => {
       setNotice(message ?? null);
       loaded.reload();
-      setIncident(null);
     },
     onReload: reload,
   };

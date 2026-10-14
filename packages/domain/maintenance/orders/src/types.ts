@@ -1,4 +1,4 @@
-import type { IdempotencyClaim, IdempotencyRecord } from './idempotency.js';
+import type { IdempotencyClaim, IdempotencyRecord, IdempotentCommand } from './idempotency.js';
 
 /** Work order states of SPECS §6.1. Ids are English snake_case; Spanish labels belong to the web layer. */
 export const WORK_ORDER_STATUSES = [
@@ -172,7 +172,7 @@ export interface WorkOrderStore {
   idempotency(
     tenantId: string,
     actorId: string,
-    command: WorkOrderCommand,
+    command: IdempotentCommand,
     key: string,
   ): Promise<IdempotencyRecord | null>;
   /** Files linked to the order, oldest first. */

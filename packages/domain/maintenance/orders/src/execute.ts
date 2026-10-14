@@ -38,6 +38,59 @@ export abstract class IdempotentCommands extends WorkOrderFilesBase {
   public abstract close(...args: CommandArgs): Promise<WorkOrder>;
   public abstract cancel(...args: CommandArgs): Promise<WorkOrder>;
   public abstract reopen(...args: CommandArgs): Promise<WorkOrder>;
+  /** `claim` builds the key claim once the new order's id is known. */
+  public abstract createCorrective(
+    tenantId: string,
+    actor: WorkOrderActor,
+    input: unknown,
+    claim?: (orderId: string) => IdempotencyClaim,
+  ): Promise<WorkOrder>;
+
+  /**
+   * Creates a corrective order under an optional Idempotency-Key: the same key and body replay the
+   * order created the first time (no second order), another body is an `idempotency_conflict`.
+   * The key is scoped to the tenant and the actor, like the status commands'.
+   */
+  public async createKeyed(
+    tenantId: string,
+    actor: WorkOrderActor,
+    input: unknown,
+    key?: string,
+  ): Promise<WorkOrder> {
+    if (key === undefined) return this.createCorrective(tenantId, actor, input);
+    if (!actor.permissions.includes('create')) throw new WorkOrderError('forbidden');
+    const claimKey = idempotencyKey(key);
+    const hash = payloadHash('create', 'create', input);
+    const replay = async (): Promise<WorkOrder | null> => {
+      const record = await this.store.idempotency(tenantId, actor.id, 'create', claimKey);
+      if (!record || record.expiresAt <= this.now().toISOString()) return null;
+      if (record.payloadHash !== hash) throw new WorkOrderError('idempotency_conflict');
+      // The caller must still see the order; costs follow the view.
+      await this.get(tenantId, actor, record.orderId);
+      return record.response;
+    };
+    const stored = await replay();
+    if (stored) return stored;
+    const createdAt = this.now();
+    try {
+      return await this.createCorrective(tenantId, actor, input, (orderId) => ({
+        actorId: actor.id,
+        command: 'create',
+        key: claimKey,
+        orderId,
+        payloadHash: hash,
+        createdAt: createdAt.toISOString(),
+        expiresAt: new Date(createdAt.getTime() + this.idempotencyTtlMs).toISOString(),
+      }));
+    } catch (error) {
+      // A concurrent duplicate lost the race: the winner's order is stored, so it replays that one.
+      if (error instanceof WorkOrderError && !error.code.startsWith('idempotency_')) {
+        const winner = await replay();
+        if (winner) return winner;
+      }
+      throw error;
+    }
+  }
 
   /**
    * Runs a status command under an Idempotency-Key (SPECS:195). The same key and payload replay the

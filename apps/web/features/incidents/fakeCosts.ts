@@ -96,6 +96,7 @@ export function createFakeCosts(ctx: FakeContext, options: FakeIncidentOptions) 
   const keyed = new Map<string, { body: string; result: unknown }>();
   let settings: BffAlertSettings = { ...DEFAULT_SETTINGS, ...options.settings };
   let sequence = 0;
+  const createdByKey = new Map<string, FakeOrder>();
   const has = (permission: string) => ctx.permissions().includes(permission);
 
   const totalsOf = (record: Record_): BffCurrencyTotals[] => {
@@ -341,10 +342,12 @@ export function createFakeCosts(ctx: FakeContext, options: FakeIncidentOptions) 
         if (!has('view')) return Promise.resolve(fail(403, 'forbidden'));
         return Promise.resolve(ok([...orders.values()].map(toOrder)));
       },
-      createCorrective: (body) => {
+      createCorrective: (body, idempotencyKey) => {
         const failed = ctx.injected('orders.createCorrective');
         if (failed) return Promise.resolve(failed);
         if (!has('create')) return Promise.resolve(fail(403, 'forbidden'));
+        const replay = idempotencyKey === undefined ? undefined : createdByKey.get(idempotencyKey);
+        if (replay) return Promise.resolve(ok(toOrder(replay)));
         sequence += 1;
         const order: FakeOrder = {
           id: `order-new-${sequence}`,
@@ -353,6 +356,7 @@ export function createFakeCosts(ctx: FakeContext, options: FakeIncidentOptions) 
           createdAt: FAKE_NOW,
         };
         orders.set(order.id, order);
+        if (idempotencyKey !== undefined) createdByKey.set(idempotencyKey, order);
         return Promise.resolve(ok(toOrder(order)));
       },
     },

@@ -354,6 +354,16 @@ describe('prepareFile', () => {
     });
     expect(prepared.blob.size).toBeLessThanOrEqual(COMPRESS_TARGET_BYTES);
   });
+  it('names and types a re-encoded transparent image as the PNG it stayed', async () => {
+    const compress = async () => new Blob([new Uint8Array(1000)], { type: 'image/png' });
+    expect(
+      await prepareFile(photo(3 * 1024 * 1024, 'image/png', 'logo.png'), compress),
+    ).toMatchObject({
+      name: 'logo.png',
+      contentType: 'image/png',
+      clientCompressed: true,
+    });
+  });
   it('sends a PDF and a small photo unchanged', async () => {
     const compress = vi.fn();
     const pdf = new File([new Uint8Array(5_000_000)], 'carta.pdf', { type: 'application/pdf' });

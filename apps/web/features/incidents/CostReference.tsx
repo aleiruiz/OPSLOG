@@ -83,7 +83,9 @@ export function CostReference({
             label: 'Deducible de la póliza',
             value: costs.policyDeductible
               ? deductibleText(costs.policyDeductible)
-              : 'Sin póliza o sin deducible registrado',
+              : costs.policyDeductibleUnavailable
+                ? 'No pudimos consultar la póliza. Intenta de nuevo más tarde.'
+                : 'Sin póliza o sin deducible registrado',
           },
         ]}
       />

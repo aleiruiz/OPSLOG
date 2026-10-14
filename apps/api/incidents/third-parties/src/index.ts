@@ -190,11 +190,14 @@ export class IncidentChildApi {
       incidentId,
       async (tenantId, actor, context) => {
         const link = await this.deps.evidence.downloadable(tenantId, actor, incidentId, evidenceId);
+        // Both ids when they fit the audit identifier (128 characters); the evidence id alone otherwise.
+        const joined = `${link.incidentId}.${evidenceId}`;
         await this.deps.audit(
           context,
           'incident.evidence_downloaded',
-          link.incidentId,
+          joined.length <= 128 ? joined : evidenceId,
           correlationId,
+          'incident_evidence',
         );
         const bytes = await this.deps.files.read(token, correlationId, link.fileId);
         return {

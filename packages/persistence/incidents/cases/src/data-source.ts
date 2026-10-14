@@ -4,6 +4,7 @@ import { AUDIT_ENTITIES } from '../../../audit/src/index.js';
 import {
   CreateIncidentChildren2026101500020,
   INCIDENT_CHILD_ENTITIES,
+  WidenIncidentSealedColumns2026101500030,
 } from '../../third-parties/src/index.js';
 import { INCIDENT_COST_ENTITIES } from '../../costs/src/entities.js';
 import { INCIDENT_SLA_ENTITIES } from '../../sla/src/entities.js';
@@ -35,8 +36,13 @@ const common = {
     ...INCIDENT_SLA_ENTITIES,
     ...AUDIT_ENTITIES,
   ],
-  // Ordered by version: the cases first, then their third parties and evidence (PR 2).
-  migrations: [CreateIncidentCases2026101500010, CreateIncidentChildren2026101500020],
+  // Ordered by version: the cases first, then their third parties and evidence (PR 2), then the
+  // wider sealed columns of the third parties.
+  migrations: [
+    CreateIncidentCases2026101500010,
+    CreateIncidentChildren2026101500020,
+    WidenIncidentSealedColumns2026101500030,
+  ],
   migrationsTableName: INCIDENT_MIGRATIONS_TABLE,
   synchronize: false,
   migrationsRun: false,

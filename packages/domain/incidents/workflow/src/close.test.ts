@@ -100,6 +100,36 @@ describe('D20 by amount (case 8)', () => {
     expect((await run(world, approved, 'close')).status).toBe('closed');
   });
 
+  it('lists the approvals as steps only while they are due (amount above the threshold, none standing)', async () => {
+    const world = setup();
+    const commandsOf = async (incident: Incident) =>
+      (await world.workflow.nextSteps(TENANT_A, ADMIN, incident.id)).map((step) => step.command);
+    // No threshold: nothing to approve.
+    borne(world, MXN('900000'));
+    expect(await commandsOf(await resolved(world))).not.toContain('approve_close');
+    world.settings.threshold = THRESHOLD;
+    // At the threshold, not above it.
+    borne(world, MXN('500000'));
+    expect(await commandsOf(await resolved(world))).not.toContain('approve_close');
+    // Above it: the approval is the step, and it is not once given.
+    borne(world, MXN('500001'));
+    const incident = await resolved(world);
+    expect(await commandsOf(incident)).toContain('approve_close');
+    const approved = await run(world, incident, 'approve_close');
+    expect(await commandsOf(approved)).not.toContain('approve_close');
+    // Costs outgrew it: due again.
+    world.closureCosts.stale = true;
+    expect(await commandsOf(approved)).toContain('approve_close');
+    // The assumption approval follows the same rule.
+    world.closureCosts.stale = false;
+    const created = await draft(world, { type: 'other' });
+    const rejected = await put(world, created, { status: 'insurance_rejected', ...FULL });
+    borne(world, MXN('500000'));
+    expect(await commandsOf(rejected)).not.toContain('approve_assumption');
+    borne(world, MXN('500001'));
+    expect(await commandsOf(rejected)).toContain('approve_assumption');
+  });
+
   it('records what each approval covered, and asks again when the costs outgrow it (close and assumption)', async () => {
     const world = setup();
     world.settings.threshold = THRESHOLD;

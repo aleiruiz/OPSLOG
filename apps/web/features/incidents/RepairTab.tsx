@@ -11,6 +11,7 @@ import { RELOADED_COPY, describeError, isStale } from './errors';
 import { ORDER_STATUS_LABELS } from './labelsCosts';
 import { STATUS_TONES as ORDER_TONES } from '../maintenance/labels';
 import { canLinkRepairs } from './model';
+import { useOrderDraft } from './orderDraft';
 import { RepairLinkForm } from './RepairLinkForm';
 import { SubmitKeys, sendKeyed } from './submit';
 import type { ChildProps } from './ThirdPartiesTab';
@@ -44,6 +45,7 @@ export function RepairTab({ incident, onVersion, onReload }: ChildProps) {
   const [removeError, setRemoveError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
   const keys = React.useRef(new SubmitKeys());
+  const draft = useOrderDraft(incident);
   const writable = canLinkRepairs(incident, env.permissions);
 
   if (list.data === null)
@@ -91,7 +93,9 @@ export function RepairTab({ incident, onVersion, onReload }: ChildProps) {
           <RepairLinkForm
             incident={incident}
             links={list.data.items}
+            draft={draft}
             onLinked={(version, message) => {
+              draft.reset();
               setLinking(false);
               onVersion(version, message);
             }}
