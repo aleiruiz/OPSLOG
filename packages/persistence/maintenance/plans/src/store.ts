@@ -232,6 +232,9 @@ export class TypeOrmMaintenancePlanStore
   ): Promise<readonly PlanEvaluation[]> {
     return this.workerStore.scan(tenantId, planId, now, odometer, timeZone);
   }
+  public enqueueScans(tenantId: string, now: Date): Promise<number> {
+    return this.workerStore.enqueueScans(tenantId, now);
+  }
   public closePreventive(event: PreventiveOrderClosedEvent): Promise<void> {
     return this.workerStore.closePreventive(event);
   }

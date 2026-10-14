@@ -140,6 +140,8 @@ export interface PlatformOptions {
     readonly maxAttempts?: number;
     /** Cadence of the periodic incident SLA scan (default 15 minutes). */
     readonly slaScanIntervalMs?: number;
+    /** Cadence of the periodic maintenance plan scan (default 1 hour). */
+    readonly planScanIntervalMs?: number;
   };
   /** How long the scan runner holds back jobs of non-active tenants. */
   readonly scanHoldMs?: number;

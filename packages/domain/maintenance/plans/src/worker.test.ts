@@ -11,6 +11,7 @@ const stubs = () => ({
   cancelPreventive: vi.fn(async () => undefined),
   adoptPreventive: vi.fn(async () => undefined),
   baselineBeforeClosure: vi.fn(async () => null),
+  enqueueScans: vi.fn(async () => 0),
 });
 const input = { vehicleId: 'vehicle-a', intervalDays: 30, lastServiceDate: '2026-01-01' };
 
@@ -116,5 +117,18 @@ describe('MaintenancePlanWorker', () => {
     await expect(missingPlan.scan('tenant-b', 'plan-a')).rejects.toMatchObject({
       code: 'not_found',
     });
+  });
+
+  it('queues the periodic scans through the store with the current time', async () => {
+    const stored = stubs();
+    stored.enqueueScans.mockResolvedValue(2);
+    const worker = new MaintenancePlanWorker(
+      new InMemoryMaintenancePlanStore(),
+      { scan: vi.fn(), closePreventive: vi.fn(), ...stored },
+      { read: async () => null },
+      () => new Date('2026-01-31T10:30:00Z'),
+    );
+    expect(await worker.enqueueScans('tenant-a')).toBe(2);
+    expect(stored.enqueueScans).toHaveBeenCalledWith('tenant-a', new Date('2026-01-31T10:30:00Z'));
   });
 });

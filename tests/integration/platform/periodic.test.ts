@@ -1,9 +1,17 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   PeriodicScheduler,
   type PeriodicTimers,
 } from '../../../apps/worker/composition/src/index.js';
-import { INCIDENT_SLA_SCAN_JOB } from '../../../apps/api/composition/src/platform/runtime.js';
+import {
+  INCIDENT_SLA_SCAN_JOB,
+  MAINTENANCE_PLAN_SCAN_JOB,
+} from '../../../apps/api/composition/src/platform/runtime.js';
+import { InMemoryMaintenancePlanStore } from '../../../packages/domain/maintenance/plans/src/index.js';
+import {
+  DEFAULT_PLAN_SCAN_INTERVAL_MS,
+  DEFAULT_SLA_SCAN_INTERVAL_MS,
+} from '../../../apps/worker/composition/src/index.js';
 import { createWorld, type World } from './world.js';
 
 let world: World | undefined;
@@ -128,5 +136,70 @@ describe('periodic incident SLA scan of the composition', () => {
         .filter((record) => record.type === 'incident.sla.scan')
         .map((record) => record.status),
     ).toEqual(['delivered', 'delivered']);
+  });
+});
+
+describe('periodic maintenance plan scan of the composition', () => {
+  /** A plan store that can scan (as the MySQL one does) and records the periodic enqueue. */
+  class ScanningPlanStore extends InMemoryMaintenancePlanStore {
+    public readonly enqueued: { tenantId: string; now: Date }[] = [];
+    public failWith: Error | undefined;
+    public async enqueueScans(tenantId: string, now: Date): Promise<number> {
+      if (this.failWith) throw this.failWith;
+      this.enqueued.push({ tenantId, now });
+      return 0;
+    }
+    public scan = async () => [];
+    public closePreventive = async () => undefined;
+    public reopenPreventive = async () => undefined;
+    public cancelPreventive = async () => undefined;
+    public adoptPreventive = async () => undefined;
+    public baselineBeforeClosure = async () => null;
+  }
+
+  it('registers no plan scan job when the plan store cannot scan (in memory)', async () => {
+    world = createWorld();
+    await expect(world.platform.runtime.periodic.tick(MAINTENANCE_PLAN_SCAN_JOB)).rejects.toThrow(
+      'unknown periodic job',
+    );
+  });
+
+  it('lists the plan scan next to the SLA scan, hourly by default, and queues it per active tenant', async () => {
+    const store = new ScanningPlanStore();
+    world = createWorld({ adapters: { maintenancePlans: store } });
+    const a = await world.tenant('Empresa Alfa', 'subject-admin-a');
+    const b = await world.tenant('Empresa Beta', 'subject-admin-b');
+    await world.platform.suspendTenant(b.tenantId);
+
+    expect(DEFAULT_PLAN_SCAN_INTERVAL_MS).toBe(3_600_000);
+    expect(await world.platform.runtime.periodic.tick(MAINTENANCE_PLAN_SCAN_JOB)).toEqual({
+      enqueued: 1,
+      failed: 0,
+    });
+    expect(store.enqueued.map((call) => call.tenantId)).toEqual([a.tenantId]);
+
+    store.failWith = new Error('outbox down');
+    expect(await world.platform.runtime.periodic.tick(MAINTENANCE_PLAN_SCAN_JOB)).toEqual({
+      enqueued: 0,
+      failed: 1,
+    });
+  });
+
+  it('schedules the plan scan hourly by default and on worker.planScanIntervalMs when given', () => {
+    const intervals = (options: Parameters<typeof createWorld>[0]): unknown[] => {
+      world = createWorld({ adapters: { maintenancePlans: new ScanningPlanStore() }, ...options });
+      const spy = vi.spyOn(globalThis, 'setInterval');
+      world.platform.runtime.periodic.start();
+      world.platform.runtime.periodic.stop();
+      const used = spy.mock.calls.map((call) => call[1]);
+      spy.mockRestore();
+      world.dispose();
+      return used;
+    };
+    expect(intervals({})).toEqual([DEFAULT_SLA_SCAN_INTERVAL_MS, DEFAULT_PLAN_SCAN_INTERVAL_MS]);
+    expect(intervals({ worker: { planScanIntervalMs: 2_000 } })).toEqual([
+      DEFAULT_SLA_SCAN_INTERVAL_MS,
+      2_000,
+    ]);
   });
 });
