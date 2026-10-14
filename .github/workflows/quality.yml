@@ -107,6 +107,9 @@ jobs:
         with: { node-version: 22.13.0 }
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
+      # Two-company incident worlds open a pool per module account; MySQL's default 151 connections
+      # is too few for four vitest workers.
+      - run: docker exec ${{ job.services.mysql.id }} mysql -uroot -e 'SET GLOBAL max_connections = 500'
       - run: pnpm test:integration
 
   # Browser journeys run against both the mock and the real API, so any product change runs them.
