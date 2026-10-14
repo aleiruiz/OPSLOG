@@ -1,0 +1,51 @@
+# OPSLOG demo stack for Coolify (Docker Compose build pack) or `docker compose up` locally.
+# Staging only, synthetic data. See docs/operations/DEPLOY_COOLIFY.md.
+services:
+  api:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: api
+    restart: unless-stopped
+    environment:
+      OPSLOG_ENV: staging
+      OPSLOG_PUBLIC_ORIGIN: ${OPSLOG_PUBLIC_ORIGIN:?public https origin, e.g. https://opslog.example.com}
+      OPSLOG_BFF_SECRET: ${OPSLOG_BFF_SECRET:?at least 32 characters}
+      OPSLOG_GRANT_SECRET: ${OPSLOG_GRANT_SECRET:?at least 32 characters}
+      OPSLOG_AUTH_MODE: ${OPSLOG_AUTH_MODE:-synthetic}
+    expose:
+      - '8080'
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    # No published port: the Coolify proxy routes the domain to port 80. Locally, add
+    # deploy/compose.local.yml to publish it on http://localhost:8081.
+    expose:
+      - '80'
+
+  # Prepared for the persistent adapters; the API does not connect to it yet. No published port.
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    command: ['--innodb-buffer-pool-size=128M', '--performance-schema=OFF']
+    environment:
+      MYSQL_ROOT_PASSWORD: ${OPSLOG_MYSQL_ROOT_PASSWORD:?root password for the database}
+      MYSQL_DATABASE: opslog
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ['CMD-SHELL', 'mysqladmin ping -h 127.0.0.1 -p"$$MYSQL_ROOT_PASSWORD" --silent']
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  mysql-data:

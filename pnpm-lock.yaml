@@ -118,6 +118,8 @@ importers:
 
   apps/api/maintenance/plans: {}
 
+  apps/api/server: {}
+
   apps/api/tenants:
     dependencies:
       '@opslog/domain-tenants':

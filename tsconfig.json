@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "./tests/harness" },
+    { "path": "./apps/api/server" },
     { "path": "./packages/contracts" },
     { "path": "./packages/domain/tenants" },
     { "path": "./packages/persistence/tenancy" },

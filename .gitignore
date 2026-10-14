@@ -15,3 +15,7 @@ test-results/
 !.env.example
 *.tsbuildinfo
 storybook-static/
+
+# Salidas de empaquetado para las imágenes (deploy/Dockerfile).
+apps/api/server/bundle/
+apps/web/dist-web/

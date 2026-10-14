@@ -1,0 +1,6 @@
+# Local run: docker compose -f docker-compose.yml -f deploy/compose.local.yml up --build
+# (set OPSLOG_PUBLIC_ORIGIN=http://localhost:8081 and the secrets first; see .env.example).
+services:
+  web:
+    ports:
+      - '8081:80'
