@@ -168,3 +168,10 @@ Ningún pendiente declarado bloquea G4.
 3. El arranque del planificador periódico y la cuenta de correo real siguen siendo condiciones de cualquier despliegue, no de G4.
 
 Este informe no declara G4 aprobado. La aceptación final de G4, y con ella el inicio de M5, corresponde al propietario.
+
+## Decisión del propietario
+
+- 2026-10-14, 07:05 UTC: Alei Ruiz aceptó G4 sobre `64bd116` en el hilo del proyecto («si, pero no regeneres las capturas, no son necesarias.»). La decisión está transcrita y no se puede verificar desde el repositorio.
+- M-1 queda diferido por decisión del propietario: las líneas base de `pnpm test:visual` no se regeneran.
+- Los hallazgos L-1 a L-4 y los Info quedan como deuda diferible.
+- M5 queda desbloqueado.
