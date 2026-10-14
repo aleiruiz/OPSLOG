@@ -156,7 +156,7 @@ describe('assignments over HTTP', () => {
       employeeId: a.driver,
       type: 'principal',
       reason: 'Alta de unidad',
-      assignedBy: expect.stringMatching(/^user-/),
+      assignedBy: { id: expect.any(String), displayName: expect.any(String) },
       endedAt: null,
       endKind: null,
       current: true,

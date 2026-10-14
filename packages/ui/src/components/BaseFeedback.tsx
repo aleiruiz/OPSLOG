@@ -23,7 +23,7 @@ export function SeverityBadge({ severity }: { severity: 'low' | 'medium' | 'high
 export function Timeline({
   items,
 }: {
-  items: { id: string; title: string; description?: string; date: string }[];
+  items: { id: string; title: string; description?: React.ReactNode; date: string }[];
 }) {
   return (
     <Stack component="ol" aria-label="Línea de tiempo" sx={{ listStyle: 'none', p: 0, m: 0 }}>

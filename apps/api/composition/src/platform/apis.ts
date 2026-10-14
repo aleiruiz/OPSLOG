@@ -37,6 +37,7 @@ import { AlertsApi } from '../alerts.js';
 import { driverLicenseAlerts } from '../driver-license-alerts.js';
 import { AreasApi } from '../areas.js';
 import { AssignmentsApi } from '../assignments.js';
+import { ROLE_LABELS } from '../directory.js';
 import { DocumentsApi } from '../documents.js';
 import { EmployeesApi } from '../employees.js';
 import { employeeImportTarget, vehicleImportTarget } from '../import-targets.js';
@@ -259,6 +260,11 @@ export function buildDomainApis(
       },
     }),
     authorize: (token, correlationId, required) => kernel.authorize(token, correlationId, required),
+    // The identity contract carries no names: a member shows as their role (as in incidents).
+    memberLabel: async (tenantId, subject) => {
+      const role = await kernel.access.effectiveRole(tenantId, subject);
+      return role ? ROLE_LABELS[role] : null;
+    },
     audit: assignmentAuditInTransaction
       ? () => undefined
       : (context, action, entityId, correlationId) =>

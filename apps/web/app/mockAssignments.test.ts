@@ -29,7 +29,7 @@ describe('mock assignments store', () => {
     const assignment = created.ok ? created.value.assignment : null;
     expect(assignment).toMatchObject({
       reason: 'Ruta de prueba',
-      assignedBy: 'user-test',
+      assignedBy: { id: 'user-test', displayName: expect.any(String) },
       startedAt: '2026-10-06T12:00:00.000Z',
       endedAt: null,
       current: true,
@@ -115,7 +115,7 @@ describe('mock assignments store', () => {
     expect(second.ok && second.value.replaced).toMatchObject({
       endKind: 'replaced',
       endReason: 'Ruta de prueba',
-      endedBy: 'user-test',
+      endedBy: { id: 'user-test', displayName: expect.any(String) },
       current: false,
       version: 2,
     });
@@ -188,7 +188,11 @@ describe('mock assignments store', () => {
     store.endExternally('asg-002');
     store.endExternally('nope');
     const snapshot = store.snapshot();
-    expect(snapshot[0]).toMatchObject({ current: false, endedBy: 'user-otra', version: 2 });
+    expect(snapshot[0]).toMatchObject({
+      current: false,
+      endedBy: { id: 'user-otra', displayName: expect.any(String) },
+      version: 2,
+    });
     expect(snapshot[1]?.version).toBe(2);
     const events = await store.port.history('asg-002');
     expect(events.ok && events.value.items.map((event) => event.kind)).toEqual([

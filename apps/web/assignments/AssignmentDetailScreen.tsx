@@ -19,7 +19,11 @@ const HISTORY_PAGE = 25;
 
 /** Assignment detail screen. Requires `view`; "Cerrar asignación" needs `edit`. */
 export function AssignmentDetailScreen({ id }: { id: string }) {
-  const { ports, can, markExpired } = useSession();
+  const { state: session, ports, can, markExpired } = useSession();
+  const userId =
+    session.status === 'authenticated' || session.status === 'expired'
+      ? session.session.user.id
+      : '';
   const router = useRouter();
   const { state, reload } = useResource(() => ports.assignments.get(id), [ports, id]);
   const history = useResource<HistoryPage>(
@@ -106,6 +110,7 @@ export function AssignmentDetailScreen({ id }: { id: string }) {
       }}
       vehicleName={vehicleName}
       driverName={driverName}
+      userId={userId}
       can={can}
       notice={notice}
       onRetry={reload}

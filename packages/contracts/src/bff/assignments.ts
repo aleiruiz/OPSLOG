@@ -12,6 +12,16 @@ export type BffAssignmentStatus = (typeof BFF_ASSIGNMENT_STATUSES)[number];
 export type BffAssignmentEndKind = 'ended' | 'replaced';
 
 /**
+ * A member who acted on an assignment. The browser never receives names or emails: `displayName`
+ * is the member's role label (or a generic one when it cannot be resolved); `id` is the session
+ * user id, for comparing with the current user and never for display.
+ */
+export interface BffAssignmentActor {
+  readonly id: string;
+  readonly displayName: string;
+}
+
+/**
  * A driver-vehicle assignment. The company is implicit (the session's); `version` is the
  * concurrency token. An assignment is never edited or deleted: it is closed (`endedAt`) and stays
  * as history. `startedAt` is the server clock at the moment of assigning.
@@ -22,13 +32,12 @@ export interface BffVehicleAssignment {
   readonly employeeId: string;
   readonly type: BffAssignmentType;
   readonly reason: string;
-  /** `user-<subject>`: the only identifier of a person in the row. */
-  readonly assignedBy: string;
+  readonly assignedBy: BffAssignmentActor;
   readonly startedAt: ISODateTime;
   readonly endedAt: ISODateTime | null;
   readonly endKind: BffAssignmentEndKind | null;
   readonly endReason: string | null;
-  readonly endedBy: string | null;
+  readonly endedBy: BffAssignmentActor | null;
   readonly current: boolean;
   readonly version: number;
   readonly updatedAt: ISODateTime;
@@ -71,7 +80,7 @@ export interface BffVehicleAssignmentsQuery {
 export interface BffVehicleAssignmentEvent {
   readonly seq: number;
   readonly kind: 'assigned' | BffAssignmentEndKind;
-  readonly actorId: string;
+  readonly actor: BffAssignmentActor;
   readonly reason: string;
   readonly at: ISODateTime;
 }

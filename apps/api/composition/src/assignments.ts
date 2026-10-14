@@ -76,6 +76,15 @@ function failure(error: unknown): PlatformResponse<never> {
   };
 }
 
+/** Shown when a member's role cannot be resolved (for example a member removed since). */
+export const UNKNOWN_ASSIGNMENT_ACTOR_LABEL = 'Otra persona de la empresa';
+
+/** A member as the browser sees them: the session user id and the role label, never a name. */
+export interface AssignmentActorView {
+  readonly id: string;
+  readonly displayName: string;
+}
+
 /** What the browser may know about an assignment. The company is never part of it. */
 export interface AssignmentView {
   readonly id: string;
@@ -83,12 +92,12 @@ export interface AssignmentView {
   readonly employeeId: string;
   readonly type: Assignment['type'];
   readonly reason: string;
-  readonly assignedBy: string;
+  readonly assignedBy: AssignmentActorView;
   readonly startedAt: string;
   readonly endedAt: string | null;
   readonly endKind: Assignment['endKind'];
   readonly endReason: string | null;
-  readonly endedBy: string | null;
+  readonly endedBy: AssignmentActorView | null;
   /** Derived from `endedAt`: true while the assignment has not ended. */
   readonly current: boolean;
   readonly version: number;
@@ -98,7 +107,7 @@ export interface AssignmentView {
 export interface AssignmentEventView {
   readonly seq: number;
   readonly kind: AssignmentEvent['kind'];
-  readonly actorId: string;
+  readonly actor: AssignmentActorView;
   readonly reason: string;
   readonly at: string;
 }
@@ -132,6 +141,11 @@ export interface AssignmentsApiDeps {
     correlationId: string,
     required: readonly Permission[],
   ) => Promise<TenantContext>;
+  /**
+   * The label of a member of the tenant (their role). Optional: without it, or when it cannot be
+   * resolved, a member shows as `UNKNOWN_ASSIGNMENT_ACTOR_LABEL`.
+   */
+  readonly memberLabel?: (tenantId: string, subject: string) => Promise<string | null>;
   /** Appends an audit event of the session's tenant and actor. Entity ids only, never field values. */
   readonly audit: (
     context: TenantContext,
@@ -170,19 +184,43 @@ const asksToReplace = (input: unknown): boolean =>
 export class AssignmentsApi {
   public constructor(private readonly deps: AssignmentsApiDeps) {}
 
-  private viewOf(assignment: Assignment): AssignmentView {
+  /** Resolves each distinct actor once per response. */
+  private actors(tenantId: string): (actorId: string) => Promise<AssignmentActorView> {
+    const cache = new Map<string, Promise<AssignmentActorView>>();
+    return (actorId) => {
+      const subject = actorId.replace(/^user-/, '');
+      let found = cache.get(subject);
+      if (!found) {
+        found = (async () => {
+          const label = await this.deps.memberLabel?.(tenantId, subject).catch(() => null);
+          return { id: subject, displayName: label ?? UNKNOWN_ASSIGNMENT_ACTOR_LABEL };
+        })();
+        cache.set(subject, found);
+      }
+      return found;
+    };
+  }
+
+  private async viewOf(
+    assignment: Assignment,
+    actor: (actorId: string) => Promise<AssignmentActorView>,
+  ): Promise<AssignmentView> {
+    const [assignedBy, endedBy] = await Promise.all([
+      actor(assignment.assignedBy),
+      assignment.endedBy === null ? null : actor(assignment.endedBy),
+    ]);
     return {
       id: assignment.id,
       vehicleId: assignment.vehicleId,
       employeeId: assignment.employeeId,
       type: assignment.type,
       reason: assignment.reason,
-      assignedBy: assignment.assignedBy,
+      assignedBy,
       startedAt: assignment.startedAt,
       endedAt: assignment.endedAt,
       endKind: assignment.endKind,
       endReason: assignment.endReason,
-      endedBy: assignment.endedBy,
+      endedBy,
       current: isCurrent(assignment),
       version: assignment.version,
       updatedAt: assignment.updatedAt,
@@ -202,6 +240,7 @@ export class AssignmentsApi {
         correlationId,
         asksToReplace(input) ? ASSIGNMENT_PERMISSIONS.replace : ASSIGNMENT_PERMISSIONS.create,
       );
+      const actor = this.actors(context.tenantId);
       const { assignment, replaced }: Assigned = await this.deps.service.create(
         context.tenantId,
         this.actorOf(context),
@@ -213,8 +252,8 @@ export class AssignmentsApi {
       return {
         ok: true,
         value: {
-          assignment: this.viewOf(assignment),
-          replaced: replaced ? this.viewOf(replaced) : null,
+          assignment: await this.viewOf(assignment, actor),
+          replaced: replaced ? await this.viewOf(replaced, actor) : null,
         },
       };
     } catch (error) {
@@ -239,7 +278,7 @@ export class AssignmentsApi {
         input,
       );
       await this.deps.audit(context, 'vehicle_assignment.ended', ended.id, correlationId);
-      return { ok: true, value: this.viewOf(ended) };
+      return { ok: true, value: await this.viewOf(ended, this.actors(context.tenantId)) };
     } catch (error) {
       return failure(error);
     }
@@ -252,7 +291,8 @@ export class AssignmentsApi {
   ): Promise<PlatformResponse<AssignmentView>> {
     try {
       const context = await this.deps.authorize(token, correlationId, ASSIGNMENT_PERMISSIONS.read);
-      return { ok: true, value: this.viewOf(await this.deps.service.get(context.tenantId, id)) };
+      const found = await this.deps.service.get(context.tenantId, id);
+      return { ok: true, value: await this.viewOf(found, this.actors(context.tenantId)) };
     } catch (error) {
       return failure(error);
     }
@@ -266,11 +306,12 @@ export class AssignmentsApi {
     try {
       const context = await this.deps.authorize(token, correlationId, ASSIGNMENT_PERMISSIONS.read);
       const slice = await this.deps.service.list(context.tenantId, query);
+      const actor = this.actors(context.tenantId);
       return {
         ok: true,
         value: {
           tenantId: context.tenantId,
-          items: slice.items.map((assignment) => this.viewOf(assignment)),
+          items: await Promise.all(slice.items.map((assignment) => this.viewOf(assignment, actor))),
           total: slice.total,
         },
       };
@@ -288,19 +329,22 @@ export class AssignmentsApi {
     try {
       const context = await this.deps.authorize(token, correlationId, ASSIGNMENT_PERMISSIONS.read);
       const slice = await this.deps.service.history(context.tenantId, id, query);
+      const actor = this.actors(context.tenantId);
       return {
         ok: true,
         value: {
           tenantId: context.tenantId,
           total: slice.total,
-          items: slice.items.map(
-            (event): AssignmentEventView => ({
-              seq: event.seq,
-              kind: event.kind,
-              actorId: event.actorId,
-              reason: event.reason,
-              at: event.at,
-            }),
+          items: await Promise.all(
+            slice.items.map(
+              async (event): Promise<AssignmentEventView> => ({
+                seq: event.seq,
+                kind: event.kind,
+                actor: await actor(event.actorId),
+                reason: event.reason,
+                at: event.at,
+              }),
+            ),
           ),
         },
       };

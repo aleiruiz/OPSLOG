@@ -1,4 +1,4 @@
-import type { ApiError } from '@opslog/contracts';
+import type { ApiError, BffAssignmentActor } from '@opslog/contracts';
 import { BFF_ASSIGNMENT_STATUSES, BFF_ASSIGNMENT_TYPES } from '@opslog/contracts';
 import { demoAssignments } from '../assignments/fixtures';
 import { OPAQUE_ID, REASON, normalizeReason } from '../assignments/rules';
@@ -39,6 +39,12 @@ export interface MockAssignmentEnvironment {
   /** The signed-in user, recorded in the history. */
   readonly actorId: () => string;
 }
+
+/** A member as the real API shows them: their id and role label, never a name. */
+const actorRef = (id: string): BffAssignmentActor => ({
+  id,
+  displayName: id === 'user-admin' ? 'Administrador' : 'Otra persona de la empresa',
+});
 
 const NOW = '2026-10-06T12:00:00.000Z';
 let correlation = 0;
@@ -117,7 +123,7 @@ export function createMockAssignmentStore(
         {
           seq: 1,
           kind: 'assigned',
-          actorId: assignment.assignedBy,
+          actor: assignment.assignedBy,
           reason: assignment.reason,
           at: assignment.startedAt,
         },
@@ -127,7 +133,7 @@ export function createMockAssignmentStore(
               {
                 seq: 2,
                 kind: assignment.endKind ?? 'ended',
-                actorId: assignment.endedBy ?? assignment.assignedBy,
+                actor: assignment.endedBy ?? assignment.assignedBy,
                 reason: assignment.endReason ?? '',
                 at: assignment.endedAt,
               } satisfies AssignmentEvent,
@@ -145,12 +151,12 @@ export function createMockAssignmentStore(
     assignment: VehicleAssignment,
     endKind: 'ended' | 'replaced',
     reason: string,
-    actor: string,
+    actor: BffAssignmentActor,
   ): VehicleAssignment => {
     const at = now();
     events.set(assignment.id, [
       ...(events.get(assignment.id) ?? []),
-      { seq: 2, kind: endKind, actorId: actor, reason, at },
+      { seq: 2, kind: endKind, actor, reason, at },
     ]);
     return replace(assignment.id, {
       ...assignment,
@@ -221,7 +227,7 @@ export function createMockAssignmentStore(
         if (holder && replaceFlag !== true) return taken('vehicle_id');
         if (currentOf((a) => a.employeeId === employeeId && a.type === 'principal'))
           return taken('employee_id');
-        if (holder) replaced = closeRow(holder, 'replaced', reason, env.actorId());
+        if (holder) replaced = closeRow(holder, 'replaced', reason, actorRef(env.actorId()));
       }
       sequence += 1;
       const at = now();
@@ -231,7 +237,7 @@ export function createMockAssignmentStore(
         employeeId,
         type,
         reason,
-        assignedBy: env.actorId(),
+        assignedBy: actorRef(env.actorId()),
         startedAt: at,
         endedAt: null,
         endKind: null,
@@ -243,7 +249,7 @@ export function createMockAssignmentStore(
       };
       rows = [...rows, assignment];
       events.set(assignment.id, [
-        { seq: 1, kind: 'assigned', actorId: assignment.assignedBy, reason, at },
+        { seq: 1, kind: 'assigned', actor: assignment.assignedBy, reason, at },
       ]);
       return ok({ assignment: { ...assignment }, replaced } satisfies AssignmentCreated);
     },
@@ -256,7 +262,7 @@ export function createMockAssignmentStore(
       if (!current) return notFound();
       if (current.endedAt !== null) return conflict('immutable');
       if (current.version !== version) return conflict('stale_version');
-      return ok({ ...closeRow(current, 'ended', reason, env.actorId()) });
+      return ok({ ...closeRow(current, 'ended', reason, actorRef(env.actorId())) });
     },
     history: async (id, query = {}) => {
       if (index(id) === -1) return notFound();
@@ -270,7 +276,7 @@ export function createMockAssignmentStore(
     endExternally: (id) => {
       const current = rows[index(id)];
       if (current && current.endedAt === null)
-        closeRow(current, 'ended', 'Cierre de otra persona', 'user-otra');
+        closeRow(current, 'ended', 'Cierre de otra persona', actorRef('user-otra'));
     },
     snapshot: () => rows.map((assignment) => ({ ...assignment })),
   };

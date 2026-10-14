@@ -14,7 +14,7 @@ import {
 import { BackLink } from '../app/BackLink';
 import { ResourceView, type ResourceState } from '../app/resource';
 import { linkSx, RouterButton, RouterLink } from '../app/router';
-import type { AssignmentEvent, VehicleAssignment } from '../app/types';
+import type { AssignmentActor, AssignmentEvent, VehicleAssignment } from '../app/types';
 import { AssignmentNotFound, assignmentPath, assignmentsPath } from './AssignmentMessages';
 import {
   endKindLabels,
@@ -45,9 +45,16 @@ export interface AssignmentDetailViewProps {
   /** Economic number of the vehicle and name of the driver, when they could be read. */
   readonly vehicleName?: string | null;
   readonly driverName?: string | null;
+  /** The signed-in user's id: their own actions show as "Tú". */
+  readonly userId?: string;
   readonly can: (permission: 'edit') => boolean;
   readonly notice?: string | null;
   readonly onRetry: () => void;
+}
+
+/** The person as the screen shows them: "Tú" for the signed-in user, else their role; the id stays in the tooltip. */
+function Actor({ actor, userId }: { actor: AssignmentActor; userId: string }) {
+  return <span title={actor.id}>{actor.id === userId ? 'Tú' : actor.displayName}</span>;
 }
 
 /** Success message of the last change; kept focusable so the result is announced and reachable. */
@@ -65,10 +72,12 @@ function Detail({
   assignment,
   vehicleName,
   driverName,
+  userId,
 }: {
   assignment: VehicleAssignment;
   vehicleName: string | null;
   driverName: string | null;
+  userId: string;
 }) {
   const status = statusPresentation[isCurrent(assignment) ? 'current' : 'ended'];
   const rows: { label: string; value: React.ReactNode }[] = [
@@ -94,7 +103,7 @@ function Detail({
     { label: 'Tipo', value: typeLabel(assignment.type) },
     { label: 'Estado', value: <StatusBadge label={status.label} tone={status.tone} /> },
     { label: 'Inicio', value: formatDateTime(assignment.startedAt) },
-    { label: 'Asignada por', value: assignment.assignedBy },
+    { label: 'Asignada por', value: <Actor actor={assignment.assignedBy} userId={userId} /> },
     { label: 'Motivo de la asignación', value: assignment.reason },
     ...(assignment.endedAt === null
       ? []
@@ -105,14 +114,17 @@ function Detail({
             value: assignment.endKind ? endKindLabels[assignment.endKind] : '—',
           },
           { label: 'Motivo del cierre', value: assignment.endReason ?? '—' },
-          { label: 'Cerrada por', value: assignment.endedBy ?? '—' },
+          {
+            label: 'Cerrada por',
+            value: assignment.endedBy ? <Actor actor={assignment.endedBy} userId={userId} /> : '—',
+          },
         ]),
     { label: 'Última actualización', value: formatDateTime(assignment.updatedAt) },
   ];
   return <DescriptionList columns={3} items={rows} />;
 }
 
-function History({ props }: { props: HistoryProps }) {
+function History({ props, userId }: { props: HistoryProps; userId: string }) {
   const { state } = props;
   return (
     <Panel title="Historial de la asignación">
@@ -122,7 +134,11 @@ function History({ props }: { props: HistoryProps }) {
             items={state.data.items.map((entry) => ({
               id: String(entry.seq),
               title: eventLabel(entry.kind),
-              description: `Por ${entry.actorId} · Motivo: ${entry.reason}`,
+              description: (
+                <>
+                  Por <Actor actor={entry.actor} userId={userId} /> · Motivo: {entry.reason}
+                </>
+              ),
               date: formatDateTime(entry.at),
             }))}
           />
@@ -156,6 +172,7 @@ export function AssignmentDetailView({
   history,
   vehicleName = null,
   driverName = null,
+  userId = '',
   can,
   notice = null,
   onRetry,
@@ -194,7 +211,12 @@ export function AssignmentDetailView({
               </Box>
             )}
             <Panel title="Datos de la asignación">
-              <Detail assignment={assignment} vehicleName={vehicleName} driverName={driverName} />
+              <Detail
+                assignment={assignment}
+                vehicleName={vehicleName}
+                driverName={driverName}
+                userId={userId}
+              />
               <Box
                 sx={{
                   display: 'flex',
@@ -220,7 +242,7 @@ export function AssignmentDetailView({
                 </RouterLink>
               </Box>
             </Panel>
-            <History props={history} />
+            <History props={history} userId={userId} />
           </>
         )}
       </ResourceView>

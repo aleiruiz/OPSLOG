@@ -97,4 +97,22 @@ describe('assignment detail', () => {
     });
     expect(await screen.findByText('Fin de la ruta', { selector: 'dd' })).toBeInTheDocument();
   });
+
+  it('shows "Tú" for the signed-in user and the role label for anyone else, never the id', async () => {
+    const other = { id: 'user-otra', displayName: 'Editor' };
+    await open('asg-x', {
+      api: createMockApi({
+        assignments: [closed(makeAssignment({ id: 'asg-x' }), 'ended', { endedBy: other })],
+      }),
+    });
+    expect(await screen.findByText('Tú', { selector: 'dd span' })).toHaveAttribute(
+      'title',
+      'user-admin',
+    );
+    expect(screen.getByText('Editor', { selector: 'dd span' })).toHaveAttribute(
+      'title',
+      'user-otra',
+    );
+    expect(screen.queryByText(/user-/)).toBeNull();
+  });
 });

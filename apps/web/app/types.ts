@@ -71,6 +71,7 @@ import type {
   BffUsersQuery,
   BffUserStatus,
   BffVehicle,
+  BffAssignmentActor,
   BffVehicleAssignment,
   BffVehicleAssignmentCreated,
   BffVehicleAssignmentEnd,
@@ -359,6 +360,7 @@ export type AssignmentEndKind = BffAssignmentEndKind;
 export type AssignmentInput = BffVehicleAssignmentInput;
 export type AssignmentCreated = BffVehicleAssignmentCreated;
 export type AssignmentEnd = BffVehicleAssignmentEnd;
+export type AssignmentActor = BffAssignmentActor;
 export type AssignmentEvent = BffVehicleAssignmentEvent;
 export type AssignmentListQuery = BffVehicleAssignmentsQuery;
 export type AssignmentHistoryQuery = BffVehicleAssignmentHistoryQuery;
