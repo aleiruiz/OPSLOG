@@ -128,6 +128,7 @@ export type {
   BffAssignmentType,
   BffAssignmentStatus,
   BffAssignmentEndKind,
+  BffAssignmentActor,
   BffVehicleAssignment,
   BffVehicleAssignmentInput,
   BffVehicleAssignmentCreated,

@@ -429,7 +429,7 @@ describe('expired session', () => {
     type('Cuenta de prueba', demoSubjects.admin);
     click('Continuar');
     const table = await screen.findByRole('table', { name: 'Usuarios (1)' });
-    expect(table).toHaveTextContent('user-admin');
+    expect(table).toHaveTextContent('Tú');
   });
 
   it('shows the panel with the previous screen and signs in again with the same account', async () => {

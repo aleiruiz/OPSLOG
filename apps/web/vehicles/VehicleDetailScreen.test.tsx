@@ -35,6 +35,17 @@ const failing = (api: MockApi, status: number, code: string) => {
 };
 
 describe('vehicle detail', () => {
+  it('falls back to the area id when the areas cannot be loaded', async () => {
+    const api = createMockApi({ vehicles: demoVehicles(5) });
+    api.areas.list = async () => ({
+      ok: false,
+      error: { code: 'internal_error', status: 500, message: 'x', correlationId: 'c' },
+    });
+    await open('veh-005', { api });
+    const data = (await screen.findByText('Número económico')).closest('dl') as HTMLElement;
+    expect(data).toHaveTextContent('area-centro');
+  });
+
   it('shows every field with Spanish labels, the status badge and the VIN or its absence', async () => {
     const seed = demoVehicles(5);
     await open('veh-005', { api: createMockApi({ vehicles: seed }) });
@@ -49,7 +60,8 @@ describe('vehicle detail', () => {
     expect(data).toHaveTextContent('ECO-005');
     expect(data).toHaveTextContent('ABC-105');
     expect(data).toHaveTextContent('Mercedes-Benz');
-    expect(data).toHaveTextContent('area-centro');
+    expect(await within(data).findByText('Centro')).toBeInTheDocument();
+    expect(data).not.toHaveTextContent('area-centro');
     expect(data).toHaveTextContent('En mantenimiento');
     expect(data).toHaveTextContent('Cambio de estado de demostración');
     expect(data).toHaveTextContent('27,750 km');

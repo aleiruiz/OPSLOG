@@ -87,7 +87,7 @@ describe('vehicle list', () => {
     await screen.findByRole('table', { name: 'Vehículos (28)' });
     set('Estado', 'in_maintenance');
     await screen.findByRole('table', { name: 'Vehículos (3)' });
-    set('Identificador de área', ' area-norte ');
+    set('Área', 'area-norte');
     await screen.findByRole('table', { name: 'Vehículos (1)' });
     expect(list).toHaveBeenLastCalledWith({
       limit: 25,
@@ -121,27 +121,33 @@ describe('vehicle list', () => {
     expect(within(table).getByRole('link', { name: 'Editar ECO-001' })).toBeInTheDocument();
   });
 
-  it('does not query with an invalid area and explains why', async () => {
+  it('offers the areas by name in the filter and shows the area name in the column', async () => {
+    await renderApp({ path: '/flota/vehiculos' });
+    const table = await screen.findByRole('table', { name: 'Vehículos (28)' });
+    const select = exact('Área') as HTMLSelectElement;
+    expect(within(select).getByRole('option', { name: 'Todas las áreas' })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(within(select).getByRole('option', { name: /^\s*Mérida$/ })).toBeInTheDocument(),
+    );
+    expect(table).toHaveTextContent('Norte');
+    expect(table).not.toHaveTextContent('area-norte');
+  });
+
+  it('keeps the list working with the area id when the areas cannot be loaded', async () => {
     const api = createMockApi();
-    const list = vi.spyOn(api.vehicles, 'list');
+    api.areas.list = async () => ({
+      ok: false,
+      error: { code: 'internal_error', status: 500, message: 'x', correlationId: 'c' },
+    });
     await renderApp({ api, path: '/flota/vehiculos' });
-    await screen.findByRole('table');
-    const calls = list.mock.calls.length;
-    set('Identificador de área', 'área norte');
-    expect(
-      await screen.findByText(/El filtro no se aplica hasta que sea válido/),
-    ).toBeInTheDocument();
-    expect(exact('Identificador de área')).toHaveAttribute('aria-invalid', 'true');
-    expect(list.mock.calls.every((call) => call[0]?.areaId === undefined)).toBe(true);
-    expect(list.mock.calls.length).toBeGreaterThanOrEqual(calls);
-    set('Identificador de área', 'area-sur');
-    await waitFor(() => expect(screen.queryByText(/El filtro no se aplica/)).toBeNull());
+    const table = await screen.findByRole('table', { name: 'Vehículos (28)' });
+    expect(table).toHaveTextContent('area-norte');
   });
 
   it('shows no results for filters that match nothing, an empty state without them, and keeps Enter from submitting', async () => {
     await renderApp({ path: '/flota/vehiculos' });
     await screen.findByRole('table');
-    set('Identificador de área', 'area-sin-flota');
+    set('Área', 'area-sur-mer');
     expect(await screen.findByRole('heading', { name: 'Sin resultados' })).toBeInTheDocument();
     const form = screen.getByRole('search', { name: 'Filtros' });
     const event = new Event('submit', { bubbles: true, cancelable: true });

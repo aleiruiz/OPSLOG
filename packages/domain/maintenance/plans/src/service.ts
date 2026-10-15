@@ -221,6 +221,10 @@ export class MaintenancePlanWorker {
       await this.timeZoneOf(tenantId),
     );
   }
+  /** Queues the periodic scan of every active plan of the tenant (deduplicated per hour). */
+  public enqueueScans(tenantId: string): Promise<number> {
+    return this.scans.enqueueScans(opaqueId(tenantId), this.now());
+  }
   public consumeClosure(event: PreventiveOrderClosedEvent): Promise<void> {
     return this.scans.closePreventive(event);
   }

@@ -8,7 +8,7 @@ import {
   type PlatformResponse,
   type RoleName,
 } from '../../../apps/api/composition/src/index.js';
-import { AuthError } from '../../../packages/domain/identity/src/index.js';
+import { AuthError, type TenantContext } from '../../../packages/domain/identity/src/index.js';
 import {
   AssignmentService,
   type AssignmentStore,
@@ -120,7 +120,7 @@ describe('assignment lifecycle through the platform', () => {
       employeeId: f.sa.driver,
       type: 'principal',
       reason: 'Alta de unidad',
-      assignedBy: `user-${admin.identityId}`,
+      assignedBy: { id: admin.identityId, displayName: 'Administrador' },
       current: true,
       version: 1,
       endedAt: null,
@@ -154,7 +154,10 @@ describe('assignment lifecycle through the platform', () => {
       [2, 'replaced'],
       [1, 'assigned'],
     ]);
-    expect(history.items[1]?.actorId).toBe(`user-${admin.identityId}`);
+    expect(history.items[1]?.actor).toEqual({
+      id: admin.identityId,
+      displayName: 'Administrador',
+    });
 
     const events = auditOf(world, f.a.tenantId);
     expect(events.map((e) => e.action)).toEqual([
@@ -421,6 +424,31 @@ describe('role matrix over the existing generic permissions', () => {
           );
       }
     });
+
+  it('shows an unresolvable actor with a generic label, never the id as a name', async () => {
+    const context = { tenantId: 't-1', actor: { subject: 'sub-1' } } as unknown as TenantContext;
+    const make = (memberLabel?: () => Promise<string | null>) =>
+      new AssignmentsApi({
+        service: new AssignmentService(new InMemoryAssignmentStore()),
+        authorize: async () => context,
+        audit: () => undefined,
+        ...(memberLabel ? { memberLabel } : {}),
+      });
+    const input = { vehicleId: 'veh-1', employeeId: 'emp-1', type: 'principal', reason: 'Ruta' };
+    for (const api of [
+      make(),
+      make(() => Promise.reject(new Error('boom'))),
+      make(async () => null),
+    ]) {
+      const created = ok(await api.create('tok', 'c', input));
+      expect(created.assignment.assignedBy).toEqual({
+        id: 'sub-1',
+        displayName: 'Otra persona de la empresa',
+      });
+    }
+    const labelled = ok(await make(async () => 'Editor').create('tok', 'c', input));
+    expect(labelled.assignment.assignedBy).toEqual({ id: 'sub-1', displayName: 'Editor' });
+  });
 
   it('asks the authorizer for the documented permissions on every operation', async () => {
     const asked: string[][] = [];
@@ -733,7 +761,7 @@ describe('typed views', () => {
       await world.platform.assignments.history(f.roles.admin.token, corr(), v.id, {}),
     );
     expect(Object.keys(history.items[0] ?? {}).sort()).toEqual(
-      ['seq', 'kind', 'actorId', 'reason', 'at'].sort(),
+      ['seq', 'kind', 'actor', 'reason', 'at'].sort(),
     );
   });
 });

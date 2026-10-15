@@ -1,6 +1,7 @@
 import type { FilePipeline } from '../../../../../packages/platform/files/src/index.js';
 import {
   createWorkerRuntime,
+  DEFAULT_PLAN_SCAN_INTERVAL_MS,
   DEFAULT_SLA_SCAN_INTERVAL_MS,
   type PeriodicTenantJob,
   type WorkerRuntime,
@@ -14,6 +15,8 @@ import { registerMaintenancePlanHandlers } from '../../../../worker/maintenance-
 
 /** Name of the periodic SLA scan job in `runtime.periodic`. */
 export const INCIDENT_SLA_SCAN_JOB = 'incident.sla.scan';
+/** Name of the periodic maintenance plan scan job in `runtime.periodic`. */
+export const MAINTENANCE_PLAN_SCAN_JOB = 'maintenance.plan.scan';
 
 /** Worker runtime over the platform's outbox, tenants and pipeline; the actor's current role gates each job. */
 export function buildWorkerRuntime(
@@ -28,15 +31,28 @@ export function buildWorkerRuntime(
 ): WorkerRuntime {
   // The incident SLA scan is queued per active tenant on a local timer; the host calls
   // `runtime.periodic.start()`. The cloud trigger (EventBridge or similar) stays deferred (ADR-0002).
-  const periodic: PeriodicTenantJob[] = incidentSla
-    ? [
-        {
-          name: INCIDENT_SLA_SCAN_JOB,
-          intervalMs: worker?.slaScanIntervalMs ?? DEFAULT_SLA_SCAN_INTERVAL_MS,
-          enqueue: (tenantId) => incidentSla.enqueueScan(tenantId),
-        },
-      ]
-    : [];
+  const periodic: PeriodicTenantJob[] = [
+    ...(incidentSla
+      ? [
+          {
+            name: INCIDENT_SLA_SCAN_JOB,
+            intervalMs: worker?.slaScanIntervalMs ?? DEFAULT_SLA_SCAN_INTERVAL_MS,
+            enqueue: (tenantId: string) => incidentSla.enqueueScan(tenantId),
+          },
+        ]
+      : []),
+    // Preventive orders are born from this scan; one job per active plan, deduplicated per hour.
+    ...(maintenancePlans
+      ? [
+          {
+            name: MAINTENANCE_PLAN_SCAN_JOB,
+            intervalMs: worker?.planScanIntervalMs ?? DEFAULT_PLAN_SCAN_INTERVAL_MS,
+            enqueue: async (tenantId: string) =>
+              void (await maintenancePlans.enqueueScans(tenantId)),
+          },
+        ]
+      : []),
+  ];
   const runtime = createWorkerRuntime({
     outbox: kernel.outbox,
     tenants: kernel.tenants,

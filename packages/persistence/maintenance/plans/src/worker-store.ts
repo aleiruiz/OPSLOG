@@ -33,6 +33,9 @@ import {
   baselineBeforeClosure,
 } from './lifecycle.js';
 
+/** Window of the periodic scan dedupe: one job per plan per hour. */
+const SCAN_BUCKET_MS = 3_600_000;
+
 export class TypeOrmMaintenancePlanWorkerStore implements PlanScanStore {
   private readonly outbox: MySqlTenantOutboxStore;
   public constructor(
@@ -293,6 +296,37 @@ export class TypeOrmMaintenancePlanWorkerStore implements PlanScanStore {
           await this.persistAlert(manager, tenantId, plan, evaluation, null);
       }
       return evaluations;
+    });
+  }
+
+  /** One scan job per active plan; id and timestamp derive from the hour, so a repeat is a no-op. */
+  public async enqueueScans(tenantId: string, now: Date): Promise<number> {
+    const bucket = Math.floor(now.getTime() / SCAN_BUCKET_MS);
+    const occurredAt = new Date(bucket * SCAN_BUCKET_MS).toISOString();
+    return this.transaction(async (manager) => {
+      const plans = await manager
+        .getRepository(MaintenancePlanEntity)
+        .find({ select: { id: true }, where: { tenantId, state: 'active' }, order: { id: 'ASC' } });
+      await this.outbox.transaction(manager, (tx) => {
+        for (const { id: planId } of plans) {
+          const eventId = `mnt-plan-scan-${planId}-${bucket}`;
+          tx.enqueue({
+            eventId,
+            tenantId,
+            type: 'maintenance.plan.scan',
+            payload: { planId, correlationId: eventId },
+            occurredAt,
+            idempotencyKey: eventId,
+            correlationId: eventId,
+            // System actors skip the permission recheck of the worker.
+            actorRef: { subject: 'worker-maintenance-plans', kind: 'system' },
+            requiredPermission: 'view',
+            entityId: planId,
+            schemaVersion: 1,
+          });
+        }
+      });
+      return plans.length;
     });
   }
 

@@ -73,14 +73,6 @@ export const FilteredWithArchived = {
       }),
     }),
 };
-export const InvalidAreaFilter = {
-  render: () =>
-    view({
-      filters: { ...noFilters, areaId: 'área norte' },
-      areaError:
-        'Usa letras, números, guion o guion bajo (hasta 64). El filtro no se aplica hasta que sea válido.',
-    }),
-};
 export const NoResults = {
   render: () =>
     view({

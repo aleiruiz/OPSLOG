@@ -141,6 +141,12 @@ export interface PlanScanStore {
     /** IANA zone of the tenant for the calendar-day comparisons; UTC when omitted. */
     timeZone?: string,
   ): Promise<readonly PlanEvaluation[]>;
+  /**
+   * Queues one `maintenance.plan.scan` job per active plan of the tenant in the durable outbox.
+   * The event id is deterministic per plan and hour of `now`, so repeated ticks inside the same
+   * hour queue nothing new; returns the number of active plans considered.
+   */
+  enqueueScans(tenantId: string, now: Date): Promise<number>;
   closePreventive(event: PreventiveOrderClosedEvent): Promise<void>;
   /** Invalidates the closure of a reopened order and restores the pre-closure plan baseline. */
   reopenPreventive(event: PreventiveOrderLifecycleEvent): Promise<void>;

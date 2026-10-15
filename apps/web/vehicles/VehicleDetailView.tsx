@@ -18,7 +18,7 @@ import { VehicleNotFound } from './VehicleMessages';
 import { BackLink } from '../app/BackLink';
 import { ResourceView, type ResourceState } from '../app/resource';
 import { RouterButton } from '../app/router';
-import type { Vehicle } from '../app/types';
+import type { Area, Vehicle } from '../app/types';
 import {
   formatDate,
   formatDateTime,
@@ -39,6 +39,8 @@ export const archiveClosed: ArchiveDialogState = { open: false, busy: false };
 
 export interface VehicleDetailViewProps {
   readonly state: ResourceState<Vehicle>;
+  /** The company's areas (every status), to name the vehicle's area; the id is shown while they are unknown. */
+  readonly areas?: readonly Area[];
   readonly can: (permission: 'edit' | 'delete' | 'incidents:view') => boolean;
   readonly notice?: string | null;
   readonly archive: ArchiveDialogState;
@@ -68,8 +70,9 @@ function FocusNotice({ text }: { text: string }) {
   );
 }
 
-function Detail({ vehicle }: { vehicle: Vehicle }) {
+function Detail({ vehicle, areas }: { vehicle: Vehicle; areas: readonly Area[] }) {
   const status = statusPresentation[vehicle.status];
+  const area = areas.find((item) => item.id === vehicle.areaId);
   return (
     <Panel title="Datos del vehículo">
       <DescriptionList
@@ -81,7 +84,7 @@ function Detail({ vehicle }: { vehicle: Vehicle }) {
           { label: 'Marca', value: vehicle.make },
           { label: 'Modelo', value: vehicle.model },
           { label: 'Año', value: String(vehicle.year) },
-          { label: 'Área', value: <Mono>{vehicle.areaId}</Mono> },
+          { label: 'Área', value: area ? area.name : <Mono>{vehicle.areaId}</Mono> },
           { label: 'Estado', value: <StatusBadge label={status.label} tone={status.tone} /> },
           { label: 'Motivo del estado', value: vehicle.statusReason },
           { label: 'Odómetro', value: formatKm(vehicle.odometerKm) },
@@ -96,6 +99,7 @@ function Detail({ vehicle }: { vehicle: Vehicle }) {
 /** Vehicle detail: data, read-only explanations and the permission-aware actions (edit, archive). */
 export function VehicleDetailView({
   state,
+  areas = [],
   can,
   notice = null,
   archive,
@@ -168,7 +172,7 @@ export function VehicleDetailView({
                 </Box>
               )
             )}
-            <Detail vehicle={vehicle} />
+            <Detail vehicle={vehicle} areas={areas} />
             {archive.open && (
               <ConfirmDialog
                 title={`Archivar el vehículo ${vehicle.economicNumber}`}

@@ -13,7 +13,7 @@
 | `mysql`   | MySQL 8.4 con volumen `mysql-data`, sin puerto publicado.                                            | Guarda todos los datos con `OPSLOG_PERSISTENCE=mysql` (por defecto).        |
 | `migrate` | Trabajo de una sola ejecución (misma imagen que `api`, `node migrate.mjs`).                          | Se ejecuta en cada despliegue antes de `api` y termina; ver «Persistencia». |
 
-El worker sigue dentro de `api`: la cola de escaneos y el relevo de auditoría comparten proceso con la API y se coordinan con las tablas de MySQL (outbox y auditoría duraderos), así que una réplica única basta. Separarlo en otro contenedor queda para cuando haga falta.
+El worker sigue dentro de `api`: la cola de escaneos y el relevo de auditoría comparten proceso con la API y se coordinan con las tablas de MySQL (outbox y auditoría duraderos), así que una réplica única basta. Separarlo en otro contenedor queda para cuando haga falta. Los planes de mantenimiento se escanean cada hora en ese mismo proceso (`worker.planScanIntervalMs`), lo que genera las órdenes preventivas vencidas.
 
 ## Variables de entorno
 

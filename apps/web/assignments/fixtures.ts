@@ -2,6 +2,8 @@ import type { AssignmentEvent, VehicleAssignment } from '../app/types';
 
 /** Synthetic assignments for the mock API, tests and stories. Nothing here is real data. */
 
+export const ADMIN_ACTOR = { id: 'user-admin', displayName: 'Administrador' } as const;
+
 export function makeAssignment(overrides: Partial<VehicleAssignment> = {}): VehicleAssignment {
   return {
     id: 'asg-001',
@@ -9,7 +11,7 @@ export function makeAssignment(overrides: Partial<VehicleAssignment> = {}): Vehi
     employeeId: 'emp-001',
     type: 'principal',
     reason: 'Ruta de reparto zona norte',
-    assignedBy: 'user-admin',
+    assignedBy: ADMIN_ACTOR,
     startedAt: '2026-03-02T15:00:00.000Z',
     endedAt: null,
     endKind: null,
@@ -34,7 +36,7 @@ export function closed(
     endedAt,
     endKind,
     endReason: endKind === 'replaced' ? 'Cambio de conductor titular' : 'Fin de la ruta',
-    endedBy: 'user-admin',
+    endedBy: ADMIN_ACTOR,
     current: false,
     version: assignment.version + 1,
     updatedAt: endedAt,
@@ -128,7 +130,7 @@ export function makeEvent(overrides: Partial<AssignmentEvent> = {}): AssignmentE
   return {
     seq: 1,
     kind: 'assigned',
-    actorId: 'user-admin',
+    actor: ADMIN_ACTOR,
     reason: 'Ruta de reparto zona norte',
     at: '2026-03-02T15:00:00.000Z',
     ...overrides,

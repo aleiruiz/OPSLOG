@@ -2,6 +2,7 @@ import React from 'react';
 import { useResource } from '../app/resource';
 import { useRouter } from '../app/router';
 import type { ApiError } from '../app/types';
+import { loadAllAreas } from '../areas/loadAreas';
 import { useSession } from '../auth/session';
 import { AssignmentHistorySection } from '../assignments/AssignmentHistorySection';
 import { archiveClosed, VehicleDetailView, type ArchiveDialogState } from './VehicleDetailView';
@@ -30,6 +31,8 @@ export function VehicleDetailScreen({ id }: { id: string }) {
   const { ports, can, markExpired } = useSession();
   const router = useRouter();
   const { state, reload, setData } = useResource(() => ports.vehicles.get(id), [ports, id]);
+  // The structure only names the area: the detail works without it (the id is shown instead).
+  const catalog = useResource(() => loadAllAreas(ports.areas, true), [ports]);
   const [notice, setNotice] = React.useState<string | null>(() => {
     const code = router.search.get('aviso') ?? '';
     return Object.hasOwn(notices, code) ? (notices[code] ?? null) : null;
@@ -61,6 +64,7 @@ export function VehicleDetailScreen({ id }: { id: string }) {
     <>
       <VehicleDetailView
         state={state}
+        areas={catalog.state.status === 'ready' ? catalog.state.data.areas : []}
         can={can}
         notice={notice}
         archive={archive}

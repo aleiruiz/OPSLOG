@@ -17,7 +17,9 @@ import {
 import { NoSubmit, ResourceView, type ResourceState } from '../app/resource';
 import { linkSx, RouterButton, RouterLink } from '../app/router';
 import { ScrollRegion } from '../app/ScrollRegion';
-import type { Vehicle, VehicleStatus } from '../app/types';
+import type { Area, Vehicle, VehicleStatus } from '../app/types';
+import { areaChoices } from '../areas/areaChoices';
+import { AreaSelect } from '../areas/AreaSelect';
 import { formatKm, isEditable, statusOrder, statusPresentation } from './labels';
 
 export interface VehicleFilters {
@@ -41,8 +43,8 @@ interface Row extends Vehicle {
 export interface VehicleListViewProps {
   readonly state: ResourceState<VehicleListData>;
   readonly filters: VehicleFilters;
-  /** Message for an area filter that is not a valid identifier (it is not applied until it is). */
-  readonly areaError?: string | undefined;
+  /** The company's areas (every status): names for the column and options of the area filter. */
+  readonly areas?: readonly Area[];
   readonly can: (permission: 'create' | 'edit') => boolean;
   readonly filtersActive: boolean;
   readonly loadingMore?: boolean;
@@ -59,7 +61,7 @@ const detailPath = (id: string) => `/flota/vehiculos/${encodeURIComponent(id)}`;
 export function VehicleListView({
   state,
   filters,
-  areaError,
+  areas = [],
   can,
   filtersActive,
   loadingMore = false,
@@ -70,6 +72,7 @@ export function VehicleListView({
   onLoadMore,
 }: VehicleListViewProps) {
   const uid = React.useId();
+  const names = new Map(areas.map((area) => [area.id, area.name]));
   const ready = state.status === 'ready' ? state.data : null;
   return (
     <>
@@ -115,13 +118,14 @@ export function VehicleListView({
                 </option>
               ))}
             </Field>
-            <Field
+            <AreaSelect
               id={`${uid}-area`}
-              label="Identificador de área"
               value={filters.areaId}
-              onChange={(event) => onFiltersChange({ ...filters, areaId: event.target.value })}
-              error={Boolean(areaError)}
-              {...(areaError ? { helperText: areaError } : {})}
+              choices={areaChoices(areas)}
+              onChange={(areaId) => onFiltersChange({ ...filters, areaId })}
+              emptyLabel="Todas las áreas"
+              allowInactive
+              fullWidth={false}
             />
             <Field
               id={`${uid}-archived`}
@@ -207,7 +211,11 @@ export function VehicleListView({
                         render: (_, row) => `${row.make} ${row.model}`,
                       },
                       { key: 'year', label: 'Año' },
-                      { key: 'areaId', label: 'Área' },
+                      {
+                        key: 'areaId',
+                        label: 'Área',
+                        render: (value) => names.get(String(value)) ?? String(value),
+                      },
                       {
                         key: 'status',
                         label: 'Estado',

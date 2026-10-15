@@ -54,7 +54,8 @@ test.describe('vehicles: list, permissions and accessibility', () => {
 
     await page.getByLabel('Estado', { exact: true }).selectOption('in_maintenance');
     await expect(page.getByRole('table', { name: 'Vehículos (3)' })).toBeVisible();
-    await fillByKeyboard(page, /Identificador de área/, 'area-sin-flota');
+    // Mérida is an area of the demo company without vehicles.
+    await page.getByLabel('Área', { exact: true }).selectOption('area-sur-mer');
     await expect(page.getByText('Sin resultados')).toBeVisible();
     await page.getByRole('button', { name: 'Limpiar filtros' }).click();
     await expect(page.getByRole('table', { name: 'Vehículos (28)' })).toBeVisible();

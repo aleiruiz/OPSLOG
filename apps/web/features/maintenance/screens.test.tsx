@@ -184,6 +184,44 @@ describe('plans', () => {
     await waitFor(() => expect(screen.getByRole('table')).toHaveTextContent('cada 45 días'));
   });
 
+  it('says the target was reached when its date is today or past, and waits when it is ahead', async () => {
+    const plan = {
+      id: 'plan-1',
+      vehicleId: 'veh-001',
+      state: 'active' as const,
+      intervalDays: 30,
+      lastServiceDate: '2026-09-01',
+      defaultWorkshopId: null,
+      defaultMechanicId: null,
+      version: 1,
+      createdAt: '',
+      updatedAt: '',
+    };
+    const open = async (nextTargetDate: string) => {
+      const fake = createFakeMaintenancePorts({ plans: [plan], nextTargetDate });
+      const view = renderView(
+        <PlansScreen
+          ports={fake.ports}
+          viewer={{ permissions: EDITOR, mechanicIds: [] }}
+          onExpired={vi.fn()}
+        />,
+      );
+      fireEvent.click(await screen.findByRole('button', { name: 'ECO-001 · Toyota Hilux' }));
+      return view;
+    };
+    const past = await open('2020-01-01');
+    expect(
+      await screen.findByText(
+        'Objetivo alcanzado; la orden preventiva se generará en la próxima revisión automática.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Todavía no se alcanza/)).toBeNull();
+    past.unmount();
+    await open('2099-01-01');
+    expect(await screen.findByText(/Todavía no se alcanza ningún objetivo/)).toBeInTheDocument();
+    expect(screen.queryByText(/Objetivo alcanzado/)).toBeNull();
+  });
+
   it('explains a stale edit', async () => {
     const plan = {
       id: 'plan-1',
