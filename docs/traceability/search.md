@@ -10,6 +10,13 @@
 | Combobox accesible en la barra superior         | n/a                            | `apps/web/features/search`                                              | `search.test.tsx` (axe)                                                                       |
 | p95 <= 700 ms                                   | n/a                            | índice B-tree de prefijo y FULLTEXT ngram                               | `tests/performance/search` (`docs/operations/SEARCH_PERFORMANCE.md`)                          |
 
+## Alcance de mecánico
+
+Los siniestros siguen la regla del módulo (`canView` / `isMechanicScoped`): `incidents:view` y, si el
+miembro está ligado a un mecánico, solo con `incidents:edit` (quien gestiona casos no queda acotado).
+La regla está replicada en `typeAccess` (el dominio de búsqueda no depende del de siniestros) y
+probada en `service.test.ts`.
+
 ## Desviaciones del paquete
 
 - Vehículos, empleados y pólizas no emiten eventos de outbox y su lógica no se modifica en este PR: la

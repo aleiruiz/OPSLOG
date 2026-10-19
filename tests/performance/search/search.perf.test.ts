@@ -1,12 +1,17 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { normalizeKey, type SearchStoreQuery } from '../../../packages/domain/search/src/index.js';
+import {
+  SearchIndexer,
+  normalizeKey,
+  type SearchStoreQuery,
+} from '../../../packages/domain/search/src/index.js';
 import { TypeOrmSearchStore } from '../../../packages/persistence/search/src/index.js';
 import {
   adminUrl,
   startSearchDatabase,
   type SearchDatabase,
 } from '../../../packages/persistence/search/src/test-support/mysql.js';
-import { plateOf, syntheticProjections } from './generate.js';
+import { FakeSources } from '../../../packages/domain/search/src/test-support.js';
+import { plateOf, syntheticFacts, syntheticProjections } from './generate.js';
 
 /**
  * Search latency over a synthetic dataset (SPECS §9.3: p95 <= 700 ms with 1 M). Opt-in: it needs
@@ -98,4 +103,24 @@ suite(`search performance (${ENTITIES} entities)`, () => {
     report(`EXPLAIN prefix: ${JSON.stringify(plan)}`);
     expect(JSON.stringify(plan)).toMatch(/PRIMARY|ix_search_prefix/);
   });
+
+  it('reconciles the whole company within a minute-scale budget (initial load, then steady state)', async () => {
+    const tenant = 'tenant-reconcile';
+    const sources = new FakeSources();
+    const { vehicles, employees } = syntheticFacts(ENTITIES);
+    sources.world(tenant).vehicles.push(...vehicles);
+    sources.world(tenant).employees.push(...employees);
+    const indexer = new SearchIndexer(store, sources);
+    const time = async (label: string, work: () => Promise<unknown>): Promise<number> => {
+      const started = performance.now();
+      await work();
+      const ms = performance.now() - started;
+      report(`reconcile ${label}: ${(ms / 1000).toFixed(1)} s (${ENTITIES} entities)`);
+      return ms;
+    };
+    await time('initial load', () => indexer.reconcile(tenant));
+    // Nothing changed: the run reads the sources and the fingerprints, and writes nothing.
+    const steady = await time('steady state', () => indexer.reconcile(tenant));
+    expect(steady).toBeLessThan(60_000);
+  }, 3_600_000);
 });

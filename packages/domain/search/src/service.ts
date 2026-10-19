@@ -35,8 +35,10 @@ export type ExactKeys = (tenantId: string, raw: string) => Promise<readonly stri
 /** The rows of a type the reader may see, or `null` when the type is closed to them. */
 export function typeAccess(type: SearchEntityType, who: Searcher): SearchTypeQuery | null {
   const can = (permission: string) => who.permissions.has(permission);
+  // Same rule as the incidents module (`canView`): a mechanic scope narrows to nothing, except for
+  // a member who manages cases (`incidents:edit`).
   if (type === 'incident')
-    return can('incidents:view') && !who.mechanicLinked
+    return can('incidents:view') && !(who.mechanicLinked && !can('incidents:edit'))
       ? { entityType: type, permissions: ['incidents:view'] }
       : null;
   if (!can('view')) return null;

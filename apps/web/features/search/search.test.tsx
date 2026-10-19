@@ -49,16 +49,27 @@ describe('global search box', () => {
     expect((await screen.findAllByRole('link', { name: /ec/i })).length).toBeGreaterThan(0);
   });
 
-  it('says so when nothing matches and when the search fails', async () => {
+  it('says so when nothing matches and when the search fails, with no axe violations', async () => {
     const api = createMockApi();
-    await renderApp({ path: '/', api });
+    const { container } = await renderApp({ path: '/', api });
     const box = await screen.findByRole('combobox', { name: 'Buscar' });
     type('zzzzzz');
+    // Loading: the message sits outside any listbox.
+    expect(screen.getAllByText('Buscando…').length).toBeGreaterThan(0);
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(box).toHaveAttribute('aria-expanded', 'false');
+    expect(await violations(container)).toEqual([]);
     expect((await screen.findAllByText('No encontramos resultados.')).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(await violations(container)).toEqual([]);
     fireEvent.keyDown(box, { key: 'ArrowDown' });
     api.controls.failNext('search', 500);
     type('zzzzzy');
-    expect(await screen.findByText('No pudimos buscar. Intenta nuevamente.')).toBeInTheDocument();
+    expect(
+      (await screen.findAllByText('No pudimos buscar. Intenta nuevamente.')).length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(await violations(container)).toEqual([]);
   });
 
   it('closes on an outside click and ignores Enter on a short term', async () => {

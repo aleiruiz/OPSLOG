@@ -6,7 +6,7 @@ import { useSession } from '../../auth/session';
 import { searchCopy, searchTypeLabels } from './labels';
 import { totalHits, useSearch } from './useSearch';
 
-/** `/buscar?q=`: every hit of every type the reader may see (the box only shows the first ones). */
+/** `/buscar?q=`: the hits of every type the reader may see, grouped by type (up to 10 each, with the total of the type). */
 export function SearchScreen() {
   const { ports, markExpired } = useSession();
   const q = useRouter().search.get('q') ?? '';

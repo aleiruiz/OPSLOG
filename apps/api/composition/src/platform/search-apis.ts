@@ -54,11 +54,22 @@ export function searchSources(services: IncidentServices, incidents: IncidentSto
       const page = await services.vehicles.list(tenantId, { limit, offset });
       return { total: page.total, items: page.items };
     },
+    // Only drivers and dispatchers are indexed: both kinds are read as one list, in that order.
     employees: async (tenantId, offset, limit) => {
-      const page = await services.employees.list(tenantId, { limit, offset });
+      const read = (kind: 'driver' | 'dispatcher', from: number, count: number) =>
+        services.employees.list(tenantId, { kind, limit: count, offset: from });
+      const drivers = await read('driver', Math.min(offset, 1_000_000), 1);
+      const dispatchers = await read('dispatcher', 0, 1);
+      const items = [];
+      if (offset < drivers.total) items.push(...(await read('driver', offset, limit)).items);
+      if (items.length < limit)
+        items.push(
+          ...(await read('dispatcher', Math.max(0, offset - drivers.total), limit - items.length))
+            .items,
+        );
       return {
-        total: page.total,
-        items: page.items.map((e) => ({
+        total: drivers.total + dispatchers.total,
+        items: items.map((e) => ({
           id: e.id,
           kind: e.kind,
           areaId: e.areaId,

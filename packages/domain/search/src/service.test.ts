@@ -82,6 +82,13 @@ describe('SearchService', () => {
     expect(noIncidents.groups.map((g) => g.type)).not.toContain('incident');
     const mechanic = await search.search('A', who(['view', 'incidents:view'], true), 'clm55');
     expect(mechanic.groups.map((g) => g.type)).not.toContain('incident');
+    // A mechanic-linked member who manages cases (`incidents:edit`) is not scoped, as in the module.
+    const manager = await search.search(
+      'A',
+      who(['view', 'incidents:view', 'incidents:edit'], true),
+      'clm55',
+    );
+    expect(manager.groups.map((g) => g.type)).toContain('incident');
   });
 
   it('shows no group at all to a reader without view', async () => {

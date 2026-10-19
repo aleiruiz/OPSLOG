@@ -156,7 +156,7 @@ describe('TypeOrmSearchStore', () => {
   it('queues one durable reconcile event per job id, as a system actor', async () => {
     const enqueued: Record<string, unknown>[] = [];
     const source = {
-      options: { username: fakeSource().source.options.username },
+      options: { username: 'opslog_search_0123456789abcdef' },
       transaction: async (level: string, work: (m: unknown) => Promise<void>) => {
         expect(level).toBe('READ COMMITTED');
         return work({});

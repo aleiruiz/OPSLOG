@@ -50,6 +50,15 @@ export function SearchBox({
   const flat = state.status === 'ready' ? flatten(state.result) : [];
   const term = text.trim();
   const showPanel = open && term.length >= MIN_SEARCH_LENGTH;
+  const hasList = state.status === 'ready' && flat.length > 0;
+  const message =
+    state.status === 'ready'
+      ? flat.length === 0
+        ? searchCopy.empty
+        : null
+      : state.status === 'error'
+        ? searchCopy.error
+        : searchCopy.loading;
   const activeKey = showPanel && active >= 0 ? flat[active]?.key : undefined;
 
   React.useEffect(() => setActive(-1), [state]);
@@ -127,8 +136,8 @@ export function SearchBox({
             role: 'combobox',
             'aria-label': searchCopy.label,
             'aria-autocomplete': 'list',
-            'aria-expanded': showPanel,
-            'aria-controls': LIST_ID,
+            'aria-expanded': showPanel && hasList,
+            ...(showPanel && hasList ? { 'aria-controls': LIST_ID } : {}),
             'aria-activedescendant': activeKey,
             maxLength: 64,
             autoComplete: 'off',
@@ -136,13 +145,14 @@ export function SearchBox({
         />
       </Box>
       <Box component="div" role="status" className="sr-only">
-        {showPanel && state.status === 'ready' ? resultsAnnouncement(totalHits(state.result)) : ''}
+        {showPanel
+          ? state.status === 'ready' && hasList
+            ? resultsAnnouncement(totalHits(state.result))
+            : message
+          : ''}
       </Box>
       {showPanel && (
         <Box
-          id={LIST_ID}
-          role="listbox"
-          aria-label={searchCopy.title}
           sx={{
             position: 'absolute',
             top: '100%',
@@ -159,13 +169,15 @@ export function SearchBox({
             py: 0.5,
           }}
         >
-          {state.status === 'ready' ? (
-            flat.length === 0 ? (
-              <Typography variant="body2" sx={{ px: 1.5, py: 1 }}>
-                {searchCopy.empty}
-              </Typography>
-            ) : (
-              state.result.groups.map((group) => (
+          {/* Messages live outside the listbox: a listbox may only contain options. */}
+          {message && (
+            <Typography variant="body2" sx={{ px: 1.5, py: 1 }}>
+              {message}
+            </Typography>
+          )}
+          {state.status === 'ready' && hasList && (
+            <Box id={LIST_ID} role="listbox" aria-label={searchCopy.title}>
+              {state.result.groups.map((group) => (
                 <Box key={group.type} role="group" aria-label={searchTypeLabels[group.type]}>
                   <Typography
                     variant="caption"
@@ -198,12 +210,8 @@ export function SearchBox({
                     );
                   })}
                 </Box>
-              ))
-            )
-          ) : (
-            <Typography variant="body2" sx={{ px: 1.5, py: 1 }}>
-              {state.status === 'error' ? searchCopy.error : searchCopy.loading}
-            </Typography>
+              ))}
+            </Box>
           )}
         </Box>
       )}
