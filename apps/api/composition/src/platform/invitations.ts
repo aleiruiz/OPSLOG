@@ -141,6 +141,12 @@ export async function redeem(
         identity.id,
         `accept-${randomUUID()}`,
       );
+    await k.membership?.(
+      'created',
+      membership.tenantId,
+      identity.id,
+      k.access.roleOf(membership.tenantId, identity.id) ?? 'viewer',
+    );
     return success({ identityId: identity.id, tenantId: membership.tenantId });
   } catch (error) {
     return failure(error);

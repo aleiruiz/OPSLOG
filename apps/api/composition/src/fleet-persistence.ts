@@ -48,6 +48,10 @@ import { createIncidentRuntimeSource, incidentRuntimeAdapters } from './incident
 import { createSavedViewsRuntimeSource, savedViewsRuntimeAdapters } from './saved-views-source.js';
 import { createSearchRuntimeSource, searchRuntimeAdapters } from './search-source.js';
 import { createExportsRuntimeSource, exportsRuntimeAdapters } from './exports-source.js';
+import {
+  createNotificationsRuntimeSource,
+  notificationsRuntimeAdapters,
+} from './notifications-source.js';
 import type { FleetDatabaseEndpoint } from './fleet-migrations.js';
 
 export * from './fleet-migrations.js';
@@ -70,6 +74,7 @@ export interface FleetRuntimeCredentials extends FleetDatabaseEndpoint {
     readonly search: { readonly username: string; readonly password: string };
     readonly views: { readonly username: string; readonly password: string };
     readonly exports: { readonly username: string; readonly password: string };
+    readonly notify: { readonly username: string; readonly password: string };
     readonly auditRuntime: { readonly username: string; readonly password: string };
     readonly auditRelay: { readonly username: string; readonly password: string };
   };
@@ -101,6 +106,8 @@ export interface FleetRuntimeStores {
       | 'search'
       | 'savedViews'
       | 'exportJobs'
+      | 'notifications'
+      | 'notificationEvents'
     >
   >;
   readonly audit: NonNullable<PlatformAdapters['audit']>;
@@ -171,6 +178,7 @@ export async function openFleetRuntimeStores(
   const searchSource = createSearchRuntimeSource(endpoint, credentials.accounts.search);
   const viewsSource = createSavedViewsRuntimeSource(endpoint, credentials.accounts.views);
   const exportsSource = createExportsRuntimeSource(endpoint, credentials.accounts.exports);
+  const notifySource = createNotificationsRuntimeSource(endpoint, credentials.accounts.notify);
   sources.push(
     maintenance.plans,
     maintenance.orders,
@@ -178,6 +186,7 @@ export async function openFleetRuntimeStores(
     searchSource,
     viewsSource,
     exportsSource,
+    notifySource,
   );
   const initialized: FleetDataSource[] = [];
   let auditRuntimeInitialized = false;
@@ -234,6 +243,7 @@ export async function openFleetRuntimeStores(
         ...searchRuntimeAdapters(searchSource),
         ...savedViewsRuntimeAdapters(viewsSource),
         ...exportsRuntimeAdapters(exportsSource),
+        ...notificationsRuntimeAdapters(notifySource),
         get records() {
           if (!fileStore) throw new Error('fleet file runtime must be bound to a tenant first');
           return fileStore;

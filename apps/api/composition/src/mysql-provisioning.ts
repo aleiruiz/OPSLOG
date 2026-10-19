@@ -14,6 +14,7 @@ import { INCIDENT_RUNTIME_ACCOUNT } from '../../../../packages/persistence/incid
 import { SAVED_VIEWS_RUNTIME_ACCOUNT } from '../../../../packages/persistence/saved-views/src/index.js';
 import { SEARCH_RUNTIME_ACCOUNT } from '../../../../packages/persistence/search/src/index.js';
 import { EXPORT_RUNTIME_ACCOUNT } from '../../../../packages/persistence/exports/src/index.js';
+import { NOTIFICATION_RUNTIME_ACCOUNT } from '../../../../packages/persistence/notifications/src/index.js';
 import { runIdentityControlMigrations } from './control-plane/identity-schema.js';
 import {
   runFleetAuditMigrations,
@@ -99,6 +100,8 @@ export function buildFleetAccounts(
     throw new Error('saved views runtime account name is invalid');
   if (!EXPORT_RUNTIME_ACCOUNT.test(set.runtime.exports.username))
     throw new Error('exports runtime account name is invalid');
+  if (!NOTIFICATION_RUNTIME_ACCOUNT.test(set.runtime.notify.username))
+    throw new Error('notifications runtime account name is invalid');
   return set;
 }
 
@@ -181,12 +184,13 @@ export async function provisionFleetRuntimeAccounts(
       await grant(entry.privileges.join(', '), table(entry.table), account);
     await grant('EXECUTE', procedure(APPEND_AUDIT), account);
   }
-  // Maintenance, incidents, search and exports enqueue their events through the durable tenant outbox.
+  // Maintenance, incidents, search, exports and notifications enqueue their events through the durable tenant outbox.
   for (const account of [
     set.runtime.maintenance,
     set.runtime.incidents,
     set.runtime.search,
     set.runtime.exports,
+    set.runtime.notify,
   ]) {
     await grant('SELECT', table(AUDIT_TABLES.outbox), account);
     await grant('EXECUTE', procedure(ENQUEUE_OUTBOX), account);

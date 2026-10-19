@@ -89,6 +89,7 @@ export function changeRole(
       throw error;
     }
     if (!k.roles.persistent) await k.audit.append(audit);
+    await k.membership?.('role_changed', context.tenantId, targetIdentityId, role);
     return null;
   });
 }

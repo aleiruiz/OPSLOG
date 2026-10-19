@@ -58,6 +58,18 @@ export class PlatformKernel {
   public readonly drafts: DraftStore;
   public readonly now: () => Date;
   public readonly invitations = new Map<string, PendingInvitation>();
+  /**
+   * Told after a membership was created or its role changed (MVP-NOTIFY sets it). It never throws:
+   * a notification does not revert the change that caused it.
+   */
+  public membership:
+    | ((
+        kind: 'created' | 'role_changed',
+        tenantId: string,
+        identityId: string,
+        role: string,
+      ) => Promise<void>)
+    | undefined;
   private readonly locks = new Map<string, Promise<unknown>>();
 
   public constructor(parts: KernelParts) {

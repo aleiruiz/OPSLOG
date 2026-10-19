@@ -53,7 +53,7 @@ shared_paths_owned_in_wave_2:
 forbidden_paths:
   - SPECS.md, Orchestrator.md, docs/baselines/**, Tasks.md, .env*, AWS (sin SES), producción y datos reales
   - reglas de los escaneos existentes (FLT-ALERTS, planes de mantenimiento, INC-SLA): se consumen, no se reescriben
-status: planned
+status: implemented
 ```
 
 ## Encargo
@@ -130,3 +130,21 @@ git diff --check
 ```
 
 Registrar SHA, MySQL exacto, versión exacta de nodemailer y la matriz requisito → contrato → implementación → prueba → evidencia. PR listo, CI verde y la única revisión Opus por PR/SHA. El autor no fusiona ni declara G5.
+
+## Evidencia de implementación
+
+- Base: `origin/claude/mvp-reports-pr1`; rama `claude/mvp-notify`. El SHA de cabeza se registra en el reporte de la sesión.
+- MySQL de las pruebas locales: 8.0.46 (las suites que exigen 8.4 quedan fuera de esta evidencia y corren en CI). nodemailer: 10.0.14 exacta.
+- Pruebas propias: dominio 64, plataforma de correo 17, persistencia 10 (9 de integración, tres ejecuciones verdes), API 6, worker 20, BFF 9, plataforma 9 y MySQL de plataforma 2, web 10 (axe incluido).
+- Cobertura: dominio 99,89 / 97,32; correo 100; API 100 / 98,27; worker 100 / 95,58; composición 96,7 / 91,6 (sentencias / ramas).
+
+| Requisito                            | Contrato                         | Implementación                                | Prueba                                                       |
+| ------------------------------------ | -------------------------------- | --------------------------------------------- | ------------------------------------------------------------ |
+| Centro, contador, leídas (S23)       | `notifications.list/count/read*` | `packages/domain/notifications`, persistencia | `notifications.test.ts` (BFF), `mysql-notifications.test.ts` |
+| Preferencias y obligatorios (FR-152) | `notifications.preferences.*`    | `catalog.ts`, `service.ts`                    | aceptación 3                                                 |
+| Suscripciones (FR-153)               | `notifications.subscri*`         | `service.ts`, `FollowButton`                  | `notifications.test.ts` (BFF)                                |
+| Fuentes y deduplicación (FR-150/151) | n/a                              | `apps/worker/notifications`                   | aceptación 1                                                 |
+| Correo: puerto, sumidero, SMTP       | n/a                              | `packages/platform/mail`                      | aceptaciones 7, 8 y 9                                        |
+| A/B (SPECS §4.4)                     | 404 con ids ajenos               | toda sentencia filtra `company_id`            | aceptación 6, `mysql-notifications.test.ts`                  |
+
+La matriz completa y los desvíos están en `docs/traceability/notifications.md`.

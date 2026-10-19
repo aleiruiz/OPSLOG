@@ -17,6 +17,7 @@ import { INCIDENT_SLA_TABLES } from '../../../../packages/persistence/incidents/
 import { INCIDENT_WORKFLOW_TABLES } from '../../../../packages/persistence/incidents/workflow/src/index.js';
 import { SAVED_VIEW_TABLES } from '../../../../packages/persistence/saved-views/src/index.js';
 import { EXPORT_TABLES } from '../../../../packages/persistence/exports/src/index.js';
+import { NOTIFICATION_TABLES } from '../../../../packages/persistence/notifications/src/index.js';
 import { SEARCH_TABLES } from '../../../../packages/persistence/search/src/index.js';
 import { INCIDENT_CHILD_TABLES } from '../../../../packages/persistence/incidents/third-parties/src/index.js';
 
@@ -101,6 +102,14 @@ export const FLEET_TABLE_GRANTS = {
   ],
   // Export jobs are never deleted: they expire.
   exports: [{ table: EXPORT_TABLES.jobs, privileges: ['SELECT', 'INSERT', 'UPDATE'] }],
+  // Notices and deliveries are never deleted (retention is a later decision); follows can be withdrawn.
+  notify: [
+    { table: NOTIFICATION_TABLES.notifications, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
+    { table: NOTIFICATION_TABLES.deliveries, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
+    { table: NOTIFICATION_TABLES.preferences, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
+    { table: NOTIFICATION_TABLES.rules, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
+    { table: NOTIFICATION_TABLES.subscriptions, privileges: ['SELECT', 'INSERT', 'DELETE'] },
+  ],
 } satisfies Record<string, readonly TableGrant[]>;
 
 export type FleetModuleName = keyof typeof FLEET_TABLE_GRANTS;
@@ -119,4 +128,5 @@ export const FLEET_MODULES: readonly FleetModuleName[] = [
   'search',
   'views',
   'exports',
+  'notify',
 ];

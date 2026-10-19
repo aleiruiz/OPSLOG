@@ -1,3 +1,4 @@
+import type { AlertService } from '../../../../../packages/domain/alerts/src/index.js';
 import type { AreaService } from '../../../../../packages/domain/areas/src/index.js';
 import { MAX_LIST_LIMIT } from '../../../../../packages/domain/areas/src/index.js';
 import {
@@ -38,6 +39,8 @@ import type { ReportsModule } from './report-apis.js';
 
 /** The fleet stores and the area service as `buildDomainApis` holds them. */
 export interface AnalyticsFleet {
+  /** Document, policy and licence alerts: the alerts screen and the notification scan read the same service. */
+  readonly alertService: AlertService;
   readonly areaService: AreaService;
   readonly vehicleStore: VehicleStore;
   readonly employeeStore: EmployeeStore;

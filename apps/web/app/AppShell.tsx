@@ -68,6 +68,7 @@ export function AppShell({
   onSignOut,
   locked = false,
   search = null,
+  notifications = null,
   children,
 }: {
   session: SessionInfo;
@@ -78,6 +79,8 @@ export function AppShell({
   locked?: boolean;
   /** Global search box of the top bar. */
   search?: React.ReactNode;
+  /** Bell with the unread counter, next to the user. */
+  notifications?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const navigation = visibleNavigation(can);
@@ -205,6 +208,7 @@ export function AppShell({
             {session.company.name}
           </Typography>
         </Box>
+        {notifications}
         <Box
           role="group"
           aria-label="Usuario"

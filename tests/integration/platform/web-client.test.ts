@@ -1165,6 +1165,50 @@ describe('typed client against the real BFF', () => {
       ok: true,
       value: { id: exportId },
     });
+    // Notification center: counter, list, preferences, rule, follow and unfollow, and the failed list.
+    expect(await client.call('notifications.count')).toMatchObject({
+      ok: true,
+      value: { unread: expect.any(Number) },
+    });
+    expect(await client.call('notifications.list', { query: { limit: 5 } })).toMatchObject({
+      ok: true,
+      value: { items: expect.any(Array) },
+    });
+    expect(await client.call('notifications.readAll')).toMatchObject({ ok: true });
+    expect(
+      await client.call('notifications.read', { params: { notificationId: 'none' } }),
+    ).toMatchObject({ ok: false, error: { status: 404 } });
+    const preferences = await client.call('notifications.preferences.get');
+    expect(preferences).toMatchObject({ ok: true, value: { items: expect.any(Array) } });
+    expect(
+      await client.call('notifications.preferences.update', { body: { items: [] } }),
+    ).toMatchObject({ ok: true });
+    const rule = await client.call('notifications.rules.get');
+    expect(rule).toMatchObject({ ok: true, value: { quietHours: false } });
+    expect(
+      await client.call('notifications.rules.update', {
+        body: { emailKinds: [], quietHours: false },
+      }),
+    ).toMatchObject({ ok: true });
+    expect(await client.call('notifications.deliveries.failed')).toMatchObject({
+      ok: true,
+      value: { total: 0 },
+    });
+    expect(await client.call('notifications.subscriptions.list')).toMatchObject({
+      ok: true,
+      value: { items: [] },
+    });
+    // Following needs a real record: an unknown vehicle is refused, and unfollowing is idempotent.
+    expect(
+      await client.call('notifications.subscribe', {
+        params: { type: 'vehicle', entityId: 'none' },
+      }),
+    ).toMatchObject({ ok: false, error: { status: 404 } });
+    expect(
+      await client.call('notifications.unsubscribe', {
+        params: { type: 'vehicle', entityId: 'none' },
+      }),
+    ).toEqual({ ok: true, value: undefined });
     // The file is not JSON: the browser opens it with its cookie, so the typed client never calls
     // it (the download is covered by the BFF tests over HTTP).
     used.add('exports.download');

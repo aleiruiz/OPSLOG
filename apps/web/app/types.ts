@@ -4,6 +4,7 @@ import type { IncidentPorts } from '../features/incidents/ports';
 import type { MaintenancePorts } from '../features/maintenance/ports';
 import type { SearchPorts } from '../features/search/ports';
 import type { ViewsPorts } from '../features/search/views/ports';
+import type { NotificationsPorts } from '../features/notifications/ports';
 import type { ReportsPorts } from '../features/reports/ports';
 import type {
   AlertsClient,
@@ -416,5 +417,7 @@ export interface ApiPorts {
   readonly views: ViewsPorts;
   /** Report catalog, preview and exports (FR-150..153). */
   readonly reports: ReportsPorts;
+  /** Notification center, preferences and subscriptions (MVP-NOTIFY). */
+  readonly notifications: NotificationsPorts;
   readonly oidc: OidcPort;
 }

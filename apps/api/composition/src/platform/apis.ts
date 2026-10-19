@@ -3,7 +3,6 @@ import {
   AssignmentService,
   InMemoryAssignmentStore,
 } from '../../../../../packages/domain/assignments/src/index.js';
-import { AlertService } from '../../../../../packages/domain/alerts/src/index.js';
 import { AreaService, InMemoryAreaStore } from '../../../../../packages/domain/areas/src/index.js';
 import {
   DocumentError,
@@ -35,7 +34,13 @@ import {
 } from '../../../../../packages/domain/vehicles/src/index.js';
 import { AlertsApi } from '../alerts.js';
 import type { AnalyticsApis, ReportApis } from './analytics-apis.js';
-import { driverLicenseAlerts } from '../driver-license-alerts.js';
+import {
+  notificationEvents,
+  vehicleStatusNotifier,
+  NotifyingVehiclesApi,
+  type NotificationApis,
+} from './notification-apis.js';
+import { buildAlertService } from './alert-service.js';
 import { AreasApi } from '../areas.js';
 import { AssignmentsApi } from '../assignments.js';
 import { ROLE_LABELS } from '../directory.js';
@@ -47,7 +52,7 @@ import { InsuranceApi } from '../insurance.js';
 import { CompanySettingsApi } from '../settings.js';
 import { VehiclesApi } from '../vehicles.js';
 import type { PlatformKernel } from './kernel.js';
-import type { PlatformAdapters } from './types.js';
+import type { PlatformAdapters, PlatformOptions } from './types.js';
 import type { buildWorkOrderApi, WorkOrderFileSupport } from './work-order-apis.js';
 import type { IncidentDomainApis } from './incident-apis.js';
 import { buildDownstreamApis } from './downstream-apis.js';
@@ -56,7 +61,11 @@ import type { AuditQueryApi } from '../../../audit-query/src/index.js';
 import type { MaintenanceApi } from '../../../maintenance/plans/src/index.js';
 import type { MaintenancePlanWorker } from '../../../../../packages/domain/maintenance/plans/src/index.js';
 
-export interface DomainApis extends IncidentDomainApis, AnalyticsApis, ReportApis {
+export interface DomainApis
+  extends IncidentDomainApis,
+    AnalyticsApis,
+    ReportApis,
+    NotificationApis {
   readonly vehicles: VehiclesApi;
   readonly areas: AreasApi;
   readonly employees: EmployeesApi;
@@ -81,8 +90,9 @@ export function buildDomainApis(
   kernel: PlatformKernel,
   adapters: PlatformAdapters,
   files: WorkOrderFileSupport,
-  environment?: string,
+  options: Pick<PlatformOptions, 'environment' | 'publicOrigin'> = {},
 ): DomainApis {
+  const environment = options.environment ?? process.env['OPSLOG_ENV'];
   const vehicleStore = adapters.vehicles ?? new InMemoryVehicleStore();
   const vehicleAuditInTransaction =
     adapters.vehicles !== undefined && !(adapters.vehicles instanceof InMemoryVehicleStore);
@@ -133,14 +143,18 @@ export function buildDomainApis(
       },
     },
   });
-  const vehicles = new VehiclesApi({
-    service: vehicleService,
-    authorize: (token, correlationId, required) => kernel.authorize(token, correlationId, required),
-    audit: vehicleAuditInTransaction
-      ? () => undefined
-      : (context, action, entityId, correlationId) =>
-          kernel.auditNow(kernel.userActor(context), action, 'vehicle', entityId, correlationId),
-  });
+  const vehicles = new NotifyingVehiclesApi(
+    {
+      service: vehicleService,
+      authorize: (token, correlationId, required) =>
+        kernel.authorize(token, correlationId, required),
+      audit: vehicleAuditInTransaction
+        ? () => undefined
+        : (context, action, entityId, correlationId) =>
+            kernel.auditNow(kernel.userActor(context), action, 'vehicle', entityId, correlationId),
+    },
+    vehicleStatusNotifier(kernel, notificationEvents(kernel, adapters)),
+  );
   const employeeService = new EmployeeService(employeeStore, {
     now: kernel.now,
     pii,
@@ -305,62 +319,13 @@ export function buildDomainApis(
   // Alerts are derived from the documents and policies stores on every read (no queue, no outbox
   // yet): vehicle documents and insurance policies whose last valid day falls inside the company's
   // window, or already passed. Archived ones are excluded; every read names the tenant.
+  const alertService = buildAlertService(
+    { documentStore, policyStore, employeeStore },
+    settingsService,
+    kernel.now,
+  );
   const alerts = new AlertsApi({
-    service: new AlertService(
-      {
-        vehicle_document: {
-          due: async (tenantId, scope, window) => {
-            const slice = await documentStore.list(
-              tenantId,
-              {
-                ownerType: 'vehicle',
-                includeArchived: false,
-                expiry: scope.expiry,
-                ...(scope.vehicleId === undefined ? {} : { ownerId: scope.vehicleId }),
-              },
-              window,
-            );
-            return {
-              total: slice.total,
-              items: slice.items.map((document) => ({
-                subjectId: document.id,
-                vehicleId: document.ownerId,
-                typeCode: document.typeCode,
-                dueOn: document.expiresOn as string,
-              })),
-            };
-          },
-        },
-        insurance_policy: {
-          due: async (tenantId, scope, window) => {
-            const slice = await policyStore.list(
-              tenantId,
-              {
-                includeArchived: false,
-                expiry: scope.expiry,
-                ...(scope.vehicleId === undefined ? {} : { vehicleId: scope.vehicleId }),
-              },
-              window,
-            );
-            return {
-              total: slice.total,
-              items: slice.items.map((policy) => ({
-                subjectId: policy.id,
-                vehicleId: policy.vehicleId,
-                typeCode: policy.coverageType,
-                dueOn: policy.endsOn,
-              })),
-            };
-          },
-        },
-        employee_license: driverLicenseAlerts(employeeStore),
-      },
-      {
-        expiryWindowDays: async (tenantId) =>
-          (await settingsService.get(tenantId)).expiryWindowDays,
-      },
-      { now: kernel.now },
-    ),
+    service: alertService,
     authorize: (token, correlationId, required) => kernel.authorize(token, correlationId, required),
   });
   const areas = new AreasApi({
@@ -417,11 +382,12 @@ export function buildDomainApis(
         policies: policyStore,
         settings: settingsService,
       },
-      { areaService, vehicleStore, employeeStore, documentStore },
+      { areaService, vehicleStore, employeeStore, documentStore, alertService },
       pii,
       files,
       areaService,
       environment,
+      options.publicOrigin,
     ),
   };
 }

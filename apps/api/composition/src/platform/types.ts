@@ -27,6 +27,11 @@ import type {
 } from '../../../../../packages/domain/incidents/sla/src/index.js';
 import type { ExportJobStore } from '../../../../../packages/domain/exports/src/index.js';
 import type {
+  NotificationEvents,
+  NotificationStore,
+} from '../../../../../packages/domain/notifications/src/index.js';
+import type { MailPort } from '../../../../../packages/platform/mail/src/index.js';
+import type {
   ReconcileQueue,
   SearchStore,
 } from '../../../../../packages/domain/search/src/index.js';
@@ -114,6 +119,15 @@ export interface PlatformAdapters {
   readonly savedViews?: SavedViewStore;
   /** Persistent export jobs (`packages/persistence/exports`). In memory by default. */
   readonly exportJobs?: ExportJobStore;
+  /** Persistent notification center (`packages/persistence/notifications`). In memory by default. */
+  readonly notifications?: NotificationStore;
+  /** Where the center writes the events no module publishes; the persistent store writes them in its own transaction. */
+  readonly notificationEvents?: NotificationEvents;
+  /**
+   * The general mail port (ADR-0016): the SMTP adapter when its variables are set, otherwise the
+   * sink. Without one, outside production, a sink that sends nothing. INC-SLA mails through it too.
+   */
+  readonly mail?: MailPort;
   /** The mail adapter of the SLA notices. Without one, outside production, a test sink records them. */
   readonly incidentAlertMailer?: IncidentAlertMailer;
   /** Where a member's address lives; read at send time. Defaults to a reserved, undeliverable address. */
@@ -162,6 +176,8 @@ export interface PlatformOptions {
   };
   /** How long the scan runner holds back jobs of non-active tenants. */
   readonly scanHoldMs?: number;
+  /** Public origin of the web app: the base of the links in e-mails. Relative links without it. */
+  readonly publicOrigin?: string;
 }
 
 export interface SessionDetails {

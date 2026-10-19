@@ -8,6 +8,7 @@ import {
   s3ObjectStorageFromEnv,
   type MysqlPlatform,
 } from '../../composition/src/index.js';
+import { SmtpMailAdapter } from '../../../../packages/platform/mail/src/index.js';
 import { createCognitoVerifier } from '../../../../packages/platform/auth/src/cognito.js';
 import { assertStagingOnly, type RuntimeDescriptor } from '../../../../infra/runtime/src/index.js';
 import type { ServerConfig, Env } from './config.js';
@@ -74,16 +75,19 @@ async function listen(
     log(
       'warning: OPSLOG_PERSISTENCE=mysql with OPSLOG_OBJECT_STORAGE=memory loses file contents on restart',
     );
+  const mail = config.smtp ? { mail: new SmtpMailAdapter({ config: config.smtp }) } : {};
   const platform = createPlatform({
     verifier,
     issuer: config.oidc?.issuer ?? fake.issuer,
     grantSecret: config.grantSecret,
     environment: 'staging',
+    publicOrigin: config.publicOrigin,
     adapters: persistent
-      ? { ...persistent.adapters, ...storage }
+      ? { ...persistent.adapters, ...storage, ...mail }
       : {
           tenants: new InMemoryTenantStore(),
           ...storage,
+          ...mail,
           audit: new InMemoryAuditStore(),
           // In memory there is no separate projection to relay to; the relay stage is a no-op.
           auditRelay: { runBatch: async () => 0 },

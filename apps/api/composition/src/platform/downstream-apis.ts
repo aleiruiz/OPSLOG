@@ -15,6 +15,7 @@ import { buildAuditQueryApi } from './audit-query-apis.js';
 import { buildSavedViews } from './saved-views-apis.js';
 import { buildSearch } from './search-apis.js';
 import { buildReports } from './report-apis.js';
+import { buildNotifications } from './notification-apis.js';
 import type { PiiCipher } from '../../../../../packages/platform/pii/src/index.js';
 
 /** Maintenance, work orders and incidents: the modules that build on the fleet services. */
@@ -27,10 +28,12 @@ export function buildDownstreamApis(
   files: WorkOrderFileSupport,
   areas: AreaService,
   environment?: string,
+  publicOrigin?: string,
 ) {
   const defaults = withMaintenanceDefaults(adapters);
   const stores = incidentStores(defaults);
   const incidents = buildIncidentApis(kernel, defaults, services, pii, files, stores, environment);
+  const reports = buildReports(kernel, defaults, services, fleet, files.storage);
   return {
     // The audit screens read the modules through their ports only (descriptions and field histories).
     auditQuery: buildAuditQueryApi(kernel, adapters.auditRelay, {
@@ -59,7 +62,20 @@ export function buildDownstreamApis(
     ),
     ...incidents,
     search: buildSearch(kernel, defaults, services, stores.store, pii),
-    reports: buildReports(kernel, defaults, services, fleet, files.storage),
+    reports,
+    notifications: buildNotifications(kernel, defaults, {
+      vehicles: fleet.vehicleStore,
+      incidents: stores.store,
+      orders: defaults.maintenanceOrders,
+      plans: defaults.maintenancePlans,
+      mechanics: defaults.maintenanceMechanics as NonNullable<typeof defaults.maintenanceMechanics>,
+      sla: incidents.incidentSla,
+      exportJobs: reports.store,
+      catalog: reports.catalog,
+      alerts: fleet.alertService,
+      settings: services.settings,
+      baseUrl: publicOrigin,
+    }),
     ...buildAnalytics(kernel, {
       areas: fleet.areaService,
       vehicles: fleet.vehicleStore,

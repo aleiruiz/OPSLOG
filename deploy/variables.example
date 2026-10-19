@@ -42,3 +42,9 @@ LANDING_ADMIN_PASSWORD=
 LANDING_NOTIFY_URL=
 # Address shown on the privacy notice for data requests.
 LANDING_CONTACT_EMAIL=
+# Optional e-mail through SMTP (TLS required). Set all five or none; none keeps the log-only sink.
+OPSLOG_SMTP_HOST=
+OPSLOG_SMTP_PORT=
+OPSLOG_SMTP_USER=
+OPSLOG_SMTP_PASSWORD=
+OPSLOG_SMTP_FROM=

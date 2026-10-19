@@ -23,6 +23,7 @@ export type MockOperation =
   | 'dashboard'
   | 'views'
   | 'reports'
+  | 'notifications'
   | 'exportReport'
   | 'listExports'
   | 'getSession'

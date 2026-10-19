@@ -23,6 +23,7 @@ import { IncidentSlaApi } from '../../../incidents/sla/src/index.js';
 import { ROLE_PERMISSIONS } from '../access.js';
 import type { PlatformKernel } from './kernel.js';
 import { createMechanicScope } from './mechanic-scope.js';
+import { MailPortAlertMailer } from './mail-port.js';
 import type { PlatformAdapters } from './types.js';
 import type { IncidentServices } from './incident-apis.js';
 
@@ -101,9 +102,14 @@ export function buildIncidentSla(
   incidents: IncidentStore,
   environment: string | undefined,
 ): IncidentSlaModule {
+  // The SLA mails through the general port (ADR-0016) when one is configured; a test may inject its own
+  // mailer, and without either the usual rules apply (a test sink outside production, a refusal in it).
+  const given =
+    adapters.incidentAlertMailer ??
+    (adapters.mail ? new MailPortAlertMailer(adapters.mail) : undefined);
   const mailer = selectIncidentAlertMailer({
     ...(environment === undefined ? {} : { environment }),
-    ...(adapters.incidentAlertMailer ? { mailer: adapters.incidentAlertMailer } : {}),
+    ...(given ? { mailer: given } : {}),
   });
   // Production needs the real directory too: a reserved address would make every send look done.
   if (isProductionMode(environment) && !adapters.incidentAlertAddresses)
