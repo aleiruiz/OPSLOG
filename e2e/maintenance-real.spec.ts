@@ -127,14 +127,14 @@ test('preventive order from plan to closure advances the plan once, over the rea
   await page.getByRole('button', { name: 'Agregar refacción' }).click();
   await page.getByLabel('Refacción 1', { exact: true }).fill('Filtro de aceite');
   await submit(page, 'Registrar trabajo', 'Guardar trabajo');
-  await expect(page.getByRole('status')).toHaveText('Trabajo guardado.');
+  await expect(page.getByRole('status').filter({ hasText: 'Trabajo guardado.' })).toBeVisible();
   await expect(page.getByRole('listitem').filter({ hasText: 'Revisión de frenos' })).toBeVisible();
   await page.getByRole('button', { name: 'Registrar costos' }).click();
   await page.getByRole('button', { name: 'Agregar costo' }).click();
   await page.getByLabel('Importe 1').fill('1500.50');
   await page.getByLabel('Moneda 1').fill('MXN');
   await submit(page, 'Registrar costos', 'Guardar costos');
-  await expect(page.getByRole('status')).toHaveText('Costos guardados.');
+  await expect(page.getByRole('status').filter({ hasText: 'Costos guardados.' })).toBeVisible();
   await expect(page.getByText('Mano de obra: 1,500.50 MXN')).toBeVisible();
   await page.getByRole('button', { name: 'Registrar término' }).click();
   await page.getByLabel('Fecha real del servicio').fill(day(0));
@@ -274,7 +274,9 @@ test('an internal mechanic sees only their assigned order, works it and never se
     await mechanicPage.getByRole('button', { name: 'Registrar trabajo' }).click();
     await mechanicPage.getByLabel('Trabajos realizados').fill('Diagnóstico del tablero');
     await submit(mechanicPage, 'Registrar trabajo', 'Guardar trabajo');
-    await expect(mechanicPage.getByRole('status')).toHaveText('Trabajo guardado.');
+    await expect(
+      mechanicPage.getByRole('status').filter({ hasText: 'Trabajo guardado.' }),
+    ).toBeVisible();
     await mechanicPage.getByRole('button', { name: 'Registrar término' }).click();
     await mechanicPage.getByLabel('Fecha real del servicio').fill(day(0));
     await mechanicPage.getByLabel('Kilometraje del servicio').fill('160');
@@ -339,7 +341,7 @@ test('evidence requirement: configure, block, upload, complete and close with an
   await page.getByRole('button', { name: 'Registrar trabajo' }).click();
   await page.getByLabel('Trabajos realizados').fill('Cambio de balatas');
   await submit(page, 'Registrar trabajo', 'Guardar trabajo');
-  await expect(page.getByRole('status')).toHaveText('Trabajo guardado.');
+  await expect(page.getByRole('status').filter({ hasText: 'Trabajo guardado.' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Registrar término' }).click();
   await page.getByLabel('Fecha real del servicio').fill(day(0));
