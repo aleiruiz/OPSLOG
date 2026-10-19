@@ -129,6 +129,8 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/persistence/tenancy
 
+  apps/landing: {}
+
   apps/web:
     dependencies:
       '@emotion/react':

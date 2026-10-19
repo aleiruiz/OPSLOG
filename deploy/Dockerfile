@@ -1,4 +1,4 @@
-# Images for the OPSLOG demo stack (staging only, synthetic data). Targets: api, web.
+# Images for the OPSLOG demo stack (staging only, synthetic data). Targets: api, web, landing.
 #   docker build -f deploy/Dockerfile --target api -t opslog-api .
 #   docker build -f deploy/Dockerfile --target web -t opslog-web \
 #     --build-arg VITE_OIDC_DOMAIN=https://<prefix>.auth.<region>.amazoncognito.com --build-arg VITE_OIDC_CLIENT_ID=<client id> .
@@ -19,7 +19,7 @@ RUN --mount=type=secret,id=extra-ca,required=false \
 ARG VITE_OIDC_DOMAIN=""
 ARG VITE_OIDC_CLIENT_ID=""
 ENV VITE_OIDC_DOMAIN=$VITE_OIDC_DOMAIN VITE_OIDC_CLIENT_ID=$VITE_OIDC_CLIENT_ID
-RUN node apps/api/server/build.mjs && node apps/web/build.mjs
+RUN node apps/api/server/build.mjs && node apps/web/build.mjs && node apps/landing/build.mjs
 
 FROM node:22-bookworm-slim AS api
 WORKDIR /app
@@ -39,3 +39,17 @@ COPY --from=build /repo/apps/web/dist-web /usr/share/nginx/html
 EXPOSE 80
 HEALTHCHECK --interval=15s --timeout=3s --start-period=5s --retries=3 \
   CMD ["wget", "-q", "-O", "/dev/null", "http://127.0.0.1/healthz"]
+
+# Public sales page with the demo-request form; requests are appended to /data (a volume).
+FROM node:22-bookworm-slim AS landing
+WORKDIR /app
+COPY --from=build /repo/apps/landing/bundle/landing.mjs ./landing.mjs
+COPY apps/landing/public ./public
+RUN mkdir /data && chown node:node /data
+VOLUME /data
+USER node
+ENV PORT=8090
+EXPOSE 8090
+HEALTHCHECK --interval=15s --timeout=3s --start-period=5s --retries=3 \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:'+process.env.PORT+'/healthz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+CMD ["node", "landing.mjs"]
