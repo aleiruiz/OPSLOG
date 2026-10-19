@@ -23,16 +23,13 @@ export const REQUIRED_TYPES: Readonly<Record<'vehicle' | 'employee', readonly st
 };
 
 /**
- * The owners a document or policy count is restricted to under an area filter: the vehicles that are
- * not archived and the employees that are not archived. Without a filter nothing is restricted, so
- * the figure is the one the unfiltered list shows.
+ * The owners a document count is restricted to: the vehicles and employees that are not archived,
+ * with or without an area filter, so the figure per area adds up to the company figure.
  */
 export function ownerScope(
-  areaIds: readonly string[] | null,
   vehicles: readonly VehicleFact[],
   employees: readonly EmployeeFact[],
-): OwnerScope | null {
-  if (areaIds === null) return null;
+): OwnerScope {
   return {
     vehicle: vehicles.filter((vehicle) => vehicle.archivedAt === null).map((vehicle) => vehicle.id),
     employee: employees.map((employee) => employee.id),

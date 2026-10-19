@@ -140,13 +140,13 @@ export class DashboardService {
         ? sources.fleet.employees(tenantId, areaIds)
         : [],
     ]);
-    const scope = ownerScope(areaIds, vehicles, employees);
+    const scope = ownerScope(vehicles, employees);
     const until = new Date(dayEnd(days[days.length - 1] ?? query.from, query.timeZone));
     const expiring = {
       from: query.today,
       until: addDays(query.today, query.expiryWindowDays),
     };
-    const vehicleScope = areaIds === null ? null : (scope?.vehicle ?? []);
+    const vehicleScope = areaIds === null ? null : scope.vehicle;
     const [
       entries,
       plans,

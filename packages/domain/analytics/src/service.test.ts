@@ -265,10 +265,14 @@ describe('the area filter', () => {
     });
   });
 
-  it('does not restrict documents or policies without an area filter', async () => {
+  it('leaves out the documents of archived owners without an area filter too, and does not restrict policies', async () => {
     const { calls, run } = setup(companyFixture());
     await run();
-    expect(calls.find((call) => call.name === 'documents.countExpiring')?.args[2]).toBeNull();
+    // The archived v6 is out, so the per-area figures add up to the company figure.
+    expect(calls.find((call) => call.name === 'documents.countExpiring')?.args[2]).toEqual({
+      vehicle: ['v1', 'v2', 'v3', 'v7', 'v8', 'v9'],
+      employee: ['e1', 'e2', 'e3'],
+    });
     expect(calls.find((call) => call.name === 'insurance.countExpiring')?.args[2]).toBeNull();
   });
 
