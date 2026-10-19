@@ -11,6 +11,7 @@
   "references": [
     { "path": "../composition" },
     { "path": "../bff" },
-    { "path": "../../../infra/runtime" }
+    { "path": "../../../infra/runtime" },
+    { "path": "../../../packages/platform/observability" }
   ]
 }

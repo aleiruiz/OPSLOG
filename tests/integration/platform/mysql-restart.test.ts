@@ -12,7 +12,11 @@ import {
 } from '../../../apps/api/server/src/persistence.js';
 import { bootstrapFirstCompany } from '../../../apps/api/server/src/bootstrap.js';
 import { startServer } from '../../../apps/api/server/src/server.js';
-import { buildFleetAccounts, type MysqlPlatform } from '../../../apps/api/composition/src/index.js';
+import {
+  BACKUP_ACCOUNT,
+  buildFleetAccounts,
+  type MysqlPlatform,
+} from '../../../apps/api/composition/src/index.js';
 import type { RuntimeDescriptor } from '../../../infra/runtime/src/index.js';
 
 /**
@@ -75,6 +79,8 @@ suite('API on MySQL across a restart', () => {
       OPSLOG_MYSQL_ROOT_PASSWORD: connection.password,
       OPSLOG_MYSQL_SECRET: randomBytes(32).toString('base64url'),
       OPSLOG_PII_MASTER_KEY: randomBytes(32).toString('base64'),
+      // The migrate job also provisions the backup account when this is set.
+      OPSLOG_BACKUP_PASSWORD: randomBytes(24).toString('base64url'),
     };
     await runMigrate(env, () => undefined);
   }, 180_000);
@@ -88,9 +94,11 @@ suite('API on MySQL across a restart', () => {
     const users = [
       ...Object.values(accounts.runtime),
       accounts.identity,
+      accounts.ops,
       accounts.auditMigrator,
       accounts.filesMigrator,
       accounts.maintenanceMigrator,
+      { username: BACKUP_ACCOUNT },
     ];
     await admin.query(`DROP DATABASE IF EXISTS ${identifier(database)}`);
     for (const { username } of users) await admin.query(`DROP USER IF EXISTS '${username}'@'%'`);
@@ -284,8 +292,9 @@ suite('API on MySQL across a restart', () => {
       (line) => lines.push(line),
     );
     try {
-      expect(lines).toContain(
-        'bootstrap_skipped company already exists (configured admin cannot sign in)',
+      // The configured admin cannot sign in any more, yet the start does not crash-loop.
+      expect(lines.map((line) => JSON.parse(line).msg)).toContain(
+        'bootstrap_skipped_company_exists',
       );
     } finally {
       await running.stop();
@@ -320,8 +329,11 @@ suite('API on MySQL across a restart', () => {
       const health = await fetch(`http://127.0.0.1:${running.port}/healthz`);
       expect(health.status).toBe(200);
       await running.tick();
-      expect(lines.filter((line) => line.startsWith('worker_tick_failed'))).toEqual([]);
-      expect(lines.some((line) => line.startsWith('restored '))).toBe(true);
+      const events = lines.map((line) => JSON.parse(line) as { msg: string; level: string });
+      expect(events.filter((event) => event.msg === 'worker_job_failed')).toEqual([]);
+      expect(events.some((event) => event.msg === 'access_restored')).toBe(true);
+      // The database is reachable by the probe account and every migration is applied.
+      expect((await fetch(`http://127.0.0.1:${running.port}/readyz`)).status).toBe(200);
     } finally {
       await running.stop();
     }

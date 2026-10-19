@@ -13,6 +13,10 @@ OPSLOG_MYSQL_SECRET=
 # openssl rand -base64 32 (32 bytes). BACK IT UP: without it the personal data already stored
 # (employees, incident parties) can never be read again.
 OPSLOG_PII_MASTER_KEY=
+# openssl rand -base64 36 (at least 24 characters). Password of the MySQL account the `backup`
+# container uses; the migrate job creates the account with it. The backup volume does NOT hold
+# OPSLOG_PII_MASTER_KEY: store that key separately, or a restore cannot read personal data.
+OPSLOG_BACKUP_PASSWORD=
 # Optional; the database must be named opslog_t_<name>. Default: opslog_t_main.
 # OPSLOG_MYSQL_DATABASE=opslog_t_main
 # Optional: real file storage. OPSLOG_OBJECT_STORAGE=s3 plus the four values below.

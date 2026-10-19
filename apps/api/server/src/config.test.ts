@@ -18,6 +18,7 @@ describe('readConfig', () => {
       authMode: 'synthetic',
       objectStorage: 'memory',
       persistence: 'memory',
+      readOnly: false,
     });
     expect(readConfig({ ...base, PORT: '9000', HOST: '127.0.0.1' })).toMatchObject({
       port: 9000,
@@ -221,5 +222,30 @@ describe('readConfig', () => {
       expect(message).not.toContain('banana');
       expect(message).not.toContain(smtp.OPSLOG_SMTP_PASSWORD);
     });
+  });
+});
+
+describe('OPSLOG_READ_ONLY', () => {
+  const mysql = {
+    ...base,
+    OPSLOG_PERSISTENCE: 'mysql',
+    OPSLOG_MYSQL_SECRET: 's'.repeat(40),
+    OPSLOG_PII_MASTER_KEY: Buffer.alloc(32, 1).toString('base64'),
+  };
+
+  it('is off by default and turns on with true or 1 over MySQL', () => {
+    expect(readConfig(mysql).readOnly).toBe(false);
+    expect(readConfig({ ...mysql, OPSLOG_READ_ONLY: 'TRUE' }).readOnly).toBe(true);
+    expect(readConfig({ ...mysql, OPSLOG_READ_ONLY: '1' }).readOnly).toBe(true);
+    expect(readConfig({ ...mysql, OPSLOG_READ_ONLY: '0' }).readOnly).toBe(false);
+  });
+
+  it('rejects other values and the memory persistence', () => {
+    expect(() => readConfig({ ...mysql, OPSLOG_READ_ONLY: 'maybe' })).toThrow(
+      'OPSLOG_READ_ONLY must be true or false',
+    );
+    expect(() => readConfig({ ...base, OPSLOG_READ_ONLY: 'true' })).toThrow(
+      'OPSLOG_READ_ONLY needs OPSLOG_PERSISTENCE=mysql',
+    );
   });
 });

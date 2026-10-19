@@ -1,10 +1,14 @@
+import mysql from 'mysql2/promise';
 import {
   buildFleetAccounts,
   deriveAccountPassword,
+  expectedMigrations,
   migrateFleetDatabase,
   openMysqlPlatform,
+  provisionBackupAccount,
   type MysqlPlatform,
 } from '../../composition/src/index.js';
+import { createOpsProbe, type OpsProbe } from './ops.js';
 import { EnvelopePiiCipher, LocalDevKms } from '../../../../packages/platform/pii/src/index.js';
 import type { Env } from './config.js';
 import { readMysqlEndpoint, readMysqlSecret, type MysqlServerConfig } from './mysql-config.js';
@@ -36,6 +40,22 @@ export function openPersistentAdapters(config: MysqlServerConfig): Promise<Mysql
   });
 }
 
+/** The SELECT-only probe behind `/readyz` and `ops_stats`; it connects when asked, never at start-up. */
+export function openOpsProbe(config: MysqlServerConfig): OpsProbe {
+  return createOpsProbe(
+    {
+      host: config.host,
+      port: config.port,
+      database: config.database,
+      account: accountsFor(config.secret).ops,
+    },
+    expectedMigrations(),
+  );
+}
+
+/** Shortest backup password accepted: it is an operator-chosen secret, not a derived one. */
+export const MIN_BACKUP_PASSWORD = 24;
+
 /**
  * The one-shot migrate job: with the MySQL admin account it creates the database, applies every
  * migration, creates the restricted runtime accounts and grants them table privileges. Idempotent,
@@ -60,6 +80,25 @@ export async function runMigrate(
     accountsFor(readMysqlSecret(env)),
     log,
   );
+  // Optional: the account the `backup` container signs in with. Without a password none is created.
+  const backupPassword = env.OPSLOG_BACKUP_PASSWORD;
+  if (backupPassword) {
+    if (backupPassword.length < MIN_BACKUP_PASSWORD)
+      throw new Error(`OPSLOG_BACKUP_PASSWORD needs at least ${MIN_BACKUP_PASSWORD} characters`);
+    const connection = await mysql.createConnection({
+      host: endpoint.host,
+      port: endpoint.port,
+      user: env.OPSLOG_MYSQL_ADMIN_USER?.trim() || 'root',
+      password,
+      database: 'mysql',
+    });
+    try {
+      await provisionBackupAccount(connection, backupPassword);
+    } finally {
+      await connection.end();
+    }
+    log('backup account provisioned');
+  }
   log(`migrate done: ${applied.length} steps`);
   return applied;
 }
