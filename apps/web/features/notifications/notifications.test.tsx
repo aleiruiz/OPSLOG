@@ -10,10 +10,12 @@ import {
   waitFor,
   within,
 } from '../../app/test/utils';
+import { AdminPanel } from './AdminPanel';
 import { createFakeNotifications, type FakeNotifications } from './fakePorts';
 import { FollowButton } from './FollowButton';
 import { NotificationsScreen } from './NotificationsScreen';
 import { PreferencesScreen } from './PreferencesScreen';
+import * as barrel from './index';
 
 const withFake = (options: Parameters<typeof createFakeNotifications>[0] = {}) => {
   const notifications = createFakeNotifications(options);
@@ -157,6 +159,47 @@ describe('preferences', () => {
     notifications.failNext('savePreferences', 500);
     click('Guardar preferencias');
     expect(await screen.findByText(/No pudimos guardar/)).toBeInTheDocument();
+  });
+});
+
+describe('preferences e-mail and company rules checkboxes', () => {
+  it('saves the e-mail choice of a kind the company allows by e-mail', async () => {
+    const { api, notifications } = withFake();
+    await renderWithSession(<PreferencesScreen />, { api });
+    const box = await screen.findByLabelText('Correo: Plazo de siniestro');
+    fireEvent.click(box);
+    click('Guardar preferencias');
+    expect(await screen.findByText('Preferencias guardadas.')).toBeInTheDocument();
+    const saved = notifications.calls.find((call) => call.name === 'savePreferences');
+    expect(saved?.args[0]).toMatchObject({
+      items: expect.arrayContaining([{ eventKind: 'incident_sla', inApp: true, email: true }]),
+    });
+  });
+
+  it('toggles an e-mail kind off and on in the company rules before saving', async () => {
+    const { api, notifications } = withFake();
+    await renderWithSession(<AdminPanel />, { api });
+    const box = await screen.findByLabelText('Plazo de siniestro');
+    expect(box).toBeChecked();
+    fireEvent.click(box);
+    expect(box).not.toBeChecked();
+    fireEvent.click(box);
+    expect(box).toBeChecked();
+    fireEvent.click(await screen.findByLabelText('Exportación fallida'));
+    click('Guardar reglas');
+    expect(await screen.findByText('Reglas guardadas.')).toBeInTheDocument();
+    expect(notifications.rules.emailKinds).toEqual(['export_ready', 'incident_sla']);
+  });
+});
+
+describe('barrel', () => {
+  it('exports the notification screens and widgets', () => {
+    expect(Object.keys(barrel).sort()).toEqual([
+      'FollowButton',
+      'NotificationBell',
+      'NotificationsScreen',
+      'PreferencesScreen',
+    ]);
   });
 });
 
