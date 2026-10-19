@@ -12,6 +12,7 @@ Paquete `MVP-OPS-M5-20261019`, PR 1. Contexto y alcance: ADR-0016 §3 (etapa 0: 
 | `restore/fingerprint.sh`   | Conteo y `CHECKSUM TABLE` por tabla (TSV ordenado). Sirve para tomar la huella de la fuente y compararla con la restaurada.                                             |
 | `restore/temp-instance.sh` | Instancia MySQL desechable: contenedor `mysql:8.4` (`docker`) o un `mysqld` aparte del anfitrión (`local`, el del simulacro).                                           |
 | `restore/smoke.mjs`        | Arranca la API contra la copia restaurada en modo solo lectura y comprueba que sirve. Exige `--temporary` y un host de loopback: se niega a correr contra la principal. |
+| `tenant-export/`           | Exportación completa de una empresa: JSON y CSV por entidad y archivos liberados en un `.opsx` cifrado con manifiesto de sumas (NFR-B5). Ver más abajo.                 |
 | `lib/common.sh`            | Utilidades compartidas (registro JSON, sumas SHA-256).                                                                                                                  |
 
 El simulacro y las pruebas de los scripts están en `tests/recovery` (`pnpm ops:drill`).
@@ -94,3 +95,7 @@ Después, nuevo dump inmediato (`backup.sh dump`): el servidor restaurado tiene 
 `pnpm ops:drill` (local, sin Docker ni AWS; usa un segundo `mysqld` del anfitrión, mysqldump y mysqlbinlog; no corre en el CI ordinario). Con datos sintéticos: migra dos empresas, escribe marcas con hora, respalda, sigue escribiendo, copia binlogs, sigue escribiendo, mata el servidor y borra su directorio de datos, restaura en una instancia temporal, compara conteo y suma de cada tabla con la fuente, ejecuta el humo y mide RPO y RTO. Después restaura solo la empresa A en una segunda instancia temporal con la principal ya avanzada, copia A a mano y comprueba que la huella de B no cambia. Cifras y limitaciones: `docs/tasks/MVP-OPS-M5-20261019.md`.
 
 Variables del simulacro: `OPSLOG_DRILL_FILLER_ROWS` (filas de relleno por empresa, 50000), `OPSLOG_DRILL_LOSS_WINDOW_MS` (escritura posterior a la copia, 4000), `OPSLOG_DRILL_OUT` (ruta de un JSON con las cifras).
+
+## Exportación completa de empresa
+
+`tenant-export` (PR 2): `export`, `verify` y `extract`. Lee con la cuenta `opslog_backup` (solo SELECT) dentro de una instantánea consistente, descifra los datos personales con el cifrador de la empresa (`OPSLOG_PII_MASTER_KEY`) y escribe un único archivo `opslog-export-<fecha>-<id>.opsx`: contenedor propio (entradas con marco, gzip, AES-256-GCM por fragmentos con clave derivada de `OPSLOG_EXPORT_KEY`) que detecta clave errónea, truncado y reordenación. Contiene `manifest.json` con la suma de cada entrada, JSON y CSV por entidad y los objetos liberados verificados por SHA-256; omite secretos y tokens. Una tabla sin clasificar en el catálogo detiene la exportación. Junto al archivo escribe `export-audit.jsonl` (eventos de auditoría con referencias opacas) y un resumen sin datos personales. Procedimiento operativo: `docs/runbooks/backup-restore.md` §4. El paquete se construye con `node infra/operations/tenant-export/build.mjs` y la imagen `api` lo trae en `./tenant-export`.

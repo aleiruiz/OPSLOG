@@ -1,0 +1,91 @@
+{
+  "version": 1,
+  "k6Image": "grafana/k6:1.0.0",
+  "vus": 50,
+  "thinkMs": 1000,
+  "scenarios": [
+    {
+      "id": "list_vehicles",
+      "label": "Lista de vehículos (100 filas)",
+      "requirement": "NFR-P1 / SPECS §9.3: lecturas p95 <= 500 ms",
+      "budgetMs": 500,
+      "method": "GET",
+      "path": "/api/vehicles?limit=100",
+      "expectStatus": 200
+    },
+    {
+      "id": "detail_vehicle",
+      "label": "Detalle de vehículo",
+      "requirement": "NFR-P1 / SPECS §9.3: lecturas p95 <= 500 ms",
+      "budgetMs": 500,
+      "method": "GET",
+      "path": "/api/vehicles/{vehicleId}",
+      "expectStatus": 200
+    },
+    {
+      "id": "list_employees",
+      "label": "Lista de empleados (100 filas)",
+      "requirement": "NFR-P1 / SPECS §9.3: lecturas p95 <= 500 ms",
+      "budgetMs": 500,
+      "method": "GET",
+      "path": "/api/employees?limit=100",
+      "expectStatus": 200
+    },
+    {
+      "id": "write_vehicle",
+      "label": "Alta de vehículo (escritura simple)",
+      "requirement": "NFR-P2 / SPECS §9.3: escrituras p95 <= 800 ms",
+      "budgetMs": 800,
+      "method": "POST",
+      "path": "/api/vehicles",
+      "body": {
+        "economicNumber": "LD{run}-{vu}-{iter}",
+        "plate": "LD{run}{vu}{iter}",
+        "vin": null,
+        "make": "Toyota",
+        "model": "Hilux",
+        "year": 2022,
+        "areaId": "{areaId}",
+        "odometerKm": 10
+      },
+      "expectStatus": 201
+    },
+    {
+      "id": "dashboard",
+      "label": "Dashboard de Inicio",
+      "requirement": "NFR-P1 / SPECS §9.3: dashboard p95 <= 1 s",
+      "budgetMs": 1000,
+      "method": "GET",
+      "path": "/api/v1/dashboard",
+      "expectStatus": 200
+    },
+    {
+      "id": "search_prefix",
+      "label": "Búsqueda global por prefijo de placa",
+      "requirement": "NFR-P4 / SPECS §9.3: búsqueda p95 <= 700 ms",
+      "budgetMs": 700,
+      "method": "GET",
+      "path": "/api/v1/search?q={platePrefix}",
+      "expectStatus": 200
+    },
+    {
+      "id": "search_contains",
+      "label": "Búsqueda global «contiene»",
+      "requirement": "NFR-P4 / SPECS §9.3: búsqueda p95 <= 700 ms",
+      "budgetMs": 700,
+      "method": "GET",
+      "path": "/api/v1/search?q={plateInfix}",
+      "expectStatus": 200
+    },
+    {
+      "id": "export_small",
+      "label": "Exportación pequeña (CSV del inventario de vehículos)",
+      "requirement": "SPECS §9.3: exportación <= 5.000 filas en <= 10 s",
+      "budgetMs": 10000,
+      "method": "POST",
+      "path": "/api/v1/reports/vehicle_inventory/exports",
+      "body": { "format": "csv" },
+      "expectStatus": 201
+    }
+  ]
+}

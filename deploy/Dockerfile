@@ -19,13 +19,15 @@ RUN --mount=type=secret,id=extra-ca,required=false \
 ARG VITE_OIDC_DOMAIN=""
 ARG VITE_OIDC_CLIENT_ID=""
 ENV VITE_OIDC_DOMAIN=$VITE_OIDC_DOMAIN VITE_OIDC_CLIENT_ID=$VITE_OIDC_CLIENT_ID
-RUN node apps/api/server/build.mjs && node apps/web/build.mjs && node apps/landing/build.mjs
+RUN node apps/api/server/build.mjs && node infra/operations/tenant-export/build.mjs && node apps/web/build.mjs && node apps/landing/build.mjs
 
 FROM node:22-bookworm-slim AS api
 WORKDIR /app
 COPY --from=build /repo/apps/api/server/bundle/server.mjs ./server.mjs
 # The one-shot job of docker-compose.yml (`migrate` service) runs the same image: node migrate.mjs.
 COPY --from=build /repo/apps/api/server/bundle/migrate.mjs ./migrate.mjs
+# Administration tool, not started with the server: the company export (docs/runbooks/backup-restore.md).
+COPY --from=build /repo/infra/operations/tenant-export/bundle ./tenant-export
 USER node
 ENV PORT=8080
 EXPOSE 8080

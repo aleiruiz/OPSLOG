@@ -1,0 +1,39 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../..",
+    "outDir": "dist",
+    "types": ["node", "vitest/globals"],
+    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"],
+  "references": [
+    {
+      "path": "../../../apps/api/composition"
+    },
+    {
+      "path": "../../../packages/platform/pii"
+    },
+    {
+      "path": "../../../packages/platform/audit"
+    },
+    {
+      "path": "../../../packages/platform/exports"
+    },
+    {
+      "path": "../../../packages/platform/files"
+    },
+    {
+      "path": "../../../packages/platform/observability"
+    },
+    {
+      "path": "../../../apps/api/bff"
+    },
+    {
+      "path": "../../../apps/api/server"
+    },
+    {
+      "path": "../../../packages/contracts"
+    }
+  ]
+}
