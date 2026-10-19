@@ -201,6 +201,8 @@ importers:
 
   packages/domain/alerts: {}
 
+  packages/domain/analytics: {}
+
   packages/domain/areas: {}
 
   packages/domain/assignments: {}

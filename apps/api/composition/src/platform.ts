@@ -14,8 +14,10 @@ import {
   type PersistedAuditEvent,
 } from '../../../../packages/platform/audit/src/index.js';
 import { isDurableAuditAdapterSet } from './platform/durable-audit.js';
-import { hasPersistentBusinessStores } from './platform/persistence-flags.js';
-import { TypeOrmFileSagaStore } from '../../../../packages/persistence/files/src/index.js';
+import {
+  assertDurableFileStores,
+  hasPersistentBusinessStores,
+} from './platform/persistence-flags.js';
 import type { VerifiedExternalPrincipal } from '../../../../packages/platform/auth/src/index.js';
 import {
   InMemoryOutboxStore,
@@ -157,13 +159,7 @@ export class Platform {
       !isDurableAuditAdapterSet(adapters.audit, adapters.auditRelay, adapters.outbox)
     )
       throw new Error('persistent stores require durable tenant-scoped audit, relay, and outbox');
-    if (
-      adapters.records instanceof TypeOrmFileSagaStore &&
-      (adapters.fileSagaJournal !== adapters.records || adapters.scanQueue !== adapters.records)
-    )
-      throw new Error(
-        'persistent file stores require one durable file saga store for records, queue and journal',
-      );
+    assertDurableFileStores(adapters);
     this.audit = adapters.audit ?? new InMemoryAuditStore();
     this.outbox = adapters.outbox ?? new InMemoryOutboxStore(() => this.now().getTime());
     this.records = adapters.records ?? new InMemoryFileRecordStore();

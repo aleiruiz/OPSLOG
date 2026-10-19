@@ -1,4 +1,5 @@
 import type { PlatformAdapters } from './types.js';
+import { TypeOrmFileSagaStore } from '../../../../../packages/persistence/files/src/index.js';
 import { TypeOrmAreaStore } from '../../../../../packages/persistence/areas/src/index.js';
 import { TypeOrmAssignmentStore } from '../../../../../packages/persistence/assignments/src/index.js';
 import { TypeOrmDocumentStore } from '../../../../../packages/persistence/documents/src/index.js';
@@ -33,4 +34,15 @@ export function hasPersistentBusinessStores(adapters: PlatformAdapters): boolean
       (adapters.maintenanceOrders !== undefined &&
         !(adapters.maintenanceOrders instanceof InMemoryWorkOrderStore)),
   ].some(Boolean);
+}
+
+/** A persistent file saga store must be the one store behind the records, the queue and the journal. */
+export function assertDurableFileStores(adapters: PlatformAdapters): void {
+  if (
+    adapters.records instanceof TypeOrmFileSagaStore &&
+    (adapters.fileSagaJournal !== adapters.records || adapters.scanQueue !== adapters.records)
+  )
+    throw new Error(
+      'persistent file stores require one durable file saga store for records, queue and journal',
+    );
 }
