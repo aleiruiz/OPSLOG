@@ -117,5 +117,11 @@ describe('sealed archive', () => {
     expect(parseArchiveKey(randomBytes(32).toString('base64')).length).toBe(32);
     expect(() => parseArchiveKey(undefined)).toThrow(ExportError);
     expect(() => parseArchiveKey(randomBytes(16).toString('base64'))).toThrow(ExportError);
+    // Exactly 32 bytes, and canonical base64: padding stripped or a longer key is refused.
+    expect(() => parseArchiveKey(randomBytes(33).toString('base64'))).toThrow(ExportError);
+    const good = randomBytes(32).toString('base64');
+    expect(() => parseArchiveKey(good.replace(/=+$/, ''))).toThrow(ExportError);
+    expect(() => parseArchiveKey(`${good.slice(0, 10)}!${good.slice(11)}`)).toThrow(ExportError);
+    expect(parseArchiveKey(` ${good}\n`).toString('base64')).toBe(good);
   });
 });

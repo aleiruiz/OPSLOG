@@ -1,7 +1,8 @@
 // Bundles the company export tool (workspace code and its npm dependencies) into one file:
 //   node infra/operations/tenant-export/build.mjs  ->  infra/operations/tenant-export/bundle/tenant-export.mjs
 // The api image carries it next to server.mjs, so it runs inside the compose network:
-//   docker compose exec -e ... api node tenant-export.mjs export --out /tmp/out --operator <handle> --reason <ticket>
+//   docker compose exec -e OPSLOG_EXPORT_KEY -e OPSLOG_BACKUP_PASSWORD api node tenant-export/tenant-export.mjs export --out /tmp/out --operator <handle> --reason <ticket>
+// (variables without a value: they come from the shell environment, never from the command line)
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';

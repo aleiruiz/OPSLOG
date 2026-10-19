@@ -29,10 +29,13 @@ const FRAME_END = 3;
 const MAX_FRAME = 1 << 20;
 const PATH = /^[A-Za-z0-9_][A-Za-z0-9_.-]*(?:\/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$/;
 
-/** Parses the operator's key: base64 of at least 32 bytes. */
+/** Parses the operator's key: canonical base64 of exactly 32 bytes (`openssl rand -base64 32`). */
 export function parseArchiveKey(value: string | undefined): Buffer {
-  const key = value ? Buffer.from(value.trim(), 'base64') : Buffer.alloc(0);
-  if (key.length < 32) throw new ExportError('missing_setting');
+  const text = value?.trim() ?? '';
+  const key = Buffer.from(text, 'base64');
+  // Canonical base64 only (a typo must not silently become a different key) and exactly 32 bytes.
+  if (key.length !== 32 || key.toString('base64') !== text)
+    throw new ExportError('missing_setting');
   return key;
 }
 
@@ -263,14 +266,12 @@ export type ArchiveEvent =
 export async function* readArchive(
   path: string,
   operatorKey: Buffer,
+  observe?: (fileChunk: Buffer) => void,
 ): AsyncGenerator<ArchiveEvent> {
+  const source = createReadStream(path);
+  if (observe) source.on('data', (chunk) => observe(chunk as Buffer));
   // `pipeline` destroys the last stage with the first error, so the loop below rethrows it.
-  const gunzip = pipelineStreams(
-    createReadStream(path),
-    new Opener(operatorKey),
-    createGunzip(),
-    () => undefined,
-  );
+  const gunzip = pipelineStreams(source, new Opener(operatorKey), createGunzip(), () => undefined);
   let buffer = Buffer.alloc(0);
   let open = false;
   try {

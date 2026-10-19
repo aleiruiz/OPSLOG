@@ -6,12 +6,12 @@ Objetivos de SPECS §9.3: RPO ≤ 15 min, RTO ≤ 4 h. Diseño: dump diario más
 
 ## 1. Qué hay que proteger
 
-| Elemento                                                                      | Dónde                                               | Nota                                                         |
-| ----------------------------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------ |
-| Dumps y binlogs                                                               | volumen `opslog-backups`                            | mismo VPS que la base: no protege de perder el VPS           |
-| `OPSLOG_PII_MASTER_KEY`                                                       | secretos de Coolify **y** gestor de secretos aparte | sin ella, los datos personales restaurados no se pueden leer |
-| `OPSLOG_MYSQL_SECRET`, `OPSLOG_MYSQL_ROOT_PASSWORD`, `OPSLOG_BACKUP_PASSWORD` | gestor de secretos                                  |                                                              |
-| `OPSLOG_EXPORT_KEY`                                                           | quien ejecuta las exportaciones, nunca en el VPS    | cifra los archivos de exportación                            |
+| Elemento                                                                      | Dónde                                                  | Nota                                                               |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------ |
+| Dumps y binlogs                                                               | volumen `opslog-backups`                               | mismo VPS que la base: no protege de perder el VPS                 |
+| `OPSLOG_PII_MASTER_KEY`                                                       | secretos de Coolify **y** gestor de secretos aparte    | sin ella, los datos personales restaurados no se pueden leer       |
+| `OPSLOG_MYSQL_SECRET`, `OPSLOG_MYSQL_ROOT_PASSWORD`, `OPSLOG_BACKUP_PASSWORD` | gestor de secretos                                     |                                                                    |
+| `OPSLOG_EXPORT_KEY`                                                           | solo en el entorno del shell mientras corre el comando | cifra los archivos de exportación; no va en argumentos ni en disco |
 
 Una copia fuera del host (por ejemplo un bucket S3 con prefijo e IAM nuevos) es decisión del propietario y no está hecha: hoy perder el VPS es perder datos y copias a la vez.
 
@@ -57,24 +57,49 @@ Bajo demanda y al terminar el contrato. Produce un archivo `.opsx` con JSON y CS
 
 Autorización: el responsable aprueba por escrito con un identificador de ticket. El operador es una persona nombrada (no una cuenta compartida).
 
-1. Generar la clave del archivo, fuera del VPS, y guardarla en el gestor de secretos del operador: `openssl rand -base64 32`. Hace falta para exportar y para verificar o extraer. Perderla vuelve inservible el archivo.
-2. Ejecutar dentro de la imagen de `api` (lleva el paquete en `./tenant-export`). Las variables del compose ya dan host, base y clave de PII; se añaden la contraseña de respaldo y la clave del archivo:
+**Paso 1. Clave del archivo.** Generarla fuera del VPS y guardarla en el gestor de secretos del operador: `openssl rand -base64 32` (base64 canónico de exactamente 32 bytes; otra forma se rechaza). Hace falta para exportar y para verificar o extraer. Perderla vuelve inservible el archivo.
+
+**Paso 2. Exportar.** Se ejecuta dentro de la imagen de `api` (lleva el paquete en `./tenant-export`). Las variables del compose ya dan host, base y clave de PII. La clave del archivo y la contraseña de respaldo **no se escriben en la línea de comandos**: `-e NOMBRE` sin valor las toma del entorno del shell, de modo que no aparecen en los argumentos del proceso (`ps`, historial). Cargarlas en el shell sin eco, solo mientras corre el comando:
 
 ```bash
-docker compose exec -T \
-  -e OPSLOG_EXPORT_KEY="$OPSLOG_EXPORT_KEY" \
-  -e OPSLOG_BACKUP_PASSWORD="$OPSLOG_BACKUP_PASSWORD" \
+read -rs OPSLOG_EXPORT_KEY && read -rs OPSLOG_BACKUP_PASSWORD && export OPSLOG_EXPORT_KEY OPSLOG_BACKUP_PASSWORD
+docker compose exec api mkdir -p /tmp/export
+docker compose exec -T -e OPSLOG_EXPORT_KEY -e OPSLOG_BACKUP_PASSWORD \
   api node tenant-export/tenant-export.mjs export \
   --out /tmp/export --operator <identificador-operador> --reason <ticket>
+echo "salida=$?"
+unset OPSLOG_EXPORT_KEY OPSLOG_BACKUP_PASSWORD
 ```
 
-Antes, `docker compose exec api mkdir -p /tmp/export`. Se lee con la cuenta `opslog_backup` (solo SELECT) dentro de una instantánea consistente. Con `OPSLOG_OBJECT_STORAGE=s3` se incluyen los archivos liberados y verificados por SHA-256; con `memory` el archivo no contiene objetos y el resumen lo dice. 3. La salida son líneas JSON con la ruta del archivo, su SHA-256 y un resumen **sin datos personales**. Código de salida 0 = completo; 1 = incompleto o con error (un objeto faltante o corrupto hace la exportación incompleta; no se entrega). 4. Verificar antes de entregar, en la máquina del operador con la clave:
+Se lee con la cuenta `opslog_backup` (solo SELECT) dentro de una instantánea consistente. Con `OPSLOG_OBJECT_STORAGE=s3` se incluyen los archivos liberados y verificados por SHA-256; con `memory` el archivo no contiene objetos y el resumen lo dice.
+
+**Paso 3. Resultado.** La salida son líneas JSON con la ruta del archivo, su SHA-256 y un resumen **sin datos personales**. Código de salida: **0** = completa; **3** = **incompleta** (un objeto faltante o corrupto; el archivo existe pero no se entrega como exportación completa: corregir la causa y repetir); **1** = error (no queda archivo); **2** = argumentos incorrectos.
+
+**Paso 4. Sacar del contenedor, antes de borrar nada.** Copiar el archivo, su resumen y la auditoría (`export-audit.jsonl`, que es la única copia de la auditoría de la ejecución):
 
 ```bash
-OPSLOG_EXPORT_KEY=... node tenant-export.mjs verify --archive opslog-export-<fecha>-<id>.opsx
+docker compose cp api:/tmp/export ./export-<ticket>
+ls export-<ticket>   # opslog-export-<fecha>-<id>.opsx, .summary.json y export-audit.jsonl
 ```
 
-`verify` descifra, comprueba cada suma del manifiesto, el conteo de filas contra el manifiesto y que no haya entradas sin listar. Una clave equivocada, un archivo truncado o reordenado se rechazan. 5. Sacar el archivo del contenedor (`docker compose cp api:/tmp/export/<archivo> .`), transferirlo por un canal acordado con el cliente y **entregar la clave por un canal distinto**. Borrar `/tmp/export` del contenedor. 6. Auditoría: la ejecución deja `export-audit.jsonl` junto al archivo (eventos iniciado, completado, incompleto o fallido, con referencias opacas del operador y del ticket, sin datos personales). Conservarlo con el ticket. 7. `extract --archive ... --out <directorio nuevo>` descomprime a archivos planos con datos personales en claro: solo en una máquina de confianza, con permisos mínimos y borrado al terminar.
+Solo con los tres archivos copiados y el SHA-256 coincidente (`sha256sum` del `.opsx` contra el de la salida), borrar el directorio del contenedor: `docker compose exec api rm -rf /tmp/export`.
+
+**Paso 5. Verificar antes de entregar**, en la máquina del operador. `verify` necesita el programa: copiarlo de la imagen y ejecutarlo con la clave en el entorno:
+
+```bash
+docker compose cp api:/app/tenant-export ./tenant-export
+read -rs OPSLOG_EXPORT_KEY && export OPSLOG_EXPORT_KEY
+node tenant-export/tenant-export.mjs verify --archive export-<ticket>/opslog-export-<fecha>-<id>.opsx
+unset OPSLOG_EXPORT_KEY
+```
+
+`verify` descifra, comprueba cada suma del manifiesto, el conteo de filas contra el manifiesto y que no haya entradas sin listar. Una clave equivocada, un archivo truncado o reordenado se rechazan.
+
+**Paso 6. Entrega.** Transferir el archivo por un canal acordado con el cliente y **entregar la clave por un canal distinto**.
+
+**Paso 7. Auditoría.** `export-audit.jsonl` recoge los eventos iniciado, completado, incompleto o fallido (con referencias opacas del operador y del ticket, sin datos personales). Conservarlo con el ticket.
+
+**Paso 8. Extraer (opcional).** `extract --archive ... --out <directorio nuevo>` descomprime a archivos planos con datos personales en claro: solo en una máquina de confianza, con permisos mínimos y borrado al terminar. Verifica el archivo y exige que el archivo extraído sea el mismo que se verificó.
 
 Exclusiones por diseño: secretos de webhooks sellados, credenciales y tokens no se exportan. El formato propio del contenedor es una desviación documentada en el paquete (no es ZIP).
 

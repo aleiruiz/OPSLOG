@@ -54,6 +54,9 @@ const stamp = (date: Date): string =>
     .replace(/[-:]/g, '')
     .replace(/\.\d+Z$/, 'Z');
 
+/** Audit subject when the company could not be resolved and the operator named none. */
+const UNRESOLVED_TENANT = 'unresolved';
+
 async function resolveTenant(request: ExportRequest): Promise<{ id: string; name: string }> {
   const company = await request.source.singleCompany();
   if (request.tenantId !== undefined) {
@@ -87,20 +90,33 @@ export async function runExport(request: ExportRequest): Promise<ExportResult> {
   const handles = requireHandles(request);
   const now = request.now ?? (() => new Date());
   const startedAt = now();
-  const tenant = await resolveTenant(request);
+  let tenant: { id: string; name: string };
+  try {
+    tenant = await resolveTenant(request);
+  } catch (error) {
+    // No company to name: the failure is still audited, under the id the operator asked for (if any).
+    const code = error instanceof ExportError ? error.code : 'source_unavailable';
+    new ExportAuditTrail(
+      request.outDir,
+      request.tenantId ?? UNRESOLVED_TENANT,
+      handles,
+      now,
+    ).record('tenant.export.failed', { code });
+    throw error instanceof ExportError ? error : new ExportError('source_unavailable');
+  }
   const audit = new ExportAuditTrail(request.outDir, tenant.id, handles, now);
   const log = request.logger.child({ companyRef: opaqueRef('c', tenant.id) });
   const base = `opslog-export-${stamp(startedAt)}-${randomBytes(3).toString('hex')}`;
   const archivePath = join(request.outDir, `${base}.opsx`);
   const summaryPath = join(request.outDir, `${base}.summary.json`);
 
-  const info = await request.source.info();
-  const { exported, excluded } = classify(await request.source.tables());
-  audit.record('tenant.export.started');
-  log.info('tenant_export_started', { count: exported.length });
-
-  const writer = await ArchiveWriter.create(archivePath, request.archiveKey);
+  let writer: ArchiveWriter | undefined;
   try {
+    audit.record('tenant.export.started');
+    const info = await request.source.info();
+    const { exported, excluded } = classify(await request.source.tables());
+    log.info('tenant_export_started', { count: exported.length });
+    writer = await ArchiveWriter.create(archivePath, request.archiveKey);
     const entities: EntityRecord[] = [];
     const released: FileRecord[] = [];
     let notReleased = 0;
@@ -179,7 +195,7 @@ export async function runExport(request: ExportRequest): Promise<ExportResult> {
     });
     return { archivePath, summaryPath, manifest, archiveSha256: sealed.sha256 };
   } catch (error) {
-    writer.abort();
+    writer?.abort();
     rmSync(archivePath, { force: true });
     const code = error instanceof ExportError ? error.code : 'source_unavailable';
     audit.record('tenant.export.failed', { code });

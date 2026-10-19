@@ -176,6 +176,7 @@ describe('runExport', () => {
       rows: 6,
       objects: 1,
       complete: true,
+      archiveSha256: result.archiveSha256,
     });
   });
 
@@ -285,6 +286,9 @@ describe('runExport', () => {
       code: 'unclassified_table',
     });
     expect(readdirSync(dir).filter((f) => f.endsWith('.opsx'))).toEqual([]);
+    const trail = readFileSync(join(dir, AUDIT_FILE), 'utf8');
+    expect(trail).toContain('tenant.export.failed');
+    expect(trail).toContain('unclassified_table');
   });
 
   it('deletes the partial archive and audits the failure when a value cannot be opened', async () => {
@@ -307,6 +311,14 @@ describe('runExport', () => {
     await expect(runExport({ ...base, tenantId: OTHER_TENANT })).rejects.toMatchObject({
       code: 'tenant_unresolved',
     });
+    // Both refusals are audited, under the id the operator asked for or a fixed placeholder.
+    const failures = readFileSync(join(dir, AUDIT_FILE), 'utf8')
+      .split('\n')
+      .filter(
+        (line) => line.includes('tenant.export.failed') && line.includes('tenant_unresolved'),
+      );
+    expect(failures.length).toBe(2);
+    expect(failures.join('\n')).toContain('unresolved');
     await expect(runExport({ ...base, tenantId: TENANT })).resolves.toBeDefined();
     await expect(
       runExport({ ...base, operatorRef: 'Ana Perez <ana@example.test>' }),

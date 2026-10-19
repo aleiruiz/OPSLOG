@@ -42,6 +42,9 @@ export async function runK6(run: K6Run): Promise<LoadSummary> {
             '--rm',
             '--network',
             'host',
+            // The summary directory is owned by this user: the container writes into it as the same one.
+            '--user',
+            `${process.getuid?.() ?? 0}:${process.getgid?.() ?? 0}`,
             '-v',
             `${K6_DIR}:/scripts:ro`,
             '-v',

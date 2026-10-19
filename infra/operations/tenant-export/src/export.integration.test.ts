@@ -15,7 +15,7 @@ import { openPersistentAdapters, runMigrate } from '../../../../apps/api/server/
 import { InMemoryObjectStorage } from '../../../../packages/platform/files/src/index.js';
 import { createLogger } from '../../../../packages/platform/observability/src/index.js';
 import { EnvelopePiiCipher, LocalDevKms } from '../../../../packages/platform/pii/src/index.js';
-import { CATALOG, dispositionOf } from './catalog.js';
+import { CATALOG, companyColumn, dispositionOf } from './catalog.js';
 import { runExport } from './export.js';
 import { MysqlSource } from './mysql-source.js';
 import { storageReader } from './object-reader.js';
@@ -33,6 +33,7 @@ if (!adminUrlValue && process.env.CI)
   );
 const suite = adminUrlValue ? describe : describe.skip;
 
+const OTHER = 'other-company-zz';
 const TAG = `x${randomBytes(3).toString('hex')}`;
 const BACKUP_USER = `opslog_backup_${TAG}`;
 const BACKUP_PASSWORD = randomBytes(24).toString('base64url');
@@ -148,7 +149,67 @@ suite('company export on MySQL', () => {
       bytes: new Uint8Array([...JPEG, 0, 0]),
     });
     await world.platform.runtime.runAuditRelay();
+    await seedOtherCompany();
   }, 240_000);
+
+  /**
+   * Rows of a second company in the same database (the export must never read them): the first row
+   * of each table is cloned with the given overrides. Written with the administrator, as the app
+   * itself allows one company per database.
+   */
+  async function cloneRow(table: string, overrides: Record<string, unknown>): Promise<void> {
+    const [rows] = await admin.query(
+      `SELECT * FROM ${identifier(database)}.${identifier(table)} LIMIT 1`,
+    );
+    const row = (rows as Record<string, unknown>[])[0];
+    if (!row) throw new Error(`no row to clone in ${table}`);
+    await admin.query(`INSERT INTO ${identifier(database)}.${identifier(table)} SET ?`, [
+      { ...row, ...overrides },
+    ]);
+  }
+
+  async function seedOtherCompany(): Promise<void> {
+    await cloneRow('opslog_areas', {
+      company_id: OTHER,
+      name: 'Flota Ajena',
+      name_key: 'flota ajena',
+    });
+    const [areas] = await admin.query(
+      `SELECT id FROM ${identifier(database)}.opslog_areas WHERE company_id = ?`,
+      [OTHER],
+    );
+    const areaId = (areas as { id: string }[])[0]?.id as string;
+    for (const n of [1, 2])
+      await cloneRow('opslog_vehicles', {
+        company_id: OTHER,
+        id: `other-veh-${n}`,
+        economic_number: `OTH-00${n}`,
+        economic_number_key: `OTH-00${n}`,
+        plate: `OTH00${n}`,
+        plate_key: `OTH00${n}`,
+        vin: null,
+        area_id: areaId,
+      });
+    await cloneRow('opslog_employees', {
+      company_id: OTHER,
+      id: 'other-emp-1',
+      first_name: 'Zoe',
+      last_name: 'Ajenazz',
+      name_key: 'ajenazz zoe',
+      employee_number: 'OTH-E1',
+      employee_number_key: 'OTH-E1',
+      national_id_idx: 'a'.repeat(64),
+      email_idx: 'b'.repeat(64),
+      license_number_idx: 'c'.repeat(64),
+      area_id: areaId,
+    });
+    await cloneRow('opslog_identity_identities', { id: 'other-identity-1' });
+    await cloneRow('opslog_identity_memberships', {
+      tenant_id: OTHER,
+      identity_id: 'other-identity-1',
+      id: 'other-membership-1',
+    });
+  }
 
   afterAll(async () => {
     world?.dispose();
@@ -169,6 +230,26 @@ suite('company export on MySQL', () => {
     for (const { username } of users) await admin.query(`DROP USER IF EXISTS '${username}'@'%'`);
     await admin.end();
   }, 60_000);
+
+  const companyCount = async (table: string, tenantId: string): Promise<number> => {
+    const spec = dispositionOf(table);
+    if (spec?.kind !== 'export') throw new Error(`${table} is not exported`);
+    const [cols] = await admin.query(
+      'SELECT COLUMN_NAME AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?',
+      [database, table],
+    );
+    const columns = (cols as { c: string }[]).map((x) => x.c);
+    const from = `${identifier(database)}.${identifier(table)}`;
+    let where: string;
+    if (spec.scope === 'tenant_record') where = '`id` = ?';
+    else if (spec.scope === 'identity_of_company')
+      where = `${identifier(columns.includes('identity_id') ? 'identity_id' : 'id')} IN (SELECT identity_id FROM ${identifier(database)}.opslog_identity_memberships WHERE tenant_id = ?)`;
+    else where = `${identifier(companyColumn(columns) as string)} = ?`;
+    const [rows] = await admin.query(`SELECT COUNT(*) AS n FROM ${from} WHERE ${where}`, [
+      tenantId,
+    ]);
+    return Number((rows as { n: number }[])[0]?.n);
+  };
 
   const exportCompany = async () => {
     const source = await MysqlSource.open({
@@ -225,13 +306,12 @@ suite('company export on MySQL', () => {
     const report = await verifyArchive(result.archivePath, archiveKey);
     expect(report).toMatchObject({ ok: true, complete: true });
 
-    // Re-reading the data gives the counts the database has now (no write happened in between).
-    for (const entity of result.manifest.entities) {
-      const [rows] = await admin.query(
-        `SELECT COUNT(*) AS n FROM ${identifier(database)}.${identifier(entity.table)}`,
+    // Each entity holds the rows of this company and no others: the counts equal a COUNT filtered by
+    // the company (the database also holds rows of a second one).
+    for (const entity of result.manifest.entities)
+      expect(entity.rows, entity.table).toBe(
+        await companyCount(entity.table, result.manifest.tenant.id),
       );
-      expect(entity.rows, entity.table).toBe(Number((rows as { n: number }[])[0]?.n));
-    }
     const counts = new Map(result.manifest.entities.map((e) => [e.table, e.rows]));
     expect(counts.get('opslog_vehicles')).toBe(3);
     expect(counts.get('opslog_employees')).toBe(1);
@@ -276,6 +356,45 @@ suite('company export on MySQL', () => {
     expect(statSync(result.archivePath).mode & 0o077).toBe(0);
     // The sealed archive itself holds none of the clear text.
     expect(readFileSync(result.archivePath).includes('SYNTH-ID-EXPORT')).toBe(false);
+  }, 120_000);
+
+  it('leaves out every row of another company in the same database', async () => {
+    const result = await exportCompany();
+    const plain = join(out, `isolation-${randomBytes(3).toString('hex')}`);
+    await extractArchive(result.archivePath, archiveKey, plain);
+    const files = readdirSync(join(plain, 'entities'));
+    expect(files.length).toBeGreaterThan(0);
+    for (const file of files) {
+      const text = readFileSync(join(plain, 'entities', file), 'utf8');
+      for (const marker of [
+        OTHER,
+        'other-veh',
+        'other-emp',
+        'other-identity',
+        'other-membership',
+        'OTH00',
+        'Ajenazz',
+        'Flota Ajena',
+      ])
+        expect(text.includes(marker), `${file} ${marker}`).toBe(false);
+    }
+    const counts = new Map(result.manifest.entities.map((e) => [e.table, e.rows]));
+    // The second company does exist in the database; the unfiltered totals are larger.
+    for (const [table, expected] of [
+      ['opslog_vehicles', 3],
+      ['opslog_employees', 1],
+      ['opslog_identity_memberships', 1],
+    ] as const) {
+      const [all] = await admin.query(
+        `SELECT COUNT(*) AS n FROM ${identifier(database)}.${identifier(table)}`,
+      );
+      expect(Number((all as { n: number }[])[0]?.n), table).toBeGreaterThan(expected);
+      expect(counts.get(table), table).toBe(expected);
+    }
+    const identities = JSON.parse(
+      readFileSync(join(plain, 'entities/opslog_identity_identities.json'), 'utf8'),
+    ) as { id: string }[];
+    expect(identities.map((i) => i.id)).not.toContain('other-identity-1');
   }, 120_000);
 
   it('cannot write: the backup account is read-only', async () => {

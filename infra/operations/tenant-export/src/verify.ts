@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { chmodSync, createWriteStream, mkdirSync, readdirSync, existsSync } from 'node:fs';
+import { chmodSync, createWriteStream, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { once } from 'node:events';
 import { FORMAT, MANIFEST_PATH, type Manifest } from './manifest.js';
@@ -14,6 +14,8 @@ export interface VerifyReport {
   readonly rows: number;
   readonly objects: number;
   readonly complete: boolean;
+  /** SHA-256 of the sealed file as read by this pass (extract requires its own pass to match). */
+  readonly archiveSha256?: string;
 }
 
 interface Seen {
@@ -30,7 +32,13 @@ async function scan(
   archive: string,
   key: Buffer,
   sink?: (path: string, chunk: Buffer | undefined) => Promise<void>,
-): Promise<{ seen: Map<string, Seen>; manifest: Manifest | undefined; order: string[] }> {
+): Promise<{
+  seen: Map<string, Seen>;
+  manifest: Manifest | undefined;
+  order: string[];
+  fileSha256: string;
+}> {
+  const fileHash = createHash('sha256');
   const seen = new Map<string, Seen>();
   const order: string[] = [];
   let path = '';
@@ -38,7 +46,7 @@ async function scan(
   let bytes = 0;
   let newlines = 0;
   const manifestChunks: Buffer[] = [];
-  for await (const event of readArchive(archive, key)) {
+  for await (const event of readArchive(archive, key, (chunk) => fileHash.update(chunk))) {
     if (event.type === 'start') {
       path = event.path;
       hash = createHash('sha256');
@@ -62,7 +70,7 @@ async function scan(
   } catch {
     manifest = undefined;
   }
-  return { seen, manifest, order };
+  return { seen, manifest, order, fileSha256: fileHash.digest('hex') };
 }
 
 /**
@@ -72,7 +80,7 @@ async function scan(
  * find the same counts). A wrong key or a damaged file throws `ExportError`.
  */
 export async function verifyArchive(archive: string, key: Buffer): Promise<VerifyReport> {
-  const { seen, manifest, order } = await scan(archive, key);
+  const { seen, manifest, order, fileSha256 } = await scan(archive, key);
   const problems: string[] = [];
   if (!manifest || manifest.format !== FORMAT || order[order.length - 1] !== MANIFEST_PATH) {
     return {
@@ -82,6 +90,7 @@ export async function verifyArchive(archive: string, key: Buffer): Promise<Verif
       rows: 0,
       objects: 0,
       complete: false,
+      archiveSha256: fileSha256,
     };
   }
   const expected = new Map<string, EntryDigest>();
@@ -110,6 +119,7 @@ export async function verifyArchive(archive: string, key: Buffer): Promise<Verif
     rows,
     objects: manifest.objects.included,
     complete: manifest.complete,
+    archiveSha256: fileSha256,
   };
 }
 
@@ -129,7 +139,7 @@ export async function extractArchive(
   mkdirSync(root, { recursive: true, mode: 0o700 });
   chmodSync(root, 0o700);
   let stream: ReturnType<typeof createWriteStream> | undefined;
-  await scan(archive, key, async (path, chunk) => {
+  const second = await scan(archive, key, async (path, chunk) => {
     if (chunk === undefined) {
       if (stream) {
         stream.end();
@@ -146,6 +156,11 @@ export async function extractArchive(
   if (stream) {
     (stream as ReturnType<typeof createWriteStream>).end();
     await once(stream as ReturnType<typeof createWriteStream>, 'close');
+  }
+  // The file verified is the file extracted: a swap between the two passes leaves nothing behind.
+  if (second.fileSha256 !== report.archiveSha256) {
+    rmSync(root, { recursive: true, force: true });
+    throw new ExportError('archive_corrupt');
   }
   return report;
 }
