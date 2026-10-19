@@ -32,6 +32,16 @@ describe('renderCsv', () => {
     }
   });
 
+  it('guards a string in any column, not only the ones declared as text', () => {
+    const lines = text(renderCsv(table([['x', 1, 1.5, '=HYPERLINK("http://x")']])).bytes).split(
+      '\r\n',
+    );
+    expect(lines[1]).toBe('x,1,1.5,"\'=HYPERLINK(""http://x"")"');
+    expect(text(renderCsv(table([['x', 1, 1.5, '2026-10-19']])).bytes)).toContain(
+      ',2026-10-19\r\n',
+    );
+  });
+
   it('drops control characters and handles huge and non-finite numbers', () => {
     const out = text(renderCsv(table([['a\u0000b', 1e21, Number.NaN, '2026-01-01']])).bytes);
     expect(out).toContain('ab,1000000000000000000000,,2026-01-01');

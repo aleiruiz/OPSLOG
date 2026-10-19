@@ -66,6 +66,12 @@ export interface ExportEvent {
 
 export const EXPORT_TTL_DAYS = 7;
 export const DIRECT_MAX_ROWS = 5_000;
+/**
+ * Largest PDF. Measured: 50.000 rows x 10 columns took 35 s and 1,9 GB inside the API process; at
+ * 2.000 rows (about 60 landscape pages) the render stays near a second and tens of MB. CSV and XLSX
+ * keep the 50.000-row ceiling of the engine.
+ */
+export const PDF_MAX_ROWS = 2_000;
 export const DIRECT_BUDGET_MS = 10_000;
 export const LEASE_MS = 2 * 60_000;
 export const MAX_ATTEMPTS = 3;

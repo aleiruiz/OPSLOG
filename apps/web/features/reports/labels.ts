@@ -29,7 +29,8 @@ export const STATUS_VIEW: Readonly<Record<BffExportStatus, { label: string; tone
 export const FAILURE_LABELS: Readonly<Record<BffExportFailure, string>> = {
   permission_revoked: 'Ya no tienes permiso para este reporte.',
   session_ended: 'Tu sesión terminó antes de generar el archivo.',
-  too_many_rows: 'El reporte tiene demasiadas filas. Acota los filtros e inténtalo de nuevo.',
+  too_many_rows:
+    'El reporte tiene demasiadas filas. Acota los filtros o exporta en CSV o XLSX (el PDF admite hasta 2.000 filas).',
   generation_failed: 'No se pudo generar el archivo. Inténtalo de nuevo.',
 };
 

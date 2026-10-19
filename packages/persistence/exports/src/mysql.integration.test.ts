@@ -98,22 +98,29 @@ suite('persistent export jobs on MySQL', () => {
   });
 
   it('hands each queued job to exactly one of two concurrent workers and reclaims a lost lease', async () => {
-    for (let i = 1; i <= 6; i += 1) await store.insert(job(`c${i}`, { actorId: 'claimer' }));
+    // A company of its own, so no job of another test can overlap in time or in the queue.
+    const C = 'tenant-claim';
+    for (let i = 1; i <= 6; i += 1)
+      await store.insert(job(`c${i}`, { tenantId: C, actorId: 'claimer' }));
     const [one, two] = await Promise.all([
-      store.claim(A, T0, 60_000, 4),
-      store.claim(A, T0, 60_000, 4),
+      store.claim(C, T0, 60_000, 4),
+      store.claim(C, T0, 60_000, 4),
     ]);
-    const ids = [...one, ...two].map((j) => j.id).filter((id) => id.startsWith('c'));
+    const ids = [...one, ...two].map((j) => j.id);
+    expect(ids.length).toBeGreaterThanOrEqual(4);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(one.concat(two).every((j) => j.status === 'running' && j.attempts === 1)).toBe(true);
-    const claimed = one.concat(two).find((j) => j.id.startsWith('c')) as ExportJob;
+    expect([...one, ...two].every((j) => j.status === 'running' && j.attempts === 1)).toBe(true);
+    const claimed = one.concat(two)[0] as ExportJob;
     expect(claimed.leaseUntil).toBe(new Date(T0.getTime() + 60_000).toISOString());
+    // The rest is still queued for the next turn; nothing is taken twice.
+    const rest = await store.claim(C, T0, 60_000, 10);
+    expect(new Set([...ids, ...rest.map((j) => j.id)]).size).toBe(6);
     const other = await store.claim(B, T0, 60_000, 10);
     expect(other.map((j) => j.id).sort()).toEqual(['j1', 'k4']);
     expect(other.every((j) => j.tenantId === B)).toBe(true);
     // After the lease the same job is taken again with one more attempt.
     const later = new Date(T0.getTime() + 120_000);
-    const again = await store.claim(A, later, 60_000, 50);
+    const again = await store.claim(C, later, 60_000, 50);
     expect(again.find((j) => j.id === claimed.id)).toMatchObject({
       attempts: 2,
       status: 'running',

@@ -158,4 +158,11 @@ Registrar SHA, MySQL exacto, versiones exactas de ExcelJS y PDFKit, y la matriz 
 - La auditoría solo conserva `attempts` en `data` (lista blanca del almacén): reporte y formato viajan en la acción (`export.completed:<reporte>:<formato>`), el resto vive en el registro del trabajo.
 - Los eventos `export.completed` y `export.failed` se publican en el outbox; hasta que MVP-NOTIFY los consuma, el worker registra un manejador que solo los reconoce (`registerExportEventHandlers`) para que no terminen en dead letter. MVP-NOTIFY debe sustituirlo.
 - Cambiar el rol de una persona cierra sus sesiones: la descarga responde 401 antes de llegar al 403; el 403 con auditoría de la denegación está cubierto en las pruebas del servicio de exportaciones.
+- PDF limitado a `PDF_MAX_ROWS` = 2.000 filas (unas 60 páginas horizontales): con 50.000 filas x 10 columnas el PDF tardó 35 s y casi 1,9 GB dentro del proceso de la API, que también ejecuta el worker. `ExportService.request` y `runClaimed` validan el total antes de renderizar y responden 422 `too_many_rows` (campo `format`) con la sugerencia de acotar filtros o usar CSV/XLSX, que conservan el tope de 50.000 del motor.
+- El trabajo que pierde su arrendamiento y es retomado por otro worker no borra el archivo del otro: el borrado de limpieza solo ocurre si el trabajo sigue siendo el `running` de este intento (`attempts`) y nunca ante `FileError('conflict')`.
+- La entrada «Reportes» del menú exige además `export` (`nav.requires`), de modo que un lector sin `export` no ve el grupo «Análisis»; la prueba de `features/audit` (no editable en este paquete) fija que ese grupo no aparece sin `view_audit`. La ruta `/analisis/reportes` sigue abierta con `view`: el lector ve el catálogo y la vista previa, y puede abrirla por dirección.
 - Acceptance 7 (sin doble conteo) no aplica al PR 1: los reportes de siniestros son del PR 2.
+
+### Notas para el PR 2
+
+- La vista previa vuelve a ejecutar el reporte completo en cada página (el motor carga, filtra y ordena en memoria) y `ExportService.request` lo ejecuta dos veces: una para estimar el tiempo y decidir directo o trabajo, y otra al producir el archivo. El PR 2 debe reutilizar el resultado o paginar en SQL si el rendimiento lo pide.

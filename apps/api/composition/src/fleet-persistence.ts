@@ -171,7 +171,14 @@ export async function openFleetRuntimeStores(
   const searchSource = createSearchRuntimeSource(endpoint, credentials.accounts.search);
   const viewsSource = createSavedViewsRuntimeSource(endpoint, credentials.accounts.views);
   const exportsSource = createExportsRuntimeSource(endpoint, credentials.accounts.exports);
-  sources.push(maintenance.plans, maintenance.orders, incidentSource, searchSource, viewsSource, exportsSource);
+  sources.push(
+    maintenance.plans,
+    maintenance.orders,
+    incidentSource,
+    searchSource,
+    viewsSource,
+    exportsSource,
+  );
   const initialized: FleetDataSource[] = [];
   let auditRuntimeInitialized = false;
   let auditRelayInitialized = false;

@@ -61,7 +61,7 @@ export function actor(
 
 export function harness(
   tenants: Record<string, TenantData> = { A: companyA(), B: companyB() },
-  options: { directMaxRows?: number } = {},
+  options: { directMaxRows?: number; pdfMaxRows?: number } = {},
 ): Harness {
   const sources = new MemorySources(tenants);
   const events: ExportEnvelope[] = [];
@@ -101,6 +101,7 @@ export function harness(
     newId: () => `job-${(ticks += 1)}`,
     clock: () => (clock.elapsed += clock.step),
     ...(options.directMaxRows === undefined ? {} : { directMaxRows: options.directMaxRows }),
+    ...(options.pdfMaxRows === undefined ? {} : { pdfMaxRows: options.pdfMaxRows }),
   });
   grants.set('A:u1', new Set(FULL));
   return { service, store, artifacts, sources, events, audit, clock, grants, renderFailures };

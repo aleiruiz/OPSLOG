@@ -34,3 +34,8 @@
 
 Exportar exige además `export`. Los reportes de mantenimiento, siniestros y transversales y las fichas
 PDF son del PR 2.
+
+## Desvíos registrados
+
+- Navegación: la entrada «Reportes» lleva `nav.requires: 'export'` para que un lector sin `export` no vea el grupo «Análisis» (lo fija `features/audit/audit.test.tsx`, que este paquete no puede editar). La ruta sigue abierta con `view`. Prueba: `reports.test.tsx` y `app/routes.test.ts`.
+- PDF: tope de 2.000 filas (`PDF_MAX_ROWS`), 422 `too_many_rows`. Prueba: `packages/domain/exports/src/service.test.ts`.

@@ -74,7 +74,7 @@ export interface BffRouteTypes
     AuditRouteTypes,
     SearchRouteTypes,
     AnalyticsRouteTypes,
-    SavedViewsRouteTypes {}
+    SavedViewsRouteTypes,
     ReportRouteTypes {}
 
 export type BffRouteId = keyof BffRouteTypes;

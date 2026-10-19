@@ -2,8 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { ReportError } from '../../reports/src/index.js';
 import { companyA } from '../../reports/src/test-support.js';
 import { ExportError } from './errors.js';
+import { PDF_MAX_ROWS } from './types.js';
 import { viewOf } from './service.js';
 import { BASIC, FULL, actor, bigCompany, harness } from './test-support.js';
+
+/** The shape of the files domain's `FileError('conflict')`, which this package does not import. */
+class FileError extends Error {
+  public override readonly name = 'FileError';
+  public constructor(public readonly code: string) {
+    super(code);
+  }
+}
 
 const text = (bytes: Uint8Array): string => Buffer.from(bytes).toString('latin1');
 
@@ -423,6 +432,81 @@ describe('download', () => {
       code: 'invalid_input',
     });
     expect((await h.service.list(actor(FULL), { limit: 1, offset: 0 })).items).toEqual([]);
+  });
+
+  const queue = async (h: ReturnType<typeof harness>) =>
+    (await h.service.request(actor(FULL), { reportId: 'vehicle_inventory', format: 'csv' })).job;
+
+  it('refuses a PDF past the row ceiling before rendering, and still allows CSV and XLSX', async () => {
+    expect(PDF_MAX_ROWS).toBe(2000);
+    const h = harness({ A: companyA() }, { pdfMaxRows: 1 });
+    let error: unknown;
+    await h.service
+      .request(actor(FULL), { reportId: 'people_compliance', format: 'pdf' })
+      .catch((e: unknown) => (error = e));
+    expect(error).toMatchObject({ name: 'ReportError', code: 'too_many_rows', field: 'format' });
+    expect(h.artifacts.files.size).toBe(0);
+    expect(h.audit).toHaveLength(0);
+    for (const format of ['csv', 'xlsx'] as const)
+      expect(
+        (await h.service.request(actor(FULL), { reportId: 'people_compliance', format })).job
+          .status,
+      ).toBe('completed');
+  });
+
+  it('fails a queued PDF whose report grew past the ceiling instead of rendering it', async () => {
+    const h = harness({ A: companyA() }, { directMaxRows: 0, pdfMaxRows: 1 });
+    const queued = (
+      await h.service.request(actor(FULL), { reportId: 'people_compliance', format: 'csv' })
+    ).job;
+    await h.store.transition({ ...queued, format: 'pdf' }, 'queued');
+    await h.service.runDue('A');
+    expect(await h.store.find('A', queued.id)).toMatchObject({
+      status: 'failed',
+      failure: 'too_many_rows',
+    });
+    expect(h.artifacts.files.size).toBe(0);
+  });
+
+  it('keeps the completed file of the worker that took the job when a late worker fails', async () => {
+    const h = harness({ A: bigCompany(5001) });
+    const job = await queue(h);
+    const theirs = new Uint8Array([1, 2, 3]);
+    const key = `tenants/A/exports/${job.id}`;
+    // The late worker meets the file of the other one: the store refuses with `conflict`.
+    h.artifacts.put = async () => {
+      h.artifacts.files.set(key, theirs);
+      throw new FileError('conflict');
+    };
+    await h.service.runDue('A');
+    expect(h.artifacts.files.get(key)).toBe(theirs);
+    // A plain failure after another worker re-claimed the job (new try) leaves their file too.
+    const second = await queue(h);
+    const key2 = `tenants/A/exports/${second.id}`;
+    h.artifacts.put = async () => {
+      h.artifacts.files.set(key2, theirs);
+      h.clock.now = new Date(h.clock.now.getTime() + 10 * 60_000);
+      await h.store.claim('A', h.clock.now, 60_000, 5);
+      throw new Error('storage_unavailable');
+    };
+    await h.service.runDue('A');
+    expect(h.artifacts.files.get(key2)).toBe(theirs);
+  });
+
+  it('removes its own file when the completion is lost to another writer only while it owns the claim', async () => {
+    const h = harness({ A: bigCompany(5001) });
+    const job = await queue(h);
+    const real = h.store.transition.bind(h.store);
+    h.store.transition = async (next, expected, event) => {
+      if (next.status === 'completed') {
+        h.artifacts.files.set(`tenants/A/exports/${job.id}`, new Uint8Array([9]));
+        return false;
+      }
+      return real(next, expected, event);
+    };
+    await h.service.runDue('A');
+    // The job is still our running claim: the orphan file is removed.
+    expect(h.artifacts.files.size).toBe(0);
   });
 
   it('viewOf leaves other statuses alone', () => {

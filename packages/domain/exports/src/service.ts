@@ -24,6 +24,7 @@ import {
   DEFAULT_LIST_LIMIT,
   DIRECT_BUDGET_MS,
   DIRECT_MAX_ROWS,
+  PDF_MAX_ROWS,
   EXPORT_TTL_DAYS,
   LEASE_MS,
   MAX_ATTEMPTS,
@@ -74,6 +75,8 @@ export interface ExportServiceDeps {
   /** Monotonic milliseconds, to estimate whether a report fits the direct budget. */
   readonly clock?: () => number;
   readonly directMaxRows?: number;
+  /** Largest PDF (default `PDF_MAX_ROWS`); tests lower it. */
+  readonly pdfMaxRows?: number;
   readonly directBudgetMs?: number;
 }
 
@@ -96,6 +99,20 @@ function missingPermission(
   return plan.columns.some(
     (column) => column.sensitivity && !permissions.has(SENSITIVITY_PERMISSION[column.sensitivity]),
   );
+}
+
+/** A storage refusal because the object exists (`FileError('conflict')`), without importing the files domain. */
+function isStorageConflict(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.name === 'FileError' &&
+    (error as { code?: unknown }).code === 'conflict'
+  );
+}
+
+/** PDF is rendered in memory page by page: past `PDF_MAX_ROWS` the person is sent to CSV or XLSX. */
+function assertPdfSize(format: string, total: number, max: number): void {
+  if (format === 'pdf' && total > max) throw new ReportError('too_many_rows', 'format');
 }
 
 /**
@@ -146,6 +163,7 @@ export class ExportService {
     const started = this.clock();
     const result = await engine.run(ctx, plan);
     const elapsed = this.clock() - started;
+    assertPdfSize(input.format, result.total, this.deps.pdfMaxRows ?? PDF_MAX_ROWS);
     const direct =
       result.total <= (this.deps.directMaxRows ?? DIRECT_MAX_ROWS) &&
       elapsed * 2 <= (this.deps.directBudgetMs ?? DIRECT_BUDGET_MS);
@@ -213,6 +231,7 @@ export class ExportService {
         return void (await this.fail(job, 'permission_revoked', correlationId));
       const ctx = await this.deps.engine.context(job.tenantId, permissions);
       const result = await this.deps.engine.run(ctx, plan);
+      assertPdfSize(job.format, result.total, this.deps.pdfMaxRows ?? PDF_MAX_ROWS);
       await this.produce(job, ctx, plan, result, correlationId);
     } catch (error) {
       if (error instanceof ReportError && error.code === 'too_many_rows')
@@ -284,16 +303,26 @@ export class ExportService {
         },
       });
       if (!written) {
-        await this.deps.artifacts.delete(job.tenantId, job.id);
+        // Somebody else moved the job: the file stays unless this worker still owns the claim.
+        if (await this.ownsClaim(job)) await this.deps.artifacts.delete(job.tenantId, job.id);
         return job;
       }
       await this.audit(done, 'export.completed', correlationId);
       return done;
     } catch (error) {
-      await this.deps.artifacts.delete(job.tenantId, job.id).catch(() => undefined);
+      // A file already there belongs to the worker that got the job after our lease ran out.
+      if (isStorageConflict(error)) return job;
+      if (await this.ownsClaim(job).catch(() => false))
+        await this.deps.artifacts.delete(job.tenantId, job.id).catch(() => undefined);
       if (job.mode === 'direct') return this.fail(job, 'generation_failed', correlationId);
       throw error;
     }
+  }
+
+  /** True while the job is still the `running` claim this worker took (same try), so its file is ours. */
+  private async ownsClaim(job: ExportJob): Promise<boolean> {
+    const current = await this.deps.store.find(job.tenantId, job.id);
+    return current?.status === 'running' && current.attempts === job.attempts;
   }
 
   private async fail(

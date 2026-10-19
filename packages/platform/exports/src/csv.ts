@@ -14,10 +14,11 @@ function plainNumber(value: number): string {
   return Math.abs(value) < 1e21 ? String(value) : BigInt(Math.trunc(value)).toString();
 }
 
-function cellText(cell: ExportCell, kind: ExportTable['columns'][number]['kind']): string {
+function cellText(cell: ExportCell): string {
   if (cell === null) return '';
   if (typeof cell === 'number') return plainNumber(cell);
-  return kind === 'text' ? neutralizeFormula(stripControl(cell)) : stripControl(cell);
+  // Every string passes the guard, whatever the declared kind: a date or status column can be fed by free text.
+  return neutralizeFormula(stripControl(cell));
 }
 
 /**
@@ -31,9 +32,7 @@ export function renderCsv(table: ExportTable): RenderedExport {
   );
   let batch: string[] = [];
   for (const row of table.rows) {
-    batch.push(
-      row.map((cell, i) => csvField(cellText(cell, table.columns[i]?.kind ?? 'text'))).join(','),
-    );
+    batch.push(row.map((cell) => csvField(cellText(cell))).join(','));
     if (batch.length >= 500) {
       chunks.push(Buffer.from(batch.join(EOL) + EOL, 'utf8'));
       batch = [];
