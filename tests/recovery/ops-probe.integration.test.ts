@@ -3,14 +3,13 @@ import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
-  BACKUP_ACCOUNT,
   buildFleetAccounts,
   deriveAccountPassword,
   expectedMigrations,
 } from '../../apps/api/composition/src/index.js';
 import { readConfig } from '../../apps/api/server/src/config.js';
 import { createOpsProbe } from '../../apps/api/server/src/ops.js';
-import { ACCOUNT_TAG, runMigrate } from '../../apps/api/server/src/persistence.js';
+import { runMigrate } from '../../apps/api/server/src/persistence.js';
 import { startServer, type RunningServer } from '../../apps/api/server/src/server.js';
 import { OPS_STAT_KEYS } from '../../packages/platform/observability/src/index.js';
 import type { RuntimeDescriptor } from '../../infra/runtime/src/index.js';
@@ -27,6 +26,9 @@ if (!adminUrlValue && process.env.CI)
   );
 const suite = adminUrlValue ? describe : describe.skip;
 
+// Own account names: another suite using the same MySQL in the same vitest call must not collide.
+const TAG = `p${randomBytes(3).toString('hex')}`;
+const BACKUP_USER = `opslog_backup_${TAG}`;
 const BACKUP_PASSWORD = randomBytes(24).toString('base64url');
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const quote = (name: string): string => {
@@ -85,6 +87,8 @@ suite('readiness, counters and accounts on MySQL', () => {
       OPSLOG_MYSQL_SECRET: randomBytes(32).toString('base64url'),
       OPSLOG_PII_MASTER_KEY: randomBytes(32).toString('base64'),
       OPSLOG_BACKUP_PASSWORD: BACKUP_PASSWORD,
+      OPSLOG_MYSQL_ACCOUNT_TAG: TAG,
+      OPSLOG_BACKUP_USER: BACKUP_USER,
     };
     await runMigrate(env, () => undefined);
   }, 240_000);
@@ -97,7 +101,7 @@ suite('readiness, counters and accounts on MySQL', () => {
 
   afterAll(async () => {
     if (!admin) return;
-    const accounts = buildFleetAccounts(ACCOUNT_TAG, ACCOUNT_TAG, () => '');
+    const accounts = buildFleetAccounts(TAG, TAG, () => '');
     const users = [
       ...Object.values(accounts.runtime),
       accounts.identity,
@@ -105,7 +109,7 @@ suite('readiness, counters and accounts on MySQL', () => {
       accounts.auditMigrator,
       accounts.filesMigrator,
       accounts.maintenanceMigrator,
-      { username: BACKUP_ACCOUNT },
+      { username: BACKUP_USER },
     ];
     await admin.query(`DROP DATABASE IF EXISTS ${quote(database)}`);
     for (const { username } of users) await admin.query(`DROP USER IF EXISTS '${username}'@'%'`);
@@ -146,7 +150,7 @@ suite('readiness, counters and accounts on MySQL', () => {
 
   it('answers 503 db_unreachable when the probe account cannot connect, and 200 once it can', async () => {
     await start();
-    const ops = buildFleetAccounts(ACCOUNT_TAG, ACCOUNT_TAG, () => '').ops.username;
+    const ops = buildFleetAccounts(TAG, TAG, () => '').ops.username;
     await admin.query(`ALTER USER '${ops}'@'%' ACCOUNT LOCK`);
     try {
       const down = await fetch(`${base()}/readyz`);
@@ -181,7 +185,7 @@ suite('readiness, counters and accounts on MySQL', () => {
   }, 60_000);
 
   it('counts dead-lettered and retrying webhook deliveries with the read-only account', async () => {
-    const ops = buildFleetAccounts(ACCOUNT_TAG, ACCOUNT_TAG, () => '').ops;
+    const ops = buildFleetAccounts(TAG, TAG, () => '').ops;
     const probe = createOpsProbe(
       {
         host,
@@ -217,7 +221,7 @@ suite('readiness, counters and accounts on MySQL', () => {
   }, 60_000);
 
   it('reports migration_pending against a newer build and db_unreachable on a wrong password', async () => {
-    const ops = buildFleetAccounts(ACCOUNT_TAG, ACCOUNT_TAG, () => '').ops.username;
+    const ops = buildFleetAccounts(TAG, TAG, () => '').ops.username;
     const password = deriveAccountPassword(env.OPSLOG_MYSQL_SECRET as string, ops);
     const endpoint = { host, port, database, account: { username: ops, password } };
     const newer = [
@@ -239,7 +243,7 @@ suite('readiness, counters and accounts on MySQL', () => {
   });
 
   it('keeps the probe account read-only: it reads the queues and migrations, nothing else', async () => {
-    const ops = buildFleetAccounts(ACCOUNT_TAG, ACCOUNT_TAG, () => '').ops.username;
+    const ops = buildFleetAccounts(TAG, TAG, () => '').ops.username;
     const connection = await asAccount(
       ops,
       deriveAccountPassword(env.OPSLOG_MYSQL_SECRET as string, ops),
@@ -248,6 +252,14 @@ suite('readiness, counters and accounts on MySQL', () => {
     try {
       await connection.query('SELECT COUNT(*) FROM opslog_tenant_outbox');
       await connection.query('SELECT MAX(timestamp) FROM opslog_vehicles_migrations');
+      // Column-level grants: the status columns only, never the payload of a queued message.
+      await connection.query('SELECT status, available_at FROM opslog_tenant_outbox LIMIT 1');
+      await expect(
+        connection.query('SELECT payload FROM opslog_tenant_outbox LIMIT 1'),
+      ).rejects.toMatchObject({ errno: 1143 });
+      await expect(connection.query('SELECT * FROM opslog_tenant_outbox')).rejects.toMatchObject({
+        errno: 1143,
+      });
       await expect(connection.query('SELECT 1 FROM opslog_vehicles LIMIT 1')).rejects.toMatchObject(
         { errno: 1142 },
       );
@@ -263,7 +275,7 @@ suite('readiness, counters and accounts on MySQL', () => {
   });
 
   it('gives the backup account what mysqldump and the binlog copy need and no way to write', async () => {
-    const connection = await asAccount(BACKUP_ACCOUNT, BACKUP_PASSWORD, {
+    const connection = await asAccount(BACKUP_USER, BACKUP_PASSWORD, {
       database,
       multipleStatements: false,
     });
@@ -286,9 +298,20 @@ suite('readiness, counters and accounts on MySQL', () => {
         'TRUNCATE TABLE opslog_vehicles',
         'CREATE DATABASE backup_scratch',
         'CREATE USER backup_intruder IDENTIFIED BY "x"',
-        `GRANT ALL ON ${quote(database)}.* TO '${BACKUP_ACCOUNT}'@'%'`,
+        `GRANT ALL ON ${quote(database)}.* TO '${BACKUP_USER}'@'%'`,
         'CALL opslog_append_local_audit_and_delivery()',
       ];
+      // TRIGGER is needed by mysqldump; creating one is blocked (1419) while the binary log is on and
+      // log_bin_trust_function_creators=0, the compose settings. Asserted only on such a server.
+      const [flags] = (await admin.query(
+        'SELECT @@log_bin AS bin, @@log_bin_trust_function_creators AS trust',
+      )) as unknown as [{ bin: number; trust: number }[]];
+      if (flags[0]?.bin === 1 && flags[0].trust === 0)
+        await expect(
+          connection.query(
+            'CREATE TRIGGER backup_trg BEFORE INSERT ON opslog_vehicles_migrations FOR EACH ROW SET NEW.name = "x"',
+          ),
+        ).rejects.toMatchObject({ errno: 1419 });
       for (const statement of denied)
         await expect(connection.query(statement), statement).rejects.toMatchObject({
           errno: expect.toSatisfy((errno: number) =>

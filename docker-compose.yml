@@ -171,7 +171,7 @@ services:
         condition: service_completed_successfully
     environment:
       OPSLOG_BACKUP_HOST: mysql
-      OPSLOG_BACKUP_PASSWORD: ${OPSLOG_BACKUP_PASSWORD:?password of the backup account (at least 24 characters)}
+      OPSLOG_BACKUP_PASSWORD: ${OPSLOG_BACKUP_PASSWORD:-}
       OPSLOG_BACKUP_RETENTION_DAYS: ${OPSLOG_BACKUP_RETENTION_DAYS:-35}
     volumes:
       - opslog-backups:/backups

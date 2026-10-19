@@ -18,14 +18,17 @@ import {
   type FleetAccountSet,
 } from './mysql-provisioning.js';
 
-/** The queue tables the `ops_stats` counters read; the probe account only ever selects from them. */
-export const OPS_STAT_TABLES: readonly string[] = [
-  AUDIT_TABLES.outbox,
-  WEBHOOK_TABLES.deliveries,
-  NOTIFICATION_TABLES.deliveries,
-  EXPORT_TABLES.jobs,
-  FILE_TABLES.saga,
-];
+/**
+ * The only columns of the queue tables the `ops_stats` counters read (see `ops.ts`). The probe
+ * account gets column-level SELECT on these, so it cannot read payloads, recipients or tokens.
+ */
+export const OPS_STAT_COLUMNS: ReadonlyMap<string, readonly string[]> = new Map([
+  [AUDIT_TABLES.outbox, ['status', 'available_at']],
+  [WEBHOOK_TABLES.deliveries, ['status']],
+  [NOTIFICATION_TABLES.deliveries, ['status', 'channel']],
+  [EXPORT_TABLES.jobs, ['status']],
+  [FILE_TABLES.saga, ['stage', 'state']],
+]);
 
 export interface ExpectedMigration {
   /** TypeORM migrations table of one module. */
@@ -76,8 +79,9 @@ export function expectedMigrations(): readonly ExpectedMigration[] {
 }
 
 /**
- * The probe account behind `/readyz` and `ops_stats`: SELECT only, on the migrations tables and on
- * the queue tables of `OPS_STAT_TABLES`. Run after every migration step (the tables must exist).
+ * The probe account behind `/readyz` and `ops_stats`: SELECT only; the `timestamp` column of the
+ * migrations tables and the status columns of `OPS_STAT_COLUMNS`. Run after every migration step
+ * (the tables must exist).
  */
 export async function provisionOpsAccount(
   admin: AdminConnection,
@@ -86,14 +90,16 @@ export async function provisionOpsAccount(
 ): Promise<void> {
   const db = quoteName(database);
   await ensureAccount(admin, set.ops);
-  const tables = [...expectedMigrations().map((entry) => entry.table), ...OPS_STAT_TABLES];
-  for (const table of tables)
-    await admin.query(
-      `GRANT SELECT ON ${db}.${quoteName(table)} TO ${quoteUser(set.ops.username)}`,
-    );
+  const grants = new Map<string, readonly string[]>(OPS_STAT_COLUMNS);
+  for (const entry of expectedMigrations()) grants.set(entry.table, ['timestamp']);
+  const user = quoteUser(set.ops.username);
+  for (const [table, columns] of grants) {
+    const list = columns.map((column) => `\`${column}\``).join(', ');
+    await admin.query(`GRANT SELECT (${list}) ON ${db}.${quoteName(table)} TO ${user}`);
+  }
 }
 
-/** Fixed name of the backup account the `backup` container signs in with. */
+/** Default name of the backup account the `backup` container signs in with. */
 export const BACKUP_ACCOUNT = 'opslog_backup';
 
 /**
@@ -102,8 +108,10 @@ export const BACKUP_ACCOUNT = 'opslog_backup';
  * schema. Table privileges cover every `opslog_t_*` database, present and future.
  *
  * - SELECT, SHOW VIEW: read the data and view definitions.
- * - TRIGGER: `mysqldump --triggers` only sees a trigger when the account holds it. It is the one
- *   privilege here that could create a trigger; the schema has none today.
+ * - TRIGGER: `mysqldump --triggers` only sees a trigger when the account holds it (verified: without
+ *   it the dump silently omits triggers). It also lets the account create one, which MySQL blocks
+ *   with error 1419 only while the binlog is on and `log_bin_trust_function_creators=0`, the
+ *   settings of this compose. The schema has no triggers today. See infra/operations/README.md.
  * - RELOAD: `FLUSH BINARY LOGS` and the brief global lock of `--source-data`.
  * - REPLICATION CLIENT: `SHOW BINARY LOGS` and the dump's binlog position.
  * - REPLICATION SLAVE: `mysqlbinlog --read-from-remote-server` (the copy of closed binlogs).
@@ -112,8 +120,9 @@ export const BACKUP_ACCOUNT = 'opslog_backup';
 export async function provisionBackupAccount(
   admin: AdminConnection,
   password: string,
+  username: string = BACKUP_ACCOUNT,
 ): Promise<void> {
-  const account: DbAccount = { username: BACKUP_ACCOUNT, password };
+  const account: DbAccount = { username, password };
   await ensureAccount(admin, account);
   const user = quoteUser(account.username);
   await admin.query(

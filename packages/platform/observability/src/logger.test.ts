@@ -168,16 +168,22 @@ describe('opaqueRef and routeOf', () => {
     expect(opaqueRef('a', 'ana@example.com')).toMatch(/^a_[0-9a-f]{16}$/);
   });
 
-  it('replaces every segment that is not a plain word with :id and drops the query', () => {
+  it('keeps only known resource segments, turns anything else into :param and drops the query', () => {
     expect(routeOf('get', '/api/employees/9b2f4c1e-0000?curp=GOMA800101')).toBe(
-      'GET /api/employees/:id',
+      'GET /api/employees/:param',
     );
     expect(routeOf('POST', '/api/auth/session')).toBe('POST /api/auth/session');
     expect(routeOf('GET', '/api/vehicles/Juan%20Perez/history')).toBe(
-      'GET /api/vehicles/:id/history',
+      'GET /api/vehicles/:param/history',
     );
+    // A plain lower-case word in an id position (a name, a token) is not a resource either.
+    expect(routeOf('GET', '/api/employees/gomez')).toBe('GET /api/employees/:param');
+    expect(routeOf('GET', '/api/invitations/secrettoken')).toBe('GET /api/invitations/:param');
+    expect(routeOf('GET', '/readyz')).toBe('GET /readyz');
     expect(routeOf('weird!', '/')).toBe('OTHER /');
-    expect(routeOf('GET', '/a/b/c/d/e/f/g/h/i/j')).toBe('GET /a/b/c/d/e/f/g/h');
+    expect(routeOf('GET', '/a/b/c/d/e/f/g/h/i/j')).toBe(
+      'GET /:param/:param/:param/:param/:param/:param/:param/:param',
+    );
     expect(routeOf('GET', '')).toBe('GET /');
   });
 });

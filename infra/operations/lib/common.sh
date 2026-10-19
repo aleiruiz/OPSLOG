@@ -2,6 +2,9 @@
 # Shared helpers of the operations scripts (backup and restore). Sourced, never executed.
 # Offline by design: the only network the scripts use is the MySQL connection they are given.
 
+# Files these scripts create (sums, reports, temporary data) are owner-only.
+umask 077
+
 # Event lines are JSON like the API's: ts, level, msg (an event code), and numeric fields only.
 # Never pass a value that could hold personal data, a password or a path with user input.
 log() {

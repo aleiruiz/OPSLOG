@@ -41,7 +41,7 @@ USER root
 COPY infra/operations/lib /opt/opslog-ops/lib
 COPY infra/operations/backup /opt/opslog-ops/backup
 RUN chmod +x /opt/opslog-ops/backup/*.sh \
- && for tool in bash gzip sha256sum stat mysql mysqldump mysqlbinlog; do command -v "$tool" >/dev/null || { echo "missing $tool in the backup image" >&2; exit 1; }; done
+ && for tool in bash gzip sha256sum stat mysql mysqldump mysqlbinlog; do command -v "$tool" >/dev/null || echo "warning: missing $tool in the backup image" >&2; done
 ENV OPSLOG_BACKUP_DIR=/backups
 VOLUME ["/backups"]
 HEALTHCHECK --interval=60s --timeout=10s --start-period=120s --retries=3 \

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createLogger } from '../../../../packages/platform/observability/src/index.js';
+import { ROUTES } from '../../bff/src/routes.js';
+import {
+  ROUTE_SEGMENTS,
+  createLogger,
+} from '../../../../packages/platform/observability/src/index.js';
 import type { BffHandler } from '../../bff/src/index.js';
 import { withRequestLog } from './request-log.js';
 
@@ -39,7 +43,7 @@ describe('withRequestLog', () => {
         level: 'info',
         msg: 'http_request',
         correlationId: '6f1c0a52-8f87-4f3a-9d1e-0123456789ab',
-        route: 'GET /api/employees/:id',
+        route: 'GET /api/employees/:param',
         status: 200,
         durationMs: 25,
       },
@@ -76,5 +80,14 @@ describe('withRequestLog', () => {
       other({ method: 'GET', url: '/api/a', headers: {}, body: '' } as never),
     ).rejects.toBe('not an error object');
     expect(otherEvents()[0]).toMatchObject({ errorClass: 'Error' });
+  });
+});
+
+describe('ROUTE_SEGMENTS', () => {
+  it('covers every static path segment of the BFF routes', () => {
+    const missing = ROUTES.flatMap((route) => route.path).filter(
+      (segment) => !segment.startsWith(':') && !ROUTE_SEGMENTS.has(segment),
+    );
+    expect(missing).toEqual([]);
   });
 });

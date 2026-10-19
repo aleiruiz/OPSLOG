@@ -62,7 +62,7 @@ describe('startServer', () => {
     const requests = events.filter((e) => e.msg === 'http_request');
     expect(requests.length).toBeGreaterThanOrEqual(3);
     expect(requests.every((e) => typeof e.correlationId === 'string')).toBe(true);
-    expect(requests.map((e) => e.route)).toContain('GET /api/vehicles/:id');
+    expect(requests.map((e) => e.route)).toContain('GET /api/vehicles/:param');
     const text = lines.join('\n');
     for (const secret of [pii, 'GOMA800101HDFRRN09', 'secret-token-value'])
       expect(text).not.toContain(secret);

@@ -4,7 +4,7 @@
 // against it in read-only mode (no worker, no bootstrap), makes the instance read-only and checks
 // the API still serves.
 //
-//   node smoke.mjs --bundle <dir with server.mjs and migrate.mjs> --host H --port P --database opslog_t_main
+//   node smoke.mjs --temporary --bundle <dir with server.mjs and migrate.mjs> --host H --port P --database opslog_t_main
 //
 // Environment: OPSLOG_MYSQL_SECRET and OPSLOG_PII_MASTER_KEY must be the values of the deployment
 // the backup came from (the runtime accounts derive from the first; the second unseals personal
@@ -16,12 +16,22 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 const args = new Map();
-for (let i = 2; i < process.argv.length; i += 2) args.set(process.argv[i], process.argv[i + 1]);
+for (let i = 2; i < process.argv.length; i += process.argv[i] === '--temporary' ? 1 : 2)
+  args.set(process.argv[i], process.argv[i + 1]);
 const bundle = args.get('--bundle');
 const host = args.get('--host') ?? '127.0.0.1';
 const port = args.get('--port');
 const database = args.get('--database') ?? 'opslog_t_main';
 const minMemberships = Number(args.get('--min-memberships') ?? '1');
+// The smoke test re-creates accounts and switches the instance to read-only: it must never be pointed
+// at the main database. It runs only with --temporary (the caller states the target is the disposable
+// instance) and only against this machine.
+if (!args.has('--temporary') || !['127.0.0.1', 'localhost', '::1'].includes(host)) {
+  console.error(
+    'refusing to run: pass --temporary and use a loopback host; the target must be the temporary restore instance',
+  );
+  process.exit(2);
+}
 if (!bundle || !port) {
   console.error(
     'usage: smoke.mjs --bundle DIR --port P [--host H] [--database NAME] [--min-memberships N]',

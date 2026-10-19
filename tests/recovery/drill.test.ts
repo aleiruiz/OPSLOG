@@ -243,7 +243,16 @@ suite('recovery drill', () => {
 
     const smoke = await script(
       'node',
-      [SCRIPTS.smoke, '--bundle', bundle, '--port', String(recovered.port), '--database', A],
+      [
+        SCRIPTS.smoke,
+        '--temporary',
+        '--bundle',
+        bundle,
+        '--port',
+        String(recovered.port),
+        '--database',
+        A,
+      ],
       {
         OPSLOG_MYSQL_SECRET: secret,
         OPSLOG_PII_MASTER_KEY: piiKey,

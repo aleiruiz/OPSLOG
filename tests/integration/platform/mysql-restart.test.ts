@@ -5,18 +5,10 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { START, createBffWorld, type BffWorld } from '../../../apps/api/bff/src/test-support.js';
 import { readConfig } from '../../../apps/api/server/src/config.js';
 import { readMysqlConfig } from '../../../apps/api/server/src/mysql-config.js';
-import {
-  ACCOUNT_TAG,
-  openPersistentAdapters,
-  runMigrate,
-} from '../../../apps/api/server/src/persistence.js';
+import { openPersistentAdapters, runMigrate } from '../../../apps/api/server/src/persistence.js';
 import { bootstrapFirstCompany } from '../../../apps/api/server/src/bootstrap.js';
 import { startServer } from '../../../apps/api/server/src/server.js';
-import {
-  BACKUP_ACCOUNT,
-  buildFleetAccounts,
-  type MysqlPlatform,
-} from '../../../apps/api/composition/src/index.js';
+import { buildFleetAccounts, type MysqlPlatform } from '../../../apps/api/composition/src/index.js';
 import type { RuntimeDescriptor } from '../../../infra/runtime/src/index.js';
 
 /**
@@ -31,6 +23,10 @@ if (!adminUrlValue && process.env.CI)
     'OPSLOG_TEST_MYSQL_ADMIN_URL is required in CI; MySQL integration must not be skipped',
   );
 const suite = adminUrlValue ? describe : describe.skip;
+
+// Own account names: another suite using the same MySQL in the same vitest call must not collide.
+const TAG = `r${randomBytes(3).toString('hex')}`;
+const BACKUP_USER = `opslog_backup_${TAG}`;
 
 const identifier = (value: string): string => {
   if (!/^[A-Za-z0-9_]+$/.test(value)) throw new Error('unsafe synthetic identifier');
@@ -81,6 +77,8 @@ suite('API on MySQL across a restart', () => {
       OPSLOG_PII_MASTER_KEY: randomBytes(32).toString('base64'),
       // The migrate job also provisions the backup account when this is set.
       OPSLOG_BACKUP_PASSWORD: randomBytes(24).toString('base64url'),
+      OPSLOG_MYSQL_ACCOUNT_TAG: TAG,
+      OPSLOG_BACKUP_USER: BACKUP_USER,
     };
     await runMigrate(env, () => undefined);
   }, 180_000);
@@ -90,7 +88,7 @@ suite('API on MySQL across a restart', () => {
   afterAll(async () => {
     await shutdown();
     if (!admin) return;
-    const accounts = buildFleetAccounts(ACCOUNT_TAG, ACCOUNT_TAG, () => '');
+    const accounts = buildFleetAccounts(TAG, TAG, () => '');
     const users = [
       ...Object.values(accounts.runtime),
       accounts.identity,
@@ -98,7 +96,7 @@ suite('API on MySQL across a restart', () => {
       accounts.auditMigrator,
       accounts.filesMigrator,
       accounts.maintenanceMigrator,
-      { username: BACKUP_ACCOUNT },
+      { username: BACKUP_USER },
     ];
     await admin.query(`DROP DATABASE IF EXISTS ${identifier(database)}`);
     for (const { username } of users) await admin.query(`DROP USER IF EXISTS '${username}'@'%'`);

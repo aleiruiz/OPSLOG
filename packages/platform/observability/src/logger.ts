@@ -41,7 +41,7 @@ const OPAQUE = /^[a-z]_[0-9a-f]{16}$/;
 // The BFF mints UUIDs; background work uses an opaque `w_` reference. Free-form ids are not accepted.
 const CORRELATION =
   /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|w_[0-9a-f]{16})$/i;
-// `GET /api/vehicles/:id` (from `routeOf`) or a static BFF route id such as `incidents.insurance.update`.
+// `GET /api/vehicles/:param` (from `routeOf`) or a static BFF route id such as `incidents.insurance.update`.
 const ROUTE = /^(?:[A-Z]{3,7} \/[A-Za-z0-9_:/.-]{0,120}|[a-z][a-z0-9]*(?:[.-][a-z0-9]+){0,5})$/;
 // Job names and modes are lower-case codes; error classes are CamelCase class names (`TypeError`).
 const JOB = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
@@ -54,14 +54,108 @@ export function opaqueRef(kind: 'c' | 'a', value: string): string {
   return `${kind}_${createHash('sha256').update(`opslog-ref:${kind}:${value}`).digest('hex').slice(0, 16)}`;
 }
 
-/** `GET /api/employees/abc-1?x=1` becomes `GET /api/employees/:id`: only plain lower-case words stay. */
+/**
+ * Static path segments of the BFF routes (`BFF_ROUTES` in the contracts) plus the probes. Anything
+ * else in a path (an id, a name, a CURP, a token) is a parameter and never reaches the log.
+ * A test in apps/api/server keeps this list in step with the contracts.
+ */
+export const ROUTE_SEGMENTS: ReadonlySet<string> = new Set([
+  'accept',
+  'activate',
+  'alerts',
+  'api',
+  'archive',
+  'areas',
+  'audit',
+  'auth',
+  'company',
+  'content',
+  'copy',
+  'costs',
+  'csrf',
+  'dashboard',
+  'deactivate',
+  'deliveries',
+  'detach',
+  'documents',
+  'download',
+  'drafts',
+  'employees',
+  'end',
+  'endpoints',
+  'entities',
+  'evidence',
+  'exports',
+  'failed',
+  'files',
+  'healthz',
+  'history',
+  'imports',
+  'incidents',
+  'inspect',
+  'insurance',
+  'insurance-policies',
+  'invitations',
+  'login',
+  'logout',
+  'maintenance',
+  'mechanics',
+  'next-steps',
+  'notification-deliveries',
+  'notification-preferences',
+  'notification-rules',
+  'notifications',
+  'odometer',
+  'orders',
+  'pause',
+  'plans',
+  'preventive',
+  'preview',
+  'read',
+  'read-all',
+  'readyz',
+  'reconciliation',
+  'remove',
+  'renew',
+  'repairs',
+  'reports',
+  'resolution',
+  'resume',
+  'retry',
+  'roles',
+  'rotate-secret',
+  'rows',
+  'schedule',
+  'search',
+  'session',
+  'settings',
+  'status',
+  'subscriptions',
+  'suggestions',
+  'test',
+  'third-parties',
+  'timeline',
+  'transitions',
+  'unlink',
+  'unread-count',
+  'users',
+  'v1',
+  'vehicle-assignments',
+  'vehicles',
+  'webhooks',
+  'work',
+  'work-orders',
+  'workshops',
+]);
+
+/** `GET /api/employees/abc-1?x=1` becomes `GET /api/employees/:param`: only known resource words stay. */
 export function routeOf(method: string, url: string): string {
   const path = url.split('?', 1)[0] ?? '';
   const segments = path
     .split('/')
     .slice(1)
     .filter((segment) => segment !== '')
-    .map((segment) => (/^[a-z]{1,24}(?:-[a-z]{1,24}){0,3}$/.test(segment) ? segment : ':id'));
+    .map((segment) => (ROUTE_SEGMENTS.has(segment) ? segment : ':param'));
   const verb = /^[A-Za-z]{3,7}$/.test(method) ? method.toUpperCase() : 'OTHER';
   return `${verb} /${segments.slice(0, 8).join('/')}`.slice(0, 120);
 }

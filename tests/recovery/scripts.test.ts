@@ -132,6 +132,40 @@ suite('backup and restore scripts', () => {
     expect((await sh('health')).code).toBe(0);
   }, 60_000);
 
+  it('copies a write that lands during the copy even if the system then stays idle', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'opslog-backup-idle-'));
+    const wrapper = join(dir, 'mysqlbinlog-wrapper.sh');
+    const mark = join(dir, 'wrote');
+    // Stands in for mysqlbinlog: on its first call it writes a row (the write "during the copy"),
+    // then runs the real tool.
+    writeFileSync(
+      wrapper,
+      `#!/bin/sh
+if [ ! -f "${mark}" ]; then
+  : > "${mark}"
+  env -u MYSQL_PWD mysql --protocol=TCP -h 127.0.0.1 -P ${source.port} -u root -e "INSERT INTO opslog_t_a.m(v) VALUES ('written-during-copy')"
+fi
+exec mysqlbinlog "$@"
+`,
+      { mode: 0o755 },
+    );
+    try {
+      const withWrapper = { ...env(dir), MYSQLBINLOG: wrapper };
+      expect((await script(SCRIPTS.backup, ['binlogs'], withWrapper)).code).toBe(0);
+      expect(existsSync(mark)).toBe(true);
+      // No further writes: the next run must still notice the active log is no longer what it saved.
+      expect((await script(SCRIPTS.backup, ['binlogs'], env(dir))).code).toBe(0);
+      const uuid = readdirSync(join(dir, 'binlogs'))[0] as string;
+      const found = await script('sh', [
+        '-c',
+        `grep -la written-during-copy "${join(dir, 'binlogs', uuid)}"/binlog.[0-9]*`,
+      ]);
+      expect(found.code).toBe(0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 120_000);
+
   it('restores the latest state into a temporary instance and the checksums match the source', async () => {
     await admin.query("INSERT INTO opslog_t_b.m(v) VALUES ('b-3')");
     await sh('binlogs');
@@ -185,6 +219,29 @@ suite('backup and restore scripts', () => {
       await fingerprint(source, ['--database', 'opslog_t_a']),
     );
   }, 120_000);
+
+  it('refuses to run the smoke test unless it is marked --temporary on a loopback host', async () => {
+    const plain = await script('node', [
+      SCRIPTS.smoke,
+      '--bundle',
+      '/nonexistent',
+      '--port',
+      '3306',
+    ]);
+    expect(plain.code).toBe(2);
+    expect(plain.stderr).toContain('refusing to run');
+    const remote = await script('node', [
+      SCRIPTS.smoke,
+      '--temporary',
+      '--bundle',
+      '/nonexistent',
+      '--port',
+      '3306',
+      '--host',
+      'db.example.com',
+    ]);
+    expect(remote.code).toBe(2);
+  });
 
   it('refuses a target that already holds company databases', async () => {
     const result = await script(SCRIPTS.restore, [

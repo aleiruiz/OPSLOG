@@ -21,6 +21,8 @@
 #   status/last-dump, status/last-binlog   (epoch seconds, for the health check)
 # OPSLOG_PII_MASTER_KEY is never read or stored here: keep it apart from this volume (see README).
 set -euo pipefail
+# Backups hold every company's data: owner-only files and directories.
+umask 077
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../lib/common.sh
 . "$here/../lib/common.sh"
@@ -89,17 +91,24 @@ cmd_dump() {
 
 cmd_binlogs() {
   require_tools "$MYSQL" "$MYSQLBINLOG" sha256sum
-  local uuid dest tmp name copied=0 names active
+  local uuid dest tmp name copied=0 names active now
   uuid="$(mysql_q -e 'SELECT @@server_uuid')"
   dest="$DIR/binlogs/$uuid"
   mkdir -p "$dest" "$DIR/status"
-  # Closing the active log makes every earlier one immutable, so each is copied exactly once. Nothing
-  # is closed when the active log has not grown since the last run (an idle stack would otherwise
-  # produce an empty log every interval).
+  # Closing the active log makes every earlier one immutable, so each is copied exactly once. The
+  # flush is skipped when the active log is exactly as it was right after the previous flush (an idle
+  # stack would otherwise produce an empty log every interval), but never for longer than four
+  # intervals. The state is read right after the flush, BEFORE the copy: a write that lands while
+  # the copy runs makes the active log differ from it, so the next run closes and copies it even if
+  # the system then stays idle.
+  now="$(date +%s)"
   active="$(mysql_q -e 'SHOW BINARY LOGS' | tail -n 1 | cut -f1,2)"
-  if [ ! -f "$DIR/status/active-log" ] || [ "$(cat "$DIR/status/active-log")" != "$active" ]; then
+  if [ ! -f "$DIR/status/active-log" ] || [ "$(cat "$DIR/status/active-log")" != "$active" ] \
+    || [ ! -f "$DIR/status/last-flush" ] || [ $((now - $(cat "$DIR/status/last-flush"))) -ge $((BINLOG_INTERVAL * 4)) ]; then
     mysql_q -e 'FLUSH BINARY LOGS'
+    date +%s >"$DIR/status/last-flush"
   fi
+  mysql_q -e 'SHOW BINARY LOGS' | tail -n 1 | cut -f1,2 >"$DIR/status/active-log"
   mapfile -t names < <(mysql_q -e 'SHOW BINARY LOGS' | cut -f1)
   [ "${#names[@]}" -ge 2 ] || { date +%s >"$DIR/status/last-binlog"; log info backup_binlogs_none; return 0; }
   tmp="$(mktemp -d "$dest/.copy.XXXXXX")"
@@ -114,8 +123,6 @@ cmd_binlogs() {
     write_sum "$dest/$name"
     copied=$((copied + 1))
   done
-  # The log opened by the flush (or the unchanged active one): the next run flushes only if it grew.
-  mysql_q -e 'SHOW BINARY LOGS' | tail -n 1 | cut -f1,2 >"$DIR/status/active-log"
   date +%s >"$DIR/status/last-binlog"
   log info backup_binlogs_done copied "$copied"
 }
@@ -147,6 +154,8 @@ cmd_retention() {
 }
 
 cmd_health() {
+  # Without a password the service is switched off (entrypoint.sh): nothing to be late.
+  [ -n "${OPSLOG_BACKUP_PASSWORD:-}" ] || exit 0
   local last now
   [ -f "$DIR/status/last-binlog" ] || exit 1
   last="$(cat "$DIR/status/last-binlog")"
