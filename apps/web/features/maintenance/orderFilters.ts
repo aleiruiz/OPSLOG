@@ -26,15 +26,16 @@ export const todayLocal = (now: Date = new Date()): string =>
 export const isOverdue = (order: BffWorkOrder, today: string): boolean =>
   OPEN.includes(order.status) && order.scheduledDate !== null && order.scheduledDate < today;
 
-/** Sum of the order's cost lines in whole units, rounded down; `null` when the reader does not get costs. */
+/**
+ * Sum of the order's cost lines in whole units, rounded down. `null` when the reader does not get costs or
+ * the lines mix currencies (summing them would be wrong, so the order is not filtered by cost).
+ */
 export function costUnits(order: BffWorkOrder): bigint | null {
   if (!order.costs) return null;
-  let minor = 0n;
-  let digits = 2;
-  for (const cost of order.costs) {
-    minor += BigInt(cost.amount.amountMinor);
-    digits = minorDigits(cost.amount.currency);
-  }
+  const currencies = new Set(order.costs.map((cost) => cost.amount.currency));
+  if (currencies.size > 1) return null;
+  const digits = minorDigits([...currencies][0] ?? 'MXN');
+  const minor = order.costs.reduce((sum, cost) => sum + BigInt(cost.amount.amountMinor), 0n);
   return minor / 10n ** BigInt(digits);
 }
 
@@ -46,7 +47,7 @@ export const matches = (order: BffWorkOrder, filters: Filters, today = todayLoca
   if (filters.overdue && !isOverdue(order, today)) return false;
   if (filters.costFrom || filters.costTo) {
     const units = costUnits(order);
-    if (units === null) return false;
+    if (units === null) return true;
     if (filters.costFrom && units < BigInt(filters.costFrom)) return false;
     if (filters.costTo && units > BigInt(filters.costTo)) return false;
   }

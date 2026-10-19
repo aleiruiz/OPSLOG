@@ -125,13 +125,17 @@ export class SavedViewService {
   }
 
   /** The view when the reader may touch it: their own, or a shared one for a manager. */
-  private async editable(tenantId: string, viewer: ViewViewer, id: unknown) {
+  private async editable(tenantId: string, viewer: ViewViewer, id: unknown, deleting = false) {
     if (typeof id !== 'string' || !OPAQUE_ID.test(id)) throw new SavedViewError('invalid_input');
     const view = await this.store.get(tenantId, id);
     // Someone else's private view does not exist for this reader.
     if (view === null || (view.ownerId !== viewer.memberId && !view.shared))
       throw new SavedViewError('not_found');
-    const module = this.open(view.module, viewer);
+    // The owner may always delete their own view, even after losing the permission of the list.
+    const module =
+      deleting && view.ownerId === viewer.memberId
+        ? (this.catalog.module(view.module) ?? null)
+        : this.open(view.module, viewer);
     if (view.ownerId !== viewer.memberId && !viewer.permissions.has(MANAGER))
       throw new SavedViewError('forbidden');
     return { view, module };
@@ -170,7 +174,7 @@ export class SavedViewService {
   }
 
   public async remove(tenantId: string, viewer: ViewViewer, id: unknown): Promise<void> {
-    const { view } = await this.editable(tenantId, viewer, id);
+    const { view } = await this.editable(tenantId, viewer, id, true);
     if (!(await this.store.remove(tenantId, view.id))) throw new SavedViewError('not_found');
   }
 

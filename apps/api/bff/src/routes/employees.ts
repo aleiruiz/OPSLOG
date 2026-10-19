@@ -47,9 +47,10 @@ const EMPLOYEE_KEYS = [
 const employeeBody = (view: EmployeeView): BffEmployee => ({ ...view });
 const employeeDetailBody = (view: EmployeeDetailView): BffEmployeeDetail => ({ ...view });
 
-/** Strict query of the employee listing: unknown or repeated keys, bad values and foreign cursors are all a 400. */
 /** Hire date and license expiry ranges (BRD §14.2). */
 const DATE_KEYS = ['hiredFrom', 'hiredTo', 'licenseExpiresFrom', 'licenseExpiresTo'] as const;
+
+/** Strict query of the employee listing: unknown or repeated keys, bad values and foreign cursors are all a 400. */
 
 function employeeQuery(ctx: RouteContext, tenantId: string) {
   const allowed = new Set([

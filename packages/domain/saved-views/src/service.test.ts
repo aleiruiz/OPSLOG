@@ -293,6 +293,31 @@ describe('SavedViewService.update and remove', () => {
     );
     expect(await code(service.remove(A, luis, 's1'))).toBe('forbidden');
   });
+
+  it('lets the owner delete, but not edit, their own view after losing the list permission', async () => {
+    const { service, store } = setup();
+    await store.create(
+      {
+        id: 'o1',
+        tenantId: A,
+        ownerId: 'luis',
+        module: 'incidents',
+        name: 'O',
+        nameKey: 'o',
+        shared: false,
+        filters: {},
+        sort: null,
+        columns: null,
+        version: 1,
+        createdAt: 'x',
+        updatedAt: 'x',
+      },
+      50,
+    );
+    expect(await code(service.update(A, luis, 'o1', { version: 1, name: 'P' }))).toBe('forbidden');
+    await service.remove(A, luis, 'o1');
+    expect(await store.get(A, 'o1')).toBeNull();
+  });
 });
 
 describe('SavedViewService columns', () => {

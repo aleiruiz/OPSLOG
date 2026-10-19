@@ -35,9 +35,10 @@ const POLICY_RENEWAL_KEYS = [
 
 const policyBody = (view: PolicyView): BffInsurancePolicy => ({ ...view });
 
-/** Strict query of the policy listing: unknown or repeated keys, bad values and foreign cursors are all a 400. */
 /** Expiry date range (BRD §14.2). */
 const DATE_KEYS = ['endsFrom', 'endsTo'] as const;
+
+/** Strict query of the policy listing: unknown or repeated keys, bad values and foreign cursors are all a 400. */
 
 function policyQuery(ctx: RouteContext, tenantId: string) {
   const allowed = new Set([

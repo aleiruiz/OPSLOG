@@ -28,9 +28,10 @@ const DOCUMENT_VALIDITY_KEYS = ['issuedOn', 'expiresOn', 'documentNumber'] as co
 
 const documentBody = (view: DocumentView): BffDocument => ({ ...view });
 
-/** Strict query of the document listing: unknown or repeated keys, bad values and foreign cursors are all a 400. */
 /** Expiry date range (BRD §14.2). */
 const DATE_KEYS = ['expiresFrom', 'expiresTo'] as const;
+
+/** Strict query of the document listing: unknown or repeated keys, bad values and foreign cursors are all a 400. */
 
 function documentQuery(ctx: RouteContext, tenantId: string) {
   const allowed = new Set([
