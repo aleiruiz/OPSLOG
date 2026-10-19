@@ -80,6 +80,8 @@ importers:
 
   apps/api: {}
 
+  apps/api/analytics: {}
+
   apps/api/audit-query: {}
 
   apps/api/auth: {}

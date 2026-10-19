@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import {
   And,
   Between,
+  In,
   IsNull,
   LessThan,
   LessThanOrEqual,
@@ -15,6 +16,7 @@ import {
   isCoverageType,
   type Deductible,
   type Policy,
+  type PolicyAnalyticsReads,
   type PolicyFilter,
   type PolicyRevision,
   type PolicyRevisionSlice,
@@ -31,6 +33,9 @@ import {
   sanitizeStoreError,
   type PolicyStoreErrorCode,
 } from './errors.js';
+
+/** Ids per `IN (...)` list: a large fleet is read in several statements. */
+const ID_CHUNK = 500;
 
 /** Structured report of a failed operation (operation name, coarse code, driver errno). */
 export interface StoreErrorEvent {
@@ -188,7 +193,7 @@ function expiryCondition(expiry: NonNullable<PolicyFilter['expiry']>) {
  * - Driver errors never leave this class: everything becomes the sanitized `PolicyStoreError`
  *   (no SQL, no parameters).
  */
-export class TypeOrmPolicyStore implements PolicyStore {
+export class TypeOrmPolicyStore implements PolicyStore, PolicyAnalyticsReads {
   private readonly maxAttempts: number;
   private readonly onError: ((event: StoreErrorEvent) => void) | undefined;
 
@@ -314,6 +319,53 @@ export class TypeOrmPolicyStore implements PolicyStore {
         skip: window.offset,
       });
       return { items: rows.map(toRevision), total };
+    });
+  }
+
+  public async analyticsCountExpiring(
+    tenantId: string,
+    window: { readonly from: string; readonly until: string },
+    vehicleIds: readonly string[] | null,
+  ): Promise<number> {
+    if (vehicleIds !== null && vehicleIds.length === 0) return 0;
+    return this.single('analytics', async () => {
+      const where = {
+        tenantId,
+        archivedAt: IsNull(),
+        endsOn: Between(window.from, window.until),
+      };
+      if (vehicleIds === null) return this.dataSource.getRepository(PolicyEntity).countBy(where);
+      let total = 0;
+      for (let start = 0; start < vehicleIds.length; start += ID_CHUNK)
+        total += await this.dataSource.getRepository(PolicyEntity).countBy({
+          ...where,
+          vehicleId: In(vehicleIds.slice(start, start + ID_CHUNK)),
+        });
+      return total;
+    });
+  }
+
+  public async analyticsCoveredVehicleIds(
+    tenantId: string,
+    day: string,
+    vehicleIds: readonly string[],
+  ): Promise<readonly string[]> {
+    return this.single('analytics', async () => {
+      const covered = new Set<string>();
+      for (let start = 0; start < vehicleIds.length; start += ID_CHUNK) {
+        const rows = await this.dataSource.getRepository(PolicyEntity).find({
+          select: { vehicleId: true },
+          where: {
+            tenantId,
+            archivedAt: IsNull(),
+            vehicleId: In(vehicleIds.slice(start, start + ID_CHUNK)),
+            startsOn: LessThanOrEqual(day),
+            endsOn: MoreThanOrEqual(day),
+          },
+        });
+        for (const row of rows) covered.add(row.vehicleId);
+      }
+      return [...covered];
     });
   }
 }

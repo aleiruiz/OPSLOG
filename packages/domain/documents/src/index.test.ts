@@ -550,3 +550,73 @@ describe('DocumentService', () => {
     expect(svc.expiry(doc).status).toBe('valid');
   });
 });
+
+describe('aggregate reads for the dashboard', () => {
+  async function seeded() {
+    const store = new InMemoryDocumentStore();
+    const ctx = service({ store });
+    const make = (tenant: string, over: Record<string, unknown>) =>
+      ctx.svc.create(tenant, ACTOR, card(over));
+    await make(A, { expiresOn: '2026-10-25' });
+    await make(A, { ownerId: 'veh-2', typeCode: 'technical_inspection', expiresOn: '2026-11-18' });
+    await make(A, { ownerId: 'veh-2', expiresOn: '2026-11-19' });
+    await make(A, { typeCode: 'transport_permit', expiresOn: '2026-10-18' });
+    await make(A, {
+      ownerType: 'employee',
+      ownerId: 'emp-1',
+      typeCode: 'medical_exam',
+      expiresOn: '2026-10-19',
+    });
+    await make(A, { typeCode: 'ownership_title', expiresOn: undefined });
+    const filed = await make(A, { ownerId: 'veh-3', expiresOn: '2026-10-30' });
+    await ctx.svc.archive(A, filed.id, filed.version);
+    await make(A, { expiresOn: '2027-06-01' });
+    await make(B, { expiresOn: '2026-10-25' });
+    return store;
+  }
+  const window = { from: '2026-10-19', until: '2026-11-18' };
+
+  it('counts the documents that expire in the window, archived ones never, per tenant and owners', async () => {
+    const store = await seeded();
+    expect(await store.analyticsCountExpiring(A, window, null)).toBe(3);
+    expect(
+      await store.analyticsCountExpiring(A, window, { vehicle: ['veh-1'], employee: [] }),
+    ).toBe(1);
+    expect(
+      await store.analyticsCountExpiring(A, window, { vehicle: ['veh-2'], employee: ['emp-1'] }),
+    ).toBe(2);
+    expect(await store.analyticsCountExpiring(A, window, { vehicle: [], employee: [] })).toBe(0);
+    expect(await store.analyticsCountExpiring(B, window, null)).toBe(1);
+    expect(await store.analyticsCountExpiring('tenant-c', window, null)).toBe(0);
+  });
+
+  it('lists the distinct (owner, type) pairs that are valid today, of the types asked', async () => {
+    const store = await seeded();
+    const found = await store.analyticsValidRequired(A, '2026-10-19', {
+      vehicle: ['registration_card', 'technical_inspection', 'transport_permit'],
+      employee: ['medical_exam'],
+    });
+    expect(
+      found.map((pair) => `${pair.ownerType}/${pair.ownerId}/${pair.typeCode}`).sort(),
+    ).toEqual([
+      'employee/emp-1/medical_exam',
+      'vehicle/veh-1/registration_card',
+      'vehicle/veh-2/registration_card',
+      'vehicle/veh-2/technical_inspection',
+    ]);
+    // An optional document with no expiry is valid, but only when its type is asked for.
+    const optional = await store.analyticsValidRequired(A, '2026-10-19', {
+      vehicle: ['ownership_title'],
+      employee: [],
+    });
+    expect(optional).toEqual([
+      { ownerType: 'vehicle', ownerId: 'veh-1', typeCode: 'ownership_title' },
+    ]);
+    expect(
+      await store.analyticsValidRequired(B, '2026-10-19', {
+        vehicle: [],
+        employee: ['medical_exam'],
+      }),
+    ).toEqual([]);
+  });
+});

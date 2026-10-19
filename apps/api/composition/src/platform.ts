@@ -45,6 +45,7 @@ import type { DocumentsApi } from './documents.js';
 import type { AssignmentsApi } from './assignments.js';
 import type { ImportsApi } from './imports.js';
 import type { AlertsApi } from './alerts.js';
+import type { DashboardApi } from '../../analytics/src/index.js';
 import type { CompanySettingsApi } from './settings.js';
 import type { InsuranceApi } from './insurance.js';
 import type { EmployeesApi } from './employees.js';
@@ -111,6 +112,8 @@ export class Platform {
   public readonly alerts: AlertsApi;
   /** Global and per-record audit history, and the relay reconciliation (`view_audit`). */
   public readonly auditQuery: DomainApis['auditQuery'];
+  /** The indicators of Inicio (`GET /api/v1/dashboard`). */
+  public readonly dashboard: DashboardApi;
   public readonly maintenance: MaintenanceApi;
   public readonly workOrders: WorkOrderApi;
   public readonly incidents: IncidentApi;
@@ -247,6 +250,7 @@ export class Platform {
     this.companySettings = apis.companySettings;
     this.alerts = apis.alerts;
     this.auditQuery = apis.auditQuery;
+    this.dashboard = apis.dashboard;
     this.maintenance = apis.maintenance;
     this.workOrders = apis.workOrders;
     this.incidents = apis.incidents;

@@ -130,6 +130,9 @@ describe('typed client against the real BFF', () => {
     const session = await client.call('auth.session');
     expect(session).toMatchObject({ ok: true, value: { user: login.value.user } });
 
+    const dashboard = await client.call('dashboard.get');
+    expect(dashboard).toMatchObject({ ok: true, value: { widgets: expect.any(Array) } });
+
     const settings = await client.call('company.settings.get');
     expect(settings).toMatchObject({ ok: true, value: { name: 'Empresa Alfa', status: 'active' } });
     const updated = await client.call('company.settings.update', {

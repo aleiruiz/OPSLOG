@@ -50,3 +50,22 @@ export interface PolicyStore {
 export interface PolicyVehicleGate {
   assertLive(tenantId: string, vehicleId: string): Promise<void>;
 }
+
+/**
+ * Aggregate reads of the dashboard (MVP-ANALYTICS), apart from `PolicyStore` so other stores keep
+ * working. Every method names the tenant; archived policies never count.
+ */
+export interface PolicyAnalyticsReads {
+  /** Policies whose last valid day is within `[from, until]` (inclusive), of the vehicles (all when null). */
+  analyticsCountExpiring(
+    tenantId: string,
+    window: { readonly from: string; readonly until: string },
+    vehicleIds: readonly string[] | null,
+  ): Promise<number>;
+  /** The vehicles, among `vehicleIds`, that have a policy whose period includes `day` (both ends inclusive). */
+  analyticsCoveredVehicleIds(
+    tenantId: string,
+    day: string,
+    vehicleIds: readonly string[],
+  ): Promise<readonly string[]>;
+}

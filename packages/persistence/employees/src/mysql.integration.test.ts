@@ -592,6 +592,34 @@ suite('persistent employee store on MySQL', () => {
     });
   });
 
+  describe('aggregate read for the dashboard', () => {
+    it('reads kind and status of the live employees by area, per company', async () => {
+      const tenant = randomUUID();
+      const other = randomUUID();
+      const make = (t: string, areaId: string, kind = 'other') =>
+        svcA.create(t, ACTOR, { kind, firstName: 'Luis', lastName: 'Gómez', areaId });
+      const driver = await make(tenant, 'x', 'dispatcher');
+      const idle = await make(tenant, 'y');
+      const filed = await make(tenant, 'x');
+      await make(other, 'x');
+      await svcA.changeStatus(tenant, ACTOR, idle.id, 1, 'inactive', 'Temporada');
+      await svcA.archive(tenant, filed.id, 1);
+      const all = await storeB.analyticsEmployees(tenant, null);
+      expect(all.map((row) => row.id).sort()).toEqual([driver.id, idle.id].sort());
+      expect(all.find((row) => row.id === idle.id)).toEqual({
+        id: idle.id,
+        kind: 'other',
+        status: 'inactive',
+      });
+      expect(await storeB.analyticsEmployees(tenant, ['x'])).toEqual([
+        { id: driver.id, kind: 'dispatcher', status: 'active' },
+      ]);
+      expect(await storeB.analyticsEmployees(tenant, ['x', 'y'])).toHaveLength(2);
+      expect(await storeB.analyticsEmployees(tenant, [])).toEqual([]);
+      expect(await storeB.analyticsEmployees(other, null)).toHaveLength(1);
+    });
+  });
+
   describe('listing', () => {
     it('filters by kind, status and area, hides archived rows by default and pages in name order', async () => {
       const tenant = randomUUID();

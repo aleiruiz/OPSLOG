@@ -1,7 +1,10 @@
 import { VehicleError, type VehicleConflictField } from './errors.js';
 import {
+  type VehicleAnalyticsReads,
+  type VehicleAnalyticsRow,
   type VehicleFilter,
   type VehicleSlice,
+  type VehicleStatusChange,
   type VehicleStore,
   type VehicleWindow,
 } from './ports.js';
@@ -16,7 +19,7 @@ const storeKey = (tenantId: string, id: string): string =>
   `${tenantId.length}:${tenantId}${id.length}:${id}`;
 
 /** In-memory double of the port. Each method is synchronous inside, so every operation is atomic. */
-export class InMemoryVehicleStore implements VehicleStore {
+export class InMemoryVehicleStore implements VehicleStore, VehicleAnalyticsReads {
   private readonly vehicles = new Map<string, Vehicle>();
   private readonly entries: VehicleStatusEntry[] = [];
 
@@ -101,5 +104,45 @@ export class InMemoryVehicleStore implements VehicleStore {
       .filter((entry) => entry.tenantId === tenantId && entry.vehicleId === vehicleId)
       .sort((a, b) => a.version - b.version)
       .map((entry) => structuredClone(entry));
+  }
+
+  public async analyticsVehicles(
+    tenantId: string,
+    areaIds: readonly string[] | null,
+    archivedSince: string,
+  ): Promise<readonly VehicleAnalyticsRow[]> {
+    const since = Date.parse(archivedSince);
+    return [...this.vehicles.values()]
+      .filter(
+        (vehicle) =>
+          vehicle.tenantId === tenantId &&
+          (areaIds === null || areaIds.includes(vehicle.areaId)) &&
+          (vehicle.archivedAt === null || Date.parse(vehicle.archivedAt) >= since),
+      )
+      .map((vehicle) => ({
+        id: vehicle.id,
+        areaId: vehicle.areaId,
+        status: vehicle.status,
+        odometerKm: vehicle.odometerKm,
+        odometerUpdatedAt: vehicle.odometerUpdatedAt,
+        archivedAt: vehicle.archivedAt,
+      }));
+  }
+
+  public async analyticsStatusChanges(
+    tenantId: string,
+    vehicleIds: readonly string[],
+    until: string,
+  ): Promise<readonly VehicleStatusChange[]> {
+    const end = Date.parse(until);
+    return this.entries
+      .filter(
+        (entry) =>
+          entry.tenantId === tenantId &&
+          vehicleIds.includes(entry.vehicleId) &&
+          Date.parse(entry.at) <= end,
+      )
+      .sort((a, b) => Date.parse(a.at) - Date.parse(b.at) || a.version - b.version)
+      .map((entry) => ({ vehicleId: entry.vehicleId, to: entry.to, at: entry.at }));
   }
 }

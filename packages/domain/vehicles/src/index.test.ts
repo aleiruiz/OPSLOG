@@ -792,3 +792,87 @@ describe('VehicleService', () => {
     expect(error.name).toBe('VehicleError');
   });
 });
+
+describe('aggregate reads for the dashboard', () => {
+  async function fleet() {
+    const store = new InMemoryVehicleStore();
+    const { svc, tick } = service(store);
+    const one = await svc.create(
+      A,
+      ACTOR,
+      input({ economicNumber: 'U-1', plate: 'AAA-111', vin: null, areaId: 'area-1' }),
+    );
+    tick();
+    const two = await svc.create(
+      A,
+      ACTOR,
+      input({ economicNumber: 'U-2', plate: 'BBB-222', vin: null, areaId: 'area-2' }),
+    );
+    tick();
+    const gone = await svc.create(
+      A,
+      ACTOR,
+      input({ economicNumber: 'U-3', plate: 'CCC-333', vin: null, areaId: 'area-1' }),
+    );
+    tick();
+    await svc.create(
+      B,
+      ACTOR,
+      input({ economicNumber: 'U-1', plate: 'AAA-111', vin: null, areaId: 'area-1' }),
+    );
+    tick();
+    await svc.changeStatus(A, ACTOR, two.id, two.version, 'out_of_service', 'taller');
+    tick();
+    await svc.archive(A, gone.id, gone.version);
+    return { store, one, two, gone };
+  }
+
+  it('lists the live vehicles of the areas and the ones archived since the instant', async () => {
+    const { store, one, two, gone } = await fleet();
+    const rows = (areas: string[] | null, since: string) =>
+      store.analyticsVehicles(A, areas, since).then((found) => found.map((row) => row.id).sort());
+    const all = [one.id, two.id, gone.id].sort();
+    expect(await rows(null, '2026-10-06T00:00:00.000Z')).toEqual(all);
+    expect(await rows(null, '2026-10-06T13:00:00.000Z')).toEqual([one.id, two.id].sort());
+    expect(await rows(['area-1'], '2026-10-06T00:00:00.000Z')).toEqual([one.id, gone.id].sort());
+    expect(await rows(['area-1', 'area-2'], '2026-10-06T13:00:00.000Z')).toEqual(
+      [one.id, two.id].sort(),
+    );
+    expect(await rows([], '2026-10-06T00:00:00.000Z')).toEqual([]);
+    expect(await store.analyticsVehicles(A, ['area-2'], '2026-10-06T00:00:00.000Z')).toEqual([
+      {
+        id: two.id,
+        areaId: 'area-2',
+        status: 'out_of_service',
+        odometerKm: 1000,
+        odometerUpdatedAt: two.odometerUpdatedAt,
+        archivedAt: null,
+      },
+    ]);
+    expect(two.odometerUpdatedAt).not.toBeNull();
+  });
+
+  it('never returns the vehicles of another tenant', async () => {
+    const { store } = await fleet();
+    const rows = await store.analyticsVehicles(B, null, '2026-10-06T00:00:00.000Z');
+    expect(rows).toHaveLength(1);
+    expect(await store.analyticsVehicles('tenant-c', null, '2026-10-06T00:00:00.000Z')).toEqual([]);
+  });
+
+  it('returns the status changes up to the instant, oldest first, for the given vehicles', async () => {
+    const { store, one, two } = await fleet();
+    const changes = await store.analyticsStatusChanges(
+      A,
+      [one.id, two.id],
+      '2026-10-06T12:00:03.000Z',
+    );
+    expect(changes).toEqual([
+      { vehicleId: one.id, to: 'active', at: '2026-10-06T12:00:00.000Z' },
+      { vehicleId: two.id, to: 'active', at: '2026-10-06T12:00:01.000Z' },
+    ]);
+    const later = await store.analyticsStatusChanges(A, [two.id], '2026-10-06T13:00:00.000Z');
+    expect(later.map((change) => change.to)).toEqual(['active', 'out_of_service']);
+    expect(await store.analyticsStatusChanges(B, [two.id], '2026-10-06T13:00:00.000Z')).toEqual([]);
+    expect(await store.analyticsStatusChanges(A, [], '2026-10-06T13:00:00.000Z')).toEqual([]);
+  });
+});

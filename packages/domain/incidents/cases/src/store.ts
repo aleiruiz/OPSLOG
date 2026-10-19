@@ -1,8 +1,8 @@
 import { validateIncidentEvent } from './events.js';
 import { formatFolio } from './folio.js';
 import type { IdempotencyRecord } from './idempotency.js';
-import type { IncidentStore } from './ports.js';
-import { SEVERITY_RANK } from './catalog.js';
+import type { IncidentAnalyticsReads, IncidentStore, IncidentTimelineRow } from './ports.js';
+import { SEVERITY_RANK, TERMINAL_STATUSES } from './catalog.js';
 import type {
   Incident,
   IncidentApplyResult,
@@ -26,7 +26,7 @@ const SORT_VALUE: Readonly<Record<IncidentListQuery['sort'], (incident: Incident
 };
 
 /** In-memory store for unit tests and the non-persistent composition; same CAS semantics as MySQL. */
-export class InMemoryIncidentStore implements IncidentStore {
+export class InMemoryIncidentStore implements IncidentStore, IncidentAnalyticsReads {
   private readonly incidents = new Map<string, Incident>();
   private readonly timelines = new Map<string, IncidentTransition[]>();
   private readonly keys = new Map<string, IdempotencyRecord>();
@@ -123,6 +123,40 @@ export class InMemoryIncidentStore implements IncidentStore {
         .map((i) => structuredClone(i)),
       total: matching.length,
     };
+  }
+
+  public async analyticsOpenCases(
+    tenantId: string,
+    areaIds: readonly string[] | null,
+  ): Promise<readonly Incident[]> {
+    return [...this.incidents.values()]
+      .filter(
+        (i) =>
+          i.tenantId === tenantId &&
+          i.status !== 'draft' &&
+          !TERMINAL_STATUSES.includes(i.status) &&
+          (areaIds === null || areaIds.includes(i.areaId)),
+      )
+      .map((i) => structuredClone(i));
+  }
+
+  public async analyticsTimeline(
+    tenantId: string,
+    areaIds: readonly string[] | null,
+    window: { readonly from: string; readonly to: string },
+  ): Promise<readonly IncidentTimelineRow[]> {
+    const inside = (instant: string | null) =>
+      instant !== null && instant >= window.from && instant < window.to;
+    const rows: IncidentTimelineRow[] = [];
+    for (const i of this.incidents.values()) {
+      if (i.tenantId !== tenantId || (areaIds !== null && !areaIds.includes(i.areaId))) continue;
+      const first = this.timelines.get(key(tenantId, i.id))?.find((e) => e.command === 'resolve');
+      const firstResolvedAt = i.cycle > 1 ? (first?.occurredAt ?? null) : i.resolvedAt;
+      const row = { reportedAt: i.reportedAt, firstResolvedAt, closedAt: i.closedAt };
+      if (inside(row.reportedAt) || inside(row.firstResolvedAt) || inside(row.closedAt))
+        rows.push(row);
+    }
+    return rows;
   }
 
   public async history(tenantId: string, id: string): Promise<readonly IncidentTransition[]> {

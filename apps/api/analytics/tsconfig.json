@@ -1,0 +1,14 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../../",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
+  },
+  "include": [
+    "src/**/*.ts",
+    "../../../packages/domain/analytics/src/**/*.ts",
+    "../../../packages/domain/identity/src/**/*.ts",
+    "../../../packages/domain/documents/src/**/*.ts"
+  ]
+}

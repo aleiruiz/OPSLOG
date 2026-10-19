@@ -1,3 +1,4 @@
+import { buildAnalytics, type AnalyticsFleet } from './analytics-apis.js';
 import { buildIncidentApis, incidentStores } from './incident-children-apis.js';
 import { incidentHoldsVehicle } from './incident-workflow-apis.js';
 import type { IncidentServices } from './incident-apis.js';
@@ -19,6 +20,7 @@ export function buildDownstreamApis(
   kernel: PlatformKernel,
   adapters: PlatformAdapters,
   services: IncidentServices,
+  fleet: AnalyticsFleet,
   pii: PiiCipher,
   files: WorkOrderFileSupport,
   areas: AreaService,
@@ -26,6 +28,7 @@ export function buildDownstreamApis(
 ) {
   const defaults = withMaintenanceDefaults(adapters);
   const stores = incidentStores(defaults);
+  const incidents = buildIncidentApis(kernel, defaults, services, pii, files, stores, environment);
   return {
     // The audit screens read the modules through their ports only (descriptions and field histories).
     auditQuery: buildAuditQueryApi(kernel, adapters.auditRelay, {
@@ -52,7 +55,19 @@ export function buildDownstreamApis(
           (await stores.repairs.linkOfOrder(tenantId, orderId))?.incidentId ?? null,
         ),
     ),
-    ...buildIncidentApis(kernel, defaults, services, pii, files, stores, environment),
+    ...incidents,
     search: buildSearch(kernel, defaults, services, stores.store, pii),
+    ...buildAnalytics(kernel, {
+      areas: fleet.areaService,
+      vehicles: fleet.vehicleStore,
+      employees: fleet.employeeStore,
+      documents: fleet.documentStore,
+      policies: services.policies,
+      settings: services.settings,
+      plans: defaults.maintenancePlans,
+      orders: defaults.maintenanceOrders,
+      incidents: stores.store,
+      sla: incidents.incidentSla.reader,
+    }),
   };
 }

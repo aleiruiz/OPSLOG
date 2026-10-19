@@ -543,3 +543,61 @@ describe('through the domain service', () => {
     });
   });
 });
+
+describe('aggregate reads for the dashboard', () => {
+  async function seeded() {
+    const ctx = setup();
+    const rows = [
+      policy(A, 'p1', { vehicleId: 'veh-1', endsOn: '2026-10-25' }),
+      policy(A, 'p2', { vehicleId: 'veh-2', endsOn: '2026-11-18' }),
+      policy(A, 'p3', { vehicleId: 'veh-3', endsOn: '2026-11-19' }),
+      policy(A, 'p4', { vehicleId: 'veh-4', endsOn: '2026-10-18' }),
+      policy(A, 'p5', { vehicleId: 'veh-5', startsOn: '2026-10-20', endsOn: '2027-10-19' }),
+      policy(A, 'p6', { vehicleId: 'veh-6', endsOn: '2026-10-30', archivedAt: NOW.toISOString() }),
+      policy(A, 'p8', { vehicleId: 'veh-1', endsOn: '2027-06-01' }),
+      policy(B, 'p7', { vehicleId: 'veh-1', endsOn: '2026-10-25' }),
+    ];
+    for (const row of rows) await ctx.store.insert(row, revision(row));
+    return ctx;
+  }
+  const range = { from: '2026-10-19', until: '2026-11-18' };
+
+  it('counts the policies that end in the window, per tenant and vehicles, archived never', async () => {
+    const { db, store } = await seeded();
+    expect(await store.analyticsCountExpiring(A, range, null)).toBe(2);
+    expect(await store.analyticsCountExpiring(A, range, ['veh-1'])).toBe(1);
+    expect(await store.analyticsCountExpiring(A, range, ['veh-1', 'veh-2', 'veh-9'])).toBe(2);
+    expect(await store.analyticsCountExpiring(A, range, [])).toBe(0);
+    expect(await store.analyticsCountExpiring(B, range, null)).toBe(1);
+    expect(await store.analyticsCountExpiring('tenant-c', range, null)).toBe(0);
+    for (const statement of db.statements.filter((s) => s.operation === 'count'))
+      expect(statement.where).toHaveProperty('tenantId');
+  });
+
+  it('lists the vehicles whose policy period includes the day, each once', async () => {
+    const { db, store } = await seeded();
+    const ids = ['veh-1', 'veh-2', 'veh-3', 'veh-4', 'veh-5', 'veh-6', 'veh-9'];
+    expect([...(await store.analyticsCoveredVehicleIds(A, '2026-10-19', ids))].sort()).toEqual([
+      'veh-1',
+      'veh-2',
+      'veh-3',
+    ]);
+    expect(await store.analyticsCoveredVehicleIds(A, '2026-10-20', ['veh-5'])).toEqual(['veh-5']);
+    expect(await store.analyticsCoveredVehicleIds(A, '2026-10-19', [])).toEqual([]);
+    expect(await store.analyticsCoveredVehicleIds(B, '2026-10-19', ids)).toEqual(['veh-1']);
+    const long = Array.from({ length: 1201 }, (_, index) => `ghost-${index}`);
+    const before = db.statements.length;
+    expect(await store.analyticsCoveredVehicleIds(A, '2026-10-19', long)).toEqual([]);
+    expect(db.statements.length - before).toBe(3);
+    expect(await store.analyticsCountExpiring(A, range, long)).toBe(0);
+    expect(db.statements.length - before).toBe(6);
+  });
+
+  it('reports a failing read without leaking', async () => {
+    const { db, store } = await seeded();
+    db.failNext('count', CONNECTION_LOST, { leak: 'veh-secret' });
+    const failure = await rejection(store.analyticsCountExpiring(A, range, ['veh-secret']));
+    expect(failure).toMatchObject({ code: 'unavailable' });
+    expect(JSON.stringify(failure)).not.toContain('veh-secret');
+  });
+});

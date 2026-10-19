@@ -16,7 +16,10 @@ import {
   transitionFrom,
   transitionRow,
 } from './mapping.js';
-import { CreateIncidentCases2026101500010 } from './migrations.js';
+import {
+  AddIncidentAnalyticsIndexes2026101900010,
+  CreateIncidentCases2026101500010,
+} from './migrations.js';
 import { TypeOrmIncidentStore } from './store.js';
 
 const endpoint = { host: '127.0.0.1', port: 3306, database: 'opslog_t_x', password: 'x' };
@@ -150,6 +153,17 @@ describe('incident schema', () => {
       `DROP ${INCIDENT_TABLES.incidents}`,
     ]);
     expect(INCIDENT_ENTITIES).toHaveLength(Object.keys(INCIDENT_TABLES).length);
+  });
+
+  it('adds the dashboard indexes and drops them in reverse', async () => {
+    const { statements, runner } = recorder();
+    const migration = new AddIncidentAnalyticsIndexes2026101900010();
+    await migration.up(runner);
+    expect(statements).toHaveLength(4);
+    expect(statements.join(' ')).toContain('ix_incident_reported');
+    expect(statements.join(' ')).toContain('(company_id,cycle,resolved_at)');
+    await migration.down(runner);
+    expect(statements.slice(4).every((sql) => sql.startsWith('DROP INDEX'))).toBe(true);
   });
 
   it('carries every column of the aggregate, including those later packages write', () => {

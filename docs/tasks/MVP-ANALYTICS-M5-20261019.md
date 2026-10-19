@@ -40,6 +40,8 @@ write_paths:
 shared_paths_owned_in_wave_1:
   - registro de contratos, rutas BFF y composición (PR 1)
   - puertos de lectura agregada en los módulos fuente (solo consultas nuevas de conteo y agregación, sin cambiar reglas): packages/domain/{vehicles,employees,documents,insurance,maintenance,incidents}/**/ports o query
+  - sus implementaciones en memoria y MySQL: packages/persistence/{vehicles,employees,documents,insurance,maintenance/orders,incidents/cases}/** (consultas nuevas, dos migraciones de solo índices en órdenes e incidentes y dobles de prueba)
+  - registro en composición: apps/api/composition/src/{index.ts,platform.ts} y platform/{apis.ts,downstream-apis.ts,work-order-apis.ts} (líneas de registro y un tipo de retorno)
   - apps/web/app/HomeScreen.tsx y las rutas web de Inicio (PR 2)
   - package.json, tsconfig.json
 forbidden_paths:
@@ -81,6 +83,20 @@ Todas las fechas en la zona IANA de la empresa; «hoy» es el día de calendario
 
 1. **PR 1, API.** `packages/domain/analytics` define el catálogo anterior y su cálculo sobre puertos de lectura agregada de cada módulo (`COUNT`/`GROUP BY` por el ORM, índices con `company_id` primero). `GET /api/v1/dashboard?areaId=&from=&to=` devuelve solo los widgets que el lector puede ver; un widget sin permiso **no aparece** en el payload (ni su conteo ni su nombre). Cache por empresa, versión de autorización del lector y filtros con vida de 5 minutos (US-050, «≤ 5 min»); `asOf` en la respuesta.
 2. **PR 2, web.** `apps/web/features/dashboard` en `/` con `StatCard`, listas cortas y barras simples en SVG accesible (sin librería de gráficas nueva). Filtro de área y rango con atajos (hoy, 7 días, mes, trimestre, personalizado). Cada widget enlaza a la URL de listado con las claves de MVP-SEARCH PR 2. Estados de SPECS §8: cargando, sin datos, sin permiso para ningún widget (explica qué pedir), error recuperable. El panel «Siguiente paso» actual se conserva debajo.
+
+## Implementación del PR 1
+
+Decisiones y desviaciones, para que la revisión no las busque en el código.
+
+- **Capas.** `packages/domain/analytics` (catálogo, fórmulas y puertos, sin dependencias de los módulos), `apps/api/analytics` (`DashboardApi`: autorización, cache y errores), `apps/api/composition/src/platform/analytics-apis.ts` (adaptadores de los puertos sobre los stores) y `apps/api/bff/src/routes/analytics.ts` (consulta estricta `areaId`, `from`, `to`, sin repetidos).
+- **Puertos de lectura.** Cada módulo fuente implementa una interfaz opcional aparte (`VehicleAnalyticsReads`, `EmployeeAnalyticsReads`, `DocumentAnalyticsReads`, `PolicyAnalyticsReads`, `WorkOrderAnalyticsReads`, `IncidentAnalyticsReads`) además de su `Store`, en memoria y con TypeORM. Un store inyectado sin ellas hace que el dashboard responda 500 genérico, no un resultado parcial.
+- **Índices.** Dos migraciones de solo índices: `ix_work_order_closure (company_id, status, closed_at)` en órdenes y `ix_incident_status`, `ix_incident_reported`, `ix_incident_closed`, `ix_incident_resolved (company_id, cycle, resolved_at)` en incidentes. Las demás consultas usan índices existentes con `company_id` primero.
+- **Fórmulas, fechas y denominadores.** Cada widget lleva en el payload su fórmula, numerador y denominador. Los días son de la zona de la empresa; el fin del rango es exclusivo en UTC (inicio del día siguiente). Los percentiles son la mediana (media de los dos centrales si el conteo es par) y el p90 por rango más cercano. Los costos se suman por moneda en enteros exactos (`BigInt`), nunca entre monedas.
+- **Mantenimiento a tiempo.** La orden no tiene km previsto propio: solo se juzga por fecha (real ≤ prevista); las preventivas sin alguna de las dos fechas se excluyen de ambos términos y se cuentan en `excluded`.
+- **Fuera de servicio.** Cuenta los estados `out_of_service` e `in_maintenance` del módulo de vehículos (la tabla de arriba lo llama `maintenance`).
+- **Siniestro crítico.** Abierto con severidad `high` o `critical`, o con el SLA en estado `breached` según `IncidentSlaReader`; abierto es todo estado salvo `draft`, `closed` y `cancelled`. Tiempo de resolución: la primera entrada `resolve` de la línea de tiempo para casos reabiertos y `resolved_at` para los de primer ciclo.
+- **Cache.** Clave: empresa, huella SHA-256 de los permisos del lector y consulta resuelta (área, rango, hoy, zona y ventana de vencimiento). Vida de 5 minutos, 256 entradas como máximo, una sola ejecución para llamadas idénticas simultáneas y sin cachear fallos. La sesión y los permisos se resuelven en cada llamada, así que una revocación o un cambio de rol aplica de inmediato.
+- **Ruta.** `GET /api/v1/dashboard`, kind `session`, error de área ajena o inexistente: 422 `invalid_area`, igual que el resto del BFF.
 
 ## Pruebas de aceptación
 

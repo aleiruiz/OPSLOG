@@ -1,22 +1,37 @@
 import 'reflect-metadata';
 import { createHash } from 'node:crypto';
-import { LessThanOrEqual, type DataSource, type EntityManager } from 'typeorm';
+import {
+  And,
+  In,
+  LessThan,
+  LessThanOrEqual,
+  MoreThan,
+  MoreThanOrEqual,
+  Not,
+  type DataSource,
+  type EntityManager,
+  type FindOptionsWhere,
+} from 'typeorm';
 import { appendLocalAuditAndDelivery, MySqlTenantOutboxStore } from '../../../audit/src/index.js';
 import {
   formatFolio,
+  TERMINAL_STATUSES,
   validateIncidentEvent,
   type IdempotencyRecord,
   type Incident,
+  type IncidentAnalyticsReads,
   type IncidentApplyResult,
   type IncidentExtraWrite,
   type IncidentListQuery,
   type IncidentMutation,
   type IncidentPage,
   type IncidentStore,
+  type IncidentTimelineRow,
   type IncidentTransition,
 } from '../../../../domain/incidents/cases/src/index.js';
 import { INCIDENT_RUNTIME_ACCOUNT } from './data-source.js';
 import {
+  type IncidentEntity,
   IncidentFolioSchema,
   IncidentIdempotencySchema,
   IncidentSchema,
@@ -42,7 +57,7 @@ class ExtraWriteRefused extends Error {}
  * Tenant is part of every selector. Each mutation commits the incident (version CAS), the folio
  * counter, the timeline, the local audit rows and the allowlisted outbox events in one transaction.
  */
-export class TypeOrmIncidentStore implements IncidentStore {
+export class TypeOrmIncidentStore implements IncidentStore, IncidentAnalyticsReads {
   private readonly outbox: MySqlTenantOutboxStore;
   public constructor(
     private readonly dataSource: DataSource,
@@ -213,6 +228,75 @@ export class TypeOrmIncidentStore implements IncidentStore {
 
   public list(tenantId: string, query: IncidentListQuery): Promise<IncidentPage> {
     return listPage(this.dataSource.getRepository(IncidentSchema), tenantId, query);
+  }
+
+  public async analyticsOpenCases(
+    tenantId: string,
+    areaIds: readonly string[] | null,
+  ): Promise<readonly Incident[]> {
+    if (areaIds?.length === 0) return [];
+    const rows = await this.dataSource.getRepository(IncidentSchema).find({
+      where: {
+        tenantId,
+        status: And(Not('draft'), ...TERMINAL_STATUSES.map((status) => Not(status))),
+        ...(areaIds ? { areaId: In([...areaIds]) } : {}),
+      },
+      order: { id: 'ASC' },
+    });
+    return rows.map(incidentFrom);
+  }
+
+  /**
+   * Cases reported, first resolved or closed in `[from, to)`. A case in its first cycle resolved when
+   * `resolved_at` says so; a reopened one keeps its first `resolve` entry on the timeline.
+   */
+  public async analyticsTimeline(
+    tenantId: string,
+    areaIds: readonly string[] | null,
+    window: { readonly from: string; readonly to: string },
+  ): Promise<readonly IncidentTimelineRow[]> {
+    if (areaIds?.length === 0) return [];
+    const range = And(MoreThanOrEqual(new Date(window.from)), LessThan(new Date(window.to)));
+    const base: FindOptionsWhere<IncidentEntity> = {
+      tenantId,
+      ...(areaIds ? { areaId: In([...areaIds]) } : {}),
+    };
+    const rows = await this.dataSource.getRepository(IncidentSchema).find({
+      select: { id: true, cycle: true, reportedAt: true, resolvedAt: true, closedAt: true },
+      where: [
+        { ...base, reportedAt: range },
+        { ...base, closedAt: range },
+        { ...base, cycle: 1, resolvedAt: range },
+        { ...base, cycle: MoreThan(1) },
+      ],
+    });
+    const first = new Map<string, Date>();
+    const reopened = rows.filter((row) => row.cycle > 1).map((row) => row.id);
+    for (let at = 0; at < reopened.length; at += 500) {
+      const entries = await this.dataSource.getRepository(IncidentTransitionSchema).find({
+        select: { incidentId: true, sequence: true, occurredAt: true },
+        where: { tenantId, command: 'resolve', incidentId: In(reopened.slice(at, at + 500)) },
+        order: { incidentId: 'ASC', sequence: 'ASC' },
+      });
+      for (const entry of entries)
+        if (!first.has(entry.incidentId)) first.set(entry.incidentId, entry.occurredAt);
+    }
+    const inside = (instant: Date | null | undefined): instant is Date =>
+      instant !== null &&
+      instant !== undefined &&
+      instant.getTime() >= Date.parse(window.from) &&
+      instant.getTime() < Date.parse(window.to);
+    const result: IncidentTimelineRow[] = [];
+    for (const row of rows) {
+      const firstResolved = row.cycle > 1 ? (first.get(row.id) ?? null) : row.resolvedAt;
+      if (!inside(row.reportedAt) && !inside(firstResolved) && !inside(row.closedAt)) continue;
+      result.push({
+        reportedAt: row.reportedAt?.toISOString() ?? null,
+        firstResolvedAt: firstResolved?.toISOString() ?? null,
+        closedAt: row.closedAt?.toISOString() ?? null,
+      });
+    }
+    return result;
   }
 
   public async history(tenantId: string, id: string): Promise<readonly IncidentTransition[]> {

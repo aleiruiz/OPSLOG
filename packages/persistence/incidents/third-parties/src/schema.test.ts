@@ -6,7 +6,10 @@ import type {
   ThirdPartyRecord,
 } from '../../../../domain/incidents/third-parties/src/index.js';
 import { createIncidentDataSource } from '../../cases/src/data-source.js';
-import { CreateIncidentCases2026101500010 } from '../../cases/src/migrations.js';
+import {
+  AddIncidentAnalyticsIndexes2026101900010,
+  CreateIncidentCases2026101500010,
+} from '../../cases/src/migrations.js';
 import { INCIDENT_TABLES } from '../../cases/src/entities.js';
 import {
   EvidenceSchema,
@@ -121,6 +124,7 @@ describe('incident children schema (migration after the cases)', () => {
       CreateIncidentCases2026101500010,
       CreateIncidentChildren2026101500020,
       WidenIncidentSealedColumns2026101500030,
+      AddIncidentAnalyticsIndexes2026101900010,
     ]);
     expect(source.options.entities).toEqual(
       expect.arrayContaining([ThirdPartySchema, EvidenceSchema]),

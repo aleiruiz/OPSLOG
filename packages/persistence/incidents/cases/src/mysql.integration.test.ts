@@ -6,7 +6,9 @@ import {
   IncidentService,
   InMemoryIncidentStore,
   type IncidentActor,
+  type Incident,
   type IncidentListQuery,
+  type IncidentStore,
   type IncidentReferences,
 } from '../../../../domain/incidents/cases/src/index.js';
 import { AUDIT_TABLES } from '../../../audit/src/index.js';
@@ -373,5 +375,88 @@ suite('incident cases on disposable MySQL 8.4', () => {
     });
     expect(page.items).toHaveLength(4);
     expect(page.total).toBe(6);
+  });
+
+  it('reads dashboard facts exactly like the in-memory store, with areas, cycles and indexes', async () => {
+    const tenant = randomUUID();
+    const mysqlStore = new TypeOrmIncidentStore(sourceA);
+    const memory = new InMemoryIncidentStore();
+    const make = async (store: IncidentStore, id: string, patch: Partial<Incident>) => {
+      const created = await new IncidentService(store, refs(), {
+        now: () => now,
+        newId: () => id,
+      }).create(tenant, MANAGER, { ...draft, severity: 'high' });
+      const moved: Incident = { ...created, ...patch, version: created.version + 1 };
+      await store.apply({
+        incident: moved,
+        expectedVersion: created.version,
+        folioYear: null,
+        transitions: (patch.cycle ?? 1) > 1 ? [step('resolve', '2026-10-05T10:00:00.000Z')] : [],
+        auditActions: ['test'],
+        events: [],
+      });
+    };
+    const step = (command: string, occurredAt: string) => ({
+      command,
+      from: null,
+      to: 'resolved' as const,
+      actorId: MANAGER.id,
+      comment: null,
+      occurredAt,
+      changedFields: [],
+      before: null,
+    });
+    const cases: [string, Partial<Incident>][] = [
+      ['c1', { status: 'reported', reportedAt: '2026-10-02T10:00:00.000Z' }],
+      [
+        'c2',
+        {
+          status: 'closed',
+          reportedAt: '2026-09-01T10:00:00.000Z',
+          resolvedAt: '2026-10-03T10:00:00.000Z',
+          closedAt: '2026-10-06T10:00:00.000Z',
+        },
+      ],
+      ['c3', { status: 'cancelled', reportedAt: '2026-10-09T10:00:00.000Z', areaId: 'area-2' }],
+      [
+        'c4',
+        {
+          status: 'reopened',
+          cycle: 2,
+          reportedAt: '2026-09-20T10:00:00.000Z',
+          resolvedAt: '2026-10-20T10:00:00.000Z',
+        },
+      ],
+      ['c5', { status: 'draft' }],
+    ];
+    for (const [id, patch] of cases)
+      for (const store of [mysqlStore, memory]) await make(store, id, patch);
+    const window = { from: '2026-10-01T00:00:00.000Z', to: '2026-11-01T00:00:00.000Z' };
+    const tight = { from: '2026-10-05T00:00:00.000Z', to: '2026-10-07T00:00:00.000Z' };
+    const key = (rows: readonly object[]) => rows.map((r) => JSON.stringify(r)).sort();
+    for (const areas of [null, ['area-1'], ['area-2'], ['area-1', 'area-2'], []])
+      for (const range of [window, tight]) {
+        expect(key(await mysqlStore.analyticsTimeline(tenant, areas, range))).toEqual(
+          key(await memory.analyticsTimeline(tenant, areas, range)),
+        );
+        const open = await mysqlStore.analyticsOpenCases(tenant, areas);
+        expect(open.map((i) => i.id).sort()).toEqual(
+          (await memory.analyticsOpenCases(tenant, areas)).map((i) => i.id).sort(),
+        );
+      }
+    // c4 was first resolved at the timeline entry, not at its later resolved_at.
+    const all = await mysqlStore.analyticsTimeline(tenant, null, window);
+    expect(all.some((r) => r.firstResolvedAt === '2026-10-05T10:00:00.000Z')).toBe(true);
+    expect(all.some((r) => r.firstResolvedAt === '2026-10-20T10:00:00.000Z')).toBe(false);
+    expect((await mysqlStore.analyticsOpenCases(tenant, null)).map((i) => i.id).sort()).toEqual([
+      'c1',
+      'c4',
+    ]);
+    expect(await mysqlStore.analyticsOpenCases(randomUUID(), null)).toEqual([]);
+    const plan = await db.rows<{ possible_keys: string | null }>(
+      `EXPLAIN SELECT id FROM ${INCIDENT_TABLES.incidents} WHERE company_id=? AND reported_at>=? AND reported_at<?`,
+      [tenant, new Date(window.from), new Date(window.to)],
+    );
+    expect(plan[0]?.possible_keys).toContain('ix_incident_reported');
   });
 });

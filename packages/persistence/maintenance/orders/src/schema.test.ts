@@ -5,6 +5,7 @@ import { createWorkOrderDataSource, createWorkOrderMigrationDataSource } from '.
 import { WORK_ORDER_ENTITIES, WORK_ORDER_TABLES } from './entities.js';
 import {
   CreateMaintenanceWorkOrderFiles2026101300020,
+  AddMaintenanceWorkOrderClosureIndex2026101900010,
   CreateMaintenanceWorkOrderIdempotency2026101400010,
   CreateMaintenanceWorkOrders2026101200030,
 } from './migrations.js';
@@ -86,6 +87,19 @@ describe('work order schema', () => {
     expect(statements[0]).toContain("CHECK (status = 'completed')");
     await migration.down(runner);
     expect(statements.at(-1)).toBe(`DROP ${WORK_ORDER_TABLES.idempotency}`);
+  });
+
+  it('adds the closure index for dashboard reads and reverts it', async () => {
+    const statements: string[] = [];
+    const runner = {
+      query: async (sql: string) => void statements.push(sql),
+    } as unknown as QueryRunner;
+    const migration = new AddMaintenanceWorkOrderClosureIndex2026101900010();
+    await migration.up(runner);
+    expect(statements[0]).toContain('ix_work_order_closure');
+    expect(statements[0]).toContain('(company_id,status,closed_at)');
+    await migration.down(runner);
+    expect(statements.at(-1)).toContain('DROP INDEX ix_work_order_closure');
   });
 
   it('maps idempotency records without loss, from a JSON value or from text', () => {

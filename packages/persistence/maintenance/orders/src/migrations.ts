@@ -127,3 +127,18 @@ export class CreateMaintenanceWorkOrderIdempotency2026101400010 implements Migra
     await queryRunner.dropTable(T.idempotency);
   }
 }
+
+export const WORK_ORDER_CLOSURE_INDEX_MIGRATION_VERSION = '2026101900010';
+
+/** Dashboard reads (MVP-ANALYTICS): orders closed in a date range, by company and status. */
+export class AddMaintenanceWorkOrderClosureIndex2026101900010 implements MigrationInterface {
+  public name = 'AddMaintenanceWorkOrderClosureIndex2026101900010';
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(
+      `CREATE INDEX ix_work_order_closure ON \`${T.orders}\` (company_id,status,closed_at)`,
+    );
+  }
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`DROP INDEX ix_work_order_closure ON \`${T.orders}\``);
+  }
+}

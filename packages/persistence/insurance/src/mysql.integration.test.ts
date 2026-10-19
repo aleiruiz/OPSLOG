@@ -479,6 +479,36 @@ suite('persistent policy store on MySQL', () => {
     });
   });
 
+  describe('aggregate reads for the dashboard', () => {
+    it('counts the policies that end in the window and lists the vehicles covered on a day', async () => {
+      const tenant = randomUUID();
+      const other = randomUUID();
+      const make = (t: string, over: Record<string, unknown>) => svcA.create(t, ACTOR, input(over));
+      await make(tenant, { vehicleId: 'veh-1', endsOn: '2026-10-25' });
+      await make(tenant, { vehicleId: 'veh-2', endsOn: '2026-11-18' });
+      await make(tenant, { vehicleId: 'veh-3', endsOn: '2026-11-19' });
+      await make(tenant, { vehicleId: 'veh-4', endsOn: '2026-10-18' });
+      await make(tenant, { vehicleId: 'veh-5', startsOn: '2026-10-20', endsOn: '2027-10-19' });
+      const filed = await make(tenant, { vehicleId: 'veh-6', endsOn: '2026-10-30' });
+      await svcA.archive(tenant, filed.id, 1);
+      await make(tenant, { vehicleId: 'veh-1', endsOn: '2027-06-01' });
+      await make(other, { vehicleId: 'veh-1', endsOn: '2026-10-25' });
+      const range = { from: '2026-10-19', until: '2026-11-18' };
+      expect(await storeB.analyticsCountExpiring(tenant, range, null)).toBe(2);
+      expect(await storeB.analyticsCountExpiring(tenant, range, ['veh-1'])).toBe(1);
+      expect(await storeB.analyticsCountExpiring(tenant, range, [])).toBe(0);
+      expect(await storeB.analyticsCountExpiring(other, range, null)).toBe(1);
+      const ids = ['veh-1', 'veh-2', 'veh-3', 'veh-4', 'veh-5', 'veh-6', 'veh-9'];
+      expect(
+        [...(await storeB.analyticsCoveredVehicleIds(tenant, '2026-10-19', ids))].sort(),
+      ).toEqual(['veh-1', 'veh-2', 'veh-3']);
+      expect(await storeB.analyticsCoveredVehicleIds(tenant, '2026-10-20', ['veh-5'])).toEqual([
+        'veh-5',
+      ]);
+      expect(await storeB.analyticsCoveredVehicleIds(other, '2026-10-19', ids)).toEqual(['veh-1']);
+    });
+  });
+
   describe('failure hygiene', () => {
     it('does not leak insurers, numbers or SQL when the database refuses a statement', async () => {
       const tenant = randomUUID();

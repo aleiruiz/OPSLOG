@@ -9,6 +9,7 @@ import { INSURANCE_ROUTES } from './routes/insurance.js';
 import { ASSIGNMENT_ROUTES } from './routes/assignments.js';
 import { IMPORT_ROUTES } from './routes/imports.js';
 import { ALERT_ROUTES } from './routes/alerts.js';
+import { ANALYTICS_ROUTES } from './routes/analytics.js';
 import { AREA_ROUTES } from './routes/areas.js';
 import { MAINTENANCE_ROUTES } from './routes/maintenance.js';
 import { MAINTENANCE_ALERT_ROUTES } from './routes/maintenance-alerts.js';
@@ -46,4 +47,5 @@ export const ROUTES: readonly Route[] = [
   ...INCIDENT_COST_ROUTES,
   ...AUDIT_ROUTES,
   ...SEARCH_ROUTES,
+  ...ANALYTICS_ROUTES,
 ];

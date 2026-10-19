@@ -11,7 +11,11 @@ import { INCIDENT_SLA_ENTITIES } from '../../sla/src/entities.js';
 import { INCIDENT_REPAIR_ENTITIES } from '../../repairs/src/entities.js';
 import { INCIDENT_WORKFLOW_ENTITIES } from '../../workflow/src/entities.js';
 import { INCIDENT_ENTITIES } from './entities.js';
-import { CreateIncidentCases2026101500010, INCIDENT_MIGRATIONS_TABLE } from './migrations.js';
+import {
+  AddIncidentAnalyticsIndexes2026101900010,
+  CreateIncidentCases2026101500010,
+  INCIDENT_MIGRATIONS_TABLE,
+} from './migrations.js';
 
 export interface IncidentDatabaseConfig {
   readonly host: string;
@@ -42,6 +46,7 @@ const common = {
     CreateIncidentCases2026101500010,
     CreateIncidentChildren2026101500020,
     WidenIncidentSealedColumns2026101500030,
+    AddIncidentAnalyticsIndexes2026101900010,
   ],
   migrationsTableName: INCIDENT_MIGRATIONS_TABLE,
   synchronize: false,

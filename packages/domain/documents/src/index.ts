@@ -56,6 +56,9 @@ export {
   type DocumentRevisionSlice,
   type DocumentStore,
   type DocumentOwnerGate,
+  type DocumentAnalyticsReads,
+  type DocumentOwnerScope,
+  type ValidRequiredDocument,
 } from './ports.js';
 export { InMemoryDocumentStore } from './store.js';
 export {

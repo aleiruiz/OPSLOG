@@ -206,6 +206,8 @@ export class FakeDatabase {
         const [from, to] = value as unknown as [string, string];
         return text !== null && text >= from && text <= to;
       }
+      case 'in':
+        return (value as unknown[]).includes(actual);
       default:
         throw new Error(`fake database: unsupported operator ${expected.type}`);
     }
@@ -265,9 +267,15 @@ export class FakeRepository {
   public async find(options: {
     where: Row;
     order?: Record<string, 'ASC' | 'DESC'>;
+    select?: Record<string, boolean>;
   }): Promise<Row[]> {
     this.db.begin('find', this.entity, options.where, null);
-    return this.sorted(this.select(options.where), options.order).map(clone);
+    const found = this.sorted(this.select(options.where), options.order).map(clone);
+    const columns = Object.entries(options.select ?? {}).filter(([, picked]) => picked);
+    // A projection returns only the selected columns, as the database does.
+    return columns.length === 0
+      ? found
+      : found.map((row) => Object.fromEntries(columns.map(([column]) => [column, row[column]])));
   }
 
   public async findAndCount(options: {

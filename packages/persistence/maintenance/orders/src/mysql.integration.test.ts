@@ -161,6 +161,44 @@ suite('work orders on disposable MySQL 8.4', () => {
     expect(JSON.stringify(outbox)).not.toMatch(/999999999999999|Ruido|Filtro|MXN/);
   });
 
+  it('reads closed-order facts for the dashboard by closure window, with exact money and an index', async () => {
+    const svc = service(sourceA);
+    const store = new TypeOrmWorkOrderStore(sourceA);
+    const everything = { from: '2000-01-01T00:00:00.000Z', to: '2100-01-01T00:00:00.000Z' };
+    const before = (await store.closedFacts(tenantA, everything)).length;
+    const created = await svc.createCorrective(tenantA, ADMIN, {
+      vehicleId: 'synthetic-vehicle',
+      description: 'Lectura analítica',
+    });
+    const done = await toCompleted(svc, tenantA, created.id, created.version);
+    const closed = await svc.close(tenantA, ADMIN, created.id, {
+      version: done.version,
+      vehicleStatus: 'active',
+    });
+    const at = new Date(closed.closedAt ?? '').getTime();
+    const around = {
+      from: new Date(at - 1000).toISOString(),
+      to: new Date(at + 1000).toISOString(),
+    };
+    const facts = await store.closedFacts(tenantA, around);
+    expect(facts).toHaveLength(before + 1);
+    expect(facts[0]).toMatchObject({ vehicleId: 'synthetic-vehicle', kind: 'corrective' });
+    expect(facts[0]?.costs[0]).toEqual({ amountMinor: '999999999999999', currency: 'MXN' });
+    // Window end is exclusive; the start is inclusive.
+    expect(
+      await store.closedFacts(tenantA, { from: around.from, to: closed.closedAt ?? '' }),
+    ).toEqual([]);
+    expect(
+      await store.closedFacts(tenantA, { from: closed.closedAt ?? '', to: around.to }),
+    ).toHaveLength(before + 1);
+    expect(await store.closedFacts(tenantB, around)).toEqual([]);
+    const plan = await db.rows<{ possible_keys: string | null }>(
+      `EXPLAIN SELECT id FROM ${WORK_ORDER_TABLES.orders} WHERE company_id=? AND status='closed' AND closed_at>=? AND closed_at<?`,
+      [tenantA, new Date(at - 1000), new Date(at + 1000)],
+    );
+    expect(plan[0]?.possible_keys).toContain('ix_work_order_closure');
+  });
+
   it('isolates tenants by database and by tenant key', async () => {
     const svcA = service(sourceA);
     const order = await svcA.createCorrective(tenantA, ADMIN, {
