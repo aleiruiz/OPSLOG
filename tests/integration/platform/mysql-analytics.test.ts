@@ -297,7 +297,7 @@ suite('dashboard on the real MySQL stores', () => {
       sum += await active(leaf);
     }
     expect(await active(rootArea)).toBe(sum);
-  });
+  }, 30_000);
 
   it('adds the expiring documents of the areas up to the company figure, archived owners left out', async () => {
     const expiring = async (query = {}) =>
