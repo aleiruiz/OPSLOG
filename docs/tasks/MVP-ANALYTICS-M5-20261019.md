@@ -100,6 +100,28 @@ Decisiones y desviaciones, para que la revisión no las busque en el código.
 - **Cache.** Clave: empresa, huella SHA-256 de los permisos del lector y consulta resuelta (área, rango, hoy, zona y ventana de vencimiento). Vida de 5 minutos, 256 entradas como máximo, una sola ejecución para llamadas idénticas simultáneas y sin cachear fallos. La sesión y los permisos se resuelven en cada llamada, así que una revocación o un cambio de rol aplica de inmediato.
 - **Ruta.** `GET /api/v1/dashboard`, kind `session`, error de área ajena o inexistente: 422 `invalid_area`, igual que el resto del BFF.
 
+## Implementación del PR 2
+
+Decisiones y desviaciones, para que la revisión no las busque en el código.
+
+- **Inicio.** `HomeScreen` conserva el encabezado, monta `DashboardScreen` (`apps/web/features/dashboard`) y deja debajo el resumen de vencimientos y «Siguiente paso». El dashboard aumenta Inicio, no lo sustituye; el resumen de vencimientos se queda porque ya existe y tiene pruebas.
+- **Capas web.** `ports.ts` (`DashboardPort` sobre `dashboard.get`, sin tocar el cliente compartido de contratos), `useDashboard.ts` (una petición por consulta; la respuesta de una consulta anterior se descarta y las últimas cifras se quedan en pantalla, marcadas como «actualizando»), `DashboardFilters.tsx`, `DashboardBody.tsx`, un componente por tipo de widget, `links.ts` (drill-down) y `fakePorts.ts` (puerto del API simulado, registrado en `mockApi`).
+- **Permisos.** Se pinta solo lo que llega en `widgets`: no hay marcadores de lugar para lo ausente. Sin ningún widget, la vista explica en general qué pedir («permiso para consultar la información de la flota o de siniestros») sin nombrar widgets concretos ni ocultar filtros que no existen.
+- **Gráficas.** SVG propio (sin librería nueva): barras diarias de disponibilidad y barras agrupadas por mes (reportados sólidos, cerrados con contorno, además de leyenda). Cada SVG tiene `role="img"` con resumen y una tabla colapsable con los datos.
+- **Periodo.** Atajos Hoy, 7 días, 30 días (el valor por omisión del servidor), mes en curso, trimestre en curso y personalizado. Se calculan con el día de la empresa (`today` de la respuesta), nunca con el reloj del navegador; por eso los atajos esperan a la primera respuesta. Un rango personalizado inválido no se envía.
+- **Drill-down.** `links.ts` traduce los filtros semánticos del payload a las claves de cada listado con `listLink`, que descarta lo que el listado no acepta. Donde el listado no tiene una clave para la fórmula exacta, el enlace abre el listado más cercano y la tarjeta lo dice:
+  - Fuera de servicio: dos enlaces (`out_of_service` y `in_maintenance`), porque `status` de vehículos admite un solo valor.
+  - Mantenimientos próximos: órdenes `scheduled` (no hay clave de «próximos por fecha o km»).
+  - Siniestros críticos: dos enlaces (`severity=critical` y `severity=high`); el SLA vencido no es filtro (pendiente en search.md).
+  - Documentos y seguros por vencer: `status=expiring`, sin área (esos listados no tienen `areaId`).
+  - Seguros vigentes: vehículos activos (no hay filtro «sin póliza»).
+  - Mantenimiento a tiempo: preventivas cerradas (sin clave `onTime`). Abiertos y cerrados: fecha del evento (`occurredFrom/To`), no la de reporte.
+  - Tiempo de resolución y costo: sin enlace hasta que existan los reportes de MVP-REPORTS.
+    Por eso la prueba de aceptación 7 («exactamente las filas contadas») queda parcial en esos casos; se cierra añadiendo las claves al catálogo de MVP-SEARCH.
+- **Estados.** Cargando, sin permiso para ningún widget, error recuperable (sin cifras: pantalla de error con reintento; con cifras previas: aviso y reintento sobre las últimas cifras), sin datos (estado vacío con acción «Registrar un vehículo» si puede crear, y cada indicador dice «Sin datos» cuando su denominador es 0).
+- **Accesibilidad.** Pruebas con axe; los enlaces repiten el título del widget en su nombre accesible para distinguirse; el énfasis (por vencer, críticos) lleva texto además del color; en 360 px la rejilla es de una columna y las tarjetas anchas no desbordan.
+- **Pruebas.** `dashboard.test.tsx` (permisos, vacío, error, filtros, rango personalizado, texto equivalente de las gráficas, Inicio), `links.test.ts`, `range.test.ts`.
+
 ## Pruebas de aceptación
 
 1. **Fórmulas.** Given un fixture con conteos conocidos por estado, área y fecha (incluido un cambio de estado a mitad del rango), Then cada indicador coincide con el cálculo a mano, también en el borde de medianoche de la zona de la empresa.

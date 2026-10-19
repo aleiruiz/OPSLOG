@@ -2,9 +2,13 @@ import Box from '@mui/material/Box';
 import React from 'react';
 import { NextStepPanel, PageHeader } from '@opslog/ui';
 import { AlertsSummary } from '../alerts/AlertsSummary';
+import { DashboardScreen } from '../features/dashboard/DashboardScreen';
 import type { Permission, SessionInfo } from './types';
 
-/** Landing screen: what the person can do next, derived from their permissions only. */
+/**
+ * Landing screen (S02): the dashboard (the server sends only the widgets the reader may see), then what the
+ * person can do next, derived from their permissions only.
+ */
 export function HomeScreen({
   session,
   can,
@@ -24,9 +28,11 @@ export function HomeScreen({
         title="Inicio"
         description={`Esta es la cuenta de ${session.company.name} con el rol ${session.roleLabel}.`}
       />
+      <DashboardScreen />
       <Box
         sx={{
           display: 'grid',
+          mt: 3,
           gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 2fr) minmax(280px, 1fr)' },
           alignItems: 'start',
           gap: 2,

@@ -20,6 +20,7 @@ import type {
 
 export type MockOperation =
   | 'search'
+  | 'dashboard'
   | 'views'
   | 'getSession'
   | 'login'

@@ -16,6 +16,7 @@ import {
 import type { ApiPorts, OidcPort, Result, SessionInfo } from '../app/types';
 import { createIncidentPorts } from '../features/incidents/ports';
 import { createMaintenancePorts } from '../features/maintenance/ports';
+import { createDashboardPort } from '../features/dashboard/ports';
 import { createSearchPorts } from '../features/search/ports';
 import { createViewsPorts } from '../features/search/views/ports';
 
@@ -53,6 +54,7 @@ export function createHttpApi(
     maintenance: createMaintenancePorts(client),
     incidents: createIncidentPorts(client),
     search: createSearchPorts(client),
+    dashboard: createDashboardPort(client),
     views: createViewsPorts(client),
     auth: {
       getSession: async () => mapResult(await call('auth.session'), toSession),
