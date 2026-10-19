@@ -173,7 +173,8 @@ describe('create document', () => {
     await waitFor(() =>
       expect(screen.queryByRole('group', { name: 'Sesión expirada' })).toBeNull(),
     );
-    click('Crear documento');
+    // The form re-renders after signing in again; wait for the button instead of racing it on a loaded runner.
+    fireEvent.click(await screen.findByRole('button', { name: 'Crear documento' }));
     await screen.findByText('Documento creado.');
   });
 
