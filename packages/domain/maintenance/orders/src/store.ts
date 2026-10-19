@@ -7,6 +7,8 @@ import type {
   WorkOrder,
   WorkOrderEvent,
   WorkOrderMutation,
+  WorkOrderPosition,
+  WorkOrderReportReads,
   WorkOrderStore,
   WorkOrderTransition,
 } from './types.js';
@@ -15,7 +17,9 @@ const key = (tenantId: string, id: string) => `${tenantId.length}:${tenantId}${i
 const OPEN_WORKSHOP: readonly WorkOrder['status'][] = ['in_progress', 'completed'];
 
 /** In-memory store for unit tests and the non-persistent composition; same CAS semantics as MySQL. */
-export class InMemoryWorkOrderStore implements WorkOrderStore, WorkOrderAnalyticsReads {
+export class InMemoryWorkOrderStore
+  implements WorkOrderStore, WorkOrderAnalyticsReads, WorkOrderReportReads
+{
   private readonly orders = new Map<string, WorkOrder>();
   private readonly transitions = new Map<string, WorkOrderTransition[]>();
   private readonly files = new Map<string, WorkOrderAttachment[]>();
@@ -76,6 +80,24 @@ export class InMemoryWorkOrderStore implements WorkOrderStore, WorkOrderAnalytic
     const order = this.orders.get(key(tenantId, id));
     return order ? structuredClone(order) : null;
   }
+  public async reportPage(
+    tenantId: string,
+    after: WorkOrderPosition | null,
+    limit: number,
+  ): Promise<readonly WorkOrder[]> {
+    return [...this.orders.values()]
+      .filter((order) => order.tenantId === tenantId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
+      .filter(
+        (order) =>
+          after === null ||
+          order.createdAt > after.createdAt ||
+          (order.createdAt === after.createdAt && order.id > after.id),
+      )
+      .slice(0, limit)
+      .map((order) => structuredClone(order));
+  }
+
   public async list(
     tenantId: string,
     filter: { readonly mechanicIds?: readonly string[] } = {},

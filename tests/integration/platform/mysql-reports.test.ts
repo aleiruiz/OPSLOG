@@ -26,7 +26,8 @@ import { NOW, SIZES, seedIncidents, seedOrders } from './analytics-dataset.js';
  * The maintenance and incident report reads on the real MySQL stores of both modules, over the
  * synthetic dataset of the dashboard (12.000 orders and 6.000 cases for one company, a few for the
  * other). Each module has its own database and restricted runtime account. CI: mysql service and
- * OPSLOG_TEST_MYSQL_ADMIN_URL; locally skipped when unset or older than 8.4.
+ * OPSLOG_TEST_MYSQL_ADMIN_URL; like mysql-analytics, `beforeAll` fails on a MySQL older than 8.4 (the order
+ * and case harnesses demand it) and the suite is skipped when the variable is unset.
  */
 const suite = incidentAdminUrl ? describe : describe.skip;
 

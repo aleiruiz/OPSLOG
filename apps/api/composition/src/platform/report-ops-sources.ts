@@ -13,7 +13,12 @@ import type {
 import type { IncidentRepairStore } from '../../../../../packages/domain/incidents/repairs/src/index.js';
 import type { IncidentSlaReader } from '../../../../../packages/domain/incidents/sla/src/index.js';
 import type { WorkshopStore } from '../../../../../packages/domain/maintenance/workshops/src/index.js';
-import type { WorkOrderStore } from '../../../../../packages/domain/maintenance/orders/src/index.js';
+import type {
+  WorkOrder,
+  WorkOrderPosition,
+  WorkOrderReportReads,
+  WorkOrderStore,
+} from '../../../../../packages/domain/maintenance/orders/src/index.js';
 import {
   targets,
   type PlanScheduleReader,
@@ -57,6 +62,22 @@ const scheduleReaderOf = (plans: PlanStore): PlanScheduleReader | undefined =>
     ? (plans as unknown as PlanScheduleReader)
     : undefined;
 
+/** Every order of the company in keyset pages; a store without the paged read is listed whole. */
+async function allOrders(store: WorkOrderStore, tenantId: string): Promise<readonly WorkOrder[]> {
+  const paged = store as Partial<WorkOrderReportReads>;
+  if (typeof paged.reportPage !== 'function') return store.list(tenantId);
+  const orders: WorkOrder[] = [];
+  let after: WorkOrderPosition | null = null;
+  for (;;) {
+    const page: readonly WorkOrder[] = await paged.reportPage(tenantId, after, PAGE);
+    orders.push(...page);
+    if (orders.length > MAX_REPORT_ROWS) throw new ReportError('too_many_rows');
+    const last = page[page.length - 1];
+    if (!last || page.length < PAGE) return orders;
+    after = { createdAt: last.createdAt, id: last.id };
+  }
+}
+
 const has = (reader: ReportReader, permission: string): boolean =>
   (reader.permissions as ReadonlySet<string>).has(permission);
 
@@ -85,6 +106,9 @@ export function operationalSources(inputs: OperationalInputs): OperationalSource
   const scoped = async (reader: ReportReader, edit: 'edit' | 'incidents:edit'): Promise<boolean> =>
     reader.actorId === undefined ||
     (!has(reader, edit) && (await inputs.mechanicLinked(reader.tenantId, reader.actorId)));
+  // ADR-0014: cases belong to `incidents:view`; no other permission reads a folio or a step.
+  const noCases = async (reader: ReportReader, edit: 'incidents:edit' = 'incidents:edit') =>
+    !has(reader, 'incidents:view') || (await scoped(reader, edit));
   const caseOf = async (tenantId: string, ids: readonly string[]): Promise<readonly Incident[]> =>
     (await Promise.all(ids.map((id) => inputs.incidents.get(tenantId, id)))).filter(
       (incident): incident is Incident => incident !== null,
@@ -95,7 +119,7 @@ export function operationalSources(inputs: OperationalInputs): OperationalSource
       if (await scoped(reader, 'edit')) return [];
       const { tenantId } = reader;
       const [orders, workshops] = await Promise.all([
-        inputs.orders.list(tenantId),
+        allOrders(inputs.orders, tenantId),
         inputs.workshops.list(tenantId),
       ]);
       const workshopName = new Map(workshops.map((w) => [w.id, w.name]));
@@ -115,9 +139,15 @@ export function operationalSources(inputs: OperationalInputs): OperationalSource
               targetKm: (scheduled.snapshot['targetKm'] as number | null | undefined) ?? null,
             });
       const facts: WorkOrderFact[] = [];
+      const folios = new Map<string, string | null>();
       for (const o of kept) {
         const link = seeCases ? await inputs.repairs.linkOfOrder(tenantId, o.id) : null;
-        const linked = link ? await inputs.incidents.get(tenantId, link.incidentId) : null;
+        if (link && !folios.has(link.incidentId))
+          folios.set(
+            link.incidentId,
+            (await inputs.incidents.get(tenantId, link.incidentId))?.folio ?? null,
+          );
+        const linked = link ? { folio: folios.get(link.incidentId) ?? null } : null;
         const snapshot = snapshots.get(o.id);
         facts.push({
           id: o.id,
@@ -163,7 +193,7 @@ export function operationalSources(inputs: OperationalInputs): OperationalSource
     },
 
     incidents: async (reader, options) => {
-      if (await scoped(reader, 'incidents:edit')) return [];
+      if (await noCases(reader)) return [];
       const facts: IncidentFact[] = [];
       for (let offset = 0; ; offset += PAGE) {
         const page = await inputs.incidents.list(reader.tenantId, {
@@ -203,8 +233,7 @@ export function operationalSources(inputs: OperationalInputs): OperationalSource
 
     incidentCosts: async (reader, ids) => {
       const result = new Map<string, readonly IncidentCostFact[]>();
-      if (!has(reader, 'incidents:view_costs') || (await scoped(reader, 'incidents:edit')))
-        return result;
+      if (!has(reader, 'incidents:view_costs') || (await noCases(reader))) return result;
       for (const id of ids) {
         const read = await inputs.ledger.read(reader.tenantId, id);
         result.set(
@@ -233,7 +262,7 @@ export function operationalSources(inputs: OperationalInputs): OperationalSource
 
     incidentSteps: async (reader, ids) => {
       const result = new Map<string, readonly { command: string; to: string; at: string }[]>();
-      if (await scoped(reader, 'incidents:edit')) return result;
+      if (await noCases(reader)) return result;
       for (const id of ids)
         result.set(
           id,
@@ -248,7 +277,7 @@ export function operationalSources(inputs: OperationalInputs): OperationalSource
 
     incidentSla: async (reader, ids) => {
       const result = new Map<string, IncidentSlaFact>();
-      if (await scoped(reader, 'incidents:edit')) return result;
+      if (await noCases(reader)) return result;
       const views = await inputs.sla.forIncidents(
         reader.tenantId,
         await caseOf(reader.tenantId, ids),

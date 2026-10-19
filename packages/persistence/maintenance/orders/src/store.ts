@@ -19,6 +19,8 @@ import {
   type WorkOrderAttachment,
   type WorkOrderCommand,
   type WorkOrderMutation,
+  type WorkOrderPosition,
+  type WorkOrderReportReads,
   type WorkOrderStore,
   type WorkOrderTransition,
 } from '../../../../domain/maintenance/orders/src/index.js';
@@ -50,7 +52,9 @@ const digest = (value: string) => createHash('sha256').update(value).digest('hex
  * Tenant is part of every selector. Each mutation commits the order (version CAS), its work facts,
  * the timeline entry, the local audit row and the allowlisted outbox events in one transaction.
  */
-export class TypeOrmWorkOrderStore implements WorkOrderStore, WorkOrderAnalyticsReads {
+export class TypeOrmWorkOrderStore
+  implements WorkOrderStore, WorkOrderAnalyticsReads, WorkOrderReportReads
+{
   private readonly outbox: MySqlTenantOutboxStore;
   public constructor(
     private readonly dataSource: DataSource,
@@ -207,6 +211,30 @@ export class TypeOrmWorkOrderStore implements WorkOrderStore, WorkOrderAnalytics
   public async get(tenantId: string, id: string): Promise<WorkOrder | null> {
     const row = await this.dataSource.getRepository(WorkOrderSchema).findOneBy({ tenantId, id });
     return row ? ((await this.hydrate(tenantId, [row]))[0] ?? null) : null;
+  }
+
+  /** A keyset page (oldest first by `createdAt`, then `id`) of the whole company, for reports. */
+  public async reportPage(
+    tenantId: string,
+    after: WorkOrderPosition | null,
+    limit: number,
+  ): Promise<readonly WorkOrder[]> {
+    const instant = after ? new Date(after.createdAt) : null;
+    const query = this.dataSource
+      .getRepository(WorkOrderSchema)
+      .createQueryBuilder('o')
+      .where('o.tenantId = :tenantId', { tenantId });
+    if (instant && after)
+      query.andWhere('(o.createdAt > :at OR (o.createdAt = :at AND o.id > :id))', {
+        at: instant,
+        id: after.id,
+      });
+    const rows = await query
+      .orderBy('o.createdAt', 'ASC')
+      .addOrderBy('o.id', 'ASC')
+      .take(limit)
+      .getMany();
+    return this.hydrate(tenantId, rows);
   }
 
   public async list(

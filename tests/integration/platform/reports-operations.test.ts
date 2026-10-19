@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { PlatformResponse } from '../../../apps/api/composition/src/index.js';
 import type { ReportsApiResponse } from '../../../apps/api/exports/src/index.js';
+import { operationalSources } from '../../../apps/api/composition/src/platform/report-ops-sources.js';
 import { corr, createWorld, type Session, type World } from './world.js';
 
 let world: World;
@@ -312,5 +313,50 @@ describe('the operational reports through the platform', () => {
     const first = ok(await preview(a.admin, 'incidents_by_period', { limit: 25 }));
     const second = ok(await preview(a.admin, 'incidents_by_period', { limit: 25, offset: 0 }));
     expect(second).toEqual(first);
+  });
+
+  it('shows no case folio to a reader without incidents:view (ADR-0014)', async () => {
+    world = createWorld();
+    const a = await company(world, 'Empresa Alfa', 'a');
+    const auditor = await world.member(a.admin, 'auditor', 'subject-auditor-a');
+    const history = ok(
+      await preview(auditor, 'vehicle_history', { filters: { vehicle: 'ECO-a' } }),
+    );
+    expect(history.total).toBeGreaterThan(0);
+    expect(JSON.stringify(history.rows)).not.toContain(a.folio);
+    const withCases = ok(
+      await preview(a.admin, 'vehicle_history', { filters: { vehicle: 'ECO-a' } }),
+    );
+    expect(JSON.stringify(withCases.rows)).toContain(a.folio);
+    const corrective = ok(await preview(auditor, 'maintenance_corrective'));
+    expect(JSON.stringify(corrective.rows)).not.toContain(a.folio);
+  });
+
+  it('refuses to read more orders than a report may hold and pages by keyset', async () => {
+    const page = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({ id: `o${i}`, createdAt: '2026-10-01T00:00:00.000Z' }));
+    const calls: unknown[] = [];
+    const store = {
+      list: async () => [],
+      reportPage: async (_t: string, after: unknown) => {
+        calls.push(after);
+        return page(100);
+      },
+    };
+    const sources = operationalSources({
+      orders: store,
+      plans: {},
+      workshops: { list: async () => [] },
+    } as never);
+    const reader = {
+      tenantId: 'A',
+      permissions: new Set(['view', 'edit']),
+      actorId: 'u1',
+    } as never;
+    await expect(sources.workOrders(reader, { withCosts: false })).rejects.toMatchObject({
+      code: 'too_many_rows',
+    });
+    expect(calls[0]).toBeNull();
+    expect(calls[1]).toEqual({ createdAt: '2026-10-01T00:00:00.000Z', id: 'o99' });
   });
 });

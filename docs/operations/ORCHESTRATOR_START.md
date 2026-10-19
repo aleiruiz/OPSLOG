@@ -52,14 +52,14 @@ Prioridad: instrucción directa del usuario más reciente > baseline adoptada > 
 
 ## 5. Qué hace cada paquete M0
 
-| ID            | Resultado                                                                | Directorio/propietario                                | Casos mínimos                                                                           |
-| ------------- | ------------------------------------------------------------------------ | ----------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| FND-REPO      | Workspace ejecutable, scripts calidad/build/test/CI                      | Raíz, lockfile, workflows/harness; propietario único  | Clon limpio, test/lint/coverage incorrecto falla; MySQL real sintético.                 |
-| FND-CONTRACTS | IDs individuales del BRD, DTO/eventos/esquemas y dependencias corregidas | packages/contracts, docs/contracts, docs/traceability | Entradas inválidas, errores, tenant/payload; ningún requisito huérfano.                 |
-| FND-DS        | Tokens/tema/stories y estados del artifact                               | packages/ui, docs/design                              | Teclado, contraste, loading/vacío/error/permiso/closed; sin pantallas funcionales.      |
-| FND-AWS       | Plan/inventario pendiente y controles propuestos                         | infra/plan y docs de operación AWS                    | Revisión documental; validación remota diferida, nunca marcada realizada.               |
-| FND-ORCH      | Runtime/CLI de scheduling/leases/reviews/gates                           | tools/orchestrator y tests/orchestrator               | Doble lease, stale fencing, restart, gate bloqueante, provider ausente, SHA modificado. |
-| FND-INTEGRATE | Composición y controles efectivos                                        | Paths compartidos con lock exclusivo                  | Paquetes aceptados juntos; CI/hashes/reviews reales; bloqueos explícitos.               |
+| ID | Resultado | Directorio/propietario | Casos mínimos |
+|---|---|---|---|
+| FND-REPO | Workspace ejecutable, scripts calidad/build/test/CI | Raíz, lockfile, workflows/harness; propietario único | Clon limpio, test/lint/coverage incorrecto falla; MySQL real sintético. |
+| FND-CONTRACTS | IDs individuales del BRD, DTO/eventos/esquemas y dependencias corregidas | packages/contracts, docs/contracts, docs/traceability | Entradas inválidas, errores, tenant/payload; ningún requisito huérfano. |
+| FND-DS | Tokens/tema/stories y estados del artifact | packages/ui, docs/design | Teclado, contraste, loading/vacío/error/permiso/closed; sin pantallas funcionales. |
+| FND-AWS | Plan/inventario pendiente y controles propuestos | infra/plan y docs de operación AWS | Revisión documental; validación remota diferida, nunca marcada realizada. |
+| FND-ORCH | Runtime/CLI de scheduling/leases/reviews/gates | tools/orchestrator y tests/orchestrator | Doble lease, stale fencing, restart, gate bloqueante, provider ausente, SHA modificado. |
+| FND-INTEGRATE | Composición y controles efectivos | Paths compartidos con lock exclusivo | Paquetes aceptados juntos; CI/hashes/reviews reales; bloqueos explícitos. |
 
 FND-DS y contratos pueden escribir archivos aislados mientras FND-REPO prepara workspace. Su ejecución de pruebas/build espera scripts/configuración compatibles: registrar esa dependencia técnica sin cambiar interfaces en paralelo. El lockfile y config raíz los modifica únicamente FND-REPO o integrador con lock.
 

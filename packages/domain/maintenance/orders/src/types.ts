@@ -175,6 +175,20 @@ export interface WorkOrderAnalyticsReads {
   ): Promise<readonly ClosedOrderFact[]>;
 }
 
+/** Position of a keyset page: the last order read, by `createdAt` then `id`, oldest first. */
+export interface WorkOrderPosition {
+  readonly createdAt: string;
+  readonly id: string;
+}
+/** Optional paged read of the store for reports: the whole company without the screen's window of 500. */
+export interface WorkOrderReportReads {
+  reportPage(
+    tenantId: string,
+    after: WorkOrderPosition | null,
+    limit: number,
+  ): Promise<readonly WorkOrder[]>;
+}
+
 export interface WorkOrderStore {
   /** Applies the mutation atomically; returns false on a stale version or a taken key (nothing written). */
   apply(mutation: WorkOrderMutation): Promise<boolean>;

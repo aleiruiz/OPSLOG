@@ -161,6 +161,26 @@ suite('work orders on disposable MySQL 8.4', () => {
     expect(JSON.stringify(outbox)).not.toMatch(/999999999999999|Ruido|Filtro|MXN/);
   });
 
+  it('pages every order of the company by keyset for reports, past the 500 of the screen list', async () => {
+    const store = new TypeOrmWorkOrderStore(sourceA);
+    const ids = new Set<string>();
+    let after: { createdAt: string; id: string } | null = null;
+    for (;;) {
+      const page: readonly { id: string; createdAt: string; tenantId: string }[] =
+        await store.reportPage(tenantA, after, 2);
+      for (const order of page) {
+        expect(order.tenantId).toBe(tenantA);
+        expect(ids.has(order.id)).toBe(false);
+        ids.add(order.id);
+      }
+      const last = page[page.length - 1];
+      if (!last || page.length < 2) break;
+      after = { createdAt: last.createdAt, id: last.id };
+    }
+    expect(ids.size).toBe((await store.list(tenantA)).length);
+    expect(await store.reportPage(tenantB, null, 5)).toEqual([]);
+  });
+
   it('reads closed-order facts for the dashboard by closure window, with exact money and an index', async () => {
     const svc = service(sourceA);
     const store = new TypeOrmWorkOrderStore(sourceA);
