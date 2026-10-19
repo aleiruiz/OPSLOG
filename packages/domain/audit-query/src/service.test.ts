@@ -120,7 +120,7 @@ describe('AuditQueryService.list', () => {
     expect(plain.items[0]?.entityLabel).toBe('Persona de la plantilla');
     const allowed = await service().list(
       'A',
-      { permissions: ['view_audit', 'view_pii'] },
+      { permissions: ['view', 'view_audit', 'view_pii'] },
       { entityType: 'employee' },
     );
     expect(allowed.items[0]?.entityLabel).toBe('Empleado 17');
@@ -233,5 +233,21 @@ describe('AuditQueryService clock', () => {
     });
     const page = await bare.list('A', auditor, {});
     expect(Date.parse(page.to) - Date.parse(page.from)).toBe(30 * 86_400_000);
+  });
+});
+
+describe('AuditQueryService module permission on descriptions', () => {
+  it('names a record by type and short id when the viewer cannot read its module', async () => {
+    const page = await service().list(
+      'A',
+      { permissions: ['view_audit'] },
+      { entityType: 'vehicle' },
+    );
+    expect(page.items.length).toBeGreaterThan(0);
+    for (const item of page.items) {
+      expect(item.entityLabel).not.toBe('ECO-001');
+      expect(item.entityLabel).toMatch(/^Vehículo /);
+      expect(item.entityAvailable).toBe(true);
+    }
   });
 });

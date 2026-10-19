@@ -26,35 +26,36 @@ export function usePagedAudit(
   const { markExpired } = useSession();
   const { state, reload } = useResource(() => load(), deps);
   const [extra, setExtra] = React.useState<{
+    base: BffAuditPage;
     entries: readonly BffAuditEntry[];
     next: string | null;
   } | null>(null);
   const [loadingMore, setLoadingMore] = React.useState(false);
   const [moreFailed, setMoreFailed] = React.useState(false);
-  const generation = React.useRef(0);
-
-  React.useEffect(() => {
-    generation.current += 1;
-    setExtra(null);
-    setLoadingMore(false);
-    setMoreFailed(false);
-  }, [state]);
 
   const first = state.status === 'ready' ? state.data : null;
-  const nextCursor = extra ? extra.next : (first?.nextCursor ?? null);
-  const entries = first ? [...first.items, ...(extra?.entries ?? [])] : [];
+  // The pages loaded afterwards belong to the first page they extend: a new first page drops them.
+  const mine = extra !== null && extra.base === first ? extra : null;
+  const firstRef = React.useRef(first);
+  firstRef.current = first;
+  const nextCursor = mine ? mine.next : (first?.nextCursor ?? null);
+  const entries = first ? [...first.items, ...(mine?.entries ?? [])] : [];
 
   const loadMore = () => {
-    if (!nextCursor || loadingMore) return;
-    const mine = generation.current;
+    if (!nextCursor || !first || loadingMore) return;
+    const base = first;
     setLoadingMore(true);
     setMoreFailed(false);
     void load(nextCursor).then((result) => {
-      if (mine !== generation.current) return;
+      if (firstRef.current !== base) {
+        setLoadingMore(false);
+        return;
+      }
       setLoadingMore(false);
       if (result.ok)
         setExtra({
-          entries: [...(extra?.entries ?? []), ...result.value.items],
+          base,
+          entries: [...(mine?.entries ?? []), ...result.value.items],
           next: result.value.nextCursor,
         });
       else {

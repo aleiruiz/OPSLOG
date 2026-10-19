@@ -92,7 +92,10 @@ export function auditReconciler(
   const snapshot: AuditSnapshot =
     audit instanceof InMemoryAuditStore
       ? (tenantId) => audit.snapshotForTesting(tenantId).map(toRow)
-      : () => [];
+      : () => {
+          // An empty list would read as «nothing pending»: without a relay to compare with, it fails instead.
+          throw new Error('audit reconciliation has no relay to compare with');
+        };
   return new InMemoryAuditReconciler(snapshot);
 }
 

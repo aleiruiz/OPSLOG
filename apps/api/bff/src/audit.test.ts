@@ -112,7 +112,7 @@ describe('audit over HTTP: content', () => {
       changes: null,
     });
     expect(created.actor.label).toBe('Administrador');
-    expect(created.actor.alias).toMatch(/^U-[0-9A-F]{4}$/);
+    expect(created.actor.alias).toMatch(/^U-[0-9A-F]{6}$/);
     const times = reply.json.items.map((item: { occurredAt: string }) => item.occurredAt);
     expect([...times].sort().reverse()).toEqual(times);
     expect(reply.text).not.toContain('B-001');

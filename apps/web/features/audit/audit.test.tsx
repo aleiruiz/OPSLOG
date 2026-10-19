@@ -41,7 +41,7 @@ describe('audit screen', () => {
     expect(rows(table)[0]).toHaveTextContent('Siniestro actualizado');
     expect(rows(table)[0]).toHaveTextContent('SIN-2026-000001');
     expect(rows(table)[0]).toHaveTextContent('Administración');
-    expect(rows(table)[0]).toHaveTextContent('U-7F3A');
+    expect(rows(table)[0]).toHaveTextContent('U-7F3A21');
     expect(table).not.toHaveTextContent(/evt-|usr-|corr-|veh-001/);
     expect(screen.queryByRole('button', { name: /exportar/i })).toBeNull();
     expect(await violations(container)).toEqual([]);

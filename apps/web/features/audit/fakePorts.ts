@@ -24,7 +24,7 @@ export function makeEntry(index: number, overrides: Partial<BffAuditEntry> = {})
     entityId: 'veh-001',
     entityLabel: 'ECO-001',
     entityAvailable: true,
-    actor: { id: 'usr-1', kind: 'user', label: 'Administración', alias: 'U-7F3A' },
+    actor: { id: 'usr-1', kind: 'user', label: 'Administración', alias: 'U-7F3A21' },
     correlationId: `corr-${index}`,
     changes: null,
     ...overrides,
@@ -63,7 +63,7 @@ export function demoEntries(): BffAuditEntry[] {
       entityTypeLabel: 'Siniestro',
       entityId: 'inc-001',
       entityLabel: 'SIN-2026-000001',
-      actor: { id: 'usr-2', kind: 'user', label: 'Consulta', alias: 'U-91C2' },
+      actor: { id: 'usr-2', kind: 'user', label: 'Consulta', alias: 'U-91C2B4' },
     }),
     makeEntry(2, {
       action: 'vehicle.deleted',

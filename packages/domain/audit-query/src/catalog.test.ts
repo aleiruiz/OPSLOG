@@ -50,7 +50,7 @@ describe('entities and actors', () => {
   it('gives stable per-company pseudonyms and role or kind labels', () => {
     expect(actorAlias('t1', 'user-1')).toBe(actorAlias('t1', 'user-1'));
     expect(actorAlias('t1', 'user-1')).not.toBe(actorAlias('t2', 'user-1'));
-    expect(actorAlias('t1', 'user-1')).toMatch(/^U-[0-9A-F]{4}$/);
+    expect(actorAlias('t1', 'user-1')).toMatch(/^U-[0-9A-F]{6}$/);
     expect(actorLabel('system', null)).toBe('Sistema');
     expect(actorLabel('api_key', null)).toBe('Integración');
     expect(actorLabel('user', 'Administrador')).toBe('Administrador');

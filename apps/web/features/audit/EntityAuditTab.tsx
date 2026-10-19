@@ -14,22 +14,26 @@ import { usePagedAudit } from './usePagedAudit';
  * «Historial de auditoría» of one record (S26, per-record tab). Shown only to people with `view_audit`; the
  * server also checks the read permission of the record's module, so a 403 renders as no permission.
  */
-export function EntityAuditTab({
+export function EntityAuditTab(props: { readonly entityType: string; readonly entityId: string }) {
+  const { can } = useSession();
+  // Without `view_audit` nothing is requested at all.
+  return can('view_audit') ? <EntityHistory {...props} /> : <UiState kind="no-permission" />;
+}
+
+function EntityHistory({
   entityType,
   entityId,
 }: {
   readonly entityType: string;
   readonly entityId: string;
 }) {
-  const { ports, can } = useSession();
+  const { ports } = useSession();
   const zone = useCompanyZone();
-  const mayView = can('view_audit');
   const paged = usePagedAudit(
     (cursor) => ports.audit.forEntity(entityType, entityId, cursor ? { cursor } : undefined),
-    [ports, entityType, entityId, mayView],
+    [ports, entityType, entityId],
   );
   const [open, setOpen] = React.useState<BffAuditEntry | null>(null);
-  if (!mayView) return <UiState kind="no-permission" />;
   const ready = paged.state.status === 'ready' ? paged.state.data : null;
   return (
     <Panel

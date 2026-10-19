@@ -93,7 +93,7 @@ export class AuditQueryService {
     rows: readonly AuditEventRow[],
   ): Promise<readonly AuditEntryView[]> {
     const [descriptions, history, roles] = await Promise.all([
-      this.describeAll(tenantId, rows),
+      this.describeAll(tenantId, viewer, rows),
       this.historiesOf(tenantId, viewer, rows),
       this.rolesOf(tenantId, rows),
     ]);
@@ -140,11 +140,16 @@ export class AuditQueryService {
 
   private async describeAll(
     tenantId: string,
+    viewer: AuditViewer,
     rows: readonly AuditEventRow[],
   ): Promise<Map<string, EntityDescription | null>> {
     const wanted = new Map<string, AuditEventRow>();
+    // A record is described only to readers of its module, like its diff: others get type and short id.
     for (const row of rows)
-      if (this.deps.describers?.[row.entityType])
+      if (
+        this.deps.describers?.[row.entityType] &&
+        can(viewer, entityType(row.entityType)?.read ?? null)
+      )
         wanted.set(`${row.entityType}\u0000${row.entityId}`, row);
     const found = await Promise.all(
       [...wanted].map(async ([key, row]) => {
