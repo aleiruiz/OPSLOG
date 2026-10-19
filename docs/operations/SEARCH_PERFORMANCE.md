@@ -31,6 +31,13 @@ Cada entidad genera varias filas de clave en `opslog_search_entries`.
 | ---------- | ------ | --------- | ----------- | ------------ | ------------------ |
 | 2026-10-19 | 8.0.46 | 100.000   | 160,8 ms    | 277,5 ms     | 6,1 ms             |
 
+Segunda corrida (misma máquina, con carga concurrente): prefijo 245,4 ms, contiene 433,7 ms, sin resultados 12,3 ms.
+
+### Duración del reconcile (100.000 entidades)
+
+Carga inicial 22,8 s; estado estable (sin cambios) 1,2 s. Las fuentes son en memoria: no incluye el costo de
+leer los módulos dueños, que el reconcile pagina por tipo (solo conductores y despachadores en empleados).
+
 Máquina local de desarrollo (mysqld en loopback, una sola empresa). Presupuesto: 700 ms.
 
 Plan `EXPLAIN` del prefijo (100.000 entidades): `type=range`, `key=ix_search_prefix`,
