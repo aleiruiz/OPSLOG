@@ -1094,6 +1094,20 @@ describe('typed client against the real BFF', () => {
       ok: false,
       error: { code: 'unauthorized', status: 401 },
     });
+    // Audit screens: the three read routes answer for the admin, scoped to the session company.
+    expect(await client.call('audit.list', { query: { limit: 25 } })).toMatchObject({
+      ok: true,
+      value: { items: expect.any(Array), total: expect.any(Number) },
+    });
+    expect(
+      await client.call('audit.entity', {
+        params: { entityType: 'vehicle', entityId: 'veh-none' },
+      }),
+    ).toMatchObject({ ok: true, value: { items: [], total: 0 } });
+    expect(await client.call('audit.reconciliation')).toMatchObject({
+      ok: true,
+      value: { pending: expect.any(Array) },
+    });
     expect(await client.call('search.query', { query: { q: 'abc' } })).toMatchObject({
       ok: true,
     });

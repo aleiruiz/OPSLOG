@@ -214,3 +214,24 @@ describe('route access', () => {
       expect(safeNextPath(unsafe)).toBe('/');
   });
 });
+
+describe('audit route and route groups', () => {
+  it('resolves the audit screen under «Análisis» and requires view_audit', () => {
+    const match = resolveRoute('/analisis/auditoria');
+    expect(match?.route).toMatchObject({
+      id: 'audit',
+      access: { permission: 'view_audit' },
+      nav: { group: 'Análisis', label: 'Auditoría' },
+    });
+    expect(isAllowed(match!.route.access, (permission) => permission === 'view_audit')).toBe(true);
+    expect(isAllowed(match!.route.access, (permission) => permission === 'view')).toBe(false);
+  });
+
+  it('keeps every route id and pattern unique in the same order across the split groups', () => {
+    const patterns = routes.map((route) => `${route.id}:${route.pattern}`);
+    expect(new Set(patterns).size).toBe(patterns.length);
+    expect(routes.map((route) => route.id).indexOf('incidentAlerts')).toBeLessThan(
+      routes.map((route) => route.id).indexOf('incidentDetail'),
+    );
+  });
+});

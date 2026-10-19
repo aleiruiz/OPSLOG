@@ -9,6 +9,8 @@ import {
   withMaintenanceDefaults,
   type WorkOrderFileSupport,
 } from './work-order-apis.js';
+import type { AreaService } from '../../../../../packages/domain/areas/src/index.js';
+import { buildAuditQueryApi } from './audit-query-apis.js';
 import { buildSearch } from './search-apis.js';
 import type { PiiCipher } from '../../../../../packages/platform/pii/src/index.js';
 
@@ -19,11 +21,20 @@ export function buildDownstreamApis(
   services: IncidentServices,
   pii: PiiCipher,
   files: WorkOrderFileSupport,
+  areas: AreaService,
   environment?: string,
 ) {
   const defaults = withMaintenanceDefaults(adapters);
   const stores = incidentStores(defaults);
   return {
+    // The audit screens read the modules through their ports only (descriptions and field histories).
+    auditQuery: buildAuditQueryApi(kernel, adapters.auditRelay, {
+      vehicles: services.vehicles,
+      employees: services.employees,
+      areas,
+      incidents: stores.store,
+      workOrders: defaults.maintenanceOrders as NonNullable<typeof defaults.maintenanceOrders>,
+    }),
     ...buildMaintenanceApis(kernel, defaults, services.vehicles, services.settings),
     // Closing an order cannot return the vehicle to `active` while an open case holds it (D11).
     workOrders: buildWorkOrderApi(

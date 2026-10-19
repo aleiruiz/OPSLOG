@@ -6,6 +6,7 @@ import { createBulkControls, createBulkPorts, createBulkStores } from './mockApi
 import { createControls } from './mockApiControls';
 import { apiError, badRequest, ok } from './mockApiErrors';
 import { demoInvitations, people, systemRoles } from './mockApiFixtures';
+import { createAuditPorts } from './mockApiAuditPorts';
 import { createModulePorts } from './mockApiModulePorts';
 import type { Guarded, MockApi, MockApiOptions, MockOperation } from './mockApiTypes';
 import { createMockAlertsStore, type MockAlertsStore } from './mockAlerts';
@@ -298,6 +299,7 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     ...createAccessPorts(guarded, users, roles, invitations, roleName),
     ...createModulePorts(guarded, fleet, orgTree, paperwork, cover, staff, warnings),
     ...createBulkPorts(guarded, bulkStores),
+    ...createAuditPorts(guarded),
     maintenance: createMockMaintenancePorts({ userId: () => currentUser()?.id ?? null, can }),
     incidents: createMockIncidentPorts({ userId: () => currentUser()?.id ?? null, can }),
     search: createMockSearchPorts(guarded, fleet, staff),

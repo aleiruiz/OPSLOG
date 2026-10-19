@@ -6,6 +6,7 @@ import BuildOutlined from '@mui/icons-material/BuildOutlined';
 import BusinessOutlined from '@mui/icons-material/BusinessOutlined';
 import DescriptionOutlined from '@mui/icons-material/DescriptionOutlined';
 import GroupOutlined from '@mui/icons-material/GroupOutlined';
+import FactCheckOutlined from '@mui/icons-material/FactCheckOutlined';
 import HomeOutlined from '@mui/icons-material/HomeOutlined';
 import ReportProblemOutlined from '@mui/icons-material/ReportProblemOutlined';
 import LocalShippingOutlined from '@mui/icons-material/LocalShippingOutlined';
@@ -27,6 +28,7 @@ export const navIcons: Readonly<Record<string, typeof HomeOutlined>> = {
   maintenance: BuildOutlined,
   incidents: ReportProblemOutlined,
   imports: UploadFileOutlined,
+  audit: FactCheckOutlined,
   alertSettings: TuneOutlined,
   company: BusinessOutlined,
   users: GroupOutlined,

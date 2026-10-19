@@ -59,7 +59,7 @@ import type { IncidentSlaModule } from './platform/incident-sla-apis.js';
 import type { SearchModule } from './platform/search-apis.js';
 import type { IncidentRepairApi } from '../../incidents/repairs/src/index.js';
 import type { IncidentWorkflowApi } from '../../incidents/workflow/src/index.js';
-import { buildDomainApis } from './platform/apis.js';
+import { buildDomainApis, type DomainApis } from './platform/apis.js';
 import { acceptInvitation, inspectInvitation, inviteUser } from './platform/invitations.js';
 import type { PlatformResponse } from './platform/errors.js';
 import { listAudit, publish } from './platform/events.js';
@@ -109,6 +109,8 @@ export class Platform {
   public readonly imports: ImportsApi;
   public readonly companySettings: CompanySettingsApi;
   public readonly alerts: AlertsApi;
+  /** Global and per-record audit history, and the relay reconciliation (`view_audit`). */
+  public readonly auditQuery: DomainApis['auditQuery'];
   public readonly maintenance: MaintenanceApi;
   public readonly workOrders: WorkOrderApi;
   public readonly incidents: IncidentApi;
@@ -244,6 +246,7 @@ export class Platform {
     this.imports = apis.imports;
     this.companySettings = apis.companySettings;
     this.alerts = apis.alerts;
+    this.auditQuery = apis.auditQuery;
     this.maintenance = apis.maintenance;
     this.workOrders = apis.workOrders;
     this.incidents = apis.incidents;

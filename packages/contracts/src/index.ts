@@ -225,3 +225,4 @@ export * from './files.js';
 export type { ContractValidationError } from './validation-support.js';
 export * from './bff.js';
 export * from './client.js';
+export * from './client-audit.js';

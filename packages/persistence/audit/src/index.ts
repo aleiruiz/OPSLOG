@@ -18,9 +18,11 @@ export {
 export {
   AUDIT_MIGRATION_VERSION,
   OUTBOX_MIGRATION_VERSION,
+  READ_INDEX_MIGRATION_VERSION,
   AUDIT_MIGRATIONS_TABLE,
   CreateAuditStore2026100700010,
   CreateTenantOutbox2026100900010,
+  AddAuditReadIndexes2026101900010,
   ensureAuditYearPartition,
 } from './migrations.js';
 export {
@@ -45,6 +47,17 @@ export {
   relayPendingAuditEvent,
   type TenantAuditDataSourceResolver,
 } from './store.js';
+export {
+  RECONCILIATION_ITEM_LIMIT,
+  queryAuditProjection,
+  reconcileAudit,
+  type AuditQueryFilter,
+  type AuditQueryPage,
+  type AuditQueryRow,
+  type AuditQuerySlice,
+  type AuditReconciliationReport,
+  type PendingAuditRecord,
+} from './query-store.js';
 export { MySqlTenantOutboxStore, type TenantOutboxDataSourceResolver } from './outbox-store.js';
 export {
   createMySqlAuditRuntime,

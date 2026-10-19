@@ -4,6 +4,7 @@ import { AUDIT_ENTITIES } from './entities.js';
 import {
   CreateAuditStore2026100700010,
   CreateTenantOutbox2026100900010,
+  AddAuditReadIndexes2026101900010,
   AUDIT_MIGRATIONS_TABLE,
 } from './migrations.js';
 
@@ -27,7 +28,11 @@ export const AUDIT_MIGRATOR_ACCOUNT = /^opslog_audit_migrator_[a-z0-9_]{1,48}$/i
 const common = {
   type: 'mysql',
   entities: [...AUDIT_ENTITIES],
-  migrations: [CreateAuditStore2026100700010, CreateTenantOutbox2026100900010],
+  migrations: [
+    CreateAuditStore2026100700010,
+    CreateTenantOutbox2026100900010,
+    AddAuditReadIndexes2026101900010,
+  ],
   migrationsTableName: AUDIT_MIGRATIONS_TABLE,
   synchronize: false,
   migrationsRun: false,

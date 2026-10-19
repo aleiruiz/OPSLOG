@@ -41,6 +41,7 @@ import { VehicleCreateScreen, VehicleEditScreen } from '../vehicles/VehicleFormS
 import { VehiclesScreen } from '../vehicles/VehiclesScreen';
 import { AppShell } from './AppShell';
 import { HomeScreen } from './HomeScreen';
+import { AuditScreen } from '../features/audit/AuditScreen';
 import { IncidentSettingsScreen } from '../features/incidents/IncidentSettingsScreen';
 import { IncidentsScreen } from '../features/incidents/IncidentsScreen';
 import { MaintenanceScreen } from '../features/maintenance/MaintenanceScreen';
@@ -282,6 +283,9 @@ function Routes() {
         break;
       case 'alerts':
         screen = <AlertsScreen />;
+        break;
+      case 'audit':
+        screen = <AuditScreen />;
         break;
       case 'alertSettings':
         screen = <AlertSettingsScreen />;

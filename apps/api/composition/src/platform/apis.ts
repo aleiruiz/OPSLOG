@@ -52,6 +52,7 @@ import type { IncidentDomainApis } from './incident-apis.js';
 import type { SearchModule } from './search-apis.js';
 import { buildDownstreamApis } from './downstream-apis.js';
 import { resolvePiiCipher } from './pii-cipher.js';
+import type { AuditQueryApi } from '../../../audit-query/src/index.js';
 import type { MaintenanceApi } from '../../../maintenance/plans/src/index.js';
 import type { MaintenancePlanWorker } from '../../../../../packages/domain/maintenance/plans/src/index.js';
 
@@ -65,6 +66,7 @@ export interface DomainApis extends IncidentDomainApis {
   readonly imports: ImportsApi;
   readonly companySettings: CompanySettingsApi;
   readonly alerts: AlertsApi;
+  readonly auditQuery: AuditQueryApi;
   readonly maintenance: MaintenanceApi;
   readonly maintenancePlanWorker?: MaintenancePlanWorker;
   readonly workOrders: ReturnType<typeof buildWorkOrderApi>;
@@ -415,6 +417,7 @@ export function buildDomainApis(
       },
       pii,
       files,
+      areaService,
       environment,
     ),
   };

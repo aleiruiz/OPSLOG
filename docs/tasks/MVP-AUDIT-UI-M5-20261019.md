@@ -8,7 +8,7 @@ model: pin de código vigente según ADR-0007, sin fallback
 milestone: M5
 kind: implementation
 wave: 1 (primer dueño de los archivos compartidos de la ola 1)
-base_sha: f2523475ee784307273d9bff9f38aedf58bb3010 o el main vigente al asignar (registrarlo)
+base_sha: f2523475ee784307273d9bff9f38aedf58bb3010 (origin/main al asignar; rama claude/mvp-audit-ui)
 depends_on:
   - G4 aceptado por el propietario el 2026-10-14 sobre 64bd116 (transcrito en el informe G4; no verificable desde el repositorio)
   - ADR-0016 (alcance por defecto de M5)
@@ -51,7 +51,7 @@ forbidden_paths:
   - packages/platform/audit/src/** (el sanitizador de escritura no cambia)
   - historiales de módulos (packages/domain/<módulo>/**): solo lectura por puertos
   - apps/web/features/reports/** (la exportación del audit es de MVP-REPORTS PR 2)
-status: planned
+status: implemented (PR pendiente de abrir por el orquestador; CI y revisión Opus por headSHA pendientes)
 ```
 
 ## Encargo
@@ -112,3 +112,35 @@ git diff --check
 ```
 
 Registrar SHA, versión exacta de MySQL, empresas sintéticas A/B y la matriz requisito → contrato → implementación → prueba → evidencia para MVP-INTEGRATE. PR listo (no draft), CI verde y la única revisión Opus por PR/SHA (ADR-0007, ADR-0011). El autor no fusiona ni declara G5.
+
+## Registro de implementación
+
+Evidencia local; la verificación vigente es la de CI sobre el headSHA del PR.
+
+- Base: f252347. MySQL local 8.0.46 (CI usa 8.4.11). Empresas sintéticas A y B en `tests/integration/platform/mysql-audit-query.test.ts` y `audit-query.test.ts`.
+- p95 de la primera página filtrada sobre 200.000 filas: 127,2 ms (umbral 500 ms), con `ix_audit_projection_entity` e `ix_audit_projection_actor` (migración `AddAuditReadIndexes2026101900010`).
+- Rutas BFF: `/api/v1/audit`, `/api/v1/audit/reconciliation`, `/api/v1/audit/entities/:entityType/:entityId` (prefijo `v1`, igual que las rutas vigentes).
+- `apps/web/app/routes.ts` se divide en `apps/web/app/routes/{types,shell,plantilla,flota,operacion,analisis,configuracion}.ts`; el orden de resolución se conserva. `routes.ts` mantiene los ayudantes de resolución.
+- `packages/contracts/src/bff.ts` mueve sus reexportaciones a `bff/exports.ts` para quedar bajo 400 líneas.
+
+### Desviaciones y límites
+
+- FR-171 queda **parcial en el diff** (ADR-0016 pregunta 1): solo siniestros y órdenes de trabajo; en órdenes únicamente el estado. Campos con PII, importes o texto libre salen como `restricted`; los que el historial no guarda, como `not_recorded`.
+- El actor se muestra como rol más alias estable (`U-XXXX`): el contrato de identidad no transporta nombres.
+- El camino real del diff sobre un almacén de siniestros en MySQL no tiene prueba de extremo a extremo, porque el almacén en memoria no escribe en el audit de plataforma; el diff se prueba con almacenes en memoria y eventos sembrados.
+- `packages/persistence/files/tsconfig.json` incluye `../audit/src/query-store.ts` (TS6307 por el tipo reutilizado).
+- Sin botón de exportación: lo enlaza MVP-INTEGRATE (reporte de MVP-REPORTS PR 2).
+
+### Matriz de trazabilidad
+
+| Requisito                  | Contrato                             | Implementación                               | Prueba                                                                                                      |
+| -------------------------- | ------------------------------------ | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Permiso (1)                | `audit.*` kind `session`, 403        | `AuditQueryApi`, `Platform.authorize`        | `apps/api/audit-query/src/index.test.ts`, `apps/api/bff/src/audit.test.ts`, `features/audit/audit.test.tsx` |
+| Tenant A/B y cursor (2)    | cursor firmado con empresa y filtros | `routes/audit.ts`, `query-store.ts`          | `mysql-audit-query.test.ts`, `audit.test.ts` (BFF)                                                          |
+| Por entidad (3)            | `audit.entity`                       | `AuditQueryService.forEntity`, `entities.ts` | `service.test.ts`, `audit-query.test.ts`                                                                    |
+| Restringidos (4)           | `BffAuditChange.state`               | `diff.ts`                                    | `diff.test.ts`, `audit.test.tsx` (detalle)                                                                  |
+| Rango acotado (5)          | 400 `invalid_input`                  | `query.ts`, `range.ts` (web)                 | `query.test.ts`, `range.test.ts`                                                                            |
+| Append-only (6)            | grants runtime y relevo              | migraciones de `persistence/audit`           | `mysql-audit-query.test.ts` (MySQL real)                                                                    |
+| Reconciliación (7, FR-170) | `audit.reconciliation`               | `reconcileAudit`, `ReconciliationPanel`      | `mysql-audit-query.test.ts`, `audit.test.tsx`                                                               |
+| Rendimiento (8)            | índices de lectura                   | migración `AddAuditReadIndexes2026101900010` | `mysql-audit-query.test.ts` (p95 127,2 ms)                                                                  |
+| Accesibilidad (9)          | n/a                                  | `features/audit/*`                           | axe en S26, detalle y pestaña; teclado: botones nativos, Escape y retorno de foco (`audit.test.tsx`)        |

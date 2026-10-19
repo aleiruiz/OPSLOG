@@ -1,5 +1,6 @@
 import {
   createAlertsClient,
+  createAuditClient,
   createAreasClient,
   createAssignmentsClient,
   createBffClient,
@@ -117,6 +118,7 @@ export function createHttpApi(
       history: employees.history,
     },
     alerts,
+    audit: createAuditClient(client),
     assignments: createAssignmentsClient(client),
     imports: createImportsClient(client),
   };
