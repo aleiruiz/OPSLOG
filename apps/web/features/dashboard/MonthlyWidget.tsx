@@ -6,7 +6,7 @@ import type { BffMonthlyWidget } from '@opslog/contracts';
 import { DataDetails } from './DataDetails';
 import { formatCount, formatMonth } from './format';
 import { WIDGET_COPY } from './labels';
-import { drilldownLinks } from './links';
+import { drilldownLinks, widgetNote } from './links';
 import { Figure, WidgetFrame } from './WidgetFrame';
 
 const { colors } = opslogTokens;
@@ -26,7 +26,12 @@ export function MonthlyWidget({ widget }: { widget: BffMonthlyWidget }) {
     ? 'Sin siniestros reportados ni cerrados en el periodo.'
     : `${formatCount(widget.reported)} reportados y ${formatCount(widget.closed)} cerrados en el periodo.`;
   return (
-    <WidgetFrame title={copy.title} note={copy.note} links={drilldownLinks(widget)} wide>
+    <WidgetFrame
+      title={copy.title}
+      note={widgetNote(widget, copy.note)}
+      links={drilldownLinks(widget)}
+      wide
+    >
       <Figure
         value={`${formatCount(widget.reported)} / ${formatCount(widget.closed)}`}
         caption="Reportados / cerrados"

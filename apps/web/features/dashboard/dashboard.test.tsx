@@ -1,8 +1,10 @@
 import axe from 'axe-core';
+import type { BffDashboardQuery } from '@opslog/contracts';
 import { describe, expect, it } from 'vitest';
 import { createMockApi } from '../../app/mockApi';
 import {
   click,
+  deferred,
   fireEvent,
   renderApp,
   renderWithSession,
@@ -159,5 +161,70 @@ describe('dashboard of Inicio', () => {
     const next = screen.getByRole('heading', { name: 'Siguiente paso' });
     const first = screen.getByRole('article', { name: 'Vehículos activos' });
     expect(first.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('shows «Toda la empresa» in the area select', async () => {
+    await renderWithSession(<DashboardScreen />);
+    await widget('Vehículos activos');
+    expect(screen.getByLabelText('Área')).toHaveTextContent('Toda la empresa');
+  });
+
+  it('shows the area warning on lists that cannot filter by area', async () => {
+    await renderWithSession(<DashboardScreen />);
+    await widget('Vehículos activos');
+    fireEvent.mouseDown(screen.getByLabelText('Área'));
+    fireEvent.click(await screen.findByRole('option', { name: /Norte/ }));
+    const docs = await screen.findByRole('article', { name: 'Documentos por vencer' });
+    await waitFor(() =>
+      expect(docs).toHaveTextContent('El listado no filtra por área; muestra toda la empresa.'),
+    );
+  });
+
+  it('drops the answer of an older query that arrives late', async () => {
+    const inner = createFakeDashboard({ can: () => true });
+    const gate = deferred();
+    const dashboard: FakeDashboard = {
+      ...inner,
+      get: (query) =>
+        query?.from === '2026-09-30' ? gate.promise.then(() => inner.get(query)) : inner.get(query),
+    };
+    await renderWithSession(<DashboardScreen />, { api: withDashboard(dashboard) });
+    await widget('Vehículos activos');
+    click('7 días');
+    click('Hoy');
+    await screen.findByRole('heading', {
+      name: /Indicadores del periodo, 06\/10\/2026 al 06\/10\/2026/,
+    });
+    gate.resolve();
+    await gate.promise;
+    await new Promise((done) => setTimeout(done, 0));
+    expect(
+      screen.getByRole('heading', {
+        name: /Indicadores del periodo, 06\/10\/2026 al 06\/10\/2026/,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /30\/09\/2026/ })).toBeNull();
+  });
+
+  it('shows the loading state again when retrying a failed first load', async () => {
+    const base = createMockApi();
+    const inner = base.dashboard;
+    const gate = deferred();
+    let calls = 0;
+    const api = Object.assign(base, {
+      dashboard: {
+        get: (query?: BffDashboardQuery) => {
+          calls += 1;
+          return calls === 1 ? inner.get(query) : gate.promise.then(() => inner.get(query));
+        },
+      },
+    });
+    api.controls.failNext('dashboard');
+    await renderWithSession(<DashboardScreen />, { api });
+    fireEvent.click(await screen.findByRole('button', { name: 'Reintentar' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('Cargando');
+    expect(screen.queryByRole('button', { name: 'Reintentar' })).toBeNull();
+    gate.resolve();
+    await widget('Vehículos activos');
   });
 });

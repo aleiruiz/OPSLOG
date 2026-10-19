@@ -46,22 +46,28 @@ function allWidgets(
   const n = (value: number) => (empty ? 0 : Math.round(value * share));
   const area = q.areaId ? { areaId: q.areaId } : {};
   const range = { from: q.from, to: q.to };
-  const count = (id: BffWidgetId, value: number, filters: Record<string, string>) =>
+  const count = (id: BffWidgetId, target: string, value: number, filters: Record<string, string>) =>
     ({
       id,
       kind: 'count',
       scope: 'today',
       definition: def(id),
-      drilldown: { target: 'vehicles', filters: { ...filters, ...area } },
+      drilldown: { target, filters: { ...filters, ...area } },
       value: n(value),
     }) as const;
-  const pct = (id: BffWidgetId, num: number, den: number, filters: Record<string, string>) =>
+  const pct = (
+    id: BffWidgetId,
+    target: string,
+    num: number,
+    den: number,
+    filters: Record<string, string>,
+  ) =>
     ({
       id,
       kind: 'ratio',
       scope: id === 'maintenance_on_time' ? 'range' : 'today',
       definition: def(id),
-      drilldown: { target: 'vehicles', filters: { ...filters, ...area } },
+      drilldown: { target, filters: { ...filters, ...area } },
       numerator: n(num),
       denominator: n(den),
       percent: ratio(n(num), n(den)),
@@ -74,14 +80,20 @@ function allWidgets(
   const live = days.reduce((sum, d) => sum + d.live, 0);
   const availableTotal = days.reduce((sum, d) => sum + d.available, 0);
   return [
-    count('vehicles_active', 40, { status: 'active' }),
-    count('vehicles_out_of_service', 8, { status: 'out_of_service,in_maintenance' }),
-    count('drivers_active', 31, { kind: 'driver', status: 'active' }),
-    count('maintenance_upcoming', 6, { view: 'upcoming' }),
-    count('documents_expiring', 9, { expiry: 'expiring', withinDays: String(EXPIRY_DAYS) }),
-    count('insurance_expiring', 3, { expiry: 'expiring', withinDays: String(EXPIRY_DAYS) }),
-    count('incidents_open', 5, { statuses: OPEN }),
-    count('incidents_critical', 2, { statuses: OPEN, critical: 'true' }),
+    count('vehicles_active', 'vehicles', 40, { status: 'active' }),
+    count('vehicles_out_of_service', 'vehicles', 8, { status: 'out_of_service,in_maintenance' }),
+    count('drivers_active', 'employees', 31, { kind: 'driver', status: 'active' }),
+    count('maintenance_upcoming', 'maintenance', 6, { view: 'upcoming' }),
+    count('documents_expiring', 'documents', 9, {
+      expiry: 'expiring',
+      withinDays: String(EXPIRY_DAYS),
+    }),
+    count('insurance_expiring', 'insurance', 3, {
+      expiry: 'expiring',
+      withinDays: String(EXPIRY_DAYS),
+    }),
+    count('incidents_open', 'incidents', 5, { statuses: OPEN }),
+    count('incidents_critical', 'incidents', 2, { statuses: OPEN, critical: 'true' }),
     {
       id: 'availability',
       kind: 'availability',
@@ -92,9 +104,13 @@ function allWidgets(
       days: days.length,
       series: days,
     },
-    pct('documents_valid_pct', 52, 60, { expiry: 'expired' }),
-    pct('insurance_valid_pct', 36, 40, { status: 'active', insurance: 'none' }),
-    pct('maintenance_on_time', 14, 18, { kind: 'preventive', status: 'closed', onTime: 'false' }),
+    pct('documents_valid_pct', 'documents', 52, 60, { expiry: 'expired' }),
+    pct('insurance_valid_pct', 'vehicles', 36, 40, { status: 'active', insurance: 'none' }),
+    pct('maintenance_on_time', 'maintenance_orders', 14, 18, {
+      kind: 'preventive',
+      status: 'closed',
+      onTime: 'false',
+    }),
     {
       id: 'incidents_monthly',
       kind: 'monthly',

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BffDashboardWidget, BffWidgetId } from '@opslog/contracts';
 import { createFakeDashboard } from './fakePorts';
-import { drilldownLinks } from './links';
+import { drilldownLinks, widgetNote } from './links';
 
 const widgets = async (areaId?: string): Promise<Map<BffWidgetId, BffDashboardWidget>> => {
   const api = createFakeDashboard({ can: () => true });
@@ -40,5 +40,26 @@ describe('drill-down links', () => {
     expect(to('documents_expiring')).toEqual(['/flota/documentos?status=expiring']);
     expect(to('incidents_resolution_time')).toEqual([]);
     expect(to('maintenance_cost')).toEqual([]);
+  });
+
+  it('warns when the list a widget opens cannot filter by the chosen area', async () => {
+    const all = await widgets('area-norte');
+    const note = (id: BffWidgetId) => widgetNote(all.get(id) as BffDashboardWidget) ?? '';
+    const warning = 'El listado no filtra por área; muestra toda la empresa.';
+    for (const id of [
+      'documents_expiring',
+      'insurance_expiring',
+      'maintenance_upcoming',
+      'maintenance_on_time',
+      'incidents_open',
+      'incidents_critical',
+      'incidents_monthly',
+    ] as const)
+      expect(note(id), id).toContain(warning);
+    for (const id of ['vehicles_active', 'drivers_active', 'availability'] as const)
+      expect(note(id), id).not.toContain(warning);
+    expect(note('incidents_resolution_time')).toBe('');
+    const company = await widgets();
+    expect(widgetNote(company.get('documents_expiring') as BffDashboardWidget)).toBeUndefined();
   });
 });

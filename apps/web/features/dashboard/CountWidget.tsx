@@ -4,7 +4,7 @@ import { statusColors } from '@opslog/ui';
 import type { BffCountWidget } from '@opslog/contracts';
 import { formatCount } from './format';
 import { WIDGET_COPY } from './labels';
-import { drilldownLinks } from './links';
+import { drilldownLinks, widgetNote } from './links';
 import { Figure, WidgetFrame } from './WidgetFrame';
 
 /** A count with its tone and, when it asks for attention, the words that say so. */
@@ -13,7 +13,11 @@ export function CountWidget({ widget }: { widget: BffCountWidget }) {
   const flagged = copy.attention !== undefined && widget.value > 0;
   const tint = statusColors[flagged && copy.attention ? copy.attention.tone : 'neutral'];
   return (
-    <WidgetFrame title={copy.title} note={copy.note} links={drilldownLinks(widget)}>
+    <WidgetFrame
+      title={copy.title}
+      note={widgetNote(widget, copy.note)}
+      links={drilldownLinks(widget)}
+    >
       <Figure
         value={formatCount(widget.value)}
         caption={widget.value === 0 && copy.attention ? 'Ninguno por ahora' : copy.hint}

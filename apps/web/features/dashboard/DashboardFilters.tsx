@@ -44,6 +44,8 @@ export function DashboardFilters({
             id={`${uid}-area`}
             label="Área"
             select
+            fullWidth
+            SelectProps={{ displayEmpty: true }}
             InputLabelProps={{ shrink: true }}
             value={values.areaId}
             onChange={(event) => onChange({ areaId: event.target.value })}

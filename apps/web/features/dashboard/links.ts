@@ -1,4 +1,4 @@
-import type { BffDashboardWidget, BffListModule } from '@opslog/contracts';
+import { listModuleSpec, type BffDashboardWidget, type BffListModule } from '@opslog/contracts';
 import { listLink } from '../search/views/urlState';
 
 export interface DrilldownLink {
@@ -89,4 +89,34 @@ export function drilldownLinks(widget: BffDashboardWidget): readonly DrilldownLi
     case 'maintenance_cost':
       return [];
   }
+}
+
+const MODULE_OF: Readonly<Record<string, BffListModule>> = {
+  vehicles: 'vehicles',
+  vehicle_status: 'vehicles',
+  employees: 'employees',
+  maintenance: 'maintenance',
+  maintenance_orders: 'maintenance',
+  documents: 'documents',
+  insurance: 'insurance',
+  incidents: 'incidents',
+};
+
+/**
+ * The card's note: the widget's own note plus, when an area filter is on and the list it opens has no area
+ * key (documentos, seguros, mantenimiento, siniestros), the warning that the list shows the whole company.
+ */
+export function widgetNote(widget: BffDashboardWidget, own?: string): string | undefined {
+  const module = MODULE_OF[widget.drilldown.target];
+  const unfiltered =
+    widget.drilldown.filters['areaId'] !== undefined &&
+    module !== undefined &&
+    drilldownLinks(widget).length > 0 &&
+    listModuleSpec(module).filters['areaId'] === undefined;
+  const parts = [
+    own,
+    unfiltered ? 'El listado no filtra por área; muestra toda la empresa.' : undefined,
+  ];
+  const text = parts.filter(Boolean).join(' ');
+  return text || undefined;
 }

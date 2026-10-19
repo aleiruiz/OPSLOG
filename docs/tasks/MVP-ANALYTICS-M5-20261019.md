@@ -117,9 +117,11 @@ Decisiones y desviaciones, para que la revisión no las busque en el código.
   - Seguros vigentes: vehículos activos (no hay filtro «sin póliza»).
   - Mantenimiento a tiempo: preventivas cerradas (sin clave `onTime`). Abiertos y cerrados: fecha del evento (`occurredFrom/To`), no la de reporte.
   - Tiempo de resolución y costo: sin enlace hasta que existan los reportes de MVP-REPORTS.
-    Por eso la prueba de aceptación 7 («exactamente las filas contadas») queda parcial en esos casos; se cierra añadiendo las claves al catálogo de MVP-SEARCH.
+    - **Filtro de área.** Con un área elegida, los listados de documentos, seguros, mantenimiento y siniestros no tienen clave `areaId` (en search.md, pendiente); el enlace abre el listado de toda la empresa y la tarjeta lo avisa: «El listado no filtra por área; muestra toda la empresa.» Vehículos y empleados sí llevan el área. El enlace de disponibilidad abre la flota de hoy y lo dice.
+      Por eso la prueba de aceptación 7 («exactamente las filas contadas») queda parcial en esos casos; se cierra añadiendo las claves al catálogo de MVP-SEARCH.
 - **Estados.** Cargando, sin permiso para ningún widget, error recuperable (sin cifras: pantalla de error con reintento; con cifras previas: aviso y reintento sobre las últimas cifras), sin datos (estado vacío con acción «Registrar un vehículo» si puede crear, y cada indicador dice «Sin datos» cuando su denominador es 0).
 - **Accesibilidad.** Pruebas con axe; los enlaces repiten el título del widget en su nombre accesible para distinguirse; el énfasis (por vencer, críticos) lleva texto además del color; en 360 px la rejilla es de una columna y las tarjetas anchas no desbordan.
+- **Archivos fuera de `write_paths`.** Registro mínimo de PR 2: `apps/web/app/HomeScreen.tsx` (autorizado), `apps/web/app/types.ts` (puerto `dashboard` en `ApiPorts`), `apps/web/app/mockApi.ts` y `apps/web/app/mockApiTypes.ts` (puerto simulado y operación `dashboard`), `apps/web/api/ports.ts` (puerto real).
 - **Pruebas.** `dashboard.test.tsx` (permisos, vacío, error, filtros, rango personalizado, texto equivalente de las gráficas, Inicio), `links.test.ts`, `range.test.ts`.
 
 ## Pruebas de aceptación

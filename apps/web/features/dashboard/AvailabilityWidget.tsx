@@ -6,7 +6,7 @@ import { formatDay } from '../incidents/time';
 import { DataDetails } from './DataDetails';
 import { formatCount, formatPercent } from './format';
 import { WIDGET_COPY } from './labels';
-import { drilldownLinks } from './links';
+import { drilldownLinks, widgetNote } from './links';
 import { Figure, WidgetFrame } from './WidgetFrame';
 
 const { colors } = opslogTokens;
@@ -30,7 +30,12 @@ export function AvailabilityWidget({ widget }: { widget: BffAvailabilityWidget }
       ? 'Sin datos de flota en el periodo.'
       : `Promedio ${formatPercent(widget.percent)} en ${formatCount(widget.days)} ${widget.days === 1 ? 'día' : 'días'}; el día más bajo fue ${formatPercent(lowest)}.`;
   return (
-    <WidgetFrame title={copy.title} note={copy.note} links={drilldownLinks(widget)} wide>
+    <WidgetFrame
+      title={copy.title}
+      note={widgetNote(widget, copy.note)}
+      links={drilldownLinks(widget)}
+      wide
+    >
       <Figure value={formatPercent(widget.percent)} caption={copy.hint} />
       {widget.percent !== null && (
         <>

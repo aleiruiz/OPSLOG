@@ -5,7 +5,7 @@ import { opslogTokens } from '@opslog/ui';
 import type { BffRatioWidget } from '@opslog/contracts';
 import { formatCount, formatPercent } from './format';
 import { WIDGET_COPY } from './labels';
-import { drilldownLinks } from './links';
+import { drilldownLinks, widgetNote } from './links';
 import { Figure, WidgetFrame } from './WidgetFrame';
 
 const { colors } = opslogTokens;
@@ -19,7 +19,11 @@ export function RatioWidget({ widget }: { widget: BffRatioWidget }) {
       ? 'Sin registros que medir en este momento.'
       : `${formatCount(widget.numerator)} de ${formatCount(widget.denominator)}`;
   return (
-    <WidgetFrame title={copy.title} note={copy.note} links={drilldownLinks(widget)}>
+    <WidgetFrame
+      title={copy.title}
+      note={widgetNote(widget, copy.note)}
+      links={drilldownLinks(widget)}
+    >
       <Figure value={formatPercent(widget.percent)} caption={copy.hint} />
       {widget.percent !== null && (
         <Box

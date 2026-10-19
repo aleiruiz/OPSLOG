@@ -4,14 +4,18 @@ import React from 'react';
 import type { BffDurationWidget, BffMoneyWidget } from '@opslog/contracts';
 import { formatCount, formatDays, formatMoney } from './format';
 import { WIDGET_COPY } from './labels';
-import { drilldownLinks } from './links';
+import { drilldownLinks, widgetNote } from './links';
 import { Figure, WidgetFrame } from './WidgetFrame';
 
 /** Median and p90 of the days to resolve; «Sin datos» when no case was resolved in the range. */
 export function DurationWidget({ widget }: { widget: BffDurationWidget }) {
   const copy = WIDGET_COPY[widget.id];
   return (
-    <WidgetFrame title={copy.title} note={copy.note} links={drilldownLinks(widget)}>
+    <WidgetFrame
+      title={copy.title}
+      note={widgetNote(widget, copy.note)}
+      links={drilldownLinks(widget)}
+    >
       <Figure value={formatDays(widget.medianDays)} caption="Mediana" />
       {widget.count > 0 ? (
         <Typography variant="body2">
@@ -30,7 +34,11 @@ export function DurationWidget({ widget }: { widget: BffDurationWidget }) {
 export function MoneyWidget({ widget }: { widget: BffMoneyWidget }) {
   const copy = WIDGET_COPY[widget.id];
   return (
-    <WidgetFrame title={copy.title} note={copy.note} links={drilldownLinks(widget)}>
+    <WidgetFrame
+      title={copy.title}
+      note={widgetNote(widget, copy.note)}
+      links={drilldownLinks(widget)}
+    >
       {widget.byCurrency.length === 0 ? (
         <Figure value="Sin datos" caption={copy.hint} />
       ) : (

@@ -46,7 +46,11 @@ export const WIDGET_COPY: Readonly<Record<BffWidgetId, WidgetCopy>> = {
     attention: { tone: 'danger', text: 'Atención inmediata' },
     note: 'Los listados filtran por gravedad; el SLA vencido aún no es un filtro.',
   },
-  availability: { title: 'Disponibilidad de la flota', hint: 'Promedio diario del periodo' },
+  availability: {
+    title: 'Disponibilidad de la flota',
+    hint: 'Promedio diario del periodo',
+    note: 'El listado muestra la flota de hoy, no el historial del periodo.',
+  },
   documents_valid_pct: {
     title: 'Documentación vigente',
     hint: 'Documentos obligatorios vigentes hoy',

@@ -18,7 +18,12 @@ export function DataDetails({
       <Box component="summary" sx={{ cursor: 'pointer', color: 'primary.main', fontWeight: 500 }}>
         {summary}
       </Box>
-      <Box sx={{ maxHeight: 220, overflow: 'auto', mt: 1 }}>
+      <Box
+        role="region"
+        aria-label={caption}
+        tabIndex={0}
+        sx={{ maxHeight: 220, overflow: 'auto', mt: 1 }}
+      >
         <Box component="table" sx={{ borderCollapse: 'collapse', width: '100%' }}>
           <caption style={{ textAlign: 'left', padding: '0 0 4px' }}>{caption}</caption>
           <thead>

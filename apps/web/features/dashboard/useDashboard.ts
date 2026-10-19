@@ -28,7 +28,9 @@ export function useDashboard(query: BffDashboardQuery): {
     if (!authenticated) return undefined;
     let current = true;
     setState((previous) =>
-      previous.data ? { status: 'ready', data: previous.data, refreshing: true } : previous,
+      previous.data
+        ? { status: 'ready', data: previous.data, refreshing: true }
+        : { status: 'loading', data: null },
     );
     void ports.dashboard.get(JSON.parse(key) as BffDashboardQuery).then((result) => {
       if (!current) return;
