@@ -134,7 +134,7 @@ export class SavedViewService {
     // The owner may always delete their own view, even after losing the permission of the list.
     const module =
       deleting && view.ownerId === viewer.memberId
-        ? (this.catalog.module(view.module) ?? null)
+        ? (this.catalog.module(view.module) ?? this.open(view.module, viewer))
         : this.open(view.module, viewer);
     if (view.ownerId !== viewer.memberId && !viewer.permissions.has(MANAGER))
       throw new SavedViewError('forbidden');
