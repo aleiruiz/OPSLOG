@@ -1,5 +1,6 @@
 import type { IncidentPorts } from '../features/incidents/ports';
 import type { MaintenancePorts } from '../features/maintenance/ports';
+import type { SearchPorts } from '../features/search/ports';
 import type {
   AlertsClient,
   AssignmentsClient,
@@ -401,5 +402,7 @@ export interface ApiPorts {
   readonly maintenance: MaintenancePorts;
   /** Incident cases, their children and workflow (INC-CASES/INC-WORKFLOW routes). */
   readonly incidents: IncidentPorts;
+  /** Global search (FR-160). */
+  readonly search: SearchPorts;
   readonly oidc: OidcPort;
 }

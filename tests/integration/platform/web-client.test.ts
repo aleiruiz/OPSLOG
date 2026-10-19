@@ -1094,6 +1094,9 @@ describe('typed client against the real BFF', () => {
       ok: false,
       error: { code: 'unauthorized', status: 401 },
     });
+    expect(await client.call('search.query', { query: { q: 'abc' } })).toMatchObject({
+      ok: true,
+    });
     expect(await client.call('auth.logout')).toEqual({ ok: true, value: undefined });
     expect(await client.call('users.list')).toMatchObject({ ok: false, error: { status: 401 } });
 

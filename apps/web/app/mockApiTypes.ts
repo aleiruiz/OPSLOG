@@ -19,6 +19,7 @@ import type {
 } from './types';
 
 export type MockOperation =
+  | 'search'
   | 'getSession'
   | 'login'
   | 'logout'

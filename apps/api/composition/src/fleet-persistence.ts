@@ -45,6 +45,7 @@ import {
   maintenanceRuntimeAdapters,
 } from './maintenance-source.js';
 import { createIncidentRuntimeSource, incidentRuntimeAdapters } from './incident-source.js';
+import { createSearchRuntimeSource, searchRuntimeAdapters } from './search-source.js';
 import type { FleetDatabaseEndpoint } from './fleet-migrations.js';
 
 export * from './fleet-migrations.js';
@@ -64,6 +65,7 @@ export interface FleetRuntimeCredentials extends FleetDatabaseEndpoint {
     readonly files: { readonly username: string; readonly password: string };
     readonly maintenance: { readonly username: string; readonly password: string };
     readonly incidents: { readonly username: string; readonly password: string };
+    readonly search: { readonly username: string; readonly password: string };
     readonly auditRuntime: { readonly username: string; readonly password: string };
     readonly auditRelay: { readonly username: string; readonly password: string };
   };
@@ -92,6 +94,7 @@ export interface FleetRuntimeStores {
       | 'maintenanceMechanics'
       | 'maintenanceOrders'
       | 'incidents'
+      | 'search'
     >
   >;
   readonly audit: NonNullable<PlatformAdapters['audit']>;
@@ -159,7 +162,8 @@ export async function openFleetRuntimeStores(
   });
   const maintenance = createMaintenanceRuntimeSources(endpoint, credentials.accounts.maintenance);
   const incidentSource = createIncidentRuntimeSource(endpoint, credentials.accounts.incidents);
-  sources.push(maintenance.plans, maintenance.orders, incidentSource);
+  const searchSource = createSearchRuntimeSource(endpoint, credentials.accounts.search);
+  sources.push(maintenance.plans, maintenance.orders, incidentSource, searchSource);
   const initialized: FleetDataSource[] = [];
   let auditRuntimeInitialized = false;
   let auditRelayInitialized = false;
@@ -212,6 +216,7 @@ export async function openFleetRuntimeStores(
         imports: new TypeOrmImportStore(sources[7] as FleetDataSource),
         ...maintenanceRuntimeAdapters(maintenance),
         ...incidentRuntimeAdapters(incidentSource),
+        ...searchRuntimeAdapters(searchSource),
         get records() {
           if (!fileStore) throw new Error('fleet file runtime must be bound to a tenant first');
           return fileStore;

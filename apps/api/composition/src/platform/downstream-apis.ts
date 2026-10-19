@@ -9,6 +9,7 @@ import {
   withMaintenanceDefaults,
   type WorkOrderFileSupport,
 } from './work-order-apis.js';
+import { buildSearch } from './search-apis.js';
 import type { PiiCipher } from '../../../../../packages/platform/pii/src/index.js';
 
 /** Maintenance, work orders and incidents: the modules that build on the fleet services. */
@@ -41,5 +42,6 @@ export function buildDownstreamApis(
         ),
     ),
     ...buildIncidentApis(kernel, defaults, services, pii, files, stores, environment),
+    search: buildSearch(kernel, defaults, services, stores.store, pii),
   };
 }

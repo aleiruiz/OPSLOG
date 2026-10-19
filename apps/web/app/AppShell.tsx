@@ -66,6 +66,7 @@ export function AppShell({
   can,
   onSignOut,
   locked = false,
+  search = null,
   children,
 }: {
   session: SessionInfo;
@@ -74,6 +75,8 @@ export function AppShell({
   onSignOut: () => void;
   /** Expired session: navigation and sign-out are inert so no screen (and its drafts) can be left. */
   locked?: boolean;
+  /** Global search box of the top bar. */
+  search?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const navigation = visibleNavigation(can);
@@ -168,6 +171,7 @@ export function AppShell({
         >
           <BrandMark />
         </Box>
+        {search}
         <Box
           role="group"
           aria-label="Empresa"

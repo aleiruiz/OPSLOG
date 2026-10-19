@@ -295,11 +295,7 @@ export type {
   BffIncidentSlaPreviousCycle,
   BffIncidentSlaState,
 } from './bff/incident-sla.js';
-export {
-  BFF_SEARCH_TYPES,
-  BFF_SEARCH_PER_TYPE,
-  BFF_SEARCH_MAX_TERM,
-} from './bff/search.js';
+export { BFF_SEARCH_TYPES, BFF_SEARCH_PER_TYPE, BFF_SEARCH_MAX_TERM } from './bff/search.js';
 export type {
   BffSearchType,
   BffSearchHit,

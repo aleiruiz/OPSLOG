@@ -8,6 +8,7 @@
     "../../../packages/platform/outbox/src/**/*.ts",
     "../../../packages/platform/files/src/**/*.ts",
     "../../../packages/domain/files/src/**/*.ts",
+    "../../../packages/domain/search/src/**/*.ts",
     "../../../infra/queues/src/**/*.ts"
   ]
 }

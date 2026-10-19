@@ -152,4 +152,35 @@ describe('TypeOrmSearchStore', () => {
       },
     ]);
   });
+
+  it('queues one durable reconcile event per job id, as a system actor', async () => {
+    const enqueued: Record<string, unknown>[] = [];
+    const source = {
+      options: { username: fakeSource().source.options.username },
+      transaction: async (level: string, work: (m: unknown) => Promise<void>) => {
+        expect(level).toBe('READ COMMITTED');
+        return work({});
+      },
+    } as unknown as DataSource;
+    const store = new TypeOrmSearchStore(source, {
+      transaction: async (_manager, work) =>
+        work({ enqueue: (event: Record<string, unknown>) => void enqueued.push(event) } as never),
+    });
+    const at = '2026-10-19T12:00:00.000Z';
+    await store.enqueueReconcile({ tenantId: 'tenant-1', jobId: 'job-1', at });
+    await store.enqueueReconcile({ tenantId: 'tenant-1', jobId: 'job-2', at, full: true });
+    expect(enqueued).toMatchObject([
+      {
+        eventId: 'search-job-1',
+        idempotencyKey: 'search-job-1',
+        tenantId: 'tenant-1',
+        payload: {},
+        actorRef: { kind: 'system' },
+      },
+      { eventId: 'search-job-2', payload: { full: true } },
+    ]);
+    await expect(
+      store.enqueueReconcile({ tenantId: 'tenant-1', jobId: 'bad id!', at }),
+    ).rejects.toThrow(/invalid search reconcile job/);
+  });
 });

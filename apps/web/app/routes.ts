@@ -57,7 +57,8 @@ export interface RouteDefinition {
     | 'incidentAlerts'
     | 'incidentSettings'
     | 'incidentDetail'
-    | 'incidentTab';
+    | 'incidentTab'
+    | 'search';
   readonly pattern: string;
   readonly title: string;
   readonly access: RouteAccess;
@@ -70,6 +71,8 @@ export interface RouteDefinition {
 }
 
 export const routes: readonly RouteDefinition[] = [
+  // Global search results (FR-160); the box in the top bar is shown to every signed-in user.
+  { id: 'search', pattern: '/buscar', title: 'Buscar', access: 'authenticated' },
   {
     id: 'home',
     pattern: '/',
@@ -86,12 +89,7 @@ export const routes: readonly RouteDefinition[] = [
     title: 'Aceptar invitación',
     access: 'public',
   },
-  {
-    id: 'invitation',
-    pattern: '/invitacion',
-    title: 'Aceptar invitación',
-    access: 'public',
-  },
+  { id: 'invitation', pattern: '/invitacion', title: 'Aceptar invitación', access: 'public' },
   // Employees (FLT-PEOPLE, nav group "Plantilla"): read = `view`, create = `create`, change = `edit`; archiving
   // (`delete`) and the status change are actions of the detail. Personal data needs `view_pii` inside the screens.
   {
