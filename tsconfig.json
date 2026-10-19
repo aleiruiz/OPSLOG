@@ -101,6 +101,9 @@
     { "path": "./packages/persistence/exports" },
     { "path": "./packages/platform/mail" },
     { "path": "./packages/domain/notifications" },
-    { "path": "./packages/persistence/notifications" }
+    { "path": "./packages/persistence/notifications" },
+    { "path": "./packages/platform/webhooks" },
+    { "path": "./packages/domain/webhooks" },
+    { "path": "./packages/persistence/webhooks" }
   ]
 }

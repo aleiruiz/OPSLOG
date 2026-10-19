@@ -22,4 +22,5 @@ export const permissionLabels: Record<Permission, string> = {
   'incidents:close': 'Cerrar siniestros resueltos',
   'incidents:reopen': 'Reabrir siniestros cerrados',
   'incidents:view_costs': 'Ver costos de siniestros',
+  'integrations:manage': 'Administrar integraciones y webhooks',
 };

@@ -42,6 +42,8 @@ import type { ReportRouteTypes } from './bff/reports.js';
 import { REPORT_ROUTES } from './bff/reports.js';
 import type { NotificationRouteTypes } from './bff/notifications.js';
 import { NOTIFICATION_ROUTES } from './bff/notifications.js';
+import type { WebhookRouteTypes } from './bff/webhooks.js';
+import { WEBHOOK_ROUTES } from './bff/webhooks.js';
 import type { BffRouteDefinition } from './bff/shared.js';
 
 /**
@@ -78,7 +80,8 @@ export interface BffRouteTypes
     AnalyticsRouteTypes,
     SavedViewsRouteTypes,
     ReportRouteTypes,
-    NotificationRouteTypes {}
+    NotificationRouteTypes,
+    WebhookRouteTypes {}
 
 export type BffRouteId = keyof BffRouteTypes;
 
@@ -105,6 +108,7 @@ export const BFF_ROUTES = {
   ...SAVED_VIEWS_ROUTES,
   ...REPORT_ROUTES,
   ...NOTIFICATION_ROUTES,
+  ...WEBHOOK_ROUTES,
 } as const satisfies Record<BffRouteId, BffRouteDefinition>;
 
 type Parts<K extends BffRouteId> = Omit<BffRouteTypes[K], 'response'>;

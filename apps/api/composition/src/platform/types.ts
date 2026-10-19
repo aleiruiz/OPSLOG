@@ -30,6 +30,11 @@ import type {
   NotificationEvents,
   NotificationStore,
 } from '../../../../../packages/domain/notifications/src/index.js';
+import type { WebhookStore } from '../../../../../packages/domain/webhooks/src/index.js';
+import type {
+  Resolver,
+  SafeWebhookClient,
+} from '../../../../../packages/platform/webhooks/src/index.js';
 import type { MailPort } from '../../../../../packages/platform/mail/src/index.js';
 import type {
   ReconcileQueue,
@@ -128,6 +133,12 @@ export interface PlatformAdapters {
    * sink. Without one, outside production, a sink that sends nothing. INC-SLA mails through it too.
    */
   readonly mail?: MailPort;
+  /** Persistent webhooks (`packages/persistence/webhooks`). In memory by default. */
+  readonly webhooks?: WebhookStore;
+  /** The client that sends the signed POST; tests inject one. The default is the guarded HTTPS client. */
+  readonly webhookClient?: Pick<SafeWebhookClient, 'send'>;
+  /** DNS for the destination guard; tests inject one. The default is the system resolver. */
+  readonly webhookResolver?: Resolver;
   /** The mail adapter of the SLA notices. Without one, outside production, a test sink records them. */
   readonly incidentAlertMailer?: IncidentAlertMailer;
   /** Where a member's address lives; read at send time. Defaults to a reserved, undeliverable address. */

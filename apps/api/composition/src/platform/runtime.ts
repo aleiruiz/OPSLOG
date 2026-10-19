@@ -17,6 +17,11 @@ import {
   registerNotificationHandlers,
   withSlaNotice,
 } from '../../../../worker/notifications/src/index.js';
+import {
+  registerWebhookHandlers,
+  sharedRegistry,
+  webhookJobs,
+} from '../../../../worker/webhooks/src/index.js';
 import { registerMaintenancePlanHandlers } from '../../../../worker/maintenance-plans/src/index.js';
 import { registerSearchHandlers } from '../../../../worker/composition/src/search-consumer.js';
 import type { DomainApis } from './apis.js';
@@ -36,13 +41,13 @@ export function buildWorkerRuntime(
   auditRelay: { runBatch(max?: number): Promise<number> } | undefined,
   modules: Pick<
     DomainApis,
-    'maintenancePlanWorker' | 'incidentSla' | 'search' | 'reports' | 'notifications'
+    'maintenancePlanWorker' | 'incidentSla' | 'search' | 'reports' | 'notifications' | 'webhooks'
   >,
 ): WorkerRuntime {
   // The incident SLA scan is queued per active tenant on a local timer; the host calls
   // `runtime.periodic.start()`. The cloud trigger (EventBridge or similar) stays deferred (ADR-0002).
   const { maintenancePlanWorker: maintenancePlans, incidentSla, search, reports } = modules;
-  const { notifications } = modules;
+  const { notifications, webhooks } = modules;
   const activeTenantIds = () =>
     kernel.tenants
       .all()
@@ -115,16 +120,26 @@ export function buildWorkerRuntime(
         activeTenantIds,
         clock: () => kernel.now().getTime(),
       }),
+      ...webhookJobs({
+        dispatcher: webhooks.dispatcher,
+        tracker: webhooks.tracker,
+        store: webhooks.store,
+        activeTenantIds,
+        clock: () => kernel.now().getTime(),
+      }),
     ],
     clock: () => kernel.now().getTime(),
     ...(worker?.leaseMs === undefined ? {} : { leaseMs: worker.leaseMs }),
     ...(worker?.maxAttempts === undefined ? {} : { maxAttempts: worker.maxAttempts }),
   });
-  if (maintenancePlans) registerMaintenancePlanHandlers(runtime.worker, maintenancePlans);
+  // Several modules listen to the same outbox events (a notice and a webhook): they share the types.
+  const registry = sharedRegistry(runtime.worker);
+  if (maintenancePlans) registerMaintenancePlanHandlers(registry, maintenancePlans);
   // INC-SLA keeps sending its own e-mail; the notice of the center runs beside it (one handler per type).
   if (incidentSla)
-    registerIncidentSlaHandlers(withSlaNotice(runtime.worker, notifications.worker), incidentSla);
-  if (search) registerSearchHandlers(runtime.worker, search.indexer);
-  registerNotificationHandlers(runtime.worker, notifications.worker);
+    registerIncidentSlaHandlers(withSlaNotice(registry, notifications.worker), incidentSla);
+  if (search) registerSearchHandlers(registry, search.indexer);
+  registerNotificationHandlers(registry, notifications.worker);
+  registerWebhookHandlers(registry, webhooks.worker);
   return runtime;
 }

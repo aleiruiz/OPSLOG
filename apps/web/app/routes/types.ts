@@ -68,7 +68,8 @@ export interface RouteDefinition {
     | 'search'
     | 'reports'
     | 'notifications'
-    | 'notificationPreferences';
+    | 'notificationPreferences'
+    | 'integrations';
   readonly pattern: string;
   readonly title: string;
   readonly access: RouteAccess;

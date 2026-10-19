@@ -18,6 +18,7 @@ import { INCIDENT_WORKFLOW_TABLES } from '../../../../packages/persistence/incid
 import { SAVED_VIEW_TABLES } from '../../../../packages/persistence/saved-views/src/index.js';
 import { EXPORT_TABLES } from '../../../../packages/persistence/exports/src/index.js';
 import { NOTIFICATION_TABLES } from '../../../../packages/persistence/notifications/src/index.js';
+import { WEBHOOK_TABLES } from '../../../../packages/persistence/webhooks/src/index.js';
 import { SEARCH_TABLES } from '../../../../packages/persistence/search/src/index.js';
 import { INCIDENT_CHILD_TABLES } from '../../../../packages/persistence/incidents/third-parties/src/index.js';
 
@@ -110,6 +111,12 @@ export const FLEET_TABLE_GRANTS = {
     { table: NOTIFICATION_TABLES.rules, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
     { table: NOTIFICATION_TABLES.subscriptions, privileges: ['SELECT', 'INSERT', 'DELETE'] },
   ],
+  // Endpoints and deliveries can be deleted (an endpoint with its history, deliveries after 30 days).
+  webhooks: [
+    { table: WEBHOOK_TABLES.endpoints, privileges: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] },
+    { table: WEBHOOK_TABLES.deliveries, privileges: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] },
+    { table: WEBHOOK_TABLES.driverState, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
+  ],
 } satisfies Record<string, readonly TableGrant[]>;
 
 export type FleetModuleName = keyof typeof FLEET_TABLE_GRANTS;
@@ -129,4 +136,5 @@ export const FLEET_MODULES: readonly FleetModuleName[] = [
   'views',
   'exports',
   'notify',
+  'webhooks',
 ];

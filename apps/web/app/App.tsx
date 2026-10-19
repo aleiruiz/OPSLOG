@@ -51,6 +51,7 @@ import { NotificationBell } from '../features/notifications/NotificationBell';
 import { NotificationsScreen } from '../features/notifications/NotificationsScreen';
 import { PreferencesScreen } from '../features/notifications/PreferencesScreen';
 import { ReportsScreen } from '../features/reports/ReportsScreen';
+import { IntegrationsScreen } from '../settings/integrations/IntegrationsScreen';
 import { RouterProvider, useRouter } from './router';
 import { isAllowed, loginPath, resolveRoute } from './routes';
 import type { ApiPorts } from './types';
@@ -302,6 +303,9 @@ function Routes() {
         break;
       case 'notificationPreferences':
         screen = <PreferencesScreen />;
+        break;
+      case 'integrations':
+        screen = <IntegrationsScreen />;
         break;
       case 'reports':
         screen = <ReportsScreen />;

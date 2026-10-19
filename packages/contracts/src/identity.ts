@@ -18,7 +18,8 @@ export type Permission =
   | 'incidents:edit'
   | 'incidents:close'
   | 'incidents:reopen'
-  | 'incidents:view_costs';
+  | 'incidents:view_costs'
+  | 'integrations:manage';
 export type ActorKind = 'user' | 'api_key' | 'system';
 export interface ActorRef {
   subject: string;

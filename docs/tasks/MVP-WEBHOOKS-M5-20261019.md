@@ -118,3 +118,21 @@ git diff --check
 ```
 
 Registrar SHA, MySQL exacto y la matriz requisito → contrato → implementación → prueba → evidencia. PR listo, CI verde y la única revisión Opus por PR/SHA. El autor no fusiona ni declara G5.
+
+## Evidencia de implementación
+
+- Base: `origin/claude/mvp-reports-pr2`; rama `claude/mvp-webhooks`. El SHA de cabeza se registra en el reporte de la sesión.
+- MySQL de las pruebas locales: 8.0.46 (las suites que exigen 8.4 quedan fuera de esta evidencia y corren en CI). Sin dependencias nuevas.
+- Pruebas propias: plataforma 112, dominio 25, persistencia 7 unitarias y 12 de integración (tres ejecuciones verdes), API 5, worker 19, BFF 5, plataforma 15 y MySQL de plataforma 2 (tres ejecuciones verdes), web 23 (axe incluido).
+- Cobertura (sentencias / ramas): plataforma 98,08 / 92,22; dominio 99,72 / 95,79; API 100 / 98,46; worker 100 / 100; composición 96,44 / 90,04 sin las suites de 8.4.
+
+| Requisito                              | Contrato                        | Implementación                                   | Prueba                                            |
+| -------------------------------------- | ------------------------------- | ------------------------------------------------ | ------------------------------------------------- |
+| Endpoints, historial y reintento (S25) | `webhooks.*`                    | `packages/domain/webhooks`, `apps/api/webhooks`  | `webhooks.test.ts` (BFF), `integrations.test.tsx` |
+| Firma y replay (SPECS §4.3)            | cabeceras `OPSLOG-*`            | `packages/platform/webhooks`                     | aceptación 1                                      |
+| SSRF y redirecciones                   | 400 en el registro              | `guard.ts`, `client.ts`, `transport.ts`          | aceptaciones 2 y 3                                |
+| Reintentos, DLQ e idempotencia         | `webhooks.deliveries`, `.retry` | `dispatch.ts`, `retry.ts`, `TypeOrmWebhookStore` | aceptaciones 4 y 5, `mysql-webhooks.test.ts`      |
+| A/B, permiso, secreto y payload        | 404, 403, secreto una vez       | `WebhooksApi`, `SecretVault`, `payload.ts`       | aceptaciones 6 a 9                                |
+| Eventos de conductor                   | n/a                             | `EligibilityTracker`, ganchos de composición     | aceptación 10                                     |
+
+Cómo verifica y rechaza replay un receptor, la matriz completa y los desvíos están en `docs/traceability/webhooks.md`.

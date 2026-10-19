@@ -17,6 +17,8 @@ import { buildSavedViews } from './saved-views-apis.js';
 import { buildSearch } from './search-apis.js';
 import { buildReports } from './report-apis.js';
 import { buildNotifications } from './notification-apis.js';
+import { buildWebhooks } from './webhook-apis.js';
+import { syntheticAddresses } from './incident-sla-apis.js';
 import type { PiiCipher } from '../../../../../packages/platform/pii/src/index.js';
 
 /** Maintenance, work orders and incidents: the modules that build on the fleet services. */
@@ -53,6 +55,19 @@ export function buildDownstreamApis(
     sla: incidents.incidentSla.reader,
     audit: auditService,
   });
+  const notifications = buildNotifications(kernel, defaults, {
+    vehicles: fleet.vehicleStore,
+    incidents: stores.store,
+    orders: defaults.maintenanceOrders,
+    plans: defaults.maintenancePlans,
+    mechanics: defaults.maintenanceMechanics as NonNullable<typeof defaults.maintenanceMechanics>,
+    sla: incidents.incidentSla,
+    exportJobs: reports.store,
+    catalog: reports.catalog,
+    alerts: fleet.alertService,
+    settings: services.settings,
+    baseUrl: publicOrigin,
+  });
   return {
     auditQuery: buildAuditQueryApi(kernel, auditService),
     ...buildMaintenanceApis(kernel, defaults, services.vehicles, services.settings),
@@ -75,18 +90,17 @@ export function buildDownstreamApis(
     ...incidents,
     search: buildSearch(kernel, defaults, services, stores.store, pii),
     reports,
-    notifications: buildNotifications(kernel, defaults, {
+    notifications,
+    webhooks: buildWebhooks(kernel, defaults, {
       vehicles: fleet.vehicleStore,
       incidents: stores.store,
       orders: defaults.maintenanceOrders,
-      plans: defaults.maintenancePlans,
-      mechanics: defaults.maintenanceMechanics as NonNullable<typeof defaults.maintenanceMechanics>,
-      sla: incidents.incidentSla,
-      exportJobs: reports.store,
-      catalog: reports.catalog,
-      alerts: fleet.alertService,
-      settings: services.settings,
-      baseUrl: publicOrigin,
+      employeeStore: fleet.employeeStore,
+      employees: services.employees,
+      holders: notifications.worker.sources.holders,
+      addressOf: (tenantId, actorId) =>
+        (defaults.incidentAlertAddresses ?? syntheticAddresses).addressOf(tenantId, actorId),
+      mail: notifications.mail,
     }),
     ...buildAnalytics(kernel, {
       areas: fleet.areaService,

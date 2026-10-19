@@ -1,0 +1,14 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../../",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
+  },
+  "include": [
+    "src/**/*.ts",
+    "../../domain/webhooks/src/**/*.ts",
+    "../../platform/webhooks/src/**/*.ts",
+    "../../platform/pii/src/**/*.ts"
+  ]
+}

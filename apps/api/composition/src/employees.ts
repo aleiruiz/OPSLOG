@@ -186,6 +186,15 @@ export interface EmployeesApiDeps {
     entityId: string,
     correlationId: string,
   ) => void | Promise<void>;
+  /**
+   * Told after a successful write, with the employee as stored (webhooks: `driver.created` and
+   * `driver.updated`). It never throws: a notification does not revert the change.
+   */
+  readonly published?: (
+    tenantId: string,
+    action: EmployeeAuditAction,
+    employee: Employee,
+  ) => Promise<void>;
 }
 
 /**
@@ -225,6 +234,7 @@ export class EmployeesApi {
       const context = await this.deps.authorize(token, correlationId, permissions);
       const employee = await work(context);
       await this.deps.audit(context, action, employee.id, correlationId);
+      await this.deps.published?.(context.tenantId, action, employee).catch(() => undefined);
       return { ok: true, value: viewOf(employee, this.deps.service.fitness(employee)) };
     } catch (error) {
       return failure(error);

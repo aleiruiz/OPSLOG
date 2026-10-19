@@ -291,6 +291,24 @@ function writes(f: Fixture): [string, string, unknown?][] {
     ['PUT', '/api/v1/notification-rules', { emailKinds: [], quietHours: false }],
     ['PUT', '/api/v1/subscriptions/vehicle/00000000-0000-4000-8000-000000000001'],
     ['DELETE', '/api/v1/subscriptions/vehicle/00000000-0000-4000-8000-000000000001'],
+    [
+      'POST',
+      '/api/v1/webhooks/endpoints',
+      { url: 'https://hooks.example.com/x', events: ['vehicle.created'] },
+    ],
+    ['PATCH', '/api/v1/webhooks/endpoints/00000000-0000-4000-8000-000000000001', { version: 1 }],
+    ['DELETE', '/api/v1/webhooks/endpoints/00000000-0000-4000-8000-000000000001'],
+    [
+      'POST',
+      '/api/v1/webhooks/endpoints/00000000-0000-4000-8000-000000000001/rotate-secret',
+      { version: 1 },
+    ],
+    ['POST', '/api/v1/webhooks/endpoints/00000000-0000-4000-8000-000000000001/test', {}],
+    [
+      'POST',
+      '/api/v1/webhooks/endpoints/00000000-0000-4000-8000-000000000001/deliveries/00000000-0000-4000-8000-000000000002/retry',
+      {},
+    ],
     ['POST', '/api/v1/incidents', { vehicleId: f.vehicleId, type: 'collision' }],
     [
       'PATCH',

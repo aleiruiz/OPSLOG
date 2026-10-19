@@ -355,3 +355,16 @@ export type {
   BffFailedDelivery,
   BffFailedDeliveryList,
 } from './notifications.js';
+export { BFF_WEBHOOK_EVENTS, BFF_WEBHOOK_DELIVERY_STATUSES } from './webhooks.js';
+export type {
+  BffWebhookEvent,
+  BffWebhookDeliveredEvent,
+  BffWebhookDeliveryStatus,
+  BffWebhookEndpoint,
+  BffWebhookEndpointList,
+  BffWebhookSecret,
+  BffWebhookEndpointInput,
+  BffWebhookEndpointPatch,
+  BffWebhookDelivery,
+  BffWebhookDeliveryList,
+} from './webhooks.js';

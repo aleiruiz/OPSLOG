@@ -25,6 +25,7 @@
     "../apps/web/app/**/*.ts",
     "../apps/web/app/**/*.tsx",
     "../apps/web/auth/**/*.tsx",
+    "../apps/web/settings/**/*.ts",
     "../apps/web/settings/**/*.tsx",
     "../apps/web/vehicles/**/*.ts",
     "../apps/web/vehicles/**/*.tsx",
