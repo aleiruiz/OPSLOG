@@ -49,8 +49,8 @@ async function signIn(page: Page, tenant: RealTenant, account: string, path = '/
   await expect(page.getByRole('heading', { name: 'Iniciar sesión', level: 1 })).toBeVisible();
   await page.getByRole('textbox', { name: /Cuenta de prueba/ }).fill(account);
   await page.keyboard.press('Enter');
-  // The sign-in heading is itself a level-1 heading: wait until it is gone, so the session cookie
-  // exists before the caller navigates elsewhere.
+  // Sign-in is asynchronous: until the sign-in screen is gone the session cookie may not exist yet, and a
+  // navigation right after Enter would cancel the request and land on the sign-in screen again.
   await expect(page.getByRole('heading', { name: 'Iniciar sesión', level: 1 })).toHaveCount(0);
 }
 async function expectNoViolations(page: Page, scope?: string) {
@@ -192,6 +192,8 @@ const actions = (page: Page) => page.getByRole('region', { name: 'Acciones del c
 async function switchTo(page: Page, tenant: RealTenant, account: string, path: string) {
   await page.context().clearCookies();
   await signIn(page, tenant, account, path);
+  // The sign-in heading is itself a level-1 heading: wait until it is gone, so the session cookie exists.
+  await expect(page.getByRole('heading', { name: 'Iniciar sesión', level: 1 })).toHaveCount(0);
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 }
 async function adminToken(tenant: RealTenant, subject: string) {
