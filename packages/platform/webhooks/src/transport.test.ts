@@ -9,7 +9,7 @@ const BODY = new TextEncoder().encode('{"id":"evt_1","type":"vehicle.created"}')
 
 suite('https transport against a real TLS receiver', () => {
   let receiver: Receiver;
-  let mode: 'ok' | 'redirect' | 'slow' | 'huge' = 'ok';
+  let mode: 'ok' | 'redirect' | 'slow' | 'huge' | 'drip' = 'ok';
   const creds = credentials as { key: string; cert: string };
   beforeAll(async () => {
     receiver = await startReceiver(creds, (_req, res) => {
@@ -17,6 +17,11 @@ suite('https transport against a real TLS receiver', () => {
         res.writeHead(302, { Location: 'https://169.254.169.254/latest/meta-data' }).end();
       } else if (mode === 'slow') {
         // Never answers: the attempt must time out.
+      } else if (mode === 'drip') {
+        // Alive but never finishing: one byte every 150 ms keeps an idle timeout from firing.
+        res.writeHead(200);
+        const timer = setInterval(() => res.write('a'), 150);
+        res.on('close', () => clearInterval(timer));
       } else if (mode === 'huge') {
         res.writeHead(200).end(Buffer.alloc(MAX_RESPONSE_BYTES * 4, 97));
       } else res.writeHead(200).end('ok');
@@ -52,6 +57,14 @@ suite('https transport against a real TLS receiver', () => {
     expect(got?.url).toBe('/hook?a=1');
     expect(got?.headers.host).toContain(TEST_HOST);
     expect(got?.headers['content-length']).toBe(String(BODY.length));
+  });
+
+  it('ends an attempt at its total deadline even when the receiver drips bytes', async () => {
+    mode = 'drip';
+    const started = Date.now();
+    await expect(direct(400)).rejects.toMatchObject({ code: 'timeout' });
+    expect(Date.now() - started).toBeLessThan(3_000);
+    mode = 'ok';
   });
 
   it('refuses a certificate that does not match the host name', async () => {

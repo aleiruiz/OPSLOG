@@ -38,9 +38,13 @@ export function httpsTransport(
   return (input) =>
     new Promise<TransportResponse>((resolve, reject) => {
       let settled = false;
+      // Total deadline of the attempt (connect, TLS, headers and body): the idle timeout alone lets
+      // a receiver that drips one byte at a time hold the attempt open for as long as it likes.
+      let deadline: NodeJS.Timeout | undefined;
       const done = (action: () => void) => {
         if (settled) return;
         settled = true;
+        clearTimeout(deadline);
         action();
       };
       const req: ClientRequest = request(
@@ -83,6 +87,10 @@ export function httpsTransport(
           response.on('close', () => done(() => resolve({ status: response.statusCode ?? 0 })));
         },
       );
+      deadline = setTimeout(() => {
+        req.destroy();
+        done(() => reject(new TransportError('timeout')));
+      }, input.timeoutMs);
       req.on('timeout', () => {
         req.destroy();
         done(() => reject(new TransportError('timeout')));

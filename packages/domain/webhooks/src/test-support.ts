@@ -36,7 +36,14 @@ export const failing = (status = 500): Partial<AttemptResult> => ({
   failure: 'http',
 });
 
-export function world(options: { perMinute?: number; batch?: number } = {}) {
+export function world(
+  options: {
+    perMinute?: number;
+    batch?: number;
+    tickBudgetMs?: number;
+    clock?: () => number;
+  } = {},
+) {
   const clock = new Clock();
   const store = new InMemoryWebhookStore();
   const vault = new SecretVault(new EnvelopePiiCipher(LocalDevKms.ephemeral('development')));

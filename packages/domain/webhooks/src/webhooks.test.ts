@@ -365,6 +365,26 @@ describe('dispatch', () => {
     ).toBe('pending');
   });
 
+  it("stops a company's tick once its wall-clock budget is spent, so it cannot hold the others", async () => {
+    let wall = 0;
+    const w = world({ tickBudgetMs: 30_000, clock: () => wall });
+    await endpointOf(w);
+    w.client.answer = () => {
+      wall += 12_000;
+      return {};
+    };
+    for (let i = 0; i < 6; i += 1) await w.ingest.publish('tenant-a', event(`evt_${i}`));
+    await w.dispatcher.runDue('tenant-a');
+    // 12 s each: the third send ends at 36 s, past the 30 s budget, so no fourth starts.
+    expect(w.client.calls).toHaveLength(3);
+    // The rest waits for its lease to lapse and is then taken again, never lost or duplicated.
+    w.clock.advance(3 * 60_000);
+    wall = 0;
+    await w.dispatcher.runDue('tenant-a');
+    expect(w.client.calls).toHaveLength(6);
+    expect(new Set(w.client.calls.map((call) => call.eventId)).size).toBe(6);
+  });
+
   it('starts at most 60 deliveries a minute per company and keeps the rest for later', async () => {
     const w = world({ perMinute: 3 });
     await endpointOf(w);

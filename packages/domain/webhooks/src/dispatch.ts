@@ -1,5 +1,5 @@
 import { SafeWebhookClient } from '../../../platform/webhooks/src/index.js';
-import { BATCH, DELIVERIES_PER_MINUTE, LEASE_MS } from './catalog.js';
+import { BATCH, DELIVERIES_PER_MINUTE, LEASE_MS, TICK_BUDGET_MS } from './catalog.js';
 import type { EndpointNotifier, WebhookStore } from './ports.js';
 import { outcomeOf } from './retry.js';
 import type { SecretVault } from './secrets.js';
@@ -14,6 +14,10 @@ export interface DispatchDeps {
   readonly random?: () => number;
   readonly batch?: number;
   readonly perMinute?: number;
+  /** Wall-clock budget of one company's tick, in milliseconds. */
+  readonly tickBudgetMs?: number;
+  /** Monotonic milliseconds, for the tick budget (not the business clock). */
+  readonly clock?: () => number;
 }
 
 export interface DispatchSummary {
@@ -29,8 +33,10 @@ export interface DispatchSummary {
  */
 export class WebhookDispatcher {
   private readonly random: () => number;
+  private readonly clock: () => number;
   public constructor(private readonly deps: DispatchDeps) {
     this.random = deps.random ?? Math.random;
+    this.clock = deps.clock ?? Date.now;
   }
 
   public async runDue(tenantId: string): Promise<DispatchSummary> {
@@ -46,7 +52,11 @@ export class WebhookDispatcher {
       LEASE_MS,
       Math.min(this.deps.batch ?? BATCH, room),
     );
+    const started0 = this.clock();
     for (const { delivery, endpoint } of work) {
+      // A tenant's tick is bounded in wall-clock time so it cannot hold the shared tick; what is
+      // left keeps its lease and is taken again once that lapses.
+      if (this.clock() - started0 >= (this.deps.tickBudgetMs ?? TICK_BUDGET_MS)) break;
       const lease = await store.renew(
         tenantId,
         delivery.id,
