@@ -84,6 +84,9 @@
     { "path": "./tests/e2e/incidents" },
     { "path": "./tests/integration/incidents" },
     { "path": "./tests/fixtures/maintenance" },
-    { "path": "./tests/e2e/maintenance" }
+    { "path": "./tests/e2e/maintenance" },
+    { "path": "./packages/domain/search" },
+    { "path": "./packages/persistence/search" },
+    { "path": "./apps/api/search" }
   ]
 }

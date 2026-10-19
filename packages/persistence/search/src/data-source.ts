@@ -1,0 +1,73 @@
+import 'reflect-metadata';
+import { DataSource, type DataSourceOptions } from 'typeorm';
+import { AUDIT_ENTITIES } from '../../audit/src/index.js';
+import { SEARCH_ENTITIES } from './entities.js';
+import { CreateSearch2026101900010, SEARCH_MIGRATIONS_TABLE } from './migrations.js';
+
+export interface SearchDatabaseConfig {
+  readonly host: string;
+  readonly port: number;
+  readonly database: string;
+  readonly username: string;
+  readonly password: string;
+  readonly connectionLimit?: number;
+  readonly queueLimit?: number;
+  readonly connectTimeoutMs?: number;
+}
+
+/** Runtime accounts follow the control-plane naming rule: never root/admin, DML privileges only. */
+export const SEARCH_RUNTIME_ACCOUNT = /^opslog_search_[a-z0-9_]+$/i;
+
+const common = {
+  type: 'mysql',
+  entities: [...SEARCH_ENTITIES, ...AUDIT_ENTITIES],
+  migrations: [CreateSearch2026101900010],
+  migrationsTableName: SEARCH_MIGRATIONS_TABLE,
+  synchronize: false,
+  migrationsRun: false,
+  migrationsTransactionMode: 'all',
+  logging: false,
+  timezone: 'Z',
+  charset: 'utf8mb4',
+} as const satisfies Partial<DataSourceOptions>;
+
+/** Runtime DataSource: restricted account, pooled, no schema changes, no query logging. */
+export function createSearchDataSource(config: SearchDatabaseConfig): DataSource {
+  if (!SEARCH_RUNTIME_ACCOUNT.test(config.username))
+    throw new Error('Search DataSource requires its restricted runtime account');
+  return new DataSource({
+    ...common,
+    host: config.host,
+    port: config.port,
+    database: config.database,
+    username: config.username,
+    password: config.password,
+    connectTimeout: config.connectTimeoutMs ?? 10_000,
+    extra: {
+      connectionLimit: config.connectionLimit ?? 10,
+      waitForConnections: true,
+      queueLimit: config.queueLimit ?? 100,
+    },
+  });
+}
+
+/** Migration source (deployment and test tooling, schema-owning account only). */
+export function createSearchMigrationDataSource(
+  config: Omit<SearchDatabaseConfig, 'connectionLimit' | 'queueLimit'>,
+): DataSource {
+  return new DataSource({
+    ...common,
+    host: config.host,
+    port: config.port,
+    database: config.database,
+    username: config.username,
+    password: config.password,
+    connectTimeout: config.connectTimeoutMs ?? 10_000,
+  });
+}
+
+export async function runSearchMigrations(dataSource: DataSource): Promise<void> {
+  if (dataSource.options.synchronize === true || dataSource.options.migrationsRun === true)
+    throw new Error('Automatic schema synchronization and startup migrations are forbidden');
+  await dataSource.runMigrations({ transaction: 'all' });
+}
