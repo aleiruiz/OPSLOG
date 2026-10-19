@@ -35,3 +35,10 @@ OPSLOG_OIDC_REDIRECT_URI=http://localhost:8081/auth/callback
 # First company and its administrator (the Cognito sub); set both or neither. Safe to leave set.
 OPSLOG_BOOTSTRAP_COMPANY=
 OPSLOG_BOOTSTRAP_ADMIN_SUB=
+# Sales page (landing service, docs/operations/LANDING.md). Password of user `admin` for
+# /admin/leads, at least 16 characters (openssl rand -base64 24); empty hides the request list.
+LANDING_ADMIN_PASSWORD=
+# Optional https webhook told about every new demo request (Slack, Discord, n8n...).
+LANDING_NOTIFY_URL=
+# Address shown on the privacy notice for data requests.
+LANDING_CONTACT_EMAIL=

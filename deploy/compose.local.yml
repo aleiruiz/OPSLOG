@@ -1,6 +1,10 @@
 # Local run: docker compose -f docker-compose.yml -f deploy/compose.local.yml up --build
 # (set OPSLOG_PUBLIC_ORIGIN=http://localhost:8081 and the secrets first; see deploy/variables.example).
+# The sales page is then on http://localhost:8082.
 services:
   web:
     ports:
       - '8081:80'
+  landing:
+    ports:
+      - '8082:8090'

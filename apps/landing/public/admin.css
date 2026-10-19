@@ -1,0 +1,54 @@
+body {
+  margin: 0;
+  padding: 24px;
+  font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
+  color: #111827;
+  background: #f5f6f8;
+}
+
+header {
+  display: flex;
+  align-items: baseline;
+  gap: 24px;
+}
+
+h1 {
+  font-size: 24px;
+  margin: 0 0 8px;
+}
+
+a {
+  color: #2952e3;
+}
+
+.count {
+  color: #4b5563;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  font-size: 14px;
+}
+
+th,
+td {
+  text-align: left;
+  vertical-align: top;
+  padding: 8px 10px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+th {
+  background: #f9fafb;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #4b5563;
+}
+
+.msg {
+  white-space: pre-wrap;
+  max-width: 360px;
+}

@@ -4,7 +4,7 @@
 
 ## Qué se despliega
 
-`docker-compose.yml` (raíz) define cuatro servicios; las imágenes salen de `deploy/Dockerfile`.
+`docker-compose.yml` (raíz) define cinco servicios; las imágenes salen de `deploy/Dockerfile`.
 
 | Servicio  | Qué es                                                                                               | Notas                                                                       |
 | --------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
@@ -12,6 +12,7 @@
 | `api`     | BFF HTTP + plataforma + worker, en un solo proceso (`apps/api/server`).                              | Sin puerto público. Health check: `GET /healthz`.                           |
 | `mysql`   | MySQL 8.4 con volumen `mysql-data`, sin puerto publicado.                                            | Guarda todos los datos con `OPSLOG_PERSISTENCE=mysql` (por defecto).        |
 | `migrate` | Trabajo de una sola ejecución (misma imagen que `api`, `node migrate.mjs`).                          | Se ejecuta en cada despliegue antes de `api` y termina; ver «Persistencia». |
+| `landing` | Página de ventas con el formulario «Solicitar demo» (`apps/landing`).                                | Dominio propio; ver [LANDING.md](LANDING.md).                               |
 
 El worker sigue dentro de `api`: la cola de escaneos y el relevo de auditoría comparten proceso con la API y se coordinan con las tablas de MySQL (outbox y auditoría duraderos), así que una réplica única basta. Separarlo en otro contenedor queda para cuando haga falta. Los planes de mantenimiento se escanean cada hora en ese mismo proceso (`worker.planScanIntervalMs`), lo que genera las órdenes preventivas vencidas.
 
@@ -45,7 +46,7 @@ Se definen en Coolify (Environment Variables de la aplicación) o en un `.env` l
 
 1. **DNS (GoDaddy):** en el dominio `northsoftmx.com`, crear un registro **A**: Nombre `opslog`, Valor = IP pública del VPS, TTL 600. Comprobar con `nslookup opslog.northsoftmx.com`.
 2. **Nueva aplicación:** Projects → New Resource → Public/Private Repository (GitHub) → repositorio `aleiruiz/OPSLOG`, rama `main` → **Build Pack: Docker Compose**, archivo `/docker-compose.yml`.
-3. **Dominio:** en el servicio `web`, Domains = `https://opslog.northsoftmx.com` (Coolify pide el certificado a Let's Encrypt; el VPS debe tener abiertos 80 y 443). Los demás servicios sin dominio.
+3. **Dominio:** en el servicio `web`, Domains = `https://opslog.northsoftmx.com` (Coolify pide el certificado a Let's Encrypt; el VPS debe tener abiertos 80 y 443). Los demás servicios sin dominio, salvo `landing` (ver [LANDING.md](LANDING.md)).
 4. **Variables:** cargar las obligatorias de la tabla: los dos secretos del BFF, `OPSLOG_MYSQL_ROOT_PASSWORD`, `OPSLOG_MYSQL_SECRET` y `OPSLOG_PII_MASTER_KEY` (generados con `openssl rand`, ver `deploy/variables.example`). Guardar `OPSLOG_PII_MASTER_KEY` y `OPSLOG_MYSQL_ROOT_PASSWORD` en un gestor de secretos.
 5. **Deploy.** La primera construcción es lenta y usa unos 3 GB de RAM mientras compila la web; conviene hacerla cuando el VPS (compartido con otras apps) esté tranquilo.
 6. Comprobar `https://opslog.northsoftmx.com/healthz` (nginx) y `https://opslog.northsoftmx.com/api/auth/csrf` (JSON con `csrfToken`, llega hasta la API).

@@ -86,6 +86,26 @@ services:
     expose:
       - '80'
 
+  # Public sales page with the demo-request form (docs/operations/LANDING.md). Independent of the
+  # app: give it its own domain in Coolify. Requests are kept in the landing-data volume.
+  landing:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: landing
+    restart: unless-stopped
+    environment:
+      # Password of user `admin` for /admin/leads (at least 16 characters); empty hides the list.
+      LANDING_ADMIN_PASSWORD: ${LANDING_ADMIN_PASSWORD:-}
+      # Optional https webhook (Slack, Discord, n8n...) told about every new request.
+      LANDING_NOTIFY_URL: ${LANDING_NOTIFY_URL:-}
+      # Address shown on the privacy notice for data requests.
+      LANDING_CONTACT_EMAIL: ${LANDING_CONTACT_EMAIL:-}
+    volumes:
+      - landing-data:/data
+    expose:
+      - '8090'
+
   # Holds every record of the API when OPSLOG_PERSISTENCE=mysql. No published port; data lives in
   # the mysql-data volume (back it up together with OPSLOG_PII_MASTER_KEY).
   mysql:
@@ -105,3 +125,4 @@ services:
 
 volumes:
   mysql-data:
+  landing-data:
