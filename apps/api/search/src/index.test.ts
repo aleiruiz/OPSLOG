@@ -64,7 +64,7 @@ describe('SearchApi', () => {
   it('maps pool saturation to a 503 unavailable without echoing the driver', async () => {
     for (const error of [
       new Error('Queue limit reached.'),
-      { message: 'query failed', driverError: { code: 'POOL_ACQUIRETIMEOUT' } },
+      { message: 'query failed', driverError: new Error('Queue limit reached.') },
     ]) {
       const { api: search } = api({
         service: {
