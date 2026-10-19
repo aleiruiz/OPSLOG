@@ -56,6 +56,17 @@ export class NotificationDispatcher {
       this.deps.batch ?? BATCH,
     );
     for (const item of work) {
+      // A slow provider can outlast the lease of a long batch: renew before each send, and skip what
+      // another worker has taken meanwhile instead of sending it twice.
+      const lease = await store.renew(
+        tenantId,
+        item.notification.id,
+        item.delivery.channel,
+        item.delivery.leaseUntil,
+        this.deps.now(),
+        LEASE_MS,
+      );
+      if (lease === null) continue;
       const outcome = await this.decide(item);
       const settled = await store.settle(
         tenantId,
@@ -63,6 +74,7 @@ export class NotificationDispatcher {
         item.delivery.channel,
         outcome,
         this.deps.now().toISOString(),
+        lease,
       );
       if (!settled) continue;
       if (outcome.status === 'sent') summary.sent += 1;

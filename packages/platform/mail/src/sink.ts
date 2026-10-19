@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { ADDRESS } from './config.js';
 import { MailError, type MailMessage, type MailPort, type SinkRecord } from './types.js';
 
 export interface SinkOptions {
@@ -9,7 +10,6 @@ export interface SinkOptions {
   readonly now?: () => Date;
 }
 
-const ADDRESS = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
 const MAX_RECORDS = 500;
 
 /** Digest that tells recipients apart inside one company without naming them. */

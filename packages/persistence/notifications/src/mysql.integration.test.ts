@@ -166,9 +166,9 @@ suite('persistent notifications on MySQL', () => {
     expect(claimed?.delivery.leaseUntil).toBe(new Date(now.getTime() + 120_000).toISOString());
     // Under lease, nothing; after the lease the same delivery can be taken again.
     expect(await store.claimDue(A, at(1060), 120_000, 10)).toEqual([]);
-    expect((await store.claimDue(A, at(1200), 120_000, 10)).map((w) => w.notification.id)).toEqual([
-      'd1',
-    ]);
+    const reclaimed = await store.claimDue(A, at(1200), 120_000, 10);
+    expect(reclaimed.map((w) => w.notification.id)).toEqual(['d1']);
+    const lease = reclaimed[0]?.delivery.leaseUntil as string;
     expect(
       await store.settle(
         A,
@@ -176,6 +176,8 @@ suite('persistent notifications on MySQL', () => {
         'email',
         { status: 'retry', nextAttemptAt: at(1500).toISOString(), error: 'timeout' },
         at(1210).toISOString(),
+
+        lease,
       ),
     ).toBe(true);
     expect((await store.deliveries(A, 'd1'))[0]).toMatchObject({
@@ -220,12 +222,18 @@ suite('persistent notifications on MySQL', () => {
     expect(await store.settle(A, 'd3', 'email', { status: 'sent' }, at(1701).toISOString())).toBe(
       false,
     );
-    expect((await store.claimDue(B, now, 120_000, 10)).map((w) => w.notification.id)).toEqual([
-      'd3',
-    ]);
-    expect(await store.settle(B, 'd3', 'email', { status: 'sent' }, at(1702).toISOString())).toBe(
-      true,
-    );
+    const claimedB = await store.claimDue(B, now, 120_000, 10);
+    expect(claimedB.map((w) => w.notification.id)).toEqual(['d3']);
+    expect(
+      await store.settle(
+        B,
+        'd3',
+        'email',
+        { status: 'sent' },
+        at(1702).toISOString(),
+        claimedB[0]?.delivery.leaseUntil ?? null,
+      ),
+    ).toBe(true);
     expect(
       await store.settle(
         B,
@@ -266,6 +274,41 @@ suite('persistent notifications on MySQL', () => {
       ],
     });
     expect((await store.failed(B, { limit: 5, offset: 0 })).total).toBe(0);
+  });
+
+  it('settles and renews only under the lease that was claimed', async () => {
+    await store.create(notice('l1', { recipientId: 'lia' }), [
+      { channel: 'email', status: 'pending', nextAttemptAt: at(10).toISOString() },
+    ]);
+    const [mine] = await store.claimDue(A, at(4000), 120_000, 1);
+    expect(mine?.notification.id).toBe('l1');
+    const first = mine?.delivery.leaseUntil as string;
+    // The lease ran out and another worker took the delivery: the first owner is not the owner any more.
+    const [theirs] = await store.claimDue(A, at(4200), 120_000, 1);
+    expect(theirs?.notification.id).toBe('l1');
+    const second = theirs?.delivery.leaseUntil as string;
+    expect(second).not.toBe(first);
+    expect(await store.renew(A, 'l1', 'email', first, at(4201), 120_000)).toBeNull();
+    expect(
+      await store.settle(A, 'l1', 'email', { status: 'sent' }, at(4202).toISOString(), first),
+    ).toBe(false);
+    expect(await store.settle(A, 'l1', 'email', { status: 'sent' }, at(4202).toISOString())).toBe(
+      false,
+    );
+    expect((await store.deliveries(A, 'l1'))[0]).toMatchObject({ status: 'pending', attempts: 0 });
+    // The current owner renews, and only the renewed lease settles; another company cannot.
+    const renewed = await store.renew(A, 'l1', 'email', second, at(4210), 120_000);
+    expect(renewed).toBe(at(4210 + 120).toISOString());
+    expect(
+      await store.settle(B, 'l1', 'email', { status: 'sent' }, at(4211).toISOString(), renewed),
+    ).toBe(false);
+    expect(
+      await store.settle(A, 'l1', 'email', { status: 'sent' }, at(4211).toISOString(), second),
+    ).toBe(false);
+    expect(
+      await store.settle(A, 'l1', 'email', { status: 'sent' }, at(4211).toISOString(), renewed),
+    ).toBe(true);
+    expect(await store.renew(A, 'l1', 'email', renewed, at(4212), 120_000)).toBeNull();
   });
 
   it('stores preferences, the company rule and follows per company', async () => {
@@ -400,7 +443,10 @@ suite('persistent notifications on MySQL', () => {
       );
       out.push(await target.markRead(tenantId, 'pat', ['p2'], KINDS, at(50).toISOString()));
       out.push(await target.unread(tenantId, 'pat', KINDS));
-      out.push((await target.claimDue(tenantId, at(20), 60_000, 5)).map((w) => w.notification.id));
+      const claims = await target.claimDue(tenantId, at(20), 60_000, 5);
+      out.push(claims.map((w) => w.notification.id));
+      const leaseOf = (id: string) =>
+        claims.find((w) => w.notification.id === id)?.delivery.leaseUntil ?? null;
       out.push(
         await target.settle(
           tenantId,
@@ -408,13 +454,28 @@ suite('persistent notifications on MySQL', () => {
           'email',
           { status: 'retry', nextAttemptAt: at(30).toISOString(), error: 'timeout' },
           at(21).toISOString(),
+          leaseOf('p1'),
         ),
       );
       out.push(
-        await target.settle(tenantId, 'p2', 'email', { status: 'sent' }, at(22).toISOString()),
+        await target.settle(
+          tenantId,
+          'p2',
+          'email',
+          { status: 'sent' },
+          at(22).toISOString(),
+          leaseOf('p2'),
+        ),
       );
       out.push(
-        await target.settle(tenantId, 'p2', 'email', { status: 'sent' }, at(23).toISOString()),
+        await target.settle(
+          tenantId,
+          'p2',
+          'email',
+          { status: 'sent' },
+          at(23).toISOString(),
+          leaseOf('p2'),
+        ),
       );
       out.push(
         (await target.deliveries(tenantId, 'p1')).map(

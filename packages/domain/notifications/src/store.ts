@@ -139,16 +139,33 @@ export class InMemoryNotificationStore implements NotificationStore {
     return work;
   }
 
+  public async renew(
+    tenantId: string,
+    notificationId: string,
+    channel: Channel,
+    lease: string | null,
+    now: Date,
+    leaseMs: number,
+  ) {
+    const key = scoped(tenantId, notificationId, channel);
+    const current = this.deliveryRows.get(key);
+    if (current?.status !== 'pending' || current.leaseUntil !== lease) return null;
+    const renewed = new Date(now.getTime() + leaseMs).toISOString();
+    this.deliveryRows.set(key, { ...current, leaseUntil: renewed });
+    return renewed;
+  }
+
   public async settle(
     tenantId: string,
     notificationId: string,
     channel: Channel,
     outcome: DeliveryOutcome,
     at: string,
+    lease: string | null = null,
   ) {
     const key = scoped(tenantId, notificationId, channel);
     const current = this.deliveryRows.get(key);
-    if (current?.status !== 'pending') return false;
+    if (current?.status !== 'pending' || current.leaseUntil !== lease) return false;
     const base = { ...current, updatedAt: at, leaseUntil: null };
     if (outcome.status === 'deferred')
       this.deliveryRows.set(key, { ...base, nextAttemptAt: outcome.nextAttemptAt });

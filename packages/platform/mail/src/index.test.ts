@@ -157,6 +157,16 @@ describe('SmtpMailAdapter', () => {
     expect((failure as MailError).message).not.toContain('ana@');
   });
 
+  it('refuses an address that is not one before the provider sees it', async () => {
+    const sendMail = vi.fn().mockResolvedValue({});
+    const adapter = new SmtpMailAdapter({ config, transport: { sendMail } });
+    for (const to of ['', 'ana', 'ana@example', 'a b@example.test', '<ana@example.test>']) {
+      const failure = await adapter.send(message({ to })).catch((error: unknown) => error);
+      expect((failure as MailError).code, to).toBe('invalid_address');
+    }
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+
   it('maps provider errors to codes', () => {
     expect(failureOf({ code: 'EAUTH' })).toBe('auth');
     expect(failureOf({ code: 'ETIMEDOUT' })).toBe('timeout');

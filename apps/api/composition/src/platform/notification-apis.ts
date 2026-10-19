@@ -196,7 +196,7 @@ export function buildNotifications(
   };
   const events = notificationEvents(kernel, adapters);
   kernel.membership = async (kind, tenantId, identityId, role) => {
-    const version = kind === 'created' ? 1 : kernel.now().getTime();
+    const version = kernel.now().getTime();
     await emitFact(
       kernel,
       events,

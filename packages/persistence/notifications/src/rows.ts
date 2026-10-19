@@ -1,5 +1,6 @@
 import type {
   Channel,
+  DeliveryOutcome,
   DeliveryStatus,
   EntityType,
   EventKind,
@@ -68,4 +69,31 @@ export function center(tenantId: string, recipientId: string, filter: Notificati
   }
   if (filter.unreadOnly) clauses.push('read_at IS NULL');
   return { where: clauses.join(' AND '), params };
+}
+
+/** The SET clause and parameters that record an outcome of a send. */
+export function outcomeChange(outcome: DeliveryOutcome): { sql: string; params: unknown[] } {
+  const set: Record<DeliveryOutcome['status'], { sql: string; params: unknown[] }> = {
+    deferred: {
+      sql: 'next_attempt_at = ?',
+      params: [date((outcome as { nextAttemptAt?: string }).nextAttemptAt ?? null)],
+    },
+    suppressed: {
+      sql: "status = 'suppressed', last_error = ?, next_attempt_at = NULL",
+      params: [(outcome as { reason?: string }).reason ?? null],
+    },
+    sent: { sql: "status = 'sent', attempts = attempts + 1, next_attempt_at = NULL", params: [] },
+    retry: {
+      sql: 'attempts = attempts + 1, last_error = ?, next_attempt_at = ?',
+      params: [
+        (outcome as { error?: string }).error ?? null,
+        date((outcome as { nextAttemptAt?: string }).nextAttemptAt ?? null),
+      ],
+    },
+    failed: {
+      sql: "status = 'failed', attempts = attempts + 1, last_error = ?, next_attempt_at = NULL",
+      params: [(outcome as { error?: string }).error ?? null],
+    },
+  };
+  return set[outcome.status];
 }

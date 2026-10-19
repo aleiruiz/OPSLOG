@@ -18,7 +18,8 @@ export class SmtpConfigError extends Error {
   }
 }
 
-const ADDRESS = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
+/** What both adapters accept as an address: one mailbox, no spaces or angle brackets. */
+export const ADDRESS = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
 
 /**
  * Reads the SMTP settings. None set means the sink stays in charge (`null`); all five set turn the

@@ -78,13 +78,29 @@ export interface NotificationStore {
     leaseMs: number,
     limit: number,
   ): Promise<readonly DeliveryWork[]>;
-  /** Writes the outcome only while the delivery is still pending; false otherwise. */
+  /**
+   * Pushes the lease of a claimed delivery forward before it is sent, so a long batch does not lose the
+   * tail to another worker. Returns the new lease, or null when the delivery is no longer ours.
+   */
+  renew(
+    tenantId: string,
+    notificationId: string,
+    channel: NotificationDelivery['channel'],
+    lease: string | null,
+    now: Date,
+    leaseMs: number,
+  ): Promise<string | null>;
+  /**
+   * Writes the outcome only while the delivery is still pending and still under `lease` (the one the
+   * claim or the last renewal returned; null for a delivery nobody claimed); false otherwise.
+   */
   settle(
     tenantId: string,
     notificationId: string,
     channel: NotificationDelivery['channel'],
     outcome: DeliveryOutcome,
     at: string,
+    lease?: string | null,
   ): Promise<boolean>;
   deliveries(tenantId: string, notificationId: string): Promise<readonly NotificationDelivery[]>;
   failed(

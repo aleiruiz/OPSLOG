@@ -36,6 +36,7 @@ import {
   iso,
   marks,
   notice,
+  outcomeChange,
   type Row,
 } from './rows.js';
 
@@ -229,42 +230,42 @@ export class TypeOrmNotificationStore implements NotificationStore, Notification
     return work;
   }
 
+  public async renew(
+    tenantId: string,
+    notificationId: string,
+    channel: Channel,
+    lease: string | null,
+    now: Date,
+    leaseMs: number,
+  ) {
+    const renewed = new Date(now.getTime() + leaseMs);
+    const taken = affected(
+      await this.run(
+        `UPDATE \`${T.deliveries}\` SET lease_until = ?
+           WHERE company_id = ? AND notification_id = ? AND channel = ? AND status = 'pending'
+             AND lease_until <=> ?`,
+        [renewed, tenantId, notificationId, channel, date(lease)],
+      ),
+    );
+    return taken === 1 ? renewed.toISOString() : null;
+  }
+
   public async settle(
     tenantId: string,
     notificationId: string,
     channel: Channel,
     outcome: DeliveryOutcome,
     at: string,
+    lease: string | null = null,
   ) {
-    const set: Record<DeliveryOutcome['status'], { sql: string; params: unknown[] }> = {
-      deferred: {
-        sql: 'next_attempt_at = ?',
-        params: [date((outcome as { nextAttemptAt?: string }).nextAttemptAt ?? null)],
-      },
-      suppressed: {
-        sql: "status = 'suppressed', last_error = ?, next_attempt_at = NULL",
-        params: [(outcome as { reason?: string }).reason ?? null],
-      },
-      sent: { sql: "status = 'sent', attempts = attempts + 1, next_attempt_at = NULL", params: [] },
-      retry: {
-        sql: 'attempts = attempts + 1, last_error = ?, next_attempt_at = ?',
-        params: [
-          (outcome as { error?: string }).error ?? null,
-          date((outcome as { nextAttemptAt?: string }).nextAttemptAt ?? null),
-        ],
-      },
-      failed: {
-        sql: "status = 'failed', attempts = attempts + 1, last_error = ?, next_attempt_at = NULL",
-        params: [(outcome as { error?: string }).error ?? null],
-      },
-    };
-    const change = set[outcome.status];
+    const change = outcomeChange(outcome);
     return (
       affected(
         await this.run(
           `UPDATE \`${T.deliveries}\` SET ${change.sql}, updated_at = ?, lease_until = NULL
-             WHERE company_id = ? AND notification_id = ? AND channel = ? AND status = 'pending'`,
-          [...change.params, new Date(at), tenantId, notificationId, channel],
+             WHERE company_id = ? AND notification_id = ? AND channel = ? AND status = 'pending'
+               AND lease_until <=> ?`,
+          [...change.params, new Date(at), tenantId, notificationId, channel, date(lease)],
         ),
       ) === 1
     );

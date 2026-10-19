@@ -1,4 +1,5 @@
 import { createTransport } from 'nodemailer';
+import { ADDRESS } from './config.js';
 import {
   MailError,
   type MailFailure,
@@ -77,6 +78,8 @@ export class SmtpMailAdapter implements MailPort {
   }
 
   public async send(message: MailMessage): Promise<void> {
+    // Same rule as the sink, checked before the provider sees the address.
+    if (!ADDRESS.test(message.to)) throw new MailError('invalid_address');
     try {
       await this.transport.sendMail({
         from: this.from,

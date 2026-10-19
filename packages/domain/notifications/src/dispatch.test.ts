@@ -117,6 +117,39 @@ describe('e-mail delivery', () => {
     expect(h.sink.messages).toHaveLength(1);
   });
 
+  it('does not count or settle a send whose lease another worker took meanwhile', async () => {
+    let rival: (() => Promise<unknown>) | undefined;
+    const slow = {
+      sends: 0,
+      async send() {
+        this.sends += 1;
+        // The provider is so slow that the 2-minute lease runs out and a second worker takes over.
+        if (this.sends === 1) {
+          h.advance(3 * MINUTE);
+          await rival?.();
+        }
+      },
+    };
+    const h = harness({ mail: slow });
+    rival = () => h.dispatcher.runDue('A');
+    await h.ingest.ingest(h.event());
+    const notice = (await h.service.list(h.actor('A', 'ana'))).items[0]!;
+    expect(await h.dispatcher.runDue('A')).toMatchObject({ sent: 0 });
+    expect((await h.store.deliveries('A', notice.id))[1]).toMatchObject({
+      status: 'sent',
+      attempts: 1,
+    });
+  });
+
+  it('skips a delivery it can no longer renew', async () => {
+    const h = harness();
+    await h.ingest.ingest(h.event());
+    const store = h.store as unknown as { renew: () => Promise<string | null> };
+    store.renew = async () => null;
+    expect(await h.dispatcher.runDue('A')).toMatchObject({ sent: 0 });
+    expect(h.sink.messages).toHaveLength(0);
+  });
+
   it('never touches another company', async () => {
     const h = harness();
     await h.ingest.ingest(h.event({ tenantId: 'B' }));

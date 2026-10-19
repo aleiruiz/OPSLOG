@@ -120,6 +120,22 @@ describe('contract', () => {
   });
 });
 
+describe('membership notices', () => {
+  it('keys each «usuario nuevo» event by its moment, so a later invitation of the same person is not swallowed', async () => {
+    const f = await fixture();
+    world.advance(HOUR);
+    const joined = await world.member('subject-admin-a', 'viewer', 'subject-back-a');
+    const ids = (await world.platform.outbox.all())
+      .filter((r) => r.type === 'membership.created' && r.entityId === joined.identityId)
+      .map((r) => r.eventId);
+    expect(ids).toHaveLength(1);
+    expect(ids[0]).toBe(`membership-created-${joined.identityId}-${Date.now()}`);
+    expect(ids[0]?.endsWith('-1')).toBe(false);
+    await tick();
+    expect(await kindsOf(f.adminA)).toContain('membership_created');
+  });
+});
+
 describe('acceptance 1: deduplication', () => {
   it('announces an expiry once per recipient and threshold, and starts again when the date changes', async () => {
     const f = await fixture();
