@@ -82,7 +82,8 @@ const ALL = [...new Set(Object.values(ROLE_PERMISSIONS).flat())];
 const percentile = (samples: readonly number[], p: number): number =>
   [...samples].sort((a, b) => a - b)[Math.ceil(p * samples.length) - 1] as number;
 
-suite('dashboard on the real MySQL stores', () => {
+// Every test reads the real stores; a loaded CI runner needs more than the 5 s default.
+suite('dashboard on the real MySQL stores', { timeout: 30_000 }, () => {
   let vehicles: VehiclesDatabase;
   let employees: EmployeesDatabase;
   let documents: DocumentsDatabase;
@@ -297,7 +298,7 @@ suite('dashboard on the real MySQL stores', () => {
       sum += await active(leaf);
     }
     expect(await active(rootArea)).toBe(sum);
-  }, 30_000);
+  });
 
   it('adds the expiring documents of the areas up to the company figure, archived owners left out', async () => {
     const expiring = async (query = {}) =>
