@@ -76,7 +76,7 @@ describe('AuditQueryApi', () => {
       expect(result.error).toMatchObject({ code: expected, status });
     }
     const crash = await api(async () => {
-      throw new Error('mysql://root:secret@host');
+      throw new Error('mysql://root:secret@host'); // secret-scan:allow fake URL proving the error is redacted
     }).reconciliation('tok', 'corr', {});
     expect(crash.error).toEqual({ code: 'internal_error', status: 500, message: 'Request failed' });
     expect(new AuditQueryError('not_found').code).toBe('not_found');
