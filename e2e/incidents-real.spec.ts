@@ -49,6 +49,9 @@ async function signIn(page: Page, tenant: RealTenant, account: string, path = '/
   await expect(page.getByRole('heading', { name: 'Iniciar sesión', level: 1 })).toBeVisible();
   await page.getByRole('textbox', { name: /Cuenta de prueba/ }).fill(account);
   await page.keyboard.press('Enter');
+  // Sign-in is asynchronous: until the sign-in screen is gone the session cookie may not exist yet, and a
+  // navigation right after Enter would cancel the request and land on the sign-in screen again.
+  await expect(page.getByRole('heading', { name: 'Iniciar sesión', level: 1 })).toHaveCount(0);
 }
 async function expectNoViolations(page: Page, scope?: string) {
   const builder = new AxeBuilder({ page }).withTags(wcag);
