@@ -38,6 +38,8 @@ import type { SearchRouteTypes } from './bff/search.js';
 import { SEARCH_ROUTES } from './bff/search.js';
 import type { SavedViewsRouteTypes } from './bff/saved-views.js';
 import { SAVED_VIEWS_ROUTES } from './bff/saved-views.js';
+import type { ReportRouteTypes } from './bff/reports.js';
+import { REPORT_ROUTES } from './bff/reports.js';
 import type { BffRouteDefinition } from './bff/shared.js';
 
 /**
@@ -73,6 +75,7 @@ export interface BffRouteTypes
     SearchRouteTypes,
     AnalyticsRouteTypes,
     SavedViewsRouteTypes {}
+    ReportRouteTypes {}
 
 export type BffRouteId = keyof BffRouteTypes;
 
@@ -97,6 +100,7 @@ export const BFF_ROUTES = {
   ...SEARCH_ROUTES,
   ...ANALYTICS_ROUTES,
   ...SAVED_VIEWS_ROUTES,
+  ...REPORT_ROUTES,
 } as const satisfies Record<BffRouteId, BffRouteDefinition>;
 
 type Parts<K extends BffRouteId> = Omit<BffRouteTypes[K], 'response'>;

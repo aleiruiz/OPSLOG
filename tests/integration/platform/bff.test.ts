@@ -284,6 +284,7 @@ function writes(f: Fixture): [string, string, unknown?][] {
       '/api/v1/work-orders/00000000-0000-4000-8000-000000000001/files/00000000-0000-4000-8000-000000000002/detach',
       { version: 1 },
     ],
+    ['POST', '/api/v1/reports/drivers/exports', { format: 'csv' }],
     ['POST', '/api/v1/incidents', { vehicleId: f.vehicleId, type: 'collision' }],
     [
       'PATCH',

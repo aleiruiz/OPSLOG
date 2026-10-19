@@ -1,6 +1,8 @@
 import type { FilePipeline } from '../../../../../packages/platform/files/src/index.js';
 import {
   createWorkerRuntime,
+  exportsJobs,
+  registerExportEventHandlers,
   DEFAULT_PLAN_SCAN_INTERVAL_MS,
   DEFAULT_SEARCH_RECONCILE_INTERVAL_MS,
   DEFAULT_SLA_SCAN_INTERVAL_MS,
@@ -10,11 +12,10 @@ import {
 import { ROLE_PERMISSIONS } from '../access.js';
 import { ACTOR_PREFIX, type PlatformKernel } from './kernel.js';
 import type { PlatformOptions } from './types.js';
-import type { MaintenancePlanWorker } from '../../../../../packages/domain/maintenance/plans/src/index.js';
 import { registerIncidentSlaHandlers } from '../../../../worker/incident-sla/src/index.js';
 import { registerMaintenancePlanHandlers } from '../../../../worker/maintenance-plans/src/index.js';
 import { registerSearchHandlers } from '../../../../worker/composition/src/search-consumer.js';
-import type { SearchModule } from './search-apis.js';
+import type { DomainApis } from './apis.js';
 
 /** Name of the periodic SLA scan job in `runtime.periodic`. */
 export const INCIDENT_SLA_SCAN_JOB = 'incident.sla.scan';
@@ -28,15 +29,12 @@ export function buildWorkerRuntime(
   kernel: PlatformKernel,
   pipeline: FilePipeline,
   worker: PlatformOptions['worker'],
-  auditRelay?: { runBatch(max?: number): Promise<number> },
-  maintenancePlans?: MaintenancePlanWorker,
-  incidentSla?: Parameters<typeof registerIncidentSlaHandlers>[1] & {
-    readonly enqueueScan: (tenantId: string) => Promise<void>;
-  },
-  search?: SearchModule,
+  auditRelay: { runBatch(max?: number): Promise<number> } | undefined,
+  modules: Pick<DomainApis, 'maintenancePlanWorker' | 'incidentSla' | 'search' | 'reports'>,
 ): WorkerRuntime {
   // The incident SLA scan is queued per active tenant on a local timer; the host calls
   // `runtime.periodic.start()`. The cloud trigger (EventBridge or similar) stays deferred (ADR-0002).
+  const { maintenancePlanWorker: maintenancePlans, incidentSla, search, reports } = modules;
   const periodic: PeriodicTenantJob[] = [
     ...(incidentSla
       ? [
@@ -89,6 +87,16 @@ export function buildWorkerRuntime(
     pipeline: pipeline,
     periodic,
     tenantIds: () => kernel.tenants.all().map((tenant) => tenant.id),
+    // Jobs the tick runs after the built-in ones: report exports and the purge of expired files.
+    jobs: exportsJobs({
+      service: reports.service,
+      activeTenantIds: () =>
+        kernel.tenants
+          .all()
+          .filter((tenant) => kernel.tenants.status(tenant.id) === 'active')
+          .map((tenant) => tenant.id),
+      clock: () => kernel.now().getTime(),
+    }),
     clock: () => kernel.now().getTime(),
     ...(worker?.leaseMs === undefined ? {} : { leaseMs: worker.leaseMs }),
     ...(worker?.maxAttempts === undefined ? {} : { maxAttempts: worker.maxAttempts }),
@@ -96,5 +104,7 @@ export function buildWorkerRuntime(
   if (maintenancePlans) registerMaintenancePlanHandlers(runtime.worker, maintenancePlans);
   if (incidentSla) registerIncidentSlaHandlers(runtime.worker, incidentSla);
   if (search) registerSearchHandlers(runtime.worker, search.indexer);
+  // MVP-NOTIFY replaces these handlers; until then the events are acknowledged, not dead-lettered.
+  registerExportEventHandlers(runtime.worker);
   return runtime;
 }

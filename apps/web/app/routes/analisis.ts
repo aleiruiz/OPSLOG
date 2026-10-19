@@ -10,4 +10,14 @@ export const analisisRoutes: readonly RouteDefinition[] = [
     access: { permission: 'view_audit' },
     nav: { group: 'Análisis', label: 'Auditoría' },
   },
+  // Reports (MVP-REPORTS, S25): catalog, preview and exports; exporting also needs `export` (the BFF checks it).
+  {
+    id: 'reports',
+    pattern: '/analisis/reportes',
+    title: 'Reportes',
+    access: { permission: 'view' },
+    // The entry follows `export` so a reader without it keeps no «Análisis» group (the audit screen test
+    // pins that); the route itself stays open to everyone with `view`.
+    nav: { group: 'Análisis', label: 'Reportes', requires: 'export' },
+  },
 ];

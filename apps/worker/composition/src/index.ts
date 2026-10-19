@@ -15,6 +15,9 @@ import type {
 
 export type { ActorPermissionCheck, TenantDirectory };
 export * from './periodic.js';
+export * from './jobs.js';
+export * from './exports-jobs.js';
+import { JobRegistry, type WorkerJob } from './jobs.js';
 import { PeriodicScheduler, type PeriodicTenantJob, type PeriodicTimers } from './periodic.js';
 
 const MAX_REFILL_ROUNDS = 1000;
@@ -89,6 +92,8 @@ export interface WorkerRuntimeDeps {
   readonly periodic?: readonly PeriodicTenantJob[];
   readonly tenantIds?: () => readonly string[];
   readonly timers?: PeriodicTimers;
+  /** Extra jobs the tick runs after the built-in ones (outbox, scans, audit relay). */
+  readonly jobs?: readonly WorkerJob[];
 }
 
 export interface WorkerRuntime {
@@ -101,6 +106,10 @@ export interface WorkerRuntime {
   runAuditRelay(max?: number): Promise<number>;
   /** The local periodic trigger of the registered per-tenant jobs; `start()` is the host's call. */
   readonly periodic: PeriodicScheduler;
+  /** What a tick runs, in order: the built-ins first, then every registered job. */
+  readonly jobs: JobRegistry;
+  /** Adds a job to the tick (names are unique). */
+  registerJob(job: WorkerJob): void;
 }
 
 /**
@@ -119,8 +128,11 @@ export function createWorkerRuntime(deps: WorkerRuntimeDeps): WorkerRuntime {
     deps.actors,
   );
   const tenantIds = deps.tenantIds ?? (() => []);
-  return {
+  const jobs = new JobRegistry();
+  const runtime: WorkerRuntime = {
     worker,
+    jobs,
+    registerJob: (job) => jobs.register(job),
     periodic: new PeriodicScheduler(
       { status: (id) => deps.tenants.status(id), ids: tenantIds },
       deps.periodic ?? [],
@@ -133,4 +145,9 @@ export function createWorkerRuntime(deps: WorkerRuntimeDeps): WorkerRuntime {
       return deps.auditRelay.runBatch(max);
     },
   };
+  jobs.register({ name: 'outbox', run: () => runtime.drainOutbox() });
+  jobs.register({ name: 'scans', run: () => runtime.runScans() });
+  jobs.register({ name: 'audit-relay', run: () => runtime.runAuditRelay() });
+  for (const job of deps.jobs ?? []) jobs.register(job);
+  return runtime;
 }

@@ -24,6 +24,9 @@ describe('object keys', () => {
     );
   });
   it('reject traversal, separators and unknown areas', () => {
+    expect(objectKey(ref({ area: 'exports' }))).toBe('tenants/tenant-a/exports/file-1');
+    expect(() => objectKey(ref({ area: 'exports', tenantId: '../tenant-b' }))).toThrow();
+    expect(() => objectKey(ref({ area: 'exports', fileId: 'a/b' }))).toThrow();
     expect(() => objectKey(ref({ tenantId: '../tenant-b' }))).toThrow();
     expect(() => objectKey(ref({ fileId: 'a/b' }))).toThrow();
     expect(() => objectKey(ref({ area: 'public' as never }))).toThrow();

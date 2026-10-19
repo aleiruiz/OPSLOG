@@ -19,6 +19,7 @@ import { createMaintenancePorts } from '../features/maintenance/ports';
 import { createDashboardPort } from '../features/dashboard/ports';
 import { createSearchPorts } from '../features/search/ports';
 import { createViewsPorts } from '../features/search/views/ports';
+import { createReportsPorts } from '../features/reports/ports';
 
 function mapResult<T, U>(result: Result<T>, map: (value: T) => U): Result<U> {
   return result.ok ? { ok: true, value: map(result.value) } : result;
@@ -56,6 +57,7 @@ export function createHttpApi(
     search: createSearchPorts(client),
     dashboard: createDashboardPort(client),
     views: createViewsPorts(client),
+    reports: createReportsPorts(client),
     auth: {
       getSession: async () => mapResult(await call('auth.session'), toSession),
       login: async (body) => mapResult(await call('auth.login', { body }), toSession),

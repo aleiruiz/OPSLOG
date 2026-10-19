@@ -42,6 +42,7 @@ import { maintenanceMigrationSteps } from './maintenance-source.js';
 import { incidentMigrationSteps } from './incident-source.js';
 import { savedViewsMigrationSteps } from './saved-views-source.js';
 import { searchMigrationSteps } from './search-source.js';
+import { exportsMigrationSteps } from './exports-source.js';
 
 type FleetDataSource = ReturnType<typeof createAreasMigrationDataSource>;
 
@@ -161,6 +162,11 @@ export function createFleetMigrationModules(
     ).map((step) => migrationModule(step.name, step.version, step.source, step.run)),
     // Saved views and visible columns of the lists: no dependency on the modules.
     ...savedViewsMigrationSteps(
+      { host: credentials.host, port: credentials.port, database: credentials.database },
+      { username: credentials.username, password: credentials.password },
+    ).map((step) => migrationModule(step.name, step.version, step.source, step.run)),
+    // Export jobs reference no module table; they write events to the outbox created above.
+    ...exportsMigrationSteps(
       { host: credentials.host, port: credentials.port, database: credentials.database },
       { username: credentials.username, password: credentials.password },
     ).map((step) => migrationModule(step.name, step.version, step.source, step.run)),

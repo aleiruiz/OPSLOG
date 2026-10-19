@@ -1,7 +1,10 @@
 import { FileError, requireOpaqueId, type FileKind } from '../../../domain/files/src/index.js';
 
-/** quarantine holds unscanned bytes; released holds bytes that passed the scan. */
-export type StorageArea = 'quarantine' | 'released';
+/**
+ * quarantine holds unscanned bytes; released holds bytes that passed the scan; exports holds the
+ * generated report files, under `tenants/<company>/exports/<jobId>` (no scan, they are produced here).
+ */
+export type StorageArea = 'quarantine' | 'released' | 'exports';
 
 export interface ObjectRef {
   readonly tenantId: string;
@@ -30,6 +33,7 @@ export interface ObjectStorage {
 export function objectKey(ref: ObjectRef): string {
   const tenant = requireOpaqueId(ref.tenantId);
   const file = requireOpaqueId(ref.fileId);
+  if (ref.area === 'exports') return `tenants/${tenant}/exports/${file}`;
   if (ref.area !== 'quarantine' && ref.area !== 'released') throw new FileError('invalid_input');
   const kind = ref.kind === 'derivative' ? 'derivatives' : 'originals';
   return `tenants/${tenant}/${ref.area}/${kind}/${file}`;

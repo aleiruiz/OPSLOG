@@ -22,6 +22,8 @@ export interface BffResponse {
   readonly status: number;
   readonly headers: Readonly<Record<string, string | readonly string[]>>;
   readonly body: string;
+  /** A file answer: sent as is, instead of `body`. */
+  readonly bytes?: Uint8Array;
 }
 
 export type BffHandler = (request: BffRequest) => Promise<BffResponse>;
@@ -62,6 +64,24 @@ export function respond(
       ...extra,
     },
     body: empty ? '' : JSON.stringify(body),
+  };
+}
+
+/** A file through the authenticated proxy: never cached, never sniffed, always a download. */
+export function fileResponse(
+  file: { readonly bytes: Uint8Array; readonly contentType: string; readonly fileName: string },
+  correlationId: string,
+): BffResponse {
+  return {
+    status: 200,
+    headers: {
+      ...SECURITY_HEADERS,
+      'content-type': file.contentType,
+      'content-disposition': `attachment; filename="${file.fileName.replace(/[^A-Za-z0-9._-]/g, '_')}"`,
+      'x-correlation-id': correlationId,
+    },
+    body: '',
+    bytes: file.bytes,
   };
 }
 

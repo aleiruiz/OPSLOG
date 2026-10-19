@@ -34,7 +34,7 @@ import {
   VehicleService,
 } from '../../../../../packages/domain/vehicles/src/index.js';
 import { AlertsApi } from '../alerts.js';
-import type { AnalyticsApis } from './analytics-apis.js';
+import type { AnalyticsApis, ReportApis } from './analytics-apis.js';
 import { driverLicenseAlerts } from '../driver-license-alerts.js';
 import { AreasApi } from '../areas.js';
 import { AssignmentsApi } from '../assignments.js';
@@ -56,7 +56,7 @@ import type { AuditQueryApi } from '../../../audit-query/src/index.js';
 import type { MaintenanceApi } from '../../../maintenance/plans/src/index.js';
 import type { MaintenancePlanWorker } from '../../../../../packages/domain/maintenance/plans/src/index.js';
 
-export interface DomainApis extends IncidentDomainApis, AnalyticsApis {
+export interface DomainApis extends IncidentDomainApis, AnalyticsApis, ReportApis {
   readonly vehicles: VehiclesApi;
   readonly areas: AreasApi;
   readonly employees: EmployeesApi;

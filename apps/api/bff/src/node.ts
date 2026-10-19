@@ -24,9 +24,10 @@ function write(response: ServerResponse, result: BffResponse): void {
   const headers: Record<string, string | string[]> = {};
   for (const [name, value] of Object.entries(result.headers))
     headers[name] = typeof value === 'string' ? value : [...value];
-  headers['content-length'] = String(Buffer.byteLength(result.body));
+  const payload = result.bytes ?? result.body;
+  headers['content-length'] = String(Buffer.byteLength(payload));
   response.writeHead(result.status, headers);
-  response.end(result.body);
+  response.end(payload);
 }
 
 /**

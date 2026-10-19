@@ -1,0 +1,18 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../../",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
+  },
+  "include": [
+    "src/**/*.ts",
+    "../../domain/exports/src/**/*.ts",
+    "../../domain/reports/src/**/*.ts",
+    "../../domain/identity/src/**/*.ts",
+    "../../platform/exports/src/**/*.ts",
+    "../audit/src/**/*.ts",
+    "../../platform/audit/src/**/*.ts",
+    "../../platform/outbox/src/**/*.ts"
+  ]
+}

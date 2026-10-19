@@ -94,6 +94,10 @@
     { "path": "./apps/api/search" },
     { "path": "./packages/domain/saved-views" },
     { "path": "./packages/persistence/saved-views" },
-    { "path": "./apps/api/saved-views" }
+    { "path": "./apps/api/saved-views" },
+    { "path": "./packages/platform/exports" },
+    { "path": "./packages/domain/reports" },
+    { "path": "./packages/domain/exports" },
+    { "path": "./packages/persistence/exports" }
   ]
 }

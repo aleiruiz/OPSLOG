@@ -86,21 +86,24 @@ describe('startServer', () => {
 describe('startWorkerLoop', () => {
   const runtime = (fail: boolean) => {
     const calls: string[] = [];
+    const job = (name: string, call: string, failing = false) => ({
+      name,
+      run: async () => {
+        calls.push(call);
+        if (failing) throw new Error('boom');
+        return 0;
+      },
+    });
     return {
       calls,
       value: {
-        drainOutbox: async () => {
-          calls.push('drain');
-          if (fail) throw new Error('boom');
-          return 0;
-        },
-        runScans: async () => {
-          calls.push('scans');
-          return {};
-        },
-        runAuditRelay: async () => {
-          calls.push('relay');
-          return 0;
+        jobs: {
+          list: () => [
+            job('outbox', 'drain', fail),
+            job('scans', 'scans'),
+            job('audit-relay', 'relay'),
+            job('exports.run', 'exports'),
+          ],
         },
         periodic: { start: () => calls.push('start'), stop: () => calls.push('stop') },
       } as never,
@@ -112,19 +115,20 @@ describe('startWorkerLoop', () => {
     const { calls, value } = runtime(false);
     const loop = startWorkerLoop(value, () => undefined, 1000);
     await vi.advanceTimersByTimeAsync(1000);
-    expect(calls).toEqual(['start', 'drain', 'scans', 'relay']);
+    expect(calls).toEqual(['start', 'drain', 'scans', 'relay', 'exports']);
     await loop.stop();
     expect(calls.at(-1)).toBe('stop');
   });
 
-  it('reports a failing tick by class name only and keeps ticking', async () => {
+  it('reports a failing job by name and class only, runs the others and keeps ticking', async () => {
     vi.useFakeTimers();
     const { calls, value } = runtime(true);
     const reports: string[] = [];
     const loop = startWorkerLoop(value, (m) => reports.push(m), 1000);
     await vi.advanceTimersByTimeAsync(2000);
-    expect(reports).toEqual(['worker_tick_failed Error', 'worker_tick_failed Error']);
+    expect(reports).toEqual(['worker_job_failed outbox Error', 'worker_job_failed outbox Error']);
     expect(calls.filter((c) => c === 'drain')).toHaveLength(2);
+    expect(calls.filter((c) => c === 'exports')).toHaveLength(2);
     await loop.stop();
   });
 });
