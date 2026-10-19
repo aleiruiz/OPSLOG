@@ -121,7 +121,7 @@ const job = (name: string) => {
   return found;
 };
 
-describe('the eight reports through the platform', () => {
+describe('the base reports through the platform', () => {
   it('exports every report of the catalog with Spanish headers and the rows of the own company', async () => {
     world = createWorld();
     const a = await company(world, 'Empresa Alfa', 'a');
@@ -137,7 +137,10 @@ describe('the eight reports through the platform', () => {
       vehicle_documents: 'ECO-a',
     };
     const catalog = ok(await world.platform.reports.reports.catalog(a.admin.token, corr()));
-    expect(catalog.reports.map((r) => r.id).sort()).toEqual(Object.keys(expectations).sort());
+    expect(catalog.reports).toHaveLength(24);
+    expect(catalog.reports.map((r) => r.id)).toEqual(
+      expect.arrayContaining(Object.keys(expectations)),
+    );
     for (const [reportId, expected] of Object.entries(expectations)) {
       for (const format of ['csv', 'xlsx'] as const) {
         const made = ok(await exportOf(a.admin, reportId, { format }));

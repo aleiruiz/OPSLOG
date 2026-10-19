@@ -124,6 +124,22 @@ describe('report preview', () => {
     expect(lastCall(reports, 'preview')?.args[1]).not.toHaveProperty('plate');
   });
 
+  it('waits for a required filter before it loads the report or lets the reader export', async () => {
+    const { api, reports } = withReports({ rowCount: 8 });
+    at('?reporte=vehicle_sheet');
+    await renderWithSession(<ReportsScreen />, { api });
+    expect(await screen.findByText(/Indica los filtros obligatorios/)).toBeInTheDocument();
+    expect(reports.calls.some((call) => call.name === 'preview')).toBe(false);
+    expect(screen.getByRole('button', { name: 'Exportar' })).toBeDisabled();
+    fireEvent.change(screen.getByRole('textbox', { name: /Vehículo/ }), {
+      target: { value: 'ECO-001' },
+    });
+    click('Aplicar filtros');
+    await previewTable();
+    expect(lastCall(reports, 'preview')?.args[1]).toMatchObject({ vehicle: 'ECO-001' });
+    expect(screen.getByRole('button', { name: 'Exportar' })).toBeEnabled();
+  });
+
   it('sorts by another column and direction', async () => {
     const { api, reports } = withReports({ rowCount: 8 });
     at('?reporte=drivers');

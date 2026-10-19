@@ -1,4 +1,5 @@
 import type { Permission } from '../../identity/src/index.js';
+import { MemoryOps, opsA, opsEmpty, type OpsData } from './test-support/ops.js';
 import { createReportCatalog } from './catalog.js';
 import { ReportEngine } from './engine.js';
 import type {
@@ -13,7 +14,7 @@ import type {
   VehicleFact,
 } from './ports.js';
 
-export interface TenantData {
+export interface TenantData extends OpsData {
   vehicles: VehicleFact[];
   people: PersonFact[];
   areas: AreaFact[];
@@ -73,6 +74,7 @@ const person = (
 /** Company A of the fixtures; today is 2026-10-19 in `America/Mexico_City`. */
 export function companyA(): TenantData {
   return {
+    ...opsA(),
     areas: [
       area('a1', 'Norte', { code: 'N', responsibleCount: 2 }),
       area('a2', 'Sur', { parentId: 'a1', active: false }),
@@ -254,6 +256,7 @@ export function companyA(): TenantData {
 export function companyB(): TenantData {
   return {
     ...companyA(),
+    ...opsEmpty(),
     areas: [area('b1', 'Bajío')],
     vehicles: [vehicle('bv1', 9, { areaId: 'b1', economicNumber: 'B-ECO-9' })],
     people: [person('bd1', 'Bruno', 'Bravo', { areaId: 'b1' })],
@@ -265,10 +268,12 @@ export function companyB(): TenantData {
   };
 }
 
-export class MemorySources implements ReportSources {
+export class MemorySources extends MemoryOps implements ReportSources {
   public readonly piiReads: { tenantId: string; fields: readonly PiiField[] }[] = [];
   public readonly policyReads: { tenantId: string; withDeductible: boolean }[] = [];
-  public constructor(public readonly tenants: Record<string, TenantData>) {}
+  public constructor(public readonly tenants: Record<string, TenantData>) {
+    super(tenants);
+  }
   private data(tenantId: string): TenantData {
     const found = this.tenants[tenantId];
     if (!found) throw new Error('unknown tenant');
@@ -328,6 +333,8 @@ export const ALL: readonly Permission[] = [
   'export',
   'view_pii',
   'view_costs',
+  'view_audit',
+  'incidents:view',
   'incidents:view_costs',
 ];
 
@@ -353,6 +360,6 @@ export async function runReport(
   const { engine } = engineFor(sources);
   const perms = new Set(permissions);
   const plan = engine.plan(id, perms, request);
-  const ctx = await engine.context(tenantId, perms);
+  const ctx = await engine.context(tenantId, perms, 'actor-1');
   return engine.run(ctx, plan);
 }

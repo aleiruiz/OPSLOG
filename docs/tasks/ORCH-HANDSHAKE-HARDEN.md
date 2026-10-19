@@ -7,9 +7,29 @@ milestone: M0
 kind: documentation
 purpose: Cerrar los gaps de lectura obligatoria y autorización explícita antes del trabajo real de una sesión hija.
 depends_on: [ORCH-RESTART]
-source_decisions: ["SESSION_HANDSHAKE", "ORCH-1.2", "ADR-0005"]
-write_paths: [AGENTS.md, CLAUDE.md, docs/operations/SESSION_HANDSHAKE.md, docs/operations/AUTONOMOUS_ORCHESTRATOR.md, docs/operations/ORCHESTRATOR_START.md, docs/tasks/ORCH-RESTART.md, docs/tasks/ORCH-HANDSHAKE-HARDEN.md]
-forbidden_paths: [SPECS.md, Orchestrator.md, docs/baselines/**, manifests/**, package.json, pnpm-lock.yaml, Tasks.md, .orchestrator/**, .env*]
+source_decisions: ['SESSION_HANDSHAKE', 'ORCH-1.2', 'ADR-0005']
+write_paths:
+  [
+    AGENTS.md,
+    CLAUDE.md,
+    docs/operations/SESSION_HANDSHAKE.md,
+    docs/operations/AUTONOMOUS_ORCHESTRATOR.md,
+    docs/operations/ORCHESTRATOR_START.md,
+    docs/tasks/ORCH-RESTART.md,
+    docs/tasks/ORCH-HANDSHAKE-HARDEN.md,
+  ]
+forbidden_paths:
+  [
+    SPECS.md,
+    Orchestrator.md,
+    docs/baselines/**,
+    manifests/**,
+    package.json,
+    pnpm-lock.yaml,
+    Tasks.md,
+    .orchestrator/**,
+    .env*,
+  ]
 requirements:
   - SESSION_HANDSHAKE es lectura obligatoria para ambos proveedores y aparece en AGENTS y en la guía de arranque.
   - READY incluye handshakeId, parent/child thread IDs reales, taskId, leaseId, epoch, modelo, host, worktree, rama, baseSHA y pathScope.
@@ -22,11 +42,19 @@ acceptance:
   - Given READY completo y correlacionado, When el padre responde ACK con startAuthorized true, Then la sesión puede iniciar únicamente su pathScope.
   - Given identidad, modelo, lease, epoch, baseSHA o paths stale/incorrectos, When llega READY o ACK, Then se bloquea y no muta estado.
   - Given un ACK válido repetido, When se reconcilia, Then no crea otra sesión ni cambia el alcance.
-checks: ["links relativos", "git diff --check", "hashes de baselines congeladas", "scope documental sin código/manifests/lockfiles"]
+checks:
+  [
+    'links relativos',
+    'git diff --check',
+    'hashes de baselines congeladas',
+    'scope documental sin código/manifests/lockfiles',
+  ]
 tests: []
-evidence: ["READY/ACK correlacionados", "diff documental", "checks reproducibles", "PR listo para revisión"]
-non_goals: ["runtime del orquestador", "auditoría adicional", "merge", "cambio de baselines", "AWS"]
-completion_evidence: ["commit/PR ready", "una auditoría independiente por SHA coordinada por el padre"]
+evidence:
+  ['READY/ACK correlacionados', 'diff documental', 'checks reproducibles', 'PR listo para revisión']
+non_goals: ['runtime del orquestador', 'auditoría adicional', 'merge', 'cambio de baselines', 'AWS']
+completion_evidence:
+  ['commit/PR ready', 'una auditoría independiente por SHA coordinada por el padre']
 ```
 
 ## Trazabilidad

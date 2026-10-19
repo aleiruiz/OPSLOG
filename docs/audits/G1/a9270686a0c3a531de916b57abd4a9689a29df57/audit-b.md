@@ -20,6 +20,7 @@
 2. **The gates are green locally on this SHA**, `test:integration` included (real MySQL, 0 skipped). CI `quality` on a927068 is green, with e2e.
 3. **I found no exploitable cross-tenant path, auth bypass or role escalation.**
 4. **Two Medium findings remain, and Medium blocks G1:**
+
    - **M1:** an explicit M1 acceptance criterion and an isolation-matrix row are neither implemented nor deferred: "roles cambiados no permiten … jobs" and "cambio de permisos con trabajo pendiente".
    - **M2:** the ADR-0008 deadline for Storybook and visual regression ("como máximo a G1") has passed without an owner decision.
 
@@ -27,71 +28,71 @@
 
 ## Commands run (this SHA)
 
-| Command | Result |
-| --- | --- |
-| `git worktree add --detach /tmp/g1b-r2 a927068…` | OK; HEAD = a9270686a0c3a531de916b57abd4a9689a29df57 |
-| `pnpm install --frozen-lockfile` | OK |
-| `pnpm baseline:check` | PASS: "12 files across 5 manifests". `git diff 8b1b61c a927068 -- docs/baselines SPECS.md Orchestrator.md AGENTS.md CLAUDE.md` is empty. ADR-0008 changed only in its G0-record wording, and ADR-0009 was added |
-| `pnpm leak:scan` | PASS: "Secret scan OK: 299 tracked files". Every allowed fixture is listed in the output. My own grep of `git log -p --all` with the same patterns found only the synthetic fixtures |
-| `pnpm lint` | PASS (exit 0, `--max-warnings 0`) |
-| `pnpm format:check` | PASS |
-| `pnpm typecheck` / `pnpm build` (`tsc -b`) | PASS / PASS |
-| `pnpm test:unit` | PASS, exit 0. Every per-package threshold was met (table below) |
-| `CI=1 OPSLOG_TEST_MYSQL_ADMIN_URL=mysql://root@127.0.0.1:3307/mysql pnpm test:integration` | PASS, exit 0. Results below the table |
-| `pnpm audit --audit-level high` | PASS. 1 low (`@eslint/plugin-kit` ReDoS, dev) and 3 moderate (`mysql2` ≤3.23.0 zlib bomb, needs protocol compression, which is not enabled; `vitest`/`@vitest/mocker`, dev only). All are already recorded in the FIX-G1 table |
-| Full Vite production build of `apps/web/app` (all deps bundled, my own config outside the repo, `NODE_ENV=production`) | Built in 5m49s. `grep -c 'createMockApi\|createFakeOidc\|fake-code\|cuenta-admin\|createHttpApi\|mockApi'` = **0**; the fail-closed text is present (1) |
-| Coverage gate is real: `vitest run apps/api/bff … --coverage.thresholds.branches=99.9` | exit 1, so thresholds fail the command |
-| GitHub check-runs for a927068 | `quality` success, job 112201531231, head_sha a927068. Steps succeeded: leak-scan, install, `pnpm audit`, `pnpm quality` and `pnpm test:e2e`. PR head 61af137 has `quality` and GitGuardian green |
-| `GET /repos/aleiruiz/OPSLOG/rulesets/24547352` | `protect-main` is active on the default branch. Rules: deletion, non_fast_forward, required status check `quality` (strict), pull_request with 0 approvals. `bypass_actors` is `[]` |
-| `pnpm exec playwright install chromium` | Blocked by the proxy. e2e evidence is the CI run above |
+| Command                                                                                                                | Result                                                                                                                                                                                                                         |
+| ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `git worktree add --detach /tmp/g1b-r2 a927068…`                                                                       | OK; HEAD = a9270686a0c3a531de916b57abd4a9689a29df57                                                                                                                                                                            |
+| `pnpm install --frozen-lockfile`                                                                                       | OK                                                                                                                                                                                                                             |
+| `pnpm baseline:check`                                                                                                  | PASS: "12 files across 5 manifests". `git diff 8b1b61c a927068 -- docs/baselines SPECS.md Orchestrator.md AGENTS.md CLAUDE.md` is empty. ADR-0008 changed only in its G0-record wording, and ADR-0009 was added                |
+| `pnpm leak:scan`                                                                                                       | PASS: "Secret scan OK: 299 tracked files". Every allowed fixture is listed in the output. My own grep of `git log -p --all` with the same patterns found only the synthetic fixtures                                           |
+| `pnpm lint`                                                                                                            | PASS (exit 0, `--max-warnings 0`)                                                                                                                                                                                              |
+| `pnpm format:check`                                                                                                    | PASS                                                                                                                                                                                                                           |
+| `pnpm typecheck` / `pnpm build` (`tsc -b`)                                                                             | PASS / PASS                                                                                                                                                                                                                    |
+| `pnpm test:unit`                                                                                                       | PASS, exit 0. Every per-package threshold was met (table below)                                                                                                                                                                |
+| `CI=1 OPSLOG_TEST_MYSQL_ADMIN_URL=mysql://root@127.0.0.1:3307/mysql pnpm test:integration`                             | PASS, exit 0. Results below the table                                                                                                                                                                                          |
+| `pnpm audit --audit-level high`                                                                                        | PASS. 1 low (`@eslint/plugin-kit` ReDoS, dev) and 3 moderate (`mysql2` ≤3.23.0 zlib bomb, needs protocol compression, which is not enabled; `vitest`/`@vitest/mocker`, dev only). All are already recorded in the FIX-G1 table |
+| Full Vite production build of `apps/web/app` (all deps bundled, my own config outside the repo, `NODE_ENV=production`) | Built in 5m49s. `grep -c 'createMockApi\|createFakeOidc\|fake-code\|cuenta-admin\|createHttpApi\|mockApi'` = **0**; the fail-closed text is present (1)                                                                        |
+| Coverage gate is real: `vitest run apps/api/bff … --coverage.thresholds.branches=99.9`                                 | exit 1, so thresholds fail the command                                                                                                                                                                                         |
+| GitHub check-runs for a927068                                                                                          | `quality` success, job 112201531231, head_sha a927068. Steps succeeded: leak-scan, install, `pnpm audit`, `pnpm quality` and `pnpm test:e2e`. PR head 61af137 has `quality` and GitGuardian green                              |
+| `GET /repos/aleiruiz/OPSLOG/rulesets/24547352`                                                                         | `protect-main` is active on the default branch. Rules: deletion, non_fast_forward, required status check `quality` (strict), pull_request with 0 approvals. `bypass_actors` is `[]`                                            |
+| `pnpm exec playwright install chromium`                                                                                | Blocked by the proxy. e2e evidence is the CI run above                                                                                                                                                                         |
 
 **`test:integration` results (real MySQL 8.0.46, 0 skipped):**
 
-| Suite | Result |
-| --- | --- |
-| Harness | 1/1 |
-| `persistence/tenancy` | 5/5 |
-| `persistence/identity` | 30/30 |
-| Platform | 15 files, 139/139; composition coverage 99.52 / 97.88 / 98.36 / 99.52 |
+| Suite                  | Result                                                                |
+| ---------------------- | --------------------------------------------------------------------- |
+| Harness                | 1/1                                                                   |
+| `persistence/tenancy`  | 5/5                                                                   |
+| `persistence/identity` | 30/30                                                                 |
+| Platform               | 15 files, 139/139; composition coverage 99.52 / 97.88 / 98.36 / 99.52 |
 
 `mysql-identity.test.ts` ran 6/6, including the cross-pool races accept-first, revoke-first and "no phantom administrator".
 
 **Coverage measured by `test:unit` (lines / branches / functions):**
 
-| Package | Threshold (L/F/S/B) | Measured |
-| --- | --- | --- |
-| contracts | 95/95/95/90 | 100 / 98.71 / 100 |
-| ui | 90/90/90/85 | 100 / 97.29 / 100 |
-| web | 90/90/90/85 | 99.61 / 94.83 / 98.74 |
-| domain/tenants | 95/95/95/90 | 100 / 100 / 100 |
-| persistence/tenancy | 95/95/95/90 | 99.75 / 97.39 / 100 |
-| persistence/identity | 95/95/95/90 | 100 / 98.16 / 98.76 |
-| tools/orchestrator | 90/90/90/85 | 100 / 92.73 / 100 |
-| domain/identity | 95/95/95/90 | 99.74 / 99.55 / 100 |
-| platform/auth | 95/95/95/90 | 100 / 100 / 100 |
-| api/auth | 95/95/95/90 | 100 / 100 / 100 |
-| api/bff | 95/95/95/90 | 100 / 99 / 100 |
-| worker/base | 90/90/90/85 | 100 / 100 / 100 |
-| platform/audit | 90/90/90/85 | 94.39 / 94.11 / 100 |
-| platform/outbox | 90/90/90/85 | 98.92 / 92.55 / 100 |
-| infra/queues | 90/90/90/85 | 100 / 100 / 100 |
-| api/tenants | 95/95/95/90 | 100 / 100 / 100 |
-| domain/files | 95/95/95/90 | 100 / 100 / 100 |
-| platform/files | 95/95/95/90 | 100 / 100 / 100 |
-| api/files | 95/95/95/90 | 100 / 98.64 / 100 |
-| infra/storage | 90/90/90/85 | 100 / 100 / 100 |
-| infra/runtime | 90/90/90/85 | 100 / 97.46 / 100 |
-| harness | lines 80 | 100 |
-| composition (`test:platform`) | 95/95/95/90 | 99.52 / 97.88 / 98.36 |
+| Package                       | Threshold (L/F/S/B) | Measured              |
+| ----------------------------- | ------------------- | --------------------- |
+| contracts                     | 95/95/95/90         | 100 / 98.71 / 100     |
+| ui                            | 90/90/90/85         | 100 / 97.29 / 100     |
+| web                           | 90/90/90/85         | 99.61 / 94.83 / 98.74 |
+| domain/tenants                | 95/95/95/90         | 100 / 100 / 100       |
+| persistence/tenancy           | 95/95/95/90         | 99.75 / 97.39 / 100   |
+| persistence/identity          | 95/95/95/90         | 100 / 98.16 / 98.76   |
+| tools/orchestrator            | 90/90/90/85         | 100 / 92.73 / 100     |
+| domain/identity               | 95/95/95/90         | 99.74 / 99.55 / 100   |
+| platform/auth                 | 95/95/95/90         | 100 / 100 / 100       |
+| api/auth                      | 95/95/95/90         | 100 / 100 / 100       |
+| api/bff                       | 95/95/95/90         | 100 / 99 / 100        |
+| worker/base                   | 90/90/90/85         | 100 / 100 / 100       |
+| platform/audit                | 90/90/90/85         | 94.39 / 94.11 / 100   |
+| platform/outbox               | 90/90/90/85         | 98.92 / 92.55 / 100   |
+| infra/queues                  | 90/90/90/85         | 100 / 100 / 100       |
+| api/tenants                   | 95/95/95/90         | 100 / 100 / 100       |
+| domain/files                  | 95/95/95/90         | 100 / 100 / 100       |
+| platform/files                | 95/95/95/90         | 100 / 100 / 100       |
+| api/files                     | 95/95/95/90         | 100 / 98.64 / 100     |
+| infra/storage                 | 90/90/90/85         | 100 / 100 / 100       |
+| infra/runtime                 | 90/90/90/85         | 100 / 97.46 / 100     |
+| harness                       | lines 80            | 100                   |
+| composition (`test:platform`) | 95/95/95/90         | 99.52 / 97.88 / 98.36 |
 
 ## Independent verification of the round-1 fixes (PR #37)
 
-| Item | Code | Tests (my run) | Mutation I applied → result |
-| --- | --- | --- | --- |
-| Pending invitation is revocable | `apps/api/composition/src/platform.ts:746-760` (pending branch: `identity.revokeMembership`, `access.revokePending`, audit `invitation.revoked`); `packages/persistence/identity/src/store.ts:571-574` (consumes unconsumed invitation rows in the same transaction, under the tenant lock) | `invitations.test.ts`, `bff.test.ts` "invitation lifecycle through HTTP", `persistent-identity.test.ts`, `mysql-identity.test.ts`, identity `mysql.integration.test.ts` | Dropping `identity.revokeMembership` from the pending branch → 4 fail. Dropping the invitation `update` in `store.ts` → 2 fail in the package (fake driver and MySQL) and 2 in the platform suite (TypeORM fake and real MySQL) |
-| Suspended tenant cannot accept | `platform.ts:603-605, 617-618` (status check under the tenant lock, before any store write) | Four suites (memory, BFF, TypeORM, race) | Disabling the status check → 4 fail |
-| Accept vs revoke vs suspend serialization | `platform.ts:417-427, 482-493, 603-605` | `invitation-race.test.ts` (memory and TypeORM fake); `mysql-identity.test.ts` (cross-pool) | Accept not under the lock → 5 fail. `setStatus` not under the lock → 2 fail |
-| Stored-role confirmation (N3 of A) | `access.ts:149-153` | `persistent-identity.test.ts` | Ignoring the store → 2 fail |
+| Item                                      | Code                                                                                                                                                                                                                                                                                        | Tests (my run)                                                                                                                                                          | Mutation I applied → result                                                                                                                                                                                                     |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pending invitation is revocable           | `apps/api/composition/src/platform.ts:746-760` (pending branch: `identity.revokeMembership`, `access.revokePending`, audit `invitation.revoked`); `packages/persistence/identity/src/store.ts:571-574` (consumes unconsumed invitation rows in the same transaction, under the tenant lock) | `invitations.test.ts`, `bff.test.ts` "invitation lifecycle through HTTP", `persistent-identity.test.ts`, `mysql-identity.test.ts`, identity `mysql.integration.test.ts` | Dropping `identity.revokeMembership` from the pending branch → 4 fail. Dropping the invitation `update` in `store.ts` → 2 fail in the package (fake driver and MySQL) and 2 in the platform suite (TypeORM fake and real MySQL) |
+| Suspended tenant cannot accept            | `platform.ts:603-605, 617-618` (status check under the tenant lock, before any store write)                                                                                                                                                                                                 | Four suites (memory, BFF, TypeORM, race)                                                                                                                                | Disabling the status check → 4 fail                                                                                                                                                                                             |
+| Accept vs revoke vs suspend serialization | `platform.ts:417-427, 482-493, 603-605`                                                                                                                                                                                                                                                     | `invitation-race.test.ts` (memory and TypeORM fake); `mysql-identity.test.ts` (cross-pool)                                                                              | Accept not under the lock → 5 fail. `setStatus` not under the lock → 2 fail                                                                                                                                                     |
+| Stored-role confirmation (N3 of A)        | `access.ts:149-153`                                                                                                                                                                                                                                                                         | `persistent-identity.test.ts`                                                                                                                                           | Ignoring the store → 2 fail                                                                                                                                                                                                     |
 
 The remaining paths fail closed:
 
@@ -100,26 +101,26 @@ The remaining paths fail closed:
 
 ## Requirements and traceability
 
-| Area (Orchestrator §8 M1 / SPECS §4, §5.4, §9) | Result | Evidence |
-| --- | --- | --- |
-| Tenant → user → object → audit, A/B (CORE-INTEGRATE) | PASS | `flow.test.ts`, `isolation.test.ts`, `bff.test.ts` (A/B over HTTP; foreign ids give an identical 404) |
-| Credentials A denied on B (CORE-TENANCY) | PASS (real MySQL) | `tests/harness/mysql.integration.test.ts` (cross-tenant connection `rejects /denied/`); tenancy `mysql.integration.test.ts` |
-| Provisioning failure does not activate a tenant; retries and leases | PASS | Tenancy MySQL suite 5/5 |
-| Revoked sessions / changed roles block **operations** | PASS | `sessions.test.ts`; `TenantGate` plus projection bump; `effectiveRole` against the store |
-| Revoked sessions / changed roles block **jobs** | **NOT MET, not deferred** | See **M1** |
-| Last administrator, concurrent, cross-process | PASS | `negative.test.ts`; MySQL x10 rounds; `mysql-identity` phantom-admin race |
-| Files: fake, pending or foreign never downloaded; revocation blocks the proxy; scanner down only queues | PASS (in-memory storage; AWS deferred) | `api/files` tests; `jobs.test.ts:210`; grants bound to tenant, actor and expiry (`apps/api/files/src/index.ts:236-243`) |
-| Audit without PII; rollback does not publish; retry does not duplicate | PASS (in memory) | `flow.test.ts`, `jobs.test.ts` |
-| Durable outbox/audit reconciliation (CORE-AUDIT) | Deferred and documented (owner action listed in the FIX-G1 table) | Out of scope per my brief |
-| Web: no tokens in browser storage; routes follow permissions; drafts kept on expiry | PASS (CI e2e on the mock; unit tests) | `e2e/web-shell.spec.ts:141,165`; production bundle excludes mock and fake OIDC (my full build: 0 markers) |
-| CSRF / Origin / cookies | PASS | `apps/api/bff/src/handler.ts:156-183`; `csrf.ts` (session-bound HMAC, signed double-submit before login, exact Origin plus Host plus Sec-Fetch-Site); cookie `HttpOnly; Secure; SameSite=Lax` |
-| SQL / migrations | PASS | No string-built SQL in runtime code. DDL only in migrations and test setup, with identifier allowlists. Runtime account is DML-only (asserted on MySQL) |
-| CI required checks and ruleset | PASS | `quality` is required and strict; the PR rule is on; CI includes audit, leak scan, MySQL and e2e; actions pinned by SHA; `persist-credentials: false` |
-| Coverage thresholds really enforced | PASS (see L3 for tiering) | All met; a threshold violation exits 1 |
-| Baseline / hash manifests | PASS | `baseline:check`; no baseline file changed since G0 |
-| Mutation testing on permission rules (SPECS §9.1) | Partial (L2) | My 13 permission mutants: 12 killed, 1 survived |
-| Traceability matrix per requirement | Stale in places (L1) | `docs/traceability/FND-CONTRACTS.md` |
-| Visual regression / Storybook (SPECS §9.1, ADR-0008) | **Deadline expired** | See **M2** |
+| Area (Orchestrator §8 M1 / SPECS §4, §5.4, §9)                                                          | Result                                                            | Evidence                                                                                                                                                                                      |
+| ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tenant → user → object → audit, A/B (CORE-INTEGRATE)                                                    | PASS                                                              | `flow.test.ts`, `isolation.test.ts`, `bff.test.ts` (A/B over HTTP; foreign ids give an identical 404)                                                                                         |
+| Credentials A denied on B (CORE-TENANCY)                                                                | PASS (real MySQL)                                                 | `tests/harness/mysql.integration.test.ts` (cross-tenant connection `rejects /denied/`); tenancy `mysql.integration.test.ts`                                                                   |
+| Provisioning failure does not activate a tenant; retries and leases                                     | PASS                                                              | Tenancy MySQL suite 5/5                                                                                                                                                                       |
+| Revoked sessions / changed roles block **operations**                                                   | PASS                                                              | `sessions.test.ts`; `TenantGate` plus projection bump; `effectiveRole` against the store                                                                                                      |
+| Revoked sessions / changed roles block **jobs**                                                         | **NOT MET, not deferred**                                         | See **M1**                                                                                                                                                                                    |
+| Last administrator, concurrent, cross-process                                                           | PASS                                                              | `negative.test.ts`; MySQL x10 rounds; `mysql-identity` phantom-admin race                                                                                                                     |
+| Files: fake, pending or foreign never downloaded; revocation blocks the proxy; scanner down only queues | PASS (in-memory storage; AWS deferred)                            | `api/files` tests; `jobs.test.ts:210`; grants bound to tenant, actor and expiry (`apps/api/files/src/index.ts:236-243`)                                                                       |
+| Audit without PII; rollback does not publish; retry does not duplicate                                  | PASS (in memory)                                                  | `flow.test.ts`, `jobs.test.ts`                                                                                                                                                                |
+| Durable outbox/audit reconciliation (CORE-AUDIT)                                                        | Deferred and documented (owner action listed in the FIX-G1 table) | Out of scope per my brief                                                                                                                                                                     |
+| Web: no tokens in browser storage; routes follow permissions; drafts kept on expiry                     | PASS (CI e2e on the mock; unit tests)                             | `e2e/web-shell.spec.ts:141,165`; production bundle excludes mock and fake OIDC (my full build: 0 markers)                                                                                     |
+| CSRF / Origin / cookies                                                                                 | PASS                                                              | `apps/api/bff/src/handler.ts:156-183`; `csrf.ts` (session-bound HMAC, signed double-submit before login, exact Origin plus Host plus Sec-Fetch-Site); cookie `HttpOnly; Secure; SameSite=Lax` |
+| SQL / migrations                                                                                        | PASS                                                              | No string-built SQL in runtime code. DDL only in migrations and test setup, with identifier allowlists. Runtime account is DML-only (asserted on MySQL)                                       |
+| CI required checks and ruleset                                                                          | PASS                                                              | `quality` is required and strict; the PR rule is on; CI includes audit, leak scan, MySQL and e2e; actions pinned by SHA; `persist-credentials: false`                                         |
+| Coverage thresholds really enforced                                                                     | PASS (see L3 for tiering)                                         | All met; a threshold violation exits 1                                                                                                                                                        |
+| Baseline / hash manifests                                                                               | PASS                                                              | `baseline:check`; no baseline file changed since G0                                                                                                                                           |
+| Mutation testing on permission rules (SPECS §9.1)                                                       | Partial (L2)                                                      | My 13 permission mutants: 12 killed, 1 survived                                                                                                                                               |
+| Traceability matrix per requirement                                                                     | Stale in places (L1)                                              | `docs/traceability/FND-CONTRACTS.md`                                                                                                                                                          |
+| Visual regression / Storybook (SPECS §9.1, ADR-0008)                                                    | **Deadline expired**                                              | See **M2**                                                                                                                                                                                    |
 
 **Known deferrals confirmed as documented (not reported as findings):**
 
@@ -231,6 +232,7 @@ The header claims an update "hasta `3eabccb`", which post-dates #32, #33 and #35
 - **I3. Per-PR audit evidence lives outside the repository.** The one Opus audit per PR and headSHA (AGENTS.md rule 7) is recorded only in task documents and PR text; for #37, for example, there is no artifact on GitHub. The orchestrator's G1 inventory (ORCH §7.2(2)) should link each mergeSHA to its audit session.
 - **I4. The ruleset is not versioned.** It is verified through the API but not in the repository, and `bypass_actors: []` is shown as seen by this token. This is consistent with the FIX-G1 table (precondition P1 closed).
 - **I5. Other open items are already documented.** These carry over from the FIX-G1 table and still apply:
+
   - operator operations without authorization of their own (`platform.ts:433-493`, not reachable over HTTP);
   - `publish` permission chosen by the caller (`platform.ts:1079`);
   - `mfa` and `sessionIdleHours` recorded but not applied;

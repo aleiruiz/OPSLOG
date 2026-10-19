@@ -25,6 +25,7 @@ export function FilterFields({
           onChange: (event: React.ChangeEvent<HTMLInputElement>) =>
             onChange(filter.id, event.target.value),
           InputLabelProps: { shrink: true },
+          required: filter.required === true,
         };
         if (filter.kind === 'enum')
           return (

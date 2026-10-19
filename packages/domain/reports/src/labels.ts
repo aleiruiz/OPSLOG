@@ -70,3 +70,96 @@ export function expiryStatus(
   if (expiresOn === null || daysLeft === null) return 'valid';
   return daysLeft < 0 ? 'expired' : daysLeft <= 30 ? 'expiring' : 'valid';
 }
+
+export const WORK_ORDER_STATUS_LABELS: Readonly<Record<string, string>> = {
+  scheduled: 'Programada',
+  assigned: 'Asignada',
+  in_progress: 'En proceso',
+  completed: 'Completada',
+  closed: 'Cerrada',
+  cancelled: 'Cancelada',
+};
+
+export const WORK_ORDER_KIND_LABELS: Readonly<Record<string, string>> = {
+  preventive: 'Preventivo',
+  corrective: 'Correctivo',
+};
+
+export const INCIDENT_STATUS_LABELS: Readonly<Record<string, string>> = {
+  reported: 'Reportado',
+  under_review: 'En revisión',
+  insurance_process: 'Con la aseguradora',
+  insurance_rejected: 'Rechazado por la aseguradora',
+  no_insurance: 'Sin aseguradora',
+  repair: 'En reparación',
+  resolved: 'Resuelto',
+  closed: 'Cerrado',
+  reopened: 'Reabierto',
+  cancelled: 'Cancelado',
+};
+
+/** Statuses of a case that is neither a draft nor finished. */
+export const OPEN_INCIDENT_STATUSES: readonly string[] = [
+  'reported',
+  'under_review',
+  'insurance_process',
+  'insurance_rejected',
+  'no_insurance',
+  'repair',
+  'resolved',
+  'reopened',
+];
+
+export const INCIDENT_TYPE_LABELS: Readonly<Record<string, string>> = {
+  collision: 'Colisión',
+  rollover: 'Volcadura',
+  theft_total: 'Robo total',
+  theft_partial: 'Robo parcial',
+  vandalism: 'Vandalismo',
+  parking_damage: 'Daño en estacionamiento',
+  mechanical_failure: 'Falla mecánica',
+  traffic_violation: 'Infracción de tránsito',
+  injury: 'Lesión',
+  other: 'Otro',
+};
+
+export const SEVERITY_LABELS: Readonly<Record<string, string>> = {
+  low: 'Baja',
+  medium: 'Media',
+  high: 'Alta',
+  critical: 'Crítica',
+};
+
+export const COVERAGE_STATUS_LABELS: Readonly<Record<string, string>> = {
+  unknown: 'Sin determinar',
+  covered: 'Con cobertura',
+  multiple: 'Varias pólizas',
+  none: 'Sin cobertura',
+};
+
+export const SLA_STATE_LABELS: Readonly<Record<string, string>> = {
+  not_started: 'Sin iniciar',
+  on_track: 'En tiempo',
+  warning: 'Por vencer',
+  breached: 'Vencido',
+  met: 'Cumplido',
+  missed: 'Cumplido fuera de plazo',
+};
+
+export const EXPENSE_CATEGORY_LABELS: Readonly<Record<string, string>> = {
+  repair: 'Reparación sin orden',
+  deductible: 'Deducible',
+  towing: 'Grúa',
+  fine: 'Multa',
+  third_party_damage: 'Daño a terceros',
+  legal: 'Legal',
+  other: 'Otros',
+};
+
+export const SOURCE_LABELS = {
+  vehicleDocument: 'Documento de vehículo',
+  personDocument: 'Documento de persona',
+  policy: 'Póliza',
+  license: 'Licencia',
+  plan: 'Plan de mantenimiento',
+} as const;

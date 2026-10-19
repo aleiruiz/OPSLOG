@@ -166,3 +166,27 @@ Registrar SHA, MySQL exacto, versiones exactas de ExcelJS y PDFKit, y la matriz 
 ### Notas para el PR 2
 
 - La vista previa vuelve a ejecutar el reporte completo en cada página (el motor carga, filtra y ordena en memoria) y `ExportService.request` lo ejecuta dos veces: una para estimar el tiempo y decidir directo o trabajo, y otra al producir el archivo. El PR 2 debe reutilizar el resultado o paginar en SQL si el rendimiento lo pide.
+
+## Evidencia PR 2
+
+- Rama `claude/mvp-reports-pr2`, apilada sobre `claude/mvp-notify`. Las notificaciones de exportación terminada son las de MVP-NOTIFY; este PR no añade otras.
+- MySQL exacto: 8.0.46 local. Las suites que exigen MySQL 8.4 (órdenes, siniestros, incluida `mysql-reports.test.ts`) se omiten localmente y corren en CI.
+- Versiones exactas: ExcelJS 4.4.0, PDFKit 0.20.2 (sin cambios respecto del PR 1).
+- Reportes nuevos: `vehicle_history`, `maintenance_plan_vs_actual`, `maintenance_corrective`, `maintenance_costs`, `maintenance_frequency`, `incidents_by_period`, `incidents_by_subject`, `incidents_distribution`, `incident_costs`, `incident_resolution`, `incident_aging`, `expirations`, `audit_log` y las fichas PDF `vehicle_sheet`, `driver_sheet`, `incident_sheet` (24 reportes en total). Matriz: `docs/traceability/reports.md`.
+- Lecturas nuevas: puerto `OperationalSources` (`packages/domain/reports/src/ports-ops.ts`) implementado en `apps/api/composition/src/platform/report-ops-sources.ts` sobre los puertos de los módulos (órdenes, planes, talleres, siniestros, libro de costos, SLA, asignaciones, historial de estado y consulta de auditoría); no se leen tablas ajenas.
+
+### Notas del PR 1 atendidas
+
+- Vista previa: `ReportEngine.preview` guarda el resultado (30 s de vida, tope de 100.000 filas entre todos los resultados guardados, clave por empresa, persona, permisos y plan), de modo que paginar no vuelve a ejecutar el reporte. `run` carga siempre de nuevo.
+- `ExportService.request`: una exportación directa ya ejecuta el reporte una sola vez y reutiliza ese resultado para escribir el archivo; solo un trabajo en segundo plano lo ejecuta dos veces (estimación en la petición y producción en el worker, que además revalida permisos). Se deja así a propósito; cubierto por `service.test.ts` (exportaciones).
+
+### Desviaciones del PR 2
+
+- Importes de reportes agregados: se imprimen como texto por moneda (`MXN 1500.50; USD 20.00`) y las filas de `maintenance_costs` e `incident_costs` van por moneda; nunca se suman monedas distintas. `incident_costs` no tiene columna de pagador conductor (D15).
+- `maintenance_costs` e `incident_costs` solo aparecen para quien tiene `view_costs` / `incidents:view_costs`; sin el permiso ni se listan ni se consulta el importe.
+- Las fichas son tablas sección/campo/valor, solo PDF, y exigen un filtro obligatorio. La revalidación de la descarga no puede detectar una revocación posterior del permiso del registro.
+- Un lector con alcance de mecánico (D9) o una sesión sin persona recibe cero filas: cierre seguro, no error.
+- `audit_log`: rango máximo de 366 días (30 por omisión); los cambios se enmascaran con las reglas de la pantalla de auditoría.
+- Se añadió `required` a `ReportFilter` y a `BffReportFilter` (contrato aditivo) y `actorId` a `ReportContext`.
+- Archivos fuera de la lista literal de `write_paths` pero dentro de las rutas compartidas de la ola (composición y arneses): `apps/api/composition/src/platform/report-ops-sources.ts`, `report-sources.ts`, `audit-query-apis.ts` (se extrae `buildAuditQueryService` para compartir el servicio con los reportes sin cambiar la API de auditoría) y `downstream-apis.ts`; `tests/integration/platform/reports-operations.test.ts` y `mysql-reports.test.ts`.
+- Rendimiento: ninguna aserción de tiempo nueva; las existentes siguen detrás de `OPSLOG_PERF=1`.

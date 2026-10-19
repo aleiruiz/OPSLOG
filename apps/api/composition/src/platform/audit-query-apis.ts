@@ -99,31 +99,39 @@ export function auditReconciler(
   return new InMemoryAuditReconciler(snapshot);
 }
 
-/** The audit screens' API (FR-171, S26): global and per-record history, and the relay reconciliation (FR-170). */
-export function buildAuditQueryApi(
+/** The audit queries over the platform's audit store, shared by the audit screens and the reports. */
+export function buildAuditQueryService(
   kernel: PlatformKernel,
   relay: { runBatch(max?: number): Promise<number> } | undefined,
   sources: AuditDescriptionSources,
+): AuditQueryService {
+  return new AuditQueryService({
+    reader: auditReader(kernel.audit),
+    reconciler: auditReconciler(kernel.audit, relay),
+    describers: entityDescribers(sources),
+    changeSources: {
+      incident: incidentChanges(sources.incidents),
+      maintenance_work_order: workOrderChanges(sources.workOrders),
+    },
+    // The identity contract carries no names: a member shows as their role.
+    roleOf: async (tenantId, actorId) => {
+      const role = await kernel.access.effectiveRole(tenantId, actorId.replace(/^user-/, ''));
+      return role ? ROLE_LABELS[role] : null;
+    },
+    now: kernel.now,
+  });
+}
+
+/** The audit screens' API (FR-171, S26): global and per-record history, and the relay reconciliation (FR-170). */
+export function buildAuditQueryApi(
+  kernel: PlatformKernel,
+  service: AuditQueryService,
 ): AuditQueryApi {
   return new AuditQueryApi({
     authorize: async (token, correlationId) => {
       const context = await kernel.authorize(token, correlationId, ['view_audit']);
       return { context, permissions: await kernel.access.resolvePermissions(context) };
     },
-    service: new AuditQueryService({
-      reader: auditReader(kernel.audit),
-      reconciler: auditReconciler(kernel.audit, relay),
-      describers: entityDescribers(sources),
-      changeSources: {
-        incident: incidentChanges(sources.incidents),
-        maintenance_work_order: workOrderChanges(sources.workOrders),
-      },
-      // The identity contract carries no names: a member shows as their role.
-      roleOf: async (tenantId, actorId) => {
-        const role = await kernel.access.effectiveRole(tenantId, actorId.replace(/^user-/, ''));
-        return role ? ROLE_LABELS[role] : null;
-      },
-      now: kernel.now,
-    }),
+    service,
   });
 }

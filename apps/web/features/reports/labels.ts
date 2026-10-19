@@ -55,6 +55,7 @@ export const copy = {
   asc: 'Ascendente',
   desc: 'Descendente',
   preview: 'Vista previa',
+  needFilters: 'Indica los filtros obligatorios y aplícalos para ver el reporte.',
   noRows: 'Ningún registro coincide con los filtros.',
   noColumns: 'Elige al menos una columna.',
   previous: 'Anterior',

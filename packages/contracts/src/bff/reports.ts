@@ -35,6 +35,8 @@ export interface BffReportFilter {
   readonly label: string;
   readonly kind: BffReportFilterKind;
   readonly options?: readonly BffReportFilterOption[];
+  /** The report cannot run until the filter has a value (a record sheet names its record). */
+  readonly required?: boolean;
 }
 
 export interface BffReportSummary {
