@@ -372,6 +372,12 @@ describe('PolicyService', () => {
     expect(await ids({ coversOn: '2026-10-06' })).toEqual([p3.id, p1.id]);
     expect(await ids({ coversOn: '2027-06-01' })).toEqual([p4.id]);
     expect(await ids({ limit: 2, offset: 1 })).toEqual([p3.id, p1.id]);
+    // The end-date range is inclusive on both bounds and combines with the rest of the filters.
+    expect(await ids({ endsFrom: '2026-10-20' })).toEqual([p3.id, p1.id, p4.id]);
+    expect(await ids({ endsTo: '2026-10-20' })).toEqual([p2.id, p3.id]);
+    expect(await ids({ endsFrom: '2026-10-02', endsTo: '2026-12-01' })).toEqual([p3.id, p1.id]);
+    expect(await ids({ endsFrom: '2026-10-21', endsTo: '2026-10-20' })).toEqual([]);
+    expect(await ids({ endsFrom: '2026-10-02', status: 'expiring' })).toEqual([p3.id]);
     await svc.archive(A, p2.id, 1);
     expect(await ids({ status: 'expired' })).toEqual([]);
     expect(await ids({ status: 'expired', includeArchived: true })).toEqual([p2.id]);
@@ -381,6 +387,8 @@ describe('PolicyService', () => {
       { includeArchived: 'yes' },
       { vehicleId: '../x' },
       { coversOn: '2026-02-30' },
+      { endsFrom: '2026-02-30' },
+      { endsTo: 20261231 },
     ])
       expect(await code(svc.list(A, query))).toBe('invalid_input');
   });

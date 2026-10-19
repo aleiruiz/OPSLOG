@@ -19,6 +19,9 @@ import { linkSx, RouterButton, RouterLink } from '../app/router';
 import { ScrollRegion } from '../app/ScrollRegion';
 import type { CoverageType, InsurancePolicy, PolicyStatus } from '../app/types';
 import type { VehicleOptions } from '../app/vehicleOptions';
+import { ExtraFilters } from '../features/search/views/ExtraFilters';
+import type { ListState } from '../features/search/views/useListState';
+import { ViewsBar } from '../features/search/views/ViewsBar';
 import {
   coverageLabel,
   coverageLabels,
@@ -68,6 +71,8 @@ export interface PolicyListViewProps {
   readonly dateError?: string | undefined;
   readonly can: (permission: 'create' | 'edit') => boolean;
   readonly filtersActive: boolean;
+  /** Address filters, saved views and columns; stories and tests of the bare view omit it. */
+  readonly list?: ListState;
   readonly loadingMore?: boolean;
   readonly notice?: { readonly text: string; readonly severity: 'success' | 'error' } | null;
   readonly onFiltersChange: (filters: PolicyFilters) => void;
@@ -84,6 +89,7 @@ export function PolicyListView({
   dateError,
   can,
   filtersActive,
+  list,
   loadingMore = false,
   notice = null,
   onFiltersChange,
@@ -92,6 +98,8 @@ export function PolicyListView({
   onLoadMore,
 }: PolicyListViewProps) {
   const uid = React.useId();
+  const shown = <T extends { key: string }>(columns: T[]): T[] =>
+    list ? list.columns.visible(columns) : columns;
   const names = new Map((vehicles?.items ?? []).map((item) => [item.id, item.economicNumber]));
   const select = (
     id: string,
@@ -140,6 +148,7 @@ export function PolicyListView({
       )}
       <NoSubmit>
         <Panel>
+          {list && <ViewsBar list={list} />}
           <FilterBar onClear={onClear}>
             {select(
               'status',
@@ -204,6 +213,13 @@ export function PolicyListView({
                 <option value="true">Incluir archivadas</option>
               </>,
             )}
+            {list && (
+              <ExtraFilters
+                list={list}
+                keys={['endsFrom', 'endsTo']}
+                pageSizeLabel="Pólizas por página"
+              />
+            )}
           </FilterBar>
         </Panel>
       </NoSubmit>
@@ -230,7 +246,7 @@ export function PolicyListView({
                 <ScrollRegion label="Tabla de pólizas">
                   <DataTable<Row>
                     caption={`Pólizas (${page.total})`}
-                    columns={[
+                    columns={shown([
                       {
                         key: 'insurer',
                         label: 'Aseguradora',
@@ -319,7 +335,7 @@ export function PolicyListView({
                             </Box>
                           ) : null,
                       },
-                    ]}
+                    ])}
                     rows={rows}
                   />
                 </ScrollRegion>

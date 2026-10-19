@@ -709,6 +709,47 @@ describe('VehicleService', () => {
       });
     expect(await rejection(svc.list(''))).toMatchObject({ code: 'invalid_input' });
   });
+  it('filters by inclusive model-year and odometer ranges and validates their bounds', async () => {
+    const { svc } = service();
+    await svc.create(
+      A,
+      ACTOR,
+      input({ economicNumber: 'U-1', plate: 'AA1', vin: null, year: 2018, odometerKm: 150_000 }),
+    );
+    await svc.create(
+      A,
+      ACTOR,
+      input({ economicNumber: 'U-2', plate: 'BB2', vin: null, year: 2022, odometerKm: 40_000 }),
+    );
+    await svc.create(
+      A,
+      ACTOR,
+      input({ economicNumber: 'U-3', plate: 'CC3', vin: null, year: 2024, odometerKm: 5_000 }),
+    );
+    const ids = async (query: Record<string, unknown>) =>
+      (await svc.list(A, query)).items.map((v) => v.economicNumber);
+    expect(await ids({ yearFrom: 2022 })).toEqual(['U-2', 'U-3']);
+    expect(await ids({ yearTo: 2022 })).toEqual(['U-1', 'U-2']);
+    expect(await ids({ yearFrom: 2022, yearTo: 2022 })).toEqual(['U-2']);
+    expect(await ids({ kmFrom: 5_000, kmTo: 40_000 })).toEqual(['U-2', 'U-3']);
+    expect(await ids({ kmFrom: 40_001 })).toEqual(['U-1']);
+    expect(await ids({ kmTo: 4_999 })).toEqual([]);
+    expect(await ids({ yearFrom: 2024, kmTo: 10_000 })).toEqual(['U-3']);
+    // The total counts the whole filter, not only the window.
+    expect((await svc.list(A, { yearFrom: 2022, limit: 1 })).total).toBe(2);
+    for (const bad of [
+      { yearFrom: 1949 },
+      { yearTo: 2101 },
+      { yearFrom: 2020.5 },
+      { yearTo: '2020' },
+      { kmFrom: -1 },
+      { kmTo: 10_000_000 },
+      { kmFrom: 'x' },
+    ])
+      expect(await rejection(svc.list(A, bad)), JSON.stringify(bad)).toMatchObject({
+        code: 'invalid_input',
+      });
+  });
   it('turns a row that vanishes between read and write into not_found', async () => {
     const inner = new InMemoryVehicleStore();
     let vanish = false;

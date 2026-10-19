@@ -42,6 +42,8 @@ export interface PolicyListQuery {
   readonly coverageType?: unknown;
   readonly status?: unknown;
   readonly coversOn?: unknown;
+  readonly endsFrom?: unknown;
+  readonly endsTo?: unknown;
   readonly includeArchived?: unknown;
   readonly limit?: unknown;
   readonly offset?: unknown;
@@ -136,6 +138,8 @@ export class PolicyService {
       ...(query.vehicleId === undefined ? {} : { vehicleId: guardId(query.vehicleId) }),
       ...(query.coverageType === undefined ? {} : { coverageType: query.coverageType }),
       ...(query.coversOn === undefined ? {} : { coversOn: normalizeDate(query.coversOn) }),
+      ...(query.endsFrom === undefined ? {} : { endsFrom: normalizeDate(query.endsFrom) }),
+      ...(query.endsTo === undefined ? {} : { endsTo: normalizeDate(query.endsTo) }),
       ...(query.status === undefined
         ? {}
         : { expiry: expiryFilterOf(query.status, dateOf(this.now())) }),

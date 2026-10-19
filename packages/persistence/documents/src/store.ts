@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import {
+  And,
   Between,
   In,
   IsNull,
@@ -142,6 +143,19 @@ const toRevisionRow = (revision: DocumentRevision): DocumentRevisionEntity => ({
   at: new Date(revision.at),
 });
 
+/** The condition on `expiry_key` of the derived status and the expiry range, when both are given both must hold. */
+function expiryWhere(filter: DocumentFilter) {
+  const conditions = [
+    ...(filter.expiry === undefined ? [] : [expiryCondition(filter.expiry)]),
+    ...(filter.expiresFrom === undefined || filter.expiresTo === undefined
+      ? []
+      : [Between(filter.expiresFrom, filter.expiresTo)]),
+  ];
+  const [first, ...rest] = conditions;
+  if (first === undefined) return {};
+  return { expiryKey: rest.length === 0 ? first : And(first, ...rest) };
+}
+
 /** The expiry-key condition of a derived status (see `matchesExpiry` in the domain). */
 function expiryCondition(expiry: NonNullable<DocumentFilter['expiry']>) {
   if (expiry.status === 'expired') return LessThan(expiry.from);
@@ -242,7 +256,7 @@ export class TypeOrmDocumentStore implements DocumentStore, DocumentAnalyticsRea
             ? { vehicleId: filter.ownerId }
             : { employeeId: filter.ownerId }),
         ...(filter.typeCode === undefined ? {} : { typeCode: filter.typeCode }),
-        ...(filter.expiry === undefined ? {} : { expiryKey: expiryCondition(filter.expiry) }),
+        ...expiryWhere(filter),
         ...(filter.includeArchived ? {} : { archivedAt: IsNull() }),
       };
       const [rows, total] = await this.dataSource.getRepository(DocumentEntity).findAndCount({

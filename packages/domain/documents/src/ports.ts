@@ -10,6 +10,12 @@ export interface DocumentFilter {
   readonly ownerId?: string;
   readonly typeCode?: string;
   readonly expiry?: ExpiryFilter;
+  /**
+   * Inclusive `YYYY-MM-DD` range of the expiry date (BRD §14.2). Both bounds are always set (the service
+   * fills the missing one), so a document without expiry never falls inside.
+   */
+  readonly expiresFrom?: string;
+  readonly expiresTo?: string;
   readonly includeArchived: boolean;
 }
 

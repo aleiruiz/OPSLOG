@@ -15,6 +15,7 @@ import {
 } from './directory';
 import { MyOrdersScreen } from './MyOrdersScreen';
 import { PlansScreen } from './PlansScreen';
+import type { ViewsPorts } from '../search/views/ports';
 import type { MaintenancePorts } from './ports';
 import { WorkOrderDetail } from './WorkOrderDetail';
 import { WorkOrdersScreen } from './WorkOrdersScreen';
@@ -46,6 +47,7 @@ export function MaintenanceArea({
   orderId: routedOrderId = null,
   onOrderChange,
   onExpired,
+  views,
 }: {
   ports: MaintenancePorts;
   permissions: readonly string[];
@@ -61,6 +63,8 @@ export function MaintenanceArea({
   orderId?: string | null;
   onOrderChange?: (orderId: string | null) => void;
   onExpired: () => void;
+  /** Saved views and columns of the order list; without them the list keeps its filters on screen only. */
+  views?: ViewsPorts;
 }) {
   const [view, setView] = React.useState<MaintenanceView>(initialView);
   const [localOrderId, setLocalOrderId] = React.useState<string | null>(null);
@@ -134,6 +138,7 @@ export function MaintenanceArea({
             viewer={viewer}
             onOpen={setOrderId}
             onExpired={onExpired}
+            {...(views ? { views } : {})}
           />
         ) : view === 'mine' && mechanicsFailed ? (
           // Without the caller's mechanic records an empty list would be misleading.

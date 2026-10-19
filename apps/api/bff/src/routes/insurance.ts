@@ -21,6 +21,7 @@ import {
   type Route,
   type RouteContext,
 } from './shared.js';
+import { catalogFilters } from './list-filters.js';
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 const POLICY_RENEWAL_KEYS = [
@@ -35,6 +36,9 @@ const POLICY_RENEWAL_KEYS = [
 const policyBody = (view: PolicyView): BffInsurancePolicy => ({ ...view });
 
 /** Strict query of the policy listing: unknown or repeated keys, bad values and foreign cursors are all a 400. */
+/** Expiry date range (BRD §14.2). */
+const DATE_KEYS = ['endsFrom', 'endsTo'] as const;
+
 function policyQuery(ctx: RouteContext, tenantId: string) {
   const allowed = new Set([
     'limit',
@@ -44,6 +48,7 @@ function policyQuery(ctx: RouteContext, tenantId: string) {
     'status',
     'coversOn',
     'includeArchived',
+    ...DATE_KEYS,
   ]);
   const keys = [...ctx.query.keys()];
   if (keys.some((key) => !allowed.has(key)) || new Set(keys).size !== keys.length) return null;
@@ -54,7 +59,9 @@ function policyQuery(ctx: RouteContext, tenantId: string) {
   const status = ctx.query.get('status');
   const coversOn = ctx.query.get('coversOn');
   const archived = ctx.query.get('includeArchived');
+  const dates = catalogFilters(ctx, 'insurance', DATE_KEYS);
   if (
+    dates === null ||
     limit === undefined ||
     (vehicleId !== null && !ID.test(vehicleId)) ||
     (coverageType !== null && !(BFF_COVERAGE_TYPES as readonly string[]).includes(coverageType)) ||
@@ -71,6 +78,7 @@ function policyQuery(ctx: RouteContext, tenantId: string) {
     coversOn,
     archived === 'true',
     limit,
+    dates,
   ]);
   let offset = 0;
   const cursorRaw = ctx.query.get('cursor');
@@ -91,6 +99,7 @@ function policyQuery(ctx: RouteContext, tenantId: string) {
       ...(coverageType === null ? {} : { coverageType: coverageType as BffCoverageType }),
       ...(status === null ? {} : { status: status as BffPolicyStatus }),
       ...(coversOn === null ? {} : { coversOn }),
+      ...dates,
     },
   };
 }

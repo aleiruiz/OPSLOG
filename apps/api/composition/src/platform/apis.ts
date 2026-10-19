@@ -51,6 +51,7 @@ import type { PlatformAdapters } from './types.js';
 import type { buildWorkOrderApi, WorkOrderFileSupport } from './work-order-apis.js';
 import type { IncidentDomainApis } from './incident-apis.js';
 import type { SearchModule } from './search-apis.js';
+import type { SavedViewsModule } from './saved-views-apis.js';
 import { buildDownstreamApis } from './downstream-apis.js';
 import { resolvePiiCipher } from './pii-cipher.js';
 import type { AuditQueryApi } from '../../../audit-query/src/index.js';
@@ -73,6 +74,8 @@ export interface DomainApis extends IncidentDomainApis, AnalyticsApis {
   readonly workOrders: ReturnType<typeof buildWorkOrderApi>;
   /** Global search: its API, the projection writer and the reconcile queue. */
   readonly search: SearchModule;
+  /** Saved views and visible columns of the lists (FR-162). */
+  readonly savedViews: SavedViewsModule;
 }
 
 /** Wires the domain services and their HTTP-facing APIs over the adapters (in-memory by default). */

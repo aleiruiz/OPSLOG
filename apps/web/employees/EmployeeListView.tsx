@@ -18,6 +18,9 @@ import { NoSubmit, ResourceView, type ResourceState } from '../app/resource';
 import { linkSx, RouterButton, RouterLink } from '../app/router';
 import { ScrollRegion } from '../app/ScrollRegion';
 import type { Area, Employee, EmployeeKind, EmployeeStatus } from '../app/types';
+import { ExtraFilters } from '../features/search/views/ExtraFilters';
+import type { ListState } from '../features/search/views/useListState';
+import { ViewsBar } from '../features/search/views/ViewsBar';
 import { areaChoices } from '../areas/areaChoices';
 import { AreaSelect } from '../areas/AreaSelect';
 import { employeePath, employeesPath } from './EmployeeMessages';
@@ -62,6 +65,8 @@ export interface EmployeeListViewProps {
   readonly areas: readonly Area[];
   readonly can: (permission: 'create' | 'edit') => boolean;
   readonly filtersActive: boolean;
+  /** Address filters, saved views and columns; stories and tests of the bare view omit it. */
+  readonly list?: ListState;
   readonly loadingMore?: boolean;
   readonly notice?: { readonly text: string; readonly severity: 'success' | 'error' } | null;
   readonly onFiltersChange: (filters: EmployeeFilters) => void;
@@ -77,6 +82,7 @@ export function EmployeeListView({
   areas,
   can,
   filtersActive,
+  list,
   loadingMore = false,
   notice = null,
   onFiltersChange,
@@ -85,6 +91,8 @@ export function EmployeeListView({
   onLoadMore,
 }: EmployeeListViewProps) {
   const uid = React.useId();
+  const shown = <T extends { key: string }>(columns: T[]): T[] =>
+    list ? list.columns.visible(columns) : columns;
   const names = new Map(areas.map((area) => [area.id, area.name]));
   const ready = state.status === 'ready' ? state.data : null;
 
@@ -113,6 +121,7 @@ export function EmployeeListView({
       )}
       <NoSubmit>
         <Panel>
+          {list && <ViewsBar list={list} />}
           <FilterBar onClear={onClear}>
             <Field
               id={`${uid}-kind`}
@@ -173,6 +182,13 @@ export function EmployeeListView({
               <option value="false">Ocultar archivados</option>
               <option value="true">Incluir archivados</option>
             </Field>
+            {list && (
+              <ExtraFilters
+                list={list}
+                keys={['hiredFrom', 'hiredTo', 'licenseExpiresFrom', 'licenseExpiresTo']}
+                pageSizeLabel="Empleados por página"
+              />
+            )}
           </FilterBar>
         </Panel>
       </NoSubmit>
@@ -202,7 +218,7 @@ export function EmployeeListView({
                 <ScrollRegion label="Tabla de empleados">
                   <DataTable<Row>
                     caption={`Empleados (${page.total})`}
-                    columns={[
+                    columns={shown([
                       {
                         key: 'lastName',
                         label: 'Nombre',
@@ -274,7 +290,7 @@ export function EmployeeListView({
                             </RouterLink>
                           ) : null,
                       },
-                    ]}
+                    ])}
                     rows={rows}
                   />
                 </ScrollRegion>

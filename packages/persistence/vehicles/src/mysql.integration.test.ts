@@ -454,6 +454,31 @@ suite('persistent vehicle store on MySQL', () => {
       expect(await ids({ includeArchived: true, limit: 2, offset: 1 })).toEqual(['B-02', 'C-03']);
       expect((await svc.list(tenant, { limit: 1 })).total).toBe(3);
     });
+
+    it('filters by inclusive model-year and odometer ranges, inside the company', async () => {
+      const tenant = randomUUID();
+      const other = randomUUID();
+      const svc = new VehicleService(storeA);
+      for (const [n, year, km] of [
+        ['R-1', 2018, 150_000],
+        ['R-2', 2022, 40_000],
+        ['R-3', 2024, 5_000],
+      ] as const)
+        await svc.create(tenant, ACTOR, fields({ economicNumber: n, year, odometerKm: km }));
+      await svc.create(
+        other,
+        ACTOR,
+        fields({ economicNumber: 'R-9', year: 2022, odometerKm: 40_000 }),
+      );
+      const ids = async (query: Record<string, unknown>) =>
+        (await svc.list(tenant, query)).items.map((v) => v.economicNumber);
+      expect(await ids({ yearFrom: 2022 })).toEqual(['R-2', 'R-3']);
+      expect(await ids({ yearTo: 2022 })).toEqual(['R-1', 'R-2']);
+      expect(await ids({ yearFrom: 2022, yearTo: 2022 })).toEqual(['R-2']);
+      expect(await ids({ kmFrom: 5_000, kmTo: 40_000 })).toEqual(['R-2', 'R-3']);
+      expect(await ids({ kmTo: 4_999 })).toEqual([]);
+      expect((await svc.list(tenant, { yearFrom: 2022, limit: 1 })).total).toBe(2);
+    });
   });
 
   describe('failure hygiene', () => {

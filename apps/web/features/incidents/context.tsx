@@ -1,6 +1,7 @@
 import React from 'react';
 import type { BffCloseCostThreshold } from '@opslog/contracts';
 import type { DirectoryOption } from '../maintenance/directory';
+import type { ViewsPorts } from '../search/views/ports';
 import type { IncidentPorts } from './ports';
 
 /** What every incident screen needs from the shell: the ports, who the caller is and the company's zone. */
@@ -24,6 +25,8 @@ export interface IncidentEnv {
    */
   readonly approvalThreshold: BffCloseCostThreshold | null;
   readonly onExpired: () => void;
+  /** Saved views and persistent columns of the case list; without them the list only keeps its filters in the address. */
+  readonly views?: ViewsPorts | undefined;
 }
 
 const EnvContext = React.createContext<IncidentEnv | null>(null);

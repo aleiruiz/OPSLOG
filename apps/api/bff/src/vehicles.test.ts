@@ -181,6 +181,67 @@ describe('vehicles over HTTP', () => {
   });
 });
 
+describe('range filters (BRD §14.2)', () => {
+  it('filters by model year and odometer ranges, inclusive, and binds cursors to them', async () => {
+    const { adminA, adminB } = await fixture();
+    await create(adminA, {
+      economicNumber: 'R-1',
+      plate: 'RA1',
+      vin: null,
+      year: 2018,
+      odometerKm: 150_000,
+    });
+    await create(adminA, {
+      economicNumber: 'R-2',
+      plate: 'RA2',
+      vin: null,
+      year: 2022,
+      odometerKm: 40_000,
+    });
+    await create(adminA, {
+      economicNumber: 'R-3',
+      plate: 'RA3',
+      vin: null,
+      year: 2024,
+      odometerKm: 5_000,
+    });
+    await create(adminB, {
+      economicNumber: 'R-9',
+      plate: 'RB9',
+      vin: null,
+      year: 2022,
+      odometerKm: 40_000,
+    });
+    const numbers = async (query: string) =>
+      (await adminA.get(`/api/vehicles${query}`)).json.items.map(
+        (v: { economicNumber: string }) => v.economicNumber,
+      );
+    expect(await numbers('?yearFrom=2022')).toEqual(['R-2', 'R-3']);
+    expect(await numbers('?yearTo=2022')).toEqual(['R-1', 'R-2']);
+    expect(await numbers('?yearFrom=2022&yearTo=2022')).toEqual(['R-2']);
+    expect(await numbers('?kmFrom=5000&kmTo=40000')).toEqual(['R-2', 'R-3']);
+    expect(await numbers('?kmTo=4999')).toEqual([]);
+    expect((await adminA.get('/api/vehicles?yearFrom=2022&limit=25')).json.total).toBe(2);
+    const first = await adminA.get('/api/vehicles?yearFrom=2018');
+    expect(first.json.nextCursor).toBeNull();
+  });
+
+  it('rejects malformed or out-of-range bounds with a uniform 400', async () => {
+    const { adminA } = await fixture();
+    for (const query of [
+      '?yearFrom=1949',
+      '?yearTo=2101',
+      '?yearFrom=abc',
+      '?yearFrom=2020.5',
+      '?kmFrom=-1',
+      '?kmTo=10000000',
+      '?kmFrom=',
+      '?yearFrom=2020&yearFrom=2021',
+    ])
+      expect((await adminA.get(`/api/vehicles${query}`)).status, query).toBe(400);
+  });
+});
+
 describe('who may do what', () => {
   it('answers 401 without a session and 403 for a missing permission, changing nothing', async () => {
     const { adminA, editorA, viewerA } = await fixture();

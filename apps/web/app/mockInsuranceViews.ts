@@ -44,7 +44,9 @@ export const matchesListQuery = (policy: InsurancePolicy, query: InsuranceListQu
   (query.coverageType === undefined || policy.coverageType === query.coverageType) &&
   (query.status === undefined || policy.status === query.status) &&
   (query.coversOn === undefined ||
-    (policy.startsOn <= query.coversOn && query.coversOn <= policy.endsOn));
+    (policy.startsOn <= query.coversOn && query.coversOn <= policy.endsOn)) &&
+  (query.endsFrom === undefined || policy.endsOn >= query.endsFrom) &&
+  (query.endsTo === undefined || policy.endsOn <= query.endsTo);
 
 /** Revisions of a policy, newest first, as the history port returns them. */
 export const revisionViews = (

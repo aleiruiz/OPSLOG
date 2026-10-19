@@ -3,11 +3,21 @@ import { EmployeeError } from './errors.js';
 import type { EmployeeConflictField } from './errors.js';
 import { employeeNumberKey, nameKey } from './validation.js';
 
+/** Whether a `YYYY-MM-DD` value (or none) lies inside an inclusive range; with no bound everything matches. */
+const within = (value: string | null, from?: string, to?: string): boolean =>
+  (from === undefined && to === undefined) ||
+  (value !== null && (from === undefined || value >= from) && (to === undefined || value <= to));
+
 export interface EmployeeFilter {
   readonly kind?: EmployeeKind;
   readonly status?: EmployeeStatus;
   readonly areaId?: string;
   readonly includeArchived: boolean;
+  /** Inclusive `YYYY-MM-DD` ranges (BRD §14.2): hire date and license expiry. Rows without the date never match. */
+  readonly hiredFrom?: string;
+  readonly hiredTo?: string;
+  readonly licenseExpiresFrom?: string;
+  readonly licenseExpiresTo?: string;
 }
 export interface EmployeeWindow {
   readonly limit: number;
@@ -128,7 +138,9 @@ export class InMemoryEmployeeStore implements EmployeeStore, EmployeeAnalyticsRe
           (filter.includeArchived || employee.archivedAt === null) &&
           (filter.kind === undefined || employee.kind === filter.kind) &&
           (filter.status === undefined || employee.status === filter.status) &&
-          (filter.areaId === undefined || employee.areaId === filter.areaId),
+          (filter.areaId === undefined || employee.areaId === filter.areaId) &&
+          within(employee.hireDate, filter.hiredFrom, filter.hiredTo) &&
+          within(employee.licenseExpiresOn, filter.licenseExpiresFrom, filter.licenseExpiresTo),
       )
       .sort((a, b) => compareKeys(orderKey(a), orderKey(b)) || compareKeys(a.id, b.id));
     return {

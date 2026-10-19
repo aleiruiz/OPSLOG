@@ -80,6 +80,9 @@ export interface BffDocumentsQuery {
   readonly status?: BffDocumentStatus;
   /** `true` to include archived documents (default: hidden). */
   readonly includeArchived?: 'true' | 'false';
+  /** `YYYY-MM-DD`, inclusive: expiry date of the current revision. */
+  readonly expiresFrom?: string;
+  readonly expiresTo?: string;
 }
 
 export interface BffDocumentRevision {

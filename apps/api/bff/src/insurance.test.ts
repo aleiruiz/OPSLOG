@@ -281,6 +281,22 @@ describe('policies over HTTP', () => {
     expect(await names('?status=expired')).toEqual([]);
     expect(await names('?status=expired&includeArchived=true')).toEqual(['Vencida Ficticia']);
   });
+
+  it('filters by an inclusive end-date range', async () => {
+    const { adminA, vehicleA } = await fixture();
+    await create(adminA, vehicleA, { insurer: 'Octubre Ficticia', endsOn: '2026-10-01' });
+    await create(adminA, vehicleA, { insurer: 'Noviembre Ficticia', endsOn: '2026-11-05' });
+    await create(adminA, vehicleA, { insurer: 'Diciembre Ficticia', endsOn: '2026-12-01' });
+    const names = async (query: string) =>
+      (await adminA.get(`${P}${query}`)).json.items.map((v: { insurer: string }) => v.insurer);
+    expect(await names('?endsFrom=2026-11-05')).toEqual([
+      'Noviembre Ficticia',
+      'Diciembre Ficticia',
+    ]);
+    expect(await names('?endsTo=2026-11-05')).toEqual(['Octubre Ficticia', 'Noviembre Ficticia']);
+    expect(await names('?endsFrom=2026-11-05&endsTo=2026-11-05')).toEqual(['Noviembre Ficticia']);
+    expect((await adminA.get(`${P}?endsTo=2026-10-31`)).json.total).toBe(1);
+  });
 });
 
 describe('who may do what', () => {
@@ -525,6 +541,9 @@ describe('errors', () => {
       '?vehicleId=a/b',
       '?coversOn=06/10/2026',
       '?coversOn=2026-02-30',
+      '?endsFrom=2026-02-30',
+      '?endsTo=06/10/2026',
+      '?endsFrom=',
       '?includeArchived=yes',
       '?sort=endsOn',
       '?q=POL-1',

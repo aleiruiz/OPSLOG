@@ -18,6 +18,7 @@ import {
   type Route,
   type RouteContext,
 } from './shared.js';
+import { catalogFilters, numbers } from './list-filters.js';
 
 const VEHICLE_CREATE_KEYS = [
   'economicNumber',
@@ -49,11 +50,21 @@ const VEHICLE_PATCH_KEYS = [
   'areaId',
 ] as const;
 
+/** Model-year and odometer ranges (BRD §14.2). */
+const RANGE_KEYS = ['yearFrom', 'yearTo', 'kmFrom', 'kmTo'] as const;
+
 const vehicleBody = (view: VehicleView): BffVehicle => ({ ...view });
 
 /** Strict query of the vehicle listing: unknown or repeated keys, bad values and foreign cursors are all a 400. */
 function vehicleQuery(ctx: RouteContext, tenantId: string) {
-  const allowed = new Set(['limit', 'cursor', 'status', 'areaId', 'includeArchived']);
+  const allowed = new Set([
+    'limit',
+    'cursor',
+    'status',
+    'areaId',
+    'includeArchived',
+    ...RANGE_KEYS,
+  ]);
   const keys = [...ctx.query.keys()];
   if (keys.some((key) => !allowed.has(key)) || new Set(keys).size !== keys.length) return null;
   const limitRaw = ctx.query.get('limit');
@@ -61,7 +72,9 @@ function vehicleQuery(ctx: RouteContext, tenantId: string) {
   const status = ctx.query.get('status');
   const areaId = ctx.query.get('areaId');
   const archived = ctx.query.get('includeArchived');
+  const ranges = catalogFilters(ctx, 'vehicles', RANGE_KEYS);
   if (
+    ranges === null ||
     limit === undefined ||
     (status !== null && !(BFF_VEHICLE_STATUSES as readonly string[]).includes(status)) ||
     (areaId !== null && !ID.test(areaId)) ||
@@ -69,7 +82,7 @@ function vehicleQuery(ctx: RouteContext, tenantId: string) {
   )
     return null;
   // The cursor is signed and bound to the tenant and to the filters it was issued for.
-  const filter = JSON.stringify([status, areaId, archived === 'true', limit]);
+  const filter = JSON.stringify([status, areaId, archived === 'true', limit, ranges]);
   let offset = 0;
   const cursorRaw = ctx.query.get('cursor');
   if (cursorRaw !== null) {
@@ -87,6 +100,7 @@ function vehicleQuery(ctx: RouteContext, tenantId: string) {
       includeArchived: archived === 'true',
       ...(status === null ? {} : { status: status as BffVehicleStatus }),
       ...(areaId === null ? {} : { areaId }),
+      ...numbers(ranges, RANGE_KEYS),
     },
   };
 }

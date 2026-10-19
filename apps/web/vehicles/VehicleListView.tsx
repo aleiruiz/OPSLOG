@@ -18,6 +18,9 @@ import { NoSubmit, ResourceView, type ResourceState } from '../app/resource';
 import { linkSx, RouterButton, RouterLink } from '../app/router';
 import { ScrollRegion } from '../app/ScrollRegion';
 import type { Area, Vehicle, VehicleStatus } from '../app/types';
+import { ExtraFilters } from '../features/search/views/ExtraFilters';
+import type { ListState } from '../features/search/views/useListState';
+import { ViewsBar } from '../features/search/views/ViewsBar';
 import { areaChoices } from '../areas/areaChoices';
 import { AreaSelect } from '../areas/AreaSelect';
 import { formatKm, isEditable, statusOrder, statusPresentation } from './labels';
@@ -47,6 +50,8 @@ export interface VehicleListViewProps {
   readonly areas?: readonly Area[];
   readonly can: (permission: 'create' | 'edit') => boolean;
   readonly filtersActive: boolean;
+  /** Address filters, saved views and columns; stories and tests of the bare view omit it. */
+  readonly list?: ListState;
   readonly loadingMore?: boolean;
   readonly notice?: { readonly text: string; readonly severity: 'success' | 'error' } | null;
   readonly onFiltersChange: (filters: VehicleFilters) => void;
@@ -64,6 +69,7 @@ export function VehicleListView({
   areas = [],
   can,
   filtersActive,
+  list,
   loadingMore = false,
   notice = null,
   onFiltersChange,
@@ -72,6 +78,8 @@ export function VehicleListView({
   onLoadMore,
 }: VehicleListViewProps) {
   const uid = React.useId();
+  const shown = <T extends { key: string }>(columns: T[]): T[] =>
+    list ? list.columns.visible(columns) : columns;
   const names = new Map(areas.map((area) => [area.id, area.name]));
   const ready = state.status === 'ready' ? state.data : null;
   return (
@@ -99,6 +107,7 @@ export function VehicleListView({
       )}
       <NoSubmit>
         <Panel>
+          {list && <ViewsBar list={list} />}
           <FilterBar onClear={onClear}>
             <Field
               id={`${uid}-status`}
@@ -141,6 +150,13 @@ export function VehicleListView({
               <option value="false">Ocultar archivados</option>
               <option value="true">Incluir archivados</option>
             </Field>
+            {list && (
+              <ExtraFilters
+                list={list}
+                keys={['yearFrom', 'yearTo', 'kmFrom', 'kmTo']}
+                pageSizeLabel="Vehículos por página"
+              />
+            )}
           </FilterBar>
         </Panel>
       </NoSubmit>
@@ -167,7 +183,7 @@ export function VehicleListView({
                 <ScrollRegion label="Tabla de vehículos">
                   <DataTable<Row>
                     caption={`Vehículos (${page.total})`}
-                    columns={[
+                    columns={shown([
                       {
                         key: 'economicNumber',
                         label: 'Número económico',
@@ -243,7 +259,7 @@ export function VehicleListView({
                             </RouterLink>
                           ) : null,
                       },
-                    ]}
+                    ])}
                     rows={rows}
                   />
                 </ScrollRegion>

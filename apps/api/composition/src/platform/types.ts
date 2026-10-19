@@ -29,6 +29,7 @@ import type {
   ReconcileQueue,
   SearchStore,
 } from '../../../../../packages/domain/search/src/index.js';
+import type { SavedViewStore } from '../../../../../packages/domain/saved-views/src/index.js';
 import type { PiiCipher } from '../../../../../packages/platform/pii/src/index.js';
 import type {
   AreaResourceCounter,
@@ -108,6 +109,8 @@ export interface PlatformAdapters {
    * its reconcile jobs. In memory by default.
    */
   readonly search?: SearchStore & ReconcileQueue;
+  /** Persistent saved views and visible columns (`packages/persistence/saved-views`). In memory by default. */
+  readonly savedViews?: SavedViewStore;
   /** The mail adapter of the SLA notices. Without one, outside production, a test sink records them. */
   readonly incidentAlertMailer?: IncidentAlertMailer;
   /** Where a member's address lives; read at send time. Defaults to a reserved, undeliverable address. */

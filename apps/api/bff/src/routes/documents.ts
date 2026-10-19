@@ -21,6 +21,7 @@ import {
   type Route,
   type RouteContext,
 } from './shared.js';
+import { catalogFilters } from './list-filters.js';
 
 const DOCUMENT_TYPE_CODE = /^[a-z][a-z0-9_]{1,31}$/;
 const DOCUMENT_VALIDITY_KEYS = ['issuedOn', 'expiresOn', 'documentNumber'] as const;
@@ -28,6 +29,9 @@ const DOCUMENT_VALIDITY_KEYS = ['issuedOn', 'expiresOn', 'documentNumber'] as co
 const documentBody = (view: DocumentView): BffDocument => ({ ...view });
 
 /** Strict query of the document listing: unknown or repeated keys, bad values and foreign cursors are all a 400. */
+/** Expiry date range (BRD §14.2). */
+const DATE_KEYS = ['expiresFrom', 'expiresTo'] as const;
+
 function documentQuery(ctx: RouteContext, tenantId: string) {
   const allowed = new Set([
     'limit',
@@ -37,6 +41,7 @@ function documentQuery(ctx: RouteContext, tenantId: string) {
     'typeCode',
     'status',
     'includeArchived',
+    ...DATE_KEYS,
   ]);
   const keys = [...ctx.query.keys()];
   if (keys.some((key) => !allowed.has(key)) || new Set(keys).size !== keys.length) return null;
@@ -47,7 +52,9 @@ function documentQuery(ctx: RouteContext, tenantId: string) {
   const typeCode = ctx.query.get('typeCode');
   const status = ctx.query.get('status');
   const archived = ctx.query.get('includeArchived');
+  const dates = catalogFilters(ctx, 'documents', DATE_KEYS);
   if (
+    dates === null ||
     limit === undefined ||
     (ownerType !== null && !(BFF_DOCUMENT_OWNER_TYPES as readonly string[]).includes(ownerType)) ||
     (ownerId !== null && (ownerType === null || !ID.test(ownerId))) ||
@@ -57,7 +64,15 @@ function documentQuery(ctx: RouteContext, tenantId: string) {
   )
     return null;
   // The cursor is signed and bound to the tenant and to the filters it was issued for.
-  const filter = JSON.stringify([ownerType, ownerId, typeCode, status, archived === 'true', limit]);
+  const filter = JSON.stringify([
+    ownerType,
+    ownerId,
+    typeCode,
+    status,
+    archived === 'true',
+    limit,
+    dates,
+  ]);
   let offset = 0;
   const cursorRaw = ctx.query.get('cursor');
   if (cursorRaw !== null) {
@@ -77,6 +92,7 @@ function documentQuery(ctx: RouteContext, tenantId: string) {
       ...(ownerId === null ? {} : { ownerId }),
       ...(typeCode === null ? {} : { typeCode }),
       ...(status === null ? {} : { status: status as BffDocumentStatus }),
+      ...dates,
     },
   };
 }

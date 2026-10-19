@@ -20,7 +20,9 @@ import {
 import {
   DEFAULT_LIST_LIMIT,
   DOCUMENT_OWNER_TYPES,
+  MAX_EXPIRY_DATE,
   MAX_LIST_LIMIT,
+  MIN_DATE,
   isDocumentStatus,
   isDocumentType,
   isOwnerType,
@@ -34,6 +36,7 @@ import {
   dateOf,
   invalid,
   isInteger,
+  normalizeDate,
   parseDocumentPatch,
   parseNewDocument,
   parseRenewal,
@@ -41,12 +44,26 @@ import {
   requireVersion,
 } from './validation.js';
 
+/** The expiry range of the list filter with both bounds filled in; a bad day is invalid. */
+function expiryRange(
+  from: unknown,
+  to: unknown,
+): Pick<DocumentFilter, 'expiresFrom' | 'expiresTo'> {
+  if (from === undefined && to === undefined) return {};
+  return {
+    expiresFrom: from === undefined ? MIN_DATE : normalizeDate(from, MIN_DATE, MAX_EXPIRY_DATE),
+    expiresTo: to === undefined ? MAX_EXPIRY_DATE : normalizeDate(to, MIN_DATE, MAX_EXPIRY_DATE),
+  };
+}
+
 export interface DocumentListQuery {
   readonly ownerType?: unknown;
   readonly ownerId?: unknown;
   readonly typeCode?: unknown;
   readonly status?: unknown;
   readonly includeArchived?: unknown;
+  readonly expiresFrom?: unknown;
+  readonly expiresTo?: unknown;
   readonly limit?: unknown;
   readonly offset?: unknown;
 }
@@ -144,6 +161,7 @@ export class DocumentService {
       ...(query.status === undefined
         ? {}
         : { expiry: expiryFilterOf(query.status, dateOf(this.now())) }),
+      ...expiryRange(query.expiresFrom, query.expiresTo),
     };
     return this.store.list(tenantId, filter, window);
   }

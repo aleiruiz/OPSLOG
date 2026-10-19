@@ -17,6 +17,8 @@ import {
 import {
   DEFAULT_LIST_LIMIT,
   MAX_LIST_LIMIT,
+  MAX_ODOMETER_KM,
+  MIN_MODEL_YEAR,
   isVehicleStatus,
   type Vehicle,
   type VehicleStatusEntry,
@@ -32,10 +34,36 @@ import {
   requireVersion,
 } from './validation.js';
 
+const MAX_FILTER_YEAR = 2100;
+
+/** `{ [name]From, [name]To }` of an inclusive integer range; a bound out of range or not a whole number is invalid. */
+function range(
+  name: 'year' | 'km',
+  from: unknown,
+  to: unknown,
+  min: number,
+  max: number,
+): Partial<Record<'yearFrom' | 'yearTo' | 'kmFrom' | 'kmTo', number>> {
+  const bounds: Partial<Record<'yearFrom' | 'yearTo' | 'kmFrom' | 'kmTo', number>> = {};
+  for (const [suffix, value] of [
+    ['From', from],
+    ['To', to],
+  ] as const) {
+    if (value === undefined) continue;
+    if (!isInteger(value, min, max)) return invalid();
+    bounds[`${name}${suffix}`] = value;
+  }
+  return bounds;
+}
+
 export interface VehicleListQuery {
   readonly status?: unknown;
   readonly areaId?: unknown;
   readonly includeArchived?: unknown;
+  readonly yearFrom?: unknown;
+  readonly yearTo?: unknown;
+  readonly kmFrom?: unknown;
+  readonly kmTo?: unknown;
   readonly limit?: unknown;
   readonly offset?: unknown;
 }
@@ -118,6 +146,8 @@ export class VehicleService {
       includeArchived: query.includeArchived ?? false,
       ...(query.status === undefined ? {} : { status: query.status }),
       ...(query.areaId === undefined ? {} : { areaId: requireOpaqueId(query.areaId) }),
+      ...range('year', query.yearFrom, query.yearTo, MIN_MODEL_YEAR, MAX_FILTER_YEAR),
+      ...range('km', query.kmFrom, query.kmTo, 0, MAX_ODOMETER_KM),
     };
     return this.store.list(tenantId, filter, { limit, offset });
   }

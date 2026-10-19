@@ -92,7 +92,12 @@ export function createMockDocumentStore(
             (query.ownerType === undefined || document.ownerType === query.ownerType) &&
             (query.ownerId === undefined || document.ownerId === query.ownerId) &&
             (query.typeCode === undefined || document.typeCode === query.typeCode) &&
-            (query.status === undefined || document.status === query.status),
+            (query.status === undefined || document.status === query.status) &&
+            // A document without an expiry never falls inside a date range.
+            (query.expiresFrom === undefined ||
+              (document.expiresOn !== null && document.expiresOn >= query.expiresFrom)) &&
+            (query.expiresTo === undefined ||
+              (document.expiresOn !== null && document.expiresOn <= query.expiresTo)),
         )
         .sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : a.id < b.id ? -1 : 1));
       const next = offset + limit;

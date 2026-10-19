@@ -615,6 +615,48 @@ describe('EmployeeService', () => {
       });
   });
 
+  it('filters by hire date and license expiry ranges; rows without the date never match a bound', async () => {
+    const { svc } = setup();
+    const person = (tag: string, hireDate: string | null, licenseExpiresOn: string | null) =>
+      svc.create(
+        A,
+        ACTOR,
+        driver({
+          employeeNumber: `E-${tag}`,
+          firstName: tag,
+          nationalId: `${tag.repeat(4)}-1111`,
+          email: `${tag.toLowerCase()}@example.test`,
+          licenseNumber: `LLL-${tag.repeat(3)}`,
+          hireDate,
+          licenseExpiresOn,
+        }),
+      );
+    await person('A', '2020-01-15', '2026-11-30');
+    await person('B', '2023-06-01', '2027-06-30');
+    await person('C', null, null);
+    const names = async (query: Record<string, unknown>) =>
+      (await svc.list(A, query)).items.map((item) => item.firstName);
+    expect(await names({ hiredFrom: '2023-01-01' })).toEqual(['B']);
+    expect(await names({ hiredTo: '2020-01-15' })).toEqual(['A']);
+    expect(await names({ hiredFrom: '2020-01-15', hiredTo: '2023-06-01' })).toEqual(['A', 'B']);
+    expect(await names({ licenseExpiresTo: '2026-12-31' })).toEqual(['A']);
+    expect(await names({ licenseExpiresFrom: '2026-12-01' })).toEqual(['B']);
+    expect(await names({ hiredFrom: '2019-01-01', licenseExpiresFrom: '2027-01-01' })).toEqual([
+      'B',
+    ]);
+    expect(await names({})).toEqual(['A', 'B', 'C']);
+    for (const bad of [
+      { hiredFrom: '2020-02-30' },
+      { hiredTo: '20-01-2020' },
+      { licenseExpiresFrom: 20260101 },
+      { licenseExpiresTo: '1900-01-01' },
+      { licenseExpiresTo: '2101-01-01' },
+    ])
+      expect(await rejection(svc.list(A, bad)), JSON.stringify(bad)).toMatchObject({
+        code: 'invalid_input',
+      });
+  });
+
   it('updates fields, bumps the version and re-seals changed PII only', async () => {
     const { svc } = setup();
     const e = await svc.create(A, ACTOR, driver());

@@ -648,6 +648,31 @@ suite('persistent employee store on MySQL', () => {
       ]);
       expect((await svcB.list(tenant, { limit: 1 })).total).toBe(3);
     });
+
+    it('filters by hire date and license expiry ranges inside the company', async () => {
+      const tenant = randomUUID();
+      const other = randomUUID();
+      const make = (t: string, firstName: string, hireDate: string, licenseExpiresOn: string) =>
+        svcA.create(t, ACTOR, fields({ firstName, hireDate, licenseExpiresOn }));
+      await make(tenant, 'Alfa', '2020-01-15', '2026-11-30');
+      await make(tenant, 'Beto', '2023-06-01', '2027-06-30');
+      await svcA.create(tenant, ACTOR, {
+        kind: 'other',
+        firstName: 'Sin',
+        lastName: 'Fechas',
+        areaId: 'x',
+      });
+      await make(other, 'Beto', '2023-06-01', '2027-06-30');
+      const hired = async (query: Record<string, unknown>) =>
+        (await svcB.list(tenant, query)).items.map((e) => e.firstName);
+      expect(await hired({ hiredFrom: '2023-01-01' })).toEqual(['Beto']);
+      expect(await hired({ hiredTo: '2020-01-15' })).toEqual(['Alfa']);
+      expect(await hired({ hiredFrom: '2020-01-15', hiredTo: '2023-06-01' })).toHaveLength(2);
+      expect(await hired({ licenseExpiresTo: '2026-12-31' })).toEqual(['Alfa']);
+      expect(await hired({ licenseExpiresFrom: '2026-12-01' })).toEqual(['Beto']);
+      expect(await hired({})).toHaveLength(3);
+      expect((await svcB.list(tenant, { hiredFrom: '2020-01-01', limit: 1 })).total).toBe(2);
+    });
   });
 
   describe('failure hygiene', () => {

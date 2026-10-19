@@ -7,6 +7,8 @@ import {
   PII_FIELD_LABEL,
   PII_INPUT_KEYS,
   isEmployeeKind,
+  MAX_LICENSE_DATE,
+  MIN_DATE,
   isEmployeeStatus,
 } from './types.js';
 import type {
@@ -24,6 +26,7 @@ import {
   isInteger,
   licenseNumberKey,
   nationalIdKey,
+  normalizeDate,
   normalizeReason,
   requireOpaqueId,
   requireVersion,
@@ -60,11 +63,21 @@ export interface EmployeeAreaGate {
   withActiveArea<T>(tenantId: string, areaId: string, work: () => Promise<T>): Promise<T>;
 }
 
+/** `{ [name]: day }` of a date bound of the list filter, or nothing when absent; a bad day is invalid. */
+function day<K extends string>(name: K, value: unknown): Partial<Record<K, string>> {
+  if (value === undefined) return {};
+  return { [name]: normalizeDate(value, MIN_DATE, MAX_LICENSE_DATE) } as Record<K, string>;
+}
+
 export interface EmployeeListQuery {
   readonly kind?: unknown;
   readonly status?: unknown;
   readonly areaId?: unknown;
   readonly includeArchived?: unknown;
+  readonly hiredFrom?: unknown;
+  readonly hiredTo?: unknown;
+  readonly licenseExpiresFrom?: unknown;
+  readonly licenseExpiresTo?: unknown;
   readonly limit?: unknown;
   readonly offset?: unknown;
 }
@@ -234,6 +247,10 @@ export class EmployeeService {
       ...(query.kind === undefined ? {} : { kind: query.kind }),
       ...(query.status === undefined ? {} : { status: query.status }),
       ...(query.areaId === undefined ? {} : { areaId: requireOpaqueId(query.areaId) }),
+      ...day('hiredFrom', query.hiredFrom),
+      ...day('hiredTo', query.hiredTo),
+      ...day('licenseExpiresFrom', query.licenseExpiresFrom),
+      ...day('licenseExpiresTo', query.licenseExpiresTo),
     };
     return this.store.list(tenantId, filter, { limit, offset });
   }

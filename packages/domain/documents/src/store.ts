@@ -46,7 +46,11 @@ export class InMemoryDocumentStore implements DocumentStore, DocumentAnalyticsRe
           (filter.ownerId === undefined || document.ownerId === filter.ownerId) &&
           (filter.typeCode === undefined || document.typeCode === filter.typeCode) &&
           (filter.expiry === undefined ||
-            matchesExpiry(expiryKeyOf(document.expiresOn), filter.expiry)),
+            matchesExpiry(expiryKeyOf(document.expiresOn), filter.expiry)) &&
+          (filter.expiresFrom === undefined ||
+            filter.expiresTo === undefined ||
+            (expiryKeyOf(document.expiresOn) >= filter.expiresFrom &&
+              expiryKeyOf(document.expiresOn) <= filter.expiresTo)),
       )
       .sort(
         (a, b) =>

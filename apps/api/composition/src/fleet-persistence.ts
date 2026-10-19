@@ -45,6 +45,7 @@ import {
   maintenanceRuntimeAdapters,
 } from './maintenance-source.js';
 import { createIncidentRuntimeSource, incidentRuntimeAdapters } from './incident-source.js';
+import { createSavedViewsRuntimeSource, savedViewsRuntimeAdapters } from './saved-views-source.js';
 import { createSearchRuntimeSource, searchRuntimeAdapters } from './search-source.js';
 import type { FleetDatabaseEndpoint } from './fleet-migrations.js';
 
@@ -66,6 +67,7 @@ export interface FleetRuntimeCredentials extends FleetDatabaseEndpoint {
     readonly maintenance: { readonly username: string; readonly password: string };
     readonly incidents: { readonly username: string; readonly password: string };
     readonly search: { readonly username: string; readonly password: string };
+    readonly views: { readonly username: string; readonly password: string };
     readonly auditRuntime: { readonly username: string; readonly password: string };
     readonly auditRelay: { readonly username: string; readonly password: string };
   };
@@ -95,6 +97,7 @@ export interface FleetRuntimeStores {
       | 'maintenanceOrders'
       | 'incidents'
       | 'search'
+      | 'savedViews'
     >
   >;
   readonly audit: NonNullable<PlatformAdapters['audit']>;
@@ -163,7 +166,8 @@ export async function openFleetRuntimeStores(
   const maintenance = createMaintenanceRuntimeSources(endpoint, credentials.accounts.maintenance);
   const incidentSource = createIncidentRuntimeSource(endpoint, credentials.accounts.incidents);
   const searchSource = createSearchRuntimeSource(endpoint, credentials.accounts.search);
-  sources.push(maintenance.plans, maintenance.orders, incidentSource, searchSource);
+  const viewsSource = createSavedViewsRuntimeSource(endpoint, credentials.accounts.views);
+  sources.push(maintenance.plans, maintenance.orders, incidentSource, searchSource, viewsSource);
   const initialized: FleetDataSource[] = [];
   let auditRuntimeInitialized = false;
   let auditRelayInitialized = false;
@@ -217,6 +221,7 @@ export async function openFleetRuntimeStores(
         ...maintenanceRuntimeAdapters(maintenance),
         ...incidentRuntimeAdapters(incidentSource),
         ...searchRuntimeAdapters(searchSource),
+        ...savedViewsRuntimeAdapters(viewsSource),
         get records() {
           if (!fileStore) throw new Error('fleet file runtime must be bound to a tenant first');
           return fileStore;

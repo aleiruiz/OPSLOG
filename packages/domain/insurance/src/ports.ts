@@ -8,6 +8,9 @@ export interface PolicyFilter {
   readonly expiry?: ExpiryFilter;
   /** Policies whose period contains this day (`startsOn <= day <= endsOn`). */
   readonly coversOn?: string;
+  /** Inclusive `YYYY-MM-DD` range of the end date of the period (BRD §14.2: «vencimiento»). */
+  readonly endsFrom?: string;
+  readonly endsTo?: string;
   readonly includeArchived: boolean;
 }
 

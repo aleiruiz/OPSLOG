@@ -3,26 +3,38 @@ import { useResource, type ResourceState } from '../app/resource';
 import type { Vehicle, VehicleListQuery } from '../app/types';
 import { loadAllAreas } from '../areas/loadAreas';
 import { useSession } from '../auth/session';
-import {
-  noFilters,
-  VehicleListView,
-  type VehicleFilters,
-  type VehicleListData,
-} from './VehicleListView';
+import { pickFilters } from '../features/search/views/urlState';
+import { useListState } from '../features/search/views/useListState';
+import { VehicleListView, type VehicleFilters, type VehicleListData } from './VehicleListView';
 
-const PAGE_SIZE = 25;
+const RANGE_KEYS = ['yearFrom', 'yearTo', 'kmFrom', 'kmTo'] as const;
 
 /** Vehicle list screen. Requires `view`; "Nuevo vehículo" and "Editar" depend on `create` and `edit`. */
 export function VehiclesScreen() {
   const { ports, can, markExpired } = useSession();
-  const [filters, setFilters] = React.useState<VehicleFilters>(noFilters);
-  const queryKey = JSON.stringify([filters.status, filters.areaId, filters.includeArchived]);
+  const list = useListState('vehicles', { views: ports.views, can, onExpired: markExpired });
+  const url = list.url.filters;
+  // Filters, order and size live in the address (keys of BFF_LIST_CATALOG), so a link reproduces the list.
+  const filters: VehicleFilters = {
+    status: (url.status ?? '') as VehicleFilters['status'],
+    areaId: url.areaId ?? '',
+    includeArchived: url.includeArchived === 'true',
+  };
+  const setFilters = (next: VehicleFilters) =>
+    list.setFilters({
+      ...pickFilters(url, RANGE_KEYS),
+      ...(next.status === '' ? {} : { status: next.status }),
+      ...(next.areaId === '' ? {} : { areaId: next.areaId }),
+      ...(next.includeArchived ? { includeArchived: 'true' } : {}),
+    });
+  const queryKey = list.key;
   const query = (cursor?: string): VehicleListQuery => ({
-    limit: PAGE_SIZE,
+    limit: list.url.limit as 25 | 50 | 100,
     ...(cursor === undefined ? {} : { cursor }),
     ...(filters.status === '' ? {} : { status: filters.status }),
     ...(filters.areaId === '' ? {} : { areaId: filters.areaId }),
     ...(filters.includeArchived ? { includeArchived: 'true' as const } : {}),
+    ...Object.fromEntries(RANGE_KEYS.flatMap((key) => (url[key] ? [[key, Number(url[key])]] : []))),
   });
 
   const first = useResource(() => ports.vehicles.list(query()), [ports, queryKey]);
@@ -78,11 +90,12 @@ export function VehiclesScreen() {
       filters={filters}
       areas={catalog.state.status === 'ready' ? catalog.state.data.areas : []}
       can={can}
-      filtersActive={filters.status !== '' || filters.areaId !== '' || filters.includeArchived}
+      list={list}
+      filtersActive={Object.keys(url).length > 0}
       loadingMore={loadingMore}
       notice={notice}
       onFiltersChange={setFilters}
-      onClear={() => setFilters(noFilters)}
+      onClear={list.clear}
       onRetry={first.reload}
       onLoadMore={(cursor) => void loadMore(cursor)}
     />

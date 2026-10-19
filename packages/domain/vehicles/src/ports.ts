@@ -4,6 +4,11 @@ export interface VehicleFilter {
   readonly status?: VehicleStatus;
   readonly areaId?: string;
   readonly includeArchived: boolean;
+  /** Inclusive ranges (BRD §14.2): model year and odometer reading in km. */
+  readonly yearFrom?: number;
+  readonly yearTo?: number;
+  readonly kmFrom?: number;
+  readonly kmTo?: number;
 }
 
 export interface VehicleWindow {

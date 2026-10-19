@@ -2,6 +2,7 @@ import type { AuditPort } from '../features/audit/ports';
 import type { IncidentPorts } from '../features/incidents/ports';
 import type { MaintenancePorts } from '../features/maintenance/ports';
 import type { SearchPorts } from '../features/search/ports';
+import type { ViewsPorts } from '../features/search/views/ports';
 import type {
   AlertsClient,
   AssignmentsClient,
@@ -407,5 +408,7 @@ export interface ApiPorts {
   readonly audit: AuditPort;
   /** Global search (FR-160). */
   readonly search: SearchPorts;
+  /** Saved views and persistent columns of the lists (FR-162). */
+  readonly views: ViewsPorts;
   readonly oidc: OidcPort;
 }

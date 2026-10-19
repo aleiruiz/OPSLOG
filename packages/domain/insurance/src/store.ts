@@ -44,7 +44,9 @@ export class InMemoryPolicyStore implements PolicyStore, PolicyAnalyticsReads {
           (filter.vehicleId === undefined || policy.vehicleId === filter.vehicleId) &&
           (filter.coverageType === undefined || policy.coverageType === filter.coverageType) &&
           (filter.expiry === undefined || matchesExpiry(policy.endsOn, filter.expiry)) &&
-          (filter.coversOn === undefined || coversOn(policy, filter.coversOn)),
+          (filter.coversOn === undefined || coversOn(policy, filter.coversOn)) &&
+          (filter.endsFrom === undefined || policy.endsOn >= filter.endsFrom) &&
+          (filter.endsTo === undefined || policy.endsOn <= filter.endsTo),
       )
       .sort((a, b) => compareKeys(a.endsOn, b.endsOn) || compareKeys(a.id, b.id));
     return {
