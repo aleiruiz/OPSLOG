@@ -17,7 +17,7 @@ import {
 } from '../../../domain/search/src/index.js';
 import { SEARCH_RUNTIME_ACCOUNT } from './data-source.js';
 import { SEARCH_TABLES as T, SearchEntryEntity } from './entities.js';
-import { hitsSql, totalSql } from './query.js';
+import { searchSql } from './query.js';
 
 const INSERT_CHUNK = 500;
 
@@ -122,24 +122,23 @@ export class TypeOrmSearchStore implements SearchStore, ReconcileQueue {
   }
 
   public async search(query: SearchStoreQuery): Promise<readonly SearchStoreGroup[]> {
-    return Promise.all(
-      query.types.map(async (type): Promise<SearchStoreGroup> => {
-        const hits = hitsSql(query, type);
-        const total = totalSql(query, type);
-        const [rows, counted] = await Promise.all([
-          this.dataSource.query(hits.sql, hits.params) as Promise<HitRow[]>,
-          this.dataSource.query(total.sql, total.params) as Promise<{ n: string | number }[]>,
-        ]);
-        return {
-          entityType: type.entityType,
-          total: Number(counted[0]?.n ?? 0),
-          hits: rows.map((row) => ({
-            entityId: row.entity_id,
-            areaId: row.area_id,
-            display: row.display,
-          })),
-        };
-      }),
-    );
+    if (query.types.length === 0) return [];
+    const built = searchSql(query);
+    const rows = (await this.dataSource.query(built.sql, built.params)) as (HitRow & {
+      entity_type: string;
+      n: string | number;
+    })[];
+    return query.types.map((type): SearchStoreGroup => {
+      const mine = rows.filter((row) => row.entity_type === type.entityType);
+      return {
+        entityType: type.entityType,
+        total: Number(mine[0]?.n ?? 0),
+        hits: mine.map((row) => ({
+          entityId: row.entity_id,
+          areaId: row.area_id,
+          display: row.display,
+        })),
+      };
+    });
   }
 }

@@ -104,7 +104,7 @@ const TOKEN_ROUTES: ReadonlySet<BffRouteId> = new Set([
   'auth.invitation.accept',
 ]);
 
-const KNOWN_STATUSES: readonly number[] = [400, 401, 403, 404, 409, 422, 429, 500];
+const KNOWN_STATUSES: readonly number[] = [400, 401, 403, 404, 409, 422, 429, 500, 503];
 
 function failure(
   status: number,

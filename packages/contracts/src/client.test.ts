@@ -98,6 +98,14 @@ describe('BFF client: CSRF handshake', () => {
     expect(seen[0]?.body).toBeUndefined();
   });
 
+  it('keeps a 503 unavailable as such, so the UI can ask to retry', async () => {
+    const { fetch } = transport(() => ({ status: 503, body: errorBody('unavailable', 503) }));
+    expect(await createBffClient({ fetch }).call('roles.list')).toMatchObject({
+      ok: false,
+      error: { code: 'unavailable', status: 503 },
+    });
+  });
+
   it('returns the session failure when the token cannot be learned', async () => {
     const { fetch, seen } = transport(() => ({
       status: 401,

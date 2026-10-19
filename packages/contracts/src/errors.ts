@@ -13,7 +13,7 @@ export interface ApiError {
   missingRequirements?: readonly string[];
   correlationId: string;
 }
-export type ApiErrorStatus = 400 | 401 | 403 | 404 | 409 | 422 | 429 | 500;
+export type ApiErrorStatus = 400 | 401 | 403 | 404 | 409 | 422 | 429 | 500 | 503;
 const ERROR_STATUS: Record<string, ApiErrorStatus> = {
   bad_request: 400,
   unauthorized: 401,
@@ -22,6 +22,7 @@ const ERROR_STATUS: Record<string, ApiErrorStatus> = {
   conflict: 409,
   unprocessable_entity: 422,
   rate_limited: 429,
+  unavailable: 503,
   internal_error: 500 as ApiErrorStatus,
 };
 const ERROR_MESSAGES: Record<string, string> = {
@@ -32,6 +33,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   conflict: 'Conflict',
   unprocessable_entity: 'Business rule violation',
   rate_limited: 'Too many requests',
+  unavailable: 'Service temporarily unavailable',
   internal_error: 'Request failed',
 };
 const FIELD_MESSAGES: Record<string, string> = {

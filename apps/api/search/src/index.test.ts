@@ -61,6 +61,25 @@ describe('SearchApi', () => {
     expect(await codes(null)).toMatchObject({ code: 'internal_error' });
   });
 
+  it('maps pool saturation to a 503 unavailable without echoing the driver', async () => {
+    for (const error of [
+      new Error('Queue limit reached.'),
+      { message: 'query failed', driverError: { code: 'POOL_ACQUIRETIMEOUT' } },
+    ]) {
+      const { api: search } = api({
+        service: {
+          search: async () => {
+            throw error;
+          },
+        },
+      });
+      expect(await search.search('t', 'c', { q: 'abc' })).toEqual({
+        ok: false,
+        error: { code: 'unavailable', status: 503, message: 'Service temporarily unavailable' },
+      });
+    }
+  });
+
   it('maps a search rejection of the service to a 400', async () => {
     const { api: search } = api({
       service: {
