@@ -70,6 +70,8 @@ function readBody(req: IncomingMessage): Promise<string | undefined> {
       resolve(size > MAX_BODY ? undefined : Buffer.concat(chunks).toString('utf8')),
     );
     req.on('error', reject);
+    // A destroyed request emits neither `end` nor `error`.
+    req.on('close', () => resolve(undefined));
   });
 }
 
@@ -99,12 +101,19 @@ function createRateLimiter(now: () => number) {
 function notify(deps: LandingDeps, lead: Lead): void {
   const url = deps.config.notifyUrl;
   if (!url) return;
-  const text = `Nueva solicitud de demo de OPSLOG: ${lead.nombre} (${lead.empresa}), ${lead.correo}, ${lead.flotilla} vehículos.`;
+  // Visitor text must not become Slack links or mentions (`<!channel>`, `<https://x|y>`, `@everyone`).
+  const plain = (value: string) =>
+    value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/@/g, '@\u200b');
+  const text = `Nueva solicitud de demo de OPSLOG: ${plain(lead.nombre)} (${plain(lead.empresa)}), ${plain(lead.correo)}, ${lead.flotilla} vehículos.`;
   (deps.fetch ?? fetch)(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     // `text` for Slack-style hooks, `content` for Discord.
-    body: JSON.stringify({ text, content: text }),
+    body: JSON.stringify({ text, content: text, allowed_mentions: { parse: [] } }),
     signal: AbortSignal.timeout(5000),
   }).then(
     (response) => {
@@ -143,7 +152,10 @@ async function handleLead(
 
   const result = parseLead(input);
   if (result.kind === 'invalid') return fail(422, 'campos', result.fields);
-  if (!allow(clientAddress(req))) return fail(429, 'limite');
+  if (!allow(clientAddress(req))) {
+    deps.log?.('rate_limited');
+    return fail(429, 'limite');
+  }
   if (result.kind === 'lead') {
     await deps.store.save(result.lead);
     deps.log?.('lead_saved');

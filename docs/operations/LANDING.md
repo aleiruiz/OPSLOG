@@ -6,7 +6,7 @@
 
 - `GET /` sirve la página (`apps/landing/public`), con aviso de privacidad (`/privacidad.html`) y página de gracias.
 - `POST /api/leads` valida la solicitud (nombre, empresa, correo, teléfono opcional, tamaño de flotilla, mensaje opcional y aceptación del aviso) y la agrega como una línea JSON a `/data/leads.jsonl`, en el volumen `landing-data`. Funciona con y sin JavaScript.
-- Antispam sin servicios externos: un campo trampa oculto (los bots que lo llenan reciben «ok» y no se guardan), 5 solicitudes por dirección cada 15 minutos y 200 en total por ventana.
+- Antispam sin servicios externos: un campo trampa oculto (los bots que lo llenan reciben «ok» y no se guardan), 5 solicitudes por dirección cada 15 minutos y 200 en total por ventana. El tope global protege el disco, pero quien envíe 200 solicitudes válidas desde muchas direcciones puede bloquear el formulario durante esos 15 minutos; cada rechazo queda en el log como `rate_limited`. La dirección del visitante es la última de `X-Forwarded-For`, la que agrega el proxy de Coolify; si algún día se pone Cloudflare u otra CDN delante, habría que ajustarlo.
 - `GET /admin/leads` muestra las solicitudes (la más reciente arriba) y `GET /admin/leads.csv` las descarga para Excel. Piden usuario `admin` y la contraseña `LANDING_ADMIN_PASSWORD`; sin esa variable responden 404.
 - Si `LANDING_NOTIFY_URL` tiene un webhook https, cada solicitud nueva le envía `{"text": "...", "content": "..."}` (formato de Slack y Discord). Si falla, la solicitud se guarda igual.
 - La campaña de origen se guarda si el enlace trae `?utm_source=` o `?ref=` (por ejemplo `?utm_source=facebook`).

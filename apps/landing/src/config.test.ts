@@ -36,6 +36,12 @@ describe('readLandingConfig', () => {
     });
   });
 
+  it('normalizes a trailing slash in the public directory', () => {
+    expect(readLandingConfig({ LANDING_PUBLIC_DIR: '/srv/landing/' }, '/p').publicDir).toBe(
+      '/srv/landing',
+    );
+  });
+
   it.each([
     [{ PORT: 'x' }, 'PORT'],
     [{ LANDING_ADMIN_PASSWORD: 'short' }, 'LANDING_ADMIN_PASSWORD'],

@@ -107,13 +107,18 @@ describe('landing server', () => {
       { notifyUrl: 'https://hooks.example.com/x' },
       { fetch: hook },
     );
-    const response = await postJson(base, lead);
+    const response = await postJson(base, { ...lead, empresa: '<!channel> @everyone & Co' });
     expect(response.status).toBe(201);
     expect(await response.json()).toEqual({ ok: true });
     expect(await store.list()).toMatchObject([{ nombre: 'Ana', flotilla: '21-50' }]);
+    expect(lines).toContain('lead_saved');
     expect(hook).toHaveBeenCalledOnce();
-    const body = JSON.parse(String(hook.mock.calls[0]?.[1]?.body)) as { text: string };
-    expect(body.text).toContain('Transportes del Norte');
+    const body = JSON.parse(String(hook.mock.calls[0]?.[1]?.body)) as {
+      text: string;
+      allowed_mentions: unknown;
+    };
+    expect(body.text).toContain('&lt;!channel&gt; @\u200beveryone &amp; Co');
+    expect(body.allowed_mentions).toEqual({ parse: [] });
     await vi.waitFor(() => expect(lines).toContain('notify_failed status 500'));
   });
 

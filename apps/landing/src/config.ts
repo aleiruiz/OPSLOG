@@ -1,3 +1,5 @@
+import { resolve } from 'node:path';
+
 export type Env = Readonly<Record<string, string | undefined>>;
 
 export interface LandingConfig {
@@ -44,7 +46,7 @@ export function readLandingConfig(env: Env, defaultPublicDir: string): LandingCo
   return {
     host: env.HOST?.trim() || '0.0.0.0',
     port,
-    publicDir: env.LANDING_PUBLIC_DIR?.trim() || defaultPublicDir,
+    publicDir: resolve(env.LANDING_PUBLIC_DIR?.trim() || defaultPublicDir),
     leadsFile: env.LANDING_LEADS_FILE?.trim() || '/data/leads.jsonl',
     ...(adminPassword ? { adminPassword } : {}),
     ...(notifyUrl ? { notifyUrl } : {}),
