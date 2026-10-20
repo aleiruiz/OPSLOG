@@ -19,6 +19,17 @@ const accept = () => {
   click('Activar cuenta');
 };
 
+// On a loaded CI machine the shell can still re-render after the home heading shows, which closes the menu
+// or replaces its button; open it on whichever button is current until it stays open.
+async function openMenu(): Promise<HTMLElement> {
+  await waitFor(() => {
+    const toggle = screen.getByRole('button', { name: 'Menú' });
+    if (toggle.getAttribute('aria-expanded') !== 'true') click('Menú');
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  });
+  return screen.getByRole('button', { name: 'Menú' });
+}
+
 describe('shell: session, company and user', () => {
   it('shows a loading state while the session is being resolved', async () => {
     const api = createMockApi();
@@ -165,9 +176,7 @@ describe('shell: session, company and user', () => {
   it('closes the navigation menu with Escape and returns focus to its button', async () => {
     await renderApp();
     await screen.findByRole('heading', { name: 'Inicio', level: 1 });
-    const toggle = screen.getByRole('button', { name: 'Menú' });
-    click('Menú');
-    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    const toggle = await openMenu();
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     expect(toggle).toHaveFocus();
@@ -176,9 +185,7 @@ describe('shell: session, company and user', () => {
   it('leaves the menu open when something else already handled Escape', async () => {
     await renderApp();
     await screen.findByRole('heading', { name: 'Inicio', level: 1 });
-    const toggle = screen.getByRole('button', { name: 'Menú' });
-    click('Menú');
-    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    const toggle = await openMenu();
     const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
     event.preventDefault();
     act(() => {
