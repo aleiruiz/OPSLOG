@@ -17,6 +17,7 @@ import type { ApiPorts, OidcPort, Result, SessionInfo } from '../app/types';
 import { createIncidentPorts } from '../features/incidents/ports';
 import { createMaintenancePorts } from '../features/maintenance/ports';
 import { createSearchPorts } from '../features/search/ports';
+import { createViewsPorts } from '../features/search/views/ports';
 
 function mapResult<T, U>(result: Result<T>, map: (value: T) => U): Result<U> {
   return result.ok ? { ok: true, value: map(result.value) } : result;
@@ -52,6 +53,7 @@ export function createHttpApi(
     maintenance: createMaintenancePorts(client),
     incidents: createIncidentPorts(client),
     search: createSearchPorts(client),
+    views: createViewsPorts(client),
     auth: {
       getSession: async () => mapResult(await call('auth.session'), toSession),
       login: async (body) => mapResult(await call('auth.login', { body }), toSession),

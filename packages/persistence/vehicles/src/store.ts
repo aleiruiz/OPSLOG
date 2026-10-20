@@ -1,12 +1,14 @@
 import 'reflect-metadata';
 import {
   In,
+  Between,
   IsNull,
   LessThanOrEqual,
   MoreThanOrEqual,
   Not,
   type DataSource,
   type EntityManager,
+  type FindOperator,
 } from 'typeorm';
 import {
   VehicleError,
@@ -37,6 +39,18 @@ import {
 
 /** Ids per `IN (...)` list: the status history of a large fleet is read in several statements. */
 const ID_CHUNK = 500;
+/** Inclusive range on a numeric column; no bound, no condition. */
+const between = (from?: number, to?: number): FindOperator<number> | undefined =>
+  from !== undefined && to !== undefined
+    ? Between(from, to)
+    : from !== undefined
+      ? MoreThanOrEqual(from)
+      : to !== undefined
+        ? LessThanOrEqual(to)
+        : undefined;
+
+const ranged = <K extends string>(column: K, operator: FindOperator<number> | undefined) =>
+  operator === undefined ? {} : { [column]: operator };
 
 /** Structured, PII-free report of a failed operation (operation name, coarse code, driver errno). */
 export interface StoreErrorEvent {
@@ -270,6 +284,8 @@ export class TypeOrmVehicleStore implements VehicleStore, VehicleAnalyticsReads 
           ...(filter.status === undefined ? {} : { status: filter.status }),
           ...(filter.areaId === undefined ? {} : { areaId: filter.areaId }),
           ...(filter.includeArchived ? {} : { archivedAt: IsNull() }),
+          ...ranged('year', between(filter.yearFrom, filter.yearTo)),
+          ...ranged('odometerKm', between(filter.kmFrom, filter.kmTo)),
         },
         order: { economicNumberKey: 'ASC', id: 'ASC' },
         take: window.limit,

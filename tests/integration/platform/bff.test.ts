@@ -352,6 +352,14 @@ function writes(f: Fixture): [string, string, unknown?][] {
       '/api/v1/incidents/00000000-0000-4000-8000-000000000001/costs',
       { version: 1, lines: [] },
     ],
+    [
+      'POST',
+      '/api/v1/views',
+      { module: 'vehicles', name: 'Activos', filters: { status: 'active' } },
+    ],
+    ['PATCH', '/api/v1/views/00000000-0000-4000-8000-000000000001', { version: 1, name: 'Otra' }],
+    ['DELETE', '/api/v1/views/00000000-0000-4000-8000-000000000001'],
+    ['PUT', '/api/v1/views/columns/vehicles', { columns: ['economicNumber', 'actions'] }],
   ];
 }
 

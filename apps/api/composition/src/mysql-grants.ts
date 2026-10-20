@@ -15,6 +15,7 @@ import { INCIDENT_REPAIR_TABLES } from '../../../../packages/persistence/inciden
 import { INCIDENT_COST_TABLES } from '../../../../packages/persistence/incidents/costs/src/index.js';
 import { INCIDENT_SLA_TABLES } from '../../../../packages/persistence/incidents/sla/src/index.js';
 import { INCIDENT_WORKFLOW_TABLES } from '../../../../packages/persistence/incidents/workflow/src/index.js';
+import { SAVED_VIEW_TABLES } from '../../../../packages/persistence/saved-views/src/index.js';
 import { SEARCH_TABLES } from '../../../../packages/persistence/search/src/index.js';
 import { INCIDENT_CHILD_TABLES } from '../../../../packages/persistence/incidents/third-parties/src/index.js';
 
@@ -92,6 +93,11 @@ export const FLEET_TABLE_GRANTS = {
   ],
   // Derived from the modules above: the worker rewrites and removes its rows.
   search: [{ table: SEARCH_TABLES.entries, privileges: ['SELECT', 'INSERT', 'DELETE'] }],
+  // Saved views are edited and deleted by their owner; the visible columns are only upserted.
+  views: [
+    { table: SAVED_VIEW_TABLES.views, privileges: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] },
+    { table: SAVED_VIEW_TABLES.columns, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
+  ],
 } satisfies Record<string, readonly TableGrant[]>;
 
 export type FleetModuleName = keyof typeof FLEET_TABLE_GRANTS;
@@ -108,4 +114,5 @@ export const FLEET_MODULES: readonly FleetModuleName[] = [
   'maintenance',
   'incidents',
   'search',
+  'views',
 ];

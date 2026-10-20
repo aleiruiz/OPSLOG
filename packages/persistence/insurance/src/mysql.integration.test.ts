@@ -471,6 +471,15 @@ suite('persistent policy store on MySQL', () => {
       expect(await ids({ coversOn: '2026-10-07' })).toEqual([p7.id, p5.id, p6.id, p1.id]);
       expect(await ids({ coversOn: '2027-01-01' })).toEqual([p3.id]);
       expect(await ids({ coversOn: '2026-10-21', status: 'expiring' })).toEqual([p5.id]);
+      // end-date range: inclusive bounds, also together with the derived status
+      expect(await ids({ endsFrom: '2026-10-06', endsTo: '2026-11-05' })).toEqual([
+        p4.id,
+        p7.id,
+        p5.id,
+      ]);
+      expect(await ids({ endsFrom: '2026-11-06' })).toEqual([p6.id, p1.id, p3.id]);
+      expect(await ids({ endsTo: '2026-10-01' })).toEqual([p2.id]);
+      expect(await ids({ endsFrom: '2026-10-07', status: 'expiring' })).toEqual([p7.id, p5.id]);
       const page = await svcA.list(tenant, { limit: 3, offset: 2 });
       expect(page.items.map((p) => p.id)).toEqual([p7.id, p5.id, p6.id]);
       expect(page.total).toBe(7);

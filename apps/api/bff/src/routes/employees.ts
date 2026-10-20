@@ -26,6 +26,7 @@ import {
   type Route,
   type RouteContext,
 } from './shared.js';
+import { catalogFilters } from './list-filters.js';
 
 const EMPLOYEE_KEYS = [
   'firstName',
@@ -46,9 +47,21 @@ const EMPLOYEE_KEYS = [
 const employeeBody = (view: EmployeeView): BffEmployee => ({ ...view });
 const employeeDetailBody = (view: EmployeeDetailView): BffEmployeeDetail => ({ ...view });
 
+/** Hire date and license expiry ranges (BRD §14.2). */
+const DATE_KEYS = ['hiredFrom', 'hiredTo', 'licenseExpiresFrom', 'licenseExpiresTo'] as const;
+
 /** Strict query of the employee listing: unknown or repeated keys, bad values and foreign cursors are all a 400. */
+
 function employeeQuery(ctx: RouteContext, tenantId: string) {
-  const allowed = new Set(['limit', 'cursor', 'kind', 'status', 'areaId', 'includeArchived']);
+  const allowed = new Set([
+    'limit',
+    'cursor',
+    'kind',
+    'status',
+    'areaId',
+    'includeArchived',
+    ...DATE_KEYS,
+  ]);
   const keys = [...ctx.query.keys()];
   if (keys.some((key) => !allowed.has(key)) || new Set(keys).size !== keys.length) return null;
   const limitRaw = ctx.query.get('limit');
@@ -57,7 +70,9 @@ function employeeQuery(ctx: RouteContext, tenantId: string) {
   const status = ctx.query.get('status');
   const areaId = ctx.query.get('areaId');
   const archived = ctx.query.get('includeArchived');
+  const dates = catalogFilters(ctx, 'employees', DATE_KEYS);
   if (
+    dates === null ||
     limit === undefined ||
     (kind !== null && !(BFF_EMPLOYEE_KINDS as readonly string[]).includes(kind)) ||
     (status !== null && !(BFF_EMPLOYEE_STATUSES as readonly string[]).includes(status)) ||
@@ -66,7 +81,7 @@ function employeeQuery(ctx: RouteContext, tenantId: string) {
   )
     return null;
   // The cursor is signed and bound to the tenant and to the filters it was issued for.
-  const filter = JSON.stringify([kind, status, areaId, archived === 'true', limit]);
+  const filter = JSON.stringify([kind, status, areaId, archived === 'true', limit, dates]);
   let offset = 0;
   const cursorRaw = ctx.query.get('cursor');
   if (cursorRaw !== null) {
@@ -85,6 +100,7 @@ function employeeQuery(ctx: RouteContext, tenantId: string) {
       ...(kind === null ? {} : { kind: kind as BffEmployeeKind }),
       ...(status === null ? {} : { status: status as BffEmployeeStatus }),
       ...(areaId === null ? {} : { areaId }),
+      ...dates,
     },
   };
 }

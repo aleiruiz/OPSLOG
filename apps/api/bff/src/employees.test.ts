@@ -259,6 +259,36 @@ describe('employees over HTTP', () => {
     expect(await names(`?areaId=${areaIds.a2}`)).toEqual(['B']);
     expect(await names('?includeArchived=false&limit=50')).toEqual(['A', 'B']);
   });
+
+  it('filters by hire date and license expiry ranges, inclusive and inside the company', async () => {
+    const { adminA, adminB } = await fixture();
+    await create(adminA, {
+      lastName: 'Antigua',
+      hireDate: '2020-01-15',
+      licenseExpiresOn: '2026-11-30',
+    });
+    await create(adminA, {
+      lastName: 'Reciente',
+      hireDate: '2023-06-01',
+      licenseExpiresOn: '2027-06-30',
+    });
+    await create(adminB, {
+      lastName: 'Ajena',
+      hireDate: '2023-06-01',
+      licenseExpiresOn: '2027-06-30',
+    });
+    const names = async (query: string) =>
+      (await adminA.get(`/api/employees${query}`)).json.items.map(
+        (v: { lastName: string }) => v.lastName,
+      );
+    expect(await names('?hiredFrom=2023-01-01')).toEqual(['Reciente']);
+    expect(await names('?hiredTo=2020-01-15')).toEqual(['Antigua']);
+    expect(await names('?licenseExpiresTo=2026-12-31')).toEqual(['Antigua']);
+    expect(await names('?licenseExpiresFrom=2026-12-01&licenseExpiresTo=2027-06-30')).toEqual([
+      'Reciente',
+    ]);
+    expect((await adminA.get('/api/employees?hiredFrom=2020-01-01')).json.total).toBe(2);
+  });
 });
 
 describe('who may do what', () => {
@@ -486,6 +516,10 @@ describe('errors', () => {
       '?kind=robot',
       '?areaId=a/b',
       '?includeArchived=yes',
+      '?hiredFrom=2020-02-30',
+      '?hiredTo=15-01-2020',
+      '?licenseExpiresFrom=',
+      '?licenseExpiresTo=2101-01-01',
       '?sort=lastName',
       '?q=SYNTH-1',
       '?nationalId=SYNTH-1',

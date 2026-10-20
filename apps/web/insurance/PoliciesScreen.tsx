@@ -3,38 +3,53 @@ import { useResource, type ResourceState } from '../app/resource';
 import type { InsuranceListQuery, InsurancePolicy } from '../app/types';
 import { loadVehicleOptions, type VehicleOptions } from '../app/vehicleOptions';
 import { useSession } from '../auth/session';
+import { pickFilters } from '../features/search/views/urlState';
+import { useListState } from '../features/search/views/useListState';
 import { isDateBetween, MAX_EXPIRY_DATE, MIN_DATE } from '../documents/rules';
-import {
-  noFilters,
-  PolicyListView,
-  type PolicyFilters,
-  type PolicyListData,
-} from './PolicyListView';
+import { PolicyListView, type PolicyFilters, type PolicyListData } from './PolicyListView';
 
-const PAGE_SIZE = 25;
+const RANGE_KEYS = ['endsFrom', 'endsTo'] as const;
 
 /** Policy list screen. Requires `view`; "Nueva póliza", "Editar" and "Renovar" depend on `create` and `edit`. */
 export function PoliciesScreen() {
   const { ports, can, markExpired } = useSession();
-  const [filters, setFilters] = React.useState<PolicyFilters>(noFilters);
-  const dateValid =
-    filters.coversOn === '' || isDateBetween(filters.coversOn, MIN_DATE, MAX_EXPIRY_DATE);
-  const appliedDate = dateValid ? filters.coversOn : '';
-  const queryKey = JSON.stringify([
-    filters.status,
-    filters.vehicleId,
-    filters.coverageType,
-    appliedDate,
-    filters.includeArchived,
-  ]);
+  const list = useListState('insurance', { views: ports.views, can, onExpired: markExpired });
+  const url = list.url.filters;
+  // The day being typed stays in the field until it is a valid one; only then does it reach the address.
+  const [coversText, setCoversText] = React.useState(url.coversOn ?? '');
+  React.useEffect(() => setCoversText(url.coversOn ?? ''), [url.coversOn]);
+  // Filters, order and size live in the address (keys of BFF_LIST_CATALOG), so a link reproduces the list.
+  const filters: PolicyFilters = {
+    status: (url.status ?? '') as PolicyFilters['status'],
+    vehicleId: url.vehicleId ?? '',
+    coverageType: (url.coverageType ?? '') as PolicyFilters['coverageType'],
+    coversOn: coversText,
+    includeArchived: url.includeArchived === 'true',
+  };
+  const dateValid = coversText === '' || isDateBetween(coversText, MIN_DATE, MAX_EXPIRY_DATE);
+  const setFilters = (next: PolicyFilters) => {
+    setCoversText(next.coversOn);
+    const covers = next.coversOn === '' || isDateBetween(next.coversOn, MIN_DATE, MAX_EXPIRY_DATE);
+    const coversOn = covers ? next.coversOn : (url.coversOn ?? '');
+    list.setFilters({
+      ...pickFilters(url, RANGE_KEYS),
+      ...(next.status === '' ? {} : { status: next.status }),
+      ...(next.vehicleId === '' ? {} : { vehicleId: next.vehicleId }),
+      ...(next.coverageType === '' ? {} : { coverageType: next.coverageType }),
+      ...(coversOn === '' ? {} : { coversOn }),
+      ...(next.includeArchived ? { includeArchived: 'true' } : {}),
+    });
+  };
+  const queryKey = list.key;
   const query = (cursor?: string): InsuranceListQuery => ({
-    limit: PAGE_SIZE,
+    limit: list.url.limit as 25 | 50 | 100,
     ...(cursor === undefined ? {} : { cursor }),
     ...(filters.status === '' ? {} : { status: filters.status }),
     ...(filters.vehicleId === '' ? {} : { vehicleId: filters.vehicleId }),
     ...(filters.coverageType === '' ? {} : { coverageType: filters.coverageType }),
-    ...(appliedDate === '' ? {} : { coversOn: appliedDate }),
+    ...(url.coversOn ? { coversOn: url.coversOn } : {}),
     ...(filters.includeArchived ? { includeArchived: 'true' as const } : {}),
+    ...pickFilters(url, RANGE_KEYS),
   });
 
   const first = useResource(() => ports.insurance.list(query()), [ports, queryKey]);
@@ -104,17 +119,12 @@ export function PoliciesScreen() {
         dateValid ? undefined : 'Elige un día válido. El filtro no se aplica hasta entonces.'
       }
       can={can}
-      filtersActive={
-        filters.status !== '' ||
-        filters.vehicleId !== '' ||
-        filters.coverageType !== '' ||
-        appliedDate !== '' ||
-        filters.includeArchived
-      }
+      list={list}
+      filtersActive={Object.keys(url).length > 0}
       loadingMore={loadingMore}
       notice={notice}
       onFiltersChange={setFilters}
-      onClear={() => setFilters(noFilters)}
+      onClear={list.clear}
       onRetry={first.reload}
       onLoadMore={(cursor) => void loadMore(cursor)}
     />

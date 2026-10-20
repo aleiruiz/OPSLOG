@@ -262,10 +262,12 @@ export class TypeOrmPolicyStore implements PolicyStore, PolicyAnalyticsReads {
     window: PolicyWindow,
   ): Promise<PolicySlice> {
     return this.single('list', async () => {
-      // The status and `coversOn` both bound `ends_on`: both conditions apply (AND).
+      // The status, `coversOn` and the expiry range all bound `ends_on`: every condition applies (AND).
       const ends = [
         ...(filter.expiry === undefined ? [] : [expiryCondition(filter.expiry)]),
         ...(filter.coversOn === undefined ? [] : [MoreThanOrEqual(filter.coversOn)]),
+        ...(filter.endsFrom === undefined ? [] : [MoreThanOrEqual(filter.endsFrom)]),
+        ...(filter.endsTo === undefined ? [] : [LessThanOrEqual(filter.endsTo)]),
       ];
       const where: FindOptionsWhere<PolicyEntity> = {
         tenantId,

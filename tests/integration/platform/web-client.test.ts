@@ -1114,6 +1114,36 @@ describe('typed client against the real BFF', () => {
     expect(await client.call('search.query', { query: { q: 'abc' } })).toMatchObject({
       ok: true,
     });
+    // Saved views and persistent columns: create, list, update, columns and delete over the wire.
+    const view = await client.call('views.create', {
+      body: { module: 'vehicles', name: 'Activos', filters: { status: 'active' } },
+    });
+    expect(view).toMatchObject({ ok: true, value: { module: 'vehicles', mine: true, version: 1 } });
+    const viewId = view.ok ? view.value.id : '';
+    expect(await client.call('views.list', { query: { module: 'vehicles' } })).toMatchObject({
+      ok: true,
+      value: { items: [{ id: viewId, filters: { status: 'active' }, dropped: [] }] },
+    });
+    expect(
+      await client.call('views.update', {
+        params: { id: viewId },
+        body: { version: 1, name: 'Activos hoy' },
+      }),
+    ).toMatchObject({ ok: true, value: { name: 'Activos hoy', version: 2 } });
+    expect(
+      await client.call('views.columnsSave', {
+        params: { module: 'vehicles' },
+        body: { columns: ['economicNumber', 'plate', 'actions'] },
+      }),
+    ).toMatchObject({ ok: true, value: { columns: ['economicNumber', 'plate', 'actions'] } });
+    expect(await client.call('views.columns', { params: { module: 'vehicles' } })).toMatchObject({
+      ok: true,
+      value: { columns: ['economicNumber', 'plate', 'actions'], dropped: [] },
+    });
+    expect(await client.call('views.delete', { params: { id: viewId } })).toEqual({
+      ok: true,
+      value: undefined,
+    });
     expect(await client.call('auth.logout')).toEqual({ ok: true, value: undefined });
     expect(await client.call('users.list')).toMatchObject({ ok: false, error: { status: 401 } });
 

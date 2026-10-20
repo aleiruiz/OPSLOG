@@ -335,6 +335,37 @@ describe('InMemoryDocumentStore', () => {
     expect((await svc.list(A, { status: 'expired', includeArchived: true })).total).toBe(1);
   });
 
+  it('filters by an inclusive expiry range; documents without expiry never fall inside', async () => {
+    const { svc } = service();
+    const mk = (over: Record<string, unknown>) => svc.create(A, ACTOR, card(over));
+    const d1 = await mk({ expiresOn: '2026-12-01', title: 'uno' });
+    const d2 = await mk({ expiresOn: '2026-10-01', title: 'dos' });
+    const d3 = await mk({ typeCode: 'other', expiresOn: null, title: 'tres' });
+    const d4 = await mk({ expiresOn: '2026-10-20', ownerId: 'veh-2', title: 'cuatro' });
+    const ids = async (query: Record<string, unknown>) =>
+      (await svc.list(A, query)).items.map((d) => d.id);
+    expect(await ids({ expiresFrom: '2026-10-20' })).toEqual([d4.id, d1.id]);
+    expect(await ids({ expiresTo: '2026-10-20' })).toEqual([d2.id, d4.id]);
+    expect(await ids({ expiresFrom: '2026-10-02', expiresTo: '2026-11-30' })).toEqual([d4.id]);
+    expect(await ids({ expiresFrom: '2026-10-01', expiresTo: '2026-10-01' })).toEqual([d2.id]);
+    expect(await ids({ expiresFrom: '2026-10-02', expiresTo: '2026-10-01' })).toEqual([]);
+    // With the derived status both conditions hold.
+    expect(await ids({ status: 'valid', expiresFrom: '2026-10-01' })).toEqual([d1.id]);
+    expect(await ids({})).toContain(d3.id);
+    for (const bad of [
+      { expiresFrom: '2026-02-30' },
+      { expiresTo: '1949-12-31' },
+      { expiresTo: '2101-01-01' },
+      { expiresFrom: 5 },
+    ])
+      expect(
+        await svc.list(A, bad).catch((error: unknown) => error),
+        JSON.stringify(bad),
+      ).toMatchObject({
+        code: 'invalid_input',
+      });
+  });
+
   it('labels the history from the rows read, even when a renewal lands between the reads', async () => {
     const inner = new InMemoryDocumentStore();
     let renewNext: (() => Promise<unknown>) | undefined;

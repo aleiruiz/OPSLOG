@@ -58,8 +58,6 @@ import type { IncidentApi } from '../../incidents/cases/src/index.js';
 import type { IncidentChildApi } from '../../incidents/third-parties/src/index.js';
 import type { IncidentCostApi } from '../../incidents/costs/src/index.js';
 import type { IncidentSlaApi } from '../../incidents/sla/src/index.js';
-import type { IncidentSlaModule } from './platform/incident-sla-apis.js';
-import type { SearchModule } from './platform/search-apis.js';
 import type { IncidentRepairApi } from '../../incidents/repairs/src/index.js';
 import type { IncidentWorkflowApi } from '../../incidents/workflow/src/index.js';
 import { buildDomainApis, type DomainApis } from './platform/apis.js';
@@ -126,9 +124,11 @@ export class Platform {
   /** The notices of the incident SLA (`GET /incidents/alerts`). */
   public readonly incidentSla: IncidentSlaApi;
   /** SLA scan, delivery and mail port: what the worker runs; `enqueueScan` queues a scan job. */
-  public readonly incidentSlaModule: IncidentSlaModule;
+  public readonly incidentSlaModule: DomainApis['incidentSla'];
   /** Global search (`GET /search`), the projection writer and its reconcile queue. */
-  public readonly search: SearchModule;
+  public readonly search: DomainApis['search'];
+  /** Saved views and visible columns of the lists (`/views`). */
+  public readonly savedViews: DomainApis['savedViews'];
   public readonly access: AccessDirectory;
   public readonly tenants: InMemoryTenantStore;
   public readonly audit: AuditStore;
@@ -257,6 +257,7 @@ export class Platform {
     this.incidentSla = apis.incidentSla.api;
     this.incidentSlaModule = apis.incidentSla;
     this.search = apis.search;
+    this.savedViews = apis.savedViews;
     this.runtime = buildWorkerRuntime(
       this.kernel,
       this.pipeline,

@@ -184,7 +184,11 @@ export function createMockVehicleStore(
           (vehicle) =>
             (query.includeArchived === 'true' || vehicle.archivedAt === null) &&
             (query.status === undefined || vehicle.status === query.status) &&
-            (query.areaId === undefined || vehicle.areaId === query.areaId),
+            (query.areaId === undefined || vehicle.areaId === query.areaId) &&
+            (query.yearFrom === undefined || vehicle.year >= query.yearFrom) &&
+            (query.yearTo === undefined || vehicle.year <= query.yearTo) &&
+            (query.kmFrom === undefined || vehicle.odometerKm >= query.kmFrom) &&
+            (query.kmTo === undefined || vehicle.odometerKm <= query.kmTo),
         )
         .sort(
           (a, b) =>

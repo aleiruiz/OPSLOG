@@ -183,3 +183,27 @@ describe('maintenance model', () => {
     expect(seen[5]).toContain('"idempotencyKey":"key-12345678"');
   });
 });
+
+describe('cost filter of the order list', () => {
+  const line = (id: string, amountMinor: string, currency: string) => ({
+    id,
+    category: 'parts' as const,
+    amount: { amountMinor, currency },
+  });
+  const none = { status: '', vehicleId: '', month: '' } as const;
+
+  it('compares the total in whole units and ignores orders it cannot total', () => {
+    const order = baseOrder({ costs: [line('a', '150000', 'MXN'), line('b', '50000', 'MXN')] });
+    expect(matches(order, { ...none, costFrom: '2000' })).toBe(true);
+    expect(matches(order, { ...none, costFrom: '2001' })).toBe(false);
+    expect(matches(order, { ...none, costTo: '1999' })).toBe(false);
+    // Mixed currencies cannot be added: the order is not filtered by cost.
+    const mixed = baseOrder({ costs: [line('a', '150000', 'MXN'), line('b', '50000', 'USD')] });
+    expect(matches(mixed, { ...none, costFrom: '999999' })).toBe(true);
+    // Without costs in the answer (no view_costs) there is nothing to compare.
+    const hidden = baseOrder();
+    delete (hidden as { costs?: unknown }).costs;
+    expect(matches(hidden, { ...none, costFrom: '1' })).toBe(true);
+    expect(matches(baseOrder({ costs: [] }), { ...none, costFrom: '1' })).toBe(false);
+  });
+});

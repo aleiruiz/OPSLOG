@@ -244,6 +244,29 @@ describe('documents over HTTP', () => {
     expect(await titles('?status=expired')).toEqual([]);
     expect(await titles('?status=expired&includeArchived=true')).toEqual(['Vencida']);
   });
+
+  it('filters by an inclusive expiry range and leaves out documents without expiry', async () => {
+    const { adminA, vehicleA } = await fixture();
+    await create(adminA, vehicleA, { title: 'Octubre', expiresOn: '2026-10-01' });
+    await create(adminA, vehicleA, { title: 'Diciembre', expiresOn: '2026-12-01' });
+    await create(adminA, vehicleA, {
+      title: 'Sin vencimiento',
+      typeCode: 'ownership_title',
+      expiresOn: null,
+    });
+    const titles = async (query: string) =>
+      (await adminA.get(`/api/documents${query}`)).json.items.map(
+        (v: { title: string }) => v.title,
+      );
+    expect(await titles('?expiresFrom=2026-10-02')).toEqual(['Diciembre']);
+    expect(await titles('?expiresTo=2026-10-01')).toEqual(['Octubre']);
+    expect(await titles('?expiresFrom=2026-10-01&expiresTo=2026-12-01')).toEqual([
+      'Octubre',
+      'Diciembre',
+    ]);
+    expect(await titles('?status=valid&expiresFrom=2026-10-01')).toEqual(['Diciembre']);
+    expect((await adminA.get('/api/documents?expiresFrom=2026-10-01')).json.total).toBe(2);
+  });
 });
 
 describe('who may do what', () => {
@@ -461,6 +484,9 @@ describe('errors', () => {
       '?ownerType=vehicle&ownerId=a/b',
       '?typeCode=Not%20A%20Code',
       '?includeArchived=yes',
+      '?expiresFrom=2026-02-30',
+      '?expiresTo=2101-01-01',
+      '?expiresFrom=',
       '?sort=expiresOn',
       '?q=TC-1',
     ])

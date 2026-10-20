@@ -11,6 +11,7 @@ import {
 } from '../../../../packages/persistence/files/src/index.js';
 import { MAINTENANCE_RUNTIME_ACCOUNT } from '../../../../packages/persistence/maintenance/plans/src/index.js';
 import { INCIDENT_RUNTIME_ACCOUNT } from '../../../../packages/persistence/incidents/cases/src/index.js';
+import { SAVED_VIEWS_RUNTIME_ACCOUNT } from '../../../../packages/persistence/saved-views/src/index.js';
 import { SEARCH_RUNTIME_ACCOUNT } from '../../../../packages/persistence/search/src/index.js';
 import { runIdentityControlMigrations } from './control-plane/identity-schema.js';
 import {
@@ -93,6 +94,8 @@ export function buildFleetAccounts(
     throw new Error('incidents runtime account name is invalid');
   if (!SEARCH_RUNTIME_ACCOUNT.test(set.runtime.search.username))
     throw new Error('search runtime account name is invalid');
+  if (!SAVED_VIEWS_RUNTIME_ACCOUNT.test(set.runtime.views.username))
+    throw new Error('saved views runtime account name is invalid');
   return set;
 }
 

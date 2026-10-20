@@ -43,7 +43,7 @@ export const addDays = (day: string, days: number): string =>
 
 export const DAY_MS = 86_400_000;
 
-function normalizeDate(value: unknown, min: string, max: string): string {
+export function normalizeDate(value: unknown, min: string, max: string): string {
   if (typeof value !== 'string' || !ISO_DATE.test(value)) return invalid();
   const parsed = new Date(`${value}T00:00:00.000Z`);
   if (Number.isNaN(parsed.getTime()) || dateOf(parsed) !== value || value < min || value > max)

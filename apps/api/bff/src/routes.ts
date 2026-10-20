@@ -20,6 +20,7 @@ import { INCIDENT_CHILD_ROUTES } from './routes/incident-children.js';
 import { INCIDENT_COST_ROUTES } from './routes/incident-costs.js';
 import { INCIDENT_WORKFLOW_ROUTES } from './routes/incident-workflow.js';
 import { AUDIT_ROUTES } from './routes/audit.js';
+import { SAVED_VIEWS_ROUTES } from './routes/saved-views.js';
 import { SEARCH_ROUTES } from './routes/search.js';
 
 export type { Route, RouteContext, RouteKind } from './routes/shared.js';
@@ -48,4 +49,5 @@ export const ROUTES: readonly Route[] = [
   ...AUDIT_ROUTES,
   ...SEARCH_ROUTES,
   ...ANALYTICS_ROUTES,
+  ...SAVED_VIEWS_ROUTES,
 ];

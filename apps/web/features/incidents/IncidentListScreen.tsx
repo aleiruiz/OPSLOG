@@ -13,98 +13,34 @@ import {
   UiState,
 } from '@opslog/ui';
 import { BFF_INCIDENT_SEVERITIES, BFF_INCIDENT_TYPES } from '@opslog/contracts';
-import type {
-  BffIncident,
-  BffIncidentSeverity,
-  BffIncidentStatus,
-  BffIncidentType,
-  BffIncidentsQuery,
-  Page,
-} from '@opslog/contracts';
+import type { BffIncident, BffIncidentStatus, Page } from '@opslog/contracts';
 import { RouterButton, useRouter } from '../../app/router';
 import { ScrollRegion } from '../../app/ScrollRegion';
+import { ExtraFilters } from '../search/views/ExtraFilters';
+import { useListState } from '../search/views/useListState';
+import { ViewsBar } from '../search/views/ViewsBar';
 import { errorKind } from '../maintenance/useResult';
 import { useIncidentEnv } from './context';
 import { mayStartIncident } from './model';
-import { OPEN_STATUSES, SEVERITY_LABELS, STATUS_LABELS, TYPE_LABELS } from './labels';
+import { SEVERITY_LABELS, STATUS_LABELS, TYPE_LABELS } from './labels';
+import {
+  apiQuery,
+  NONE,
+  OPEN,
+  QUICK,
+  readFilters,
+  sameQuick,
+  SIZES,
+  SORT_OPTIONS,
+  toQuery,
+  undoQuick,
+  type Filters,
+  type Size,
+} from './incidentFilters';
 import { incidentColumns } from './listColumns';
 import { IncidentAlertsPanel } from './IncidentAlertsPanel';
 import { newIncidentPath, incidentsPath } from './paths';
 import type { ApiError } from '@opslog/contracts';
-
-const SIZES = [25, 50, 100] as const;
-type Size = (typeof SIZES)[number];
-
-/** Filters as the address keeps them, so a link or a reload shows the same list. */
-interface Filters {
-  readonly status: string;
-  readonly severity: string;
-  readonly type: string;
-  readonly responsible: boolean;
-  readonly createdBy: boolean;
-  /** The vehicle sheet's "Siniestros" link: only the cases of that vehicle. */
-  readonly vehicleId: string;
-  readonly limit: Size;
-}
-const NONE: Filters = {
-  status: '',
-  severity: '',
-  type: '',
-  responsible: false,
-  createdBy: false,
-  vehicleId: '',
-  limit: 25,
-};
-const OPEN = OPEN_STATUSES.join(',');
-
-const QUICK: readonly { readonly label: string; readonly filters: Partial<Filters> }[] = [
-  { label: 'Mis casos', filters: { responsible: true } },
-  { label: 'Mis borradores', filters: { createdBy: true, status: 'draft' } },
-  { label: 'Críticos', filters: { severity: 'critical' } },
-  { label: 'Abiertos', filters: { status: OPEN } },
-];
-
-function readFilters(search: URLSearchParams): Filters {
-  const limit = Number(search.get('limit'));
-  return {
-    status: search.get('status') ?? '',
-    severity: search.get('severity') ?? '',
-    type: search.get('type') ?? '',
-    responsible: search.get('responsible') === 'me',
-    createdBy: search.get('createdBy') === 'me',
-    vehicleId: search.get('vehicleId') ?? '',
-    limit: SIZES.find((size) => size === limit) ?? 25,
-  };
-}
-function toQuery(filters: Filters): string {
-  const params = new URLSearchParams();
-  if (filters.status) params.set('status', filters.status);
-  if (filters.severity) params.set('severity', filters.severity);
-  if (filters.type) params.set('type', filters.type);
-  if (filters.responsible) params.set('responsible', 'me');
-  if (filters.createdBy) params.set('createdBy', 'me');
-  if (filters.vehicleId) params.set('vehicleId', filters.vehicleId);
-  if (filters.limit !== 25) params.set('limit', String(filters.limit));
-  const text = params.toString();
-  return text ? `?${text}` : '';
-}
-const sameQuick = (filters: Filters, quick: Partial<Filters>): boolean =>
-  (Object.keys(quick) as (keyof Filters)[]).every((key) => filters[key] === quick[key]);
-
-function apiQuery(filters: Filters, cursor?: string): BffIncidentsQuery {
-  return {
-    limit: filters.limit,
-    ...(cursor ? { cursor } : {}),
-    ...(filters.status ? { status: filters.status } : {}),
-    ...(filters.severity ? { severity: filters.severity as BffIncidentSeverity } : {}),
-    ...(filters.type ? { type: filters.type as BffIncidentType } : {}),
-    ...(filters.responsible ? { responsible: 'me' as const } : {}),
-    ...(filters.createdBy ? { createdBy: 'me' as const } : {}),
-    ...(filters.vehicleId ? { vehicleId: filters.vehicleId } : {}),
-    sort: 'occurredAt',
-    direction: 'desc',
-  };
-}
 
 type Loaded =
   | { readonly kind: 'loading' }
@@ -124,6 +60,11 @@ export function IncidentListScreen() {
   const env = useIncidentEnv();
   const router = useRouter();
   const filters = readFilters(router.search);
+  const list = useListState('incidents', {
+    views: env.views,
+    can: (permission) => env.permissions.includes(permission),
+    onExpired: env.onExpired,
+  });
   const key = toQuery(filters);
   const [loaded, setLoaded] = React.useState<Loaded>({ kind: 'loading' });
   const [more, setMore] = React.useState<{ busy: boolean; error: string | null }>({
@@ -222,7 +163,7 @@ export function IncidentListScreen() {
           <DataTable
             caption={`${rows.length} siniestros`}
             rows={rows}
-            columns={incidentColumns(env.zone)}
+            columns={list.columns.visible(incidentColumns(env.zone))}
           />
         </ScrollRegion>
         {more.error && <InlineAlert severity="error">{more.error}</InlineAlert>}
@@ -314,6 +255,7 @@ export function IncidentListScreen() {
             );
           })}
         </Stack>
+        <ViewsBar list={list} />
         <FilterBar onClear={() => router.navigate(incidentsPath, { replace: true })}>
           {select('inc-filter-status', 'Estado', filters.status, statusOptions, 'status')}
           {select(
@@ -330,6 +272,22 @@ export function IncidentListScreen() {
             BFF_INCIDENT_SEVERITIES.map((value) => ({ value, label: SEVERITY_LABELS[value] })),
             'severity',
           )}
+          <ExtraFilters list={list} keys={['occurredFrom', 'occurredTo']} pageSizeLabel={null} />
+          <Field
+            id="inc-sort"
+            label="Ordenar por"
+            select
+            SelectProps={{ native: true }}
+            InputLabelProps={{ shrink: true }}
+            value={filters.sort}
+            onChange={(event) => apply({ sort: event.target.value })}
+          >
+            {SORT_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Field>
           <Field
             id="inc-page-size"
             label="Casos por página"
@@ -353,11 +311,4 @@ export function IncidentListScreen() {
       </Panel>
     </Box>
   );
-}
-
-/** Turning a quick filter off restores the defaults of the fields it set. */
-function undoQuick(quick: Partial<Filters>): Partial<Filters> {
-  const reset: Record<string, unknown> = {};
-  for (const name of Object.keys(quick)) reset[name] = NONE[name as keyof Filters];
-  return reset as Partial<Filters>;
 }

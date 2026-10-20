@@ -560,7 +560,8 @@ describe('employee detail: change status', () => {
     submit();
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('Otra persona modificó este empleado');
-    expect(alert.closest('[tabindex="-1"]')).toHaveFocus();
+    // Focus moves to the notice after it paints, which can lag behind the alert on a loaded CI machine.
+    await waitFor(() => expect(alert.closest('[tabindex="-1"]')).toHaveFocus());
     click('Recargar datos');
     await waitFor(() => expect(screen.queryByRole('form', { name: 'Cambiar estado' })).toBeNull());
     await waitFor(() =>

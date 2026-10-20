@@ -59,7 +59,11 @@ export class InMemoryVehicleStore implements VehicleStore, VehicleAnalyticsReads
           vehicle.tenantId === tenantId &&
           (filter.includeArchived || vehicle.archivedAt === null) &&
           (filter.status === undefined || vehicle.status === filter.status) &&
-          (filter.areaId === undefined || vehicle.areaId === filter.areaId),
+          (filter.areaId === undefined || vehicle.areaId === filter.areaId) &&
+          (filter.yearFrom === undefined || vehicle.year >= filter.yearFrom) &&
+          (filter.yearTo === undefined || vehicle.year <= filter.yearTo) &&
+          (filter.kmFrom === undefined || vehicle.odometerKm >= filter.kmFrom) &&
+          (filter.kmTo === undefined || vehicle.odometerKm <= filter.kmTo),
       )
       .sort(
         (a, b) =>

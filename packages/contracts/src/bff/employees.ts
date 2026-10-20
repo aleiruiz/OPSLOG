@@ -110,6 +110,12 @@ export interface BffEmployeesQuery {
   readonly areaId?: string;
   /** `true` to include archived employees (default: hidden). */
   readonly includeArchived?: 'true' | 'false';
+  /** `YYYY-MM-DD`, inclusive: hire date. */
+  readonly hiredFrom?: string;
+  readonly hiredTo?: string;
+  /** `YYYY-MM-DD`, inclusive: expiry of the driver's license. */
+  readonly licenseExpiresFrom?: string;
+  readonly licenseExpiresTo?: string;
 }
 
 /** `status` entries carry the reason and the status ids; `area` entries carry the area ids and no reason. */

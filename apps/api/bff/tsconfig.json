@@ -5,6 +5,6 @@
     "outDir": "dist",
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
   },
-  "include": ["src/**/*.ts", "../../../packages/contracts/src/**/*.ts"],
+  "include": ["src/**/*.ts"],
   "references": [{ "path": "../composition" }]
 }

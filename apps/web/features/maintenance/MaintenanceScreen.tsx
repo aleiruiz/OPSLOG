@@ -65,6 +65,7 @@ export function MaintenanceScreen({ orderId = null }: { orderId?: string | null 
       orderId={orderId}
       onOrderChange={(next) => router.navigate(next ? maintenanceOrderPath(next) : maintenancePath)}
       onExpired={markExpired}
+      views={ports.views}
     />
   );
 }

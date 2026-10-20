@@ -3,32 +3,41 @@ import { useResource, type ResourceState } from '../app/resource';
 import type { Employee, EmployeeListQuery } from '../app/types';
 import { loadAllAreas } from '../areas/loadAreas';
 import { useSession } from '../auth/session';
-import {
-  EmployeeListView,
-  noFilters,
-  type EmployeeFilters,
-  type EmployeeListData,
-} from './EmployeeListView';
+import { pickFilters } from '../features/search/views/urlState';
+import { useListState } from '../features/search/views/useListState';
+import { EmployeeListView, type EmployeeFilters, type EmployeeListData } from './EmployeeListView';
 
-const PAGE_SIZE = 25;
+const RANGE_KEYS = ['hiredFrom', 'hiredTo', 'licenseExpiresFrom', 'licenseExpiresTo'] as const;
 
 /** Employee list screen. Requires `view`; "Nuevo empleado" and "Editar" depend on `create` and `edit`. */
 export function EmployeesScreen() {
   const { ports, can, markExpired } = useSession();
-  const [filters, setFilters] = React.useState<EmployeeFilters>(noFilters);
-  const queryKey = JSON.stringify([
-    filters.kind,
-    filters.status,
-    filters.areaId,
-    filters.includeArchived,
-  ]);
+  const list = useListState('employees', { views: ports.views, can, onExpired: markExpired });
+  const url = list.url.filters;
+  // Filters, order and size live in the address (keys of BFF_LIST_CATALOG), so a link reproduces the list.
+  const filters: EmployeeFilters = {
+    kind: (url.kind ?? '') as EmployeeFilters['kind'],
+    status: (url.status ?? '') as EmployeeFilters['status'],
+    areaId: url.areaId ?? '',
+    includeArchived: url.includeArchived === 'true',
+  };
+  const setFilters = (next: EmployeeFilters) =>
+    list.setFilters({
+      ...pickFilters(url, RANGE_KEYS),
+      ...(next.kind === '' ? {} : { kind: next.kind }),
+      ...(next.status === '' ? {} : { status: next.status }),
+      ...(next.areaId === '' ? {} : { areaId: next.areaId }),
+      ...(next.includeArchived ? { includeArchived: 'true' } : {}),
+    });
+  const queryKey = list.key;
   const query = (cursor?: string): EmployeeListQuery => ({
-    limit: PAGE_SIZE,
+    limit: list.url.limit as 25 | 50 | 100,
     ...(cursor === undefined ? {} : { cursor }),
     ...(filters.kind === '' ? {} : { kind: filters.kind }),
     ...(filters.status === '' ? {} : { status: filters.status }),
     ...(filters.areaId === '' ? {} : { areaId: filters.areaId }),
     ...(filters.includeArchived ? { includeArchived: 'true' as const } : {}),
+    ...pickFilters(url, RANGE_KEYS),
   });
 
   const first = useResource(() => ports.employees.list(query()), [ports, queryKey]);
@@ -84,16 +93,12 @@ export function EmployeesScreen() {
       filters={filters}
       areas={catalog.state.status === 'ready' ? catalog.state.data.areas : []}
       can={can}
-      filtersActive={
-        filters.kind !== '' ||
-        filters.status !== '' ||
-        filters.areaId !== '' ||
-        filters.includeArchived
-      }
+      list={list}
+      filtersActive={Object.keys(url).length > 0}
       loadingMore={loadingMore}
       notice={notice}
       onFiltersChange={setFilters}
-      onClear={() => setFilters(noFilters)}
+      onClear={list.clear}
       onRetry={first.reload}
       onLoadMore={(cursor) => void loadMore(cursor)}
     />

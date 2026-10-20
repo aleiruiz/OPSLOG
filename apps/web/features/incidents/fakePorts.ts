@@ -6,7 +6,6 @@ import type {
   BffPolicyDeductible,
   BffIncidentInput,
   BffIncidentSuggestions,
-  Page,
 } from '@opslog/contracts';
 import type { Result } from '../../app/types';
 import {
@@ -20,6 +19,7 @@ import {
   type Setting,
 } from './fakeContext';
 import type { FakeOrder } from './fakeCosts';
+import { fakeIncidentPage } from './fakeList';
 import { createFakeChildren } from './fakeChildren';
 import { createFakeCosts } from './fakeCosts';
 import { createFakeUpdates } from './fakeUpdates';
@@ -196,23 +196,7 @@ export function createFakeIncidentPorts(options: FakeIncidentOptions = {}) {
       const failed = injected('list');
       if (failed) return Promise.resolve(failed);
       if (!permissions().includes('incidents:view')) return Promise.resolve(fail(403, 'forbidden'));
-      const statuses = query?.status?.split(',');
-      const items = [...records.values()]
-        .map(view)
-        .filter((item) => !statuses || statuses.includes(item.status))
-        .filter((item) => !query?.severity || item.severity === query.severity)
-        .filter((item) => !query?.vehicleId || item.vehicle.id === query.vehicleId)
-        .filter((item) => query?.responsible !== 'me' || item.responsible?.id === userId())
-        .filter((item) => query?.createdBy !== 'me' || item.createdBy.id === userId());
-      const start = query?.cursor ? Number(query.cursor) : 0;
-      const size = query?.limit ?? 25;
-      const next = start + size;
-      const page: Page<BffIncident> = {
-        items: items.slice(start, next),
-        nextCursor: next < items.length ? String(next) : null,
-        total: items.length,
-        sort: { field: 'occurredAt', direction: 'desc' },
-      };
+      const page = fakeIncidentPage([...records.values()].map(view), query, userId());
       return Promise.resolve(ok(page));
     },
     get: (id) => {

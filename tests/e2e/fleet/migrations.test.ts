@@ -53,6 +53,7 @@ suite('fleet tenant migration composition on real MySQL', () => {
       'incident-costs:2026101700020',
       'incident-sla:2026101700030',
       'search:2026101900010',
+      'saved_views:2026101900020',
       'audit:2026100700010',
     ]);
     expect(database.databaseName).toMatch(/^opslog_t_[a-f0-9]+$/);

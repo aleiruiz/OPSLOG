@@ -1,5 +1,15 @@
 import 'reflect-metadata';
-import { In, IsNull, Not, type DataSource, type EntityManager } from 'typeorm';
+import {
+  Between,
+  In,
+  IsNull,
+  LessThanOrEqual,
+  MoreThanOrEqual,
+  Not,
+  type DataSource,
+  type EntityManager,
+  type FindOperator,
+} from 'typeorm';
 import {
   EmployeeError,
   employeeNumberKey,
@@ -28,6 +38,20 @@ import {
   sanitizeStoreError,
   type EmployeeStoreErrorCode,
 } from './errors.js';
+
+/** Inclusive range on a column; no bound, no condition. */
+const between = <T extends string | number>(from?: T, to?: T): FindOperator<T> | undefined =>
+  from !== undefined && to !== undefined
+    ? Between(from, to)
+    : from !== undefined
+      ? MoreThanOrEqual(from)
+      : to !== undefined
+        ? LessThanOrEqual(to)
+        : undefined;
+const ranged = <K extends string>(
+  column: K,
+  operator: FindOperator<string | number> | undefined,
+) => (operator === undefined ? {} : { [column]: operator });
 
 /** Structured, PII-free report of a failed operation (operation name, coarse code, driver errno). */
 export interface StoreErrorEvent {
@@ -296,6 +320,11 @@ export class TypeOrmEmployeeStore implements EmployeeStore, EmployeeAnalyticsRea
           ...(filter.status === undefined ? {} : { status: filter.status }),
           ...(filter.areaId === undefined ? {} : { areaId: filter.areaId }),
           ...(filter.includeArchived ? {} : { archivedAt: IsNull() }),
+          ...ranged('hireDate', between(filter.hiredFrom, filter.hiredTo)),
+          ...ranged(
+            'licenseExpiresOn',
+            between(filter.licenseExpiresFrom, filter.licenseExpiresTo),
+          ),
         },
         order: { nameKey: 'ASC', id: 'ASC' },
         take: window.limit,

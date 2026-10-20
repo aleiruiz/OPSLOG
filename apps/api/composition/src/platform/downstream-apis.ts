@@ -12,6 +12,7 @@ import {
 } from './work-order-apis.js';
 import type { AreaService } from '../../../../../packages/domain/areas/src/index.js';
 import { buildAuditQueryApi } from './audit-query-apis.js';
+import { buildSavedViews } from './saved-views-apis.js';
 import { buildSearch } from './search-apis.js';
 import type { PiiCipher } from '../../../../../packages/platform/pii/src/index.js';
 
@@ -69,5 +70,6 @@ export function buildDownstreamApis(
       incidents: stores.store,
       sla: incidents.incidentSla.reader,
     }),
+    savedViews: buildSavedViews(kernel, defaults),
   };
 }

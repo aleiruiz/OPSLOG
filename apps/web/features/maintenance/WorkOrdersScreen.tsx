@@ -8,6 +8,7 @@ import Typography from '@mui/material/Typography';
 import {
   Button,
   DataTable,
+  type DataTableColumn,
   DetailTabs,
   Field,
   FilterBar,
@@ -24,24 +25,22 @@ import type { MaintenanceViewer } from './workflow';
 import { CorrectiveOrderForm } from './CorrectiveOrderForm';
 import { useDirectory, vehicleLabel } from './directory';
 import { linkSx } from '../../app/router';
+import { ExtraFilters } from '../search/views/ExtraFilters';
+import type { ViewsPorts } from '../search/views/ports';
+import { useListState, type ListState } from '../search/views/useListState';
+import { ViewsBar } from '../search/views/ViewsBar';
+import { formatMinor } from '../incidents/money';
+import { filtersFromUrl, filtersToUrl, matches, NO_FILTERS, type Filters } from './orderFilters';
 
 export interface WorkOrdersScreenProps {
   readonly ports: MaintenancePorts;
   readonly viewer: MaintenanceViewer;
   readonly onOpen: (orderId: string) => void;
   readonly onExpired: () => void;
+  /** Saved views and persistent columns; without it the filters live in the screen and are not shared by link. */
+  readonly views?: ViewsPorts;
 }
-interface Filters {
-  readonly status: '' | BffWorkOrderStatus;
-  readonly vehicleId: string;
-  readonly month: string;
-}
-const NO_FILTERS: Filters = { status: '', vehicleId: '', month: '' };
-
-export const matches = (order: BffWorkOrder, filters: Filters): boolean =>
-  (filters.status === '' || order.status === filters.status) &&
-  (filters.vehicleId === '' || order.vehicleId === filters.vehicleId) &&
-  (filters.month === '' || (order.scheduledDate ?? '').startsWith(filters.month));
+export { matches } from './orderFilters';
 
 /** Calendar groups by scheduled date; orders without one are listed apart with an explanation. */
 export function byScheduledDate(orders: readonly BffWorkOrder[]) {
@@ -54,11 +53,42 @@ export function byScheduledDate(orders: readonly BffWorkOrder[]) {
   return { days: [...dated.entries()].sort(([a], [b]) => a.localeCompare(b)), undated };
 }
 
-/** S14: one list of work orders shown as a table and as a calendar, from the same contract. */
-export function WorkOrdersScreen({ ports, viewer, onOpen, onExpired }: WorkOrdersScreenProps) {
+/**
+ * S14: one list of work orders shown as a table and as a calendar, from the same contract. With `views`
+ * its filters live in the address (keys of BFF_LIST_CATALOG) and the screen offers saved views and columns.
+ */
+type OrderRow = BffWorkOrder & { order: BffWorkOrder; cost: string };
+
+export function WorkOrdersScreen(props: WorkOrdersScreenProps) {
+  const { views, ...rest } = props;
+  return views ? <WithList {...rest} views={views} /> : <WorkOrdersBody {...rest} list={null} />;
+}
+
+function WithList(props: WorkOrdersScreenProps & { views: ViewsPorts }) {
+  const { views, ...rest } = props;
+  const list = useListState('maintenance', {
+    views,
+    can: (permission) => props.viewer.permissions.includes(permission),
+    onExpired: props.onExpired,
+  });
+  return <WorkOrdersBody {...rest} list={list} />;
+}
+
+function WorkOrdersBody({
+  ports,
+  viewer,
+  onOpen,
+  onExpired,
+  list,
+}: Omit<WorkOrdersScreenProps, 'views'> & { list: ListState | null }) {
   const { state, reload } = useResult(() => ports.orders.list(), [ports], onExpired);
   const directory = useDirectory();
-  const [filters, setFilters] = React.useState<Filters>(NO_FILTERS);
+  const [local, setLocal] = React.useState<Filters>(NO_FILTERS);
+  const filters = list ? filtersFromUrl(list.url.filters) : local;
+  const setFilters = (next: Filters) =>
+    list ? list.setFilters(filtersToUrl(next)) : setLocal(next);
+  const visible = <T extends { key: string }>(columns: T[]): T[] =>
+    list ? list.columns.visible(columns) : columns;
   const [tab, setTab] = React.useState('list');
   const [creating, setCreating] = React.useState(false);
   const canCreate = viewer.permissions.includes('create');
@@ -109,7 +139,42 @@ export function WorkOrdersScreen({ ports, viewer, onOpen, onExpired }: WorkOrder
   const status = (order: BffWorkOrder) => (
     <StatusBadge label={STATUS_LABELS[order.status]} tone={STATUS_TONES[order.status]} />
   );
-  const rows = shown.map((order) => ({ ...order, order }));
+  const rows: OrderRow[] = shown.map((order) => ({
+    ...order,
+    order,
+    cost: order.costs?.length
+      ? formatMinor(
+          order.costs.reduce((sum, line) => sum + BigInt(line.amount.amountMinor), 0n).toString(),
+          order.costs[0]!.amount.currency,
+        )
+      : '—',
+  }));
+  const columns: DataTableColumn<OrderRow>[] = [
+    { key: 'order', label: 'Orden', render: (_value, row) => open(row.order) },
+    {
+      key: 'kind',
+      label: 'Tipo',
+      render: (_value, row) => KIND_LABELS[row.kind],
+    },
+    {
+      key: 'vehicleId',
+      label: 'Vehículo',
+      render: (_value, row) => vehicleLabel(directory, row.vehicleId),
+    },
+    {
+      key: 'status',
+      label: 'Estado',
+      render: (_value, row) => status(row.order),
+    },
+    {
+      key: 'scheduledDate',
+      label: 'Fecha programada',
+      render: (_value, row) => formatDate(row.scheduledDate),
+    },
+    ...(list && viewer.permissions.includes('view_costs')
+      ? [{ key: 'cost' as const, label: 'Costo' }]
+      : []),
+  ];
   const { days, undated } = byScheduledDate(shown);
   const empty =
     orders.length === 0 ? (
@@ -140,6 +205,7 @@ export function WorkOrdersScreen({ ports, viewer, onOpen, onExpired }: WorkOrder
         />
       )}
       <Panel>
+        {list && <ViewsBar list={list} />}
         <FilterBar onClear={() => setFilters(NO_FILTERS)}>
           <Field
             select
@@ -181,6 +247,41 @@ export function WorkOrdersScreen({ ports, viewer, onOpen, onExpired }: WorkOrder
             onChange={(event) => setFilters({ ...filters, month: event.target.value })}
             InputLabelProps={{ shrink: true }}
           />
+          {list && (
+            <>
+              <Field
+                select
+                id="mnt-filter-kind"
+                label="Tipo"
+                value={filters.kind ?? ''}
+                onChange={(event) =>
+                  setFilters({
+                    ...filters,
+                    kind: event.target.value as NonNullable<Filters['kind']>,
+                  })
+                }
+                sx={{ minWidth: 180 }}
+              >
+                <MenuItem value="">Todos</MenuItem>
+                <MenuItem value="preventive">{KIND_LABELS.preventive}</MenuItem>
+                <MenuItem value="corrective">{KIND_LABELS.corrective}</MenuItem>
+              </Field>
+              <Field
+                select
+                id="mnt-filter-overdue"
+                label="Vencimiento"
+                value={filters.overdue ? 'true' : ''}
+                onChange={(event) =>
+                  setFilters({ ...filters, overdue: event.target.value === 'true' })
+                }
+                sx={{ minWidth: 180 }}
+              >
+                <MenuItem value="">Todas</MenuItem>
+                <MenuItem value="true">Solo vencidas</MenuItem>
+              </Field>
+              <ExtraFilters list={list} keys={['costFrom', 'costTo']} pageSizeLabel={null} />
+            </>
+          )}
         </FilterBar>
       </Panel>
       <Panel title="Órdenes">
@@ -199,29 +300,7 @@ export function WorkOrdersScreen({ ports, viewer, onOpen, onExpired }: WorkOrder
                     <DataTable
                       caption={`${shown.length} órdenes`}
                       rows={rows}
-                      columns={[
-                        { key: 'order', label: 'Orden', render: (_value, row) => open(row.order) },
-                        {
-                          key: 'kind',
-                          label: 'Tipo',
-                          render: (_value, row) => KIND_LABELS[row.kind],
-                        },
-                        {
-                          key: 'vehicleId',
-                          label: 'Vehículo',
-                          render: (_value, row) => vehicleLabel(directory, row.vehicleId),
-                        },
-                        {
-                          key: 'status',
-                          label: 'Estado',
-                          render: (_value, row) => status(row.order),
-                        },
-                        {
-                          key: 'scheduledDate',
-                          label: 'Fecha programada',
-                          render: (_value, row) => formatDate(row.scheduledDate),
-                        },
-                      ]}
+                      columns={visible(columns)}
                     />
                   </Box>
                 ),

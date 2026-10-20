@@ -3,30 +3,52 @@ import { useResource, type ResourceState } from '../app/resource';
 import type { Document, DocumentListQuery } from '../app/types';
 import { loadVehicleOptions, type VehicleOptions } from '../app/vehicleOptions';
 import { useSession } from '../auth/session';
-import {
-  DocumentListView,
-  noFilters,
-  type DocumentFilters,
-  type DocumentListData,
-} from './DocumentListView';
+import { pickFilters } from '../features/search/views/urlState';
+import { useListState } from '../features/search/views/useListState';
+import { DocumentListView, type DocumentFilters, type DocumentListData } from './DocumentListView';
 
-const PAGE_SIZE = 25;
+const RANGE_KEYS = ['expiresFrom', 'expiresTo'] as const;
 
 /** Document list screen. Requires `view`; "Nuevo documento", "Editar" and "Renovar" depend on `create` and `edit`. */
 export function DocumentsScreen() {
   const { ports, can, markExpired } = useSession();
-  const [filters, setFilters] = React.useState<DocumentFilters>(noFilters);
-  const queryKey = JSON.stringify(filters);
+  const list = useListState('documents', { views: ports.views, can, onExpired: markExpired });
+  const url = list.url.filters;
+  // Filters, order and size live in the address (keys of BFF_LIST_CATALOG), so a link reproduces the list.
+  const filters: DocumentFilters = {
+    status: (url.status ?? '') as DocumentFilters['status'],
+    ownerType: (url.ownerType ?? '') as DocumentFilters['ownerType'],
+    vehicleId: url.ownerType === 'vehicle' ? (url.ownerId ?? '') : '',
+    typeCode: url.typeCode ?? '',
+    includeArchived: url.includeArchived === 'true',
+  };
+  const setFilters = (next: DocumentFilters) => {
+    // The owner filter of another kind (an employee, from a link) survives changes to the other filters.
+    const ownerId =
+      next.ownerType === 'vehicle'
+        ? next.vehicleId
+        : next.ownerType === url.ownerType
+          ? (url.ownerId ?? '')
+          : '';
+    list.setFilters({
+      ...pickFilters(url, RANGE_KEYS),
+      ...(next.status === '' ? {} : { status: next.status }),
+      ...(next.ownerType === '' ? {} : { ownerType: next.ownerType }),
+      ...(next.ownerType !== '' && ownerId !== '' ? { ownerId } : {}),
+      ...(next.typeCode === '' ? {} : { typeCode: next.typeCode }),
+      ...(next.includeArchived ? { includeArchived: 'true' } : {}),
+    });
+  };
+  const queryKey = list.key;
   const query = (cursor?: string): DocumentListQuery => ({
-    limit: PAGE_SIZE,
+    limit: list.url.limit as 25 | 50 | 100,
     ...(cursor === undefined ? {} : { cursor }),
     ...(filters.status === '' ? {} : { status: filters.status }),
-    ...(filters.ownerType === '' ? {} : { ownerType: filters.ownerType }),
-    ...(filters.ownerType === 'vehicle' && filters.vehicleId !== ''
-      ? { ownerId: filters.vehicleId }
-      : {}),
-    ...(filters.typeCode === '' ? {} : { typeCode: filters.typeCode }),
-    ...(filters.includeArchived ? { includeArchived: 'true' as const } : {}),
+    ...(url.ownerType ? { ownerType: url.ownerType as 'vehicle' | 'employee' } : {}),
+    ...(url.ownerType && url.ownerId ? { ownerId: url.ownerId } : {}),
+    ...(url.typeCode ? { typeCode: url.typeCode } : {}),
+    ...(url.includeArchived ? { includeArchived: 'true' as const } : {}),
+    ...pickFilters(url, RANGE_KEYS),
   });
 
   const first = useResource(() => ports.documents.list(query()), [ports, queryKey]);
@@ -92,11 +114,12 @@ export function DocumentsScreen() {
       filters={filters}
       vehicles={vehicles}
       can={can}
-      filtersActive={queryKey !== JSON.stringify(noFilters)}
+      list={list}
+      filtersActive={Object.keys(url).length > 0}
       loadingMore={loadingMore}
       notice={notice}
       onFiltersChange={setFilters}
-      onClear={() => setFilters(noFilters)}
+      onClear={list.clear}
       onRetry={first.reload}
       onLoadMore={(cursor) => void loadMore(cursor)}
     />

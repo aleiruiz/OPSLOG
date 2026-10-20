@@ -98,6 +98,9 @@ export interface BffInsurancePoliciesQuery {
   readonly coversOn?: string;
   /** `true` to include archived policies (default: hidden). */
   readonly includeArchived?: 'true' | 'false';
+  /** `YYYY-MM-DD`, inclusive: end date of the current period. */
+  readonly endsFrom?: string;
+  readonly endsTo?: string;
 }
 
 export interface BffInsurancePolicyRevision {

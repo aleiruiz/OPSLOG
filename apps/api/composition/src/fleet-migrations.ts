@@ -40,6 +40,7 @@ import {
 } from '../../../../packages/persistence/audit/src/index.js';
 import { maintenanceMigrationSteps } from './maintenance-source.js';
 import { incidentMigrationSteps } from './incident-source.js';
+import { savedViewsMigrationSteps } from './saved-views-source.js';
 import { searchMigrationSteps } from './search-source.js';
 
 type FleetDataSource = ReturnType<typeof createAreasMigrationDataSource>;
@@ -155,6 +156,11 @@ export function createFleetMigrationModules(
     ).map((step) => migrationModule(step.name, step.version, step.source, step.run)),
     // The search projection indexes the modules above and is derived from them.
     ...searchMigrationSteps(
+      { host: credentials.host, port: credentials.port, database: credentials.database },
+      { username: credentials.username, password: credentials.password },
+    ).map((step) => migrationModule(step.name, step.version, step.source, step.run)),
+    // Saved views and visible columns of the lists: no dependency on the modules.
+    ...savedViewsMigrationSteps(
       { host: credentials.host, port: credentials.port, database: credentials.database },
       { username: credentials.username, password: credentials.password },
     ).map((step) => migrationModule(step.name, step.version, step.source, step.run)),

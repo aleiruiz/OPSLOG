@@ -91,6 +91,9 @@
     { "path": "./tests/e2e/maintenance" },
     { "path": "./packages/domain/search" },
     { "path": "./packages/persistence/search" },
-    { "path": "./apps/api/search" }
+    { "path": "./apps/api/search" },
+    { "path": "./packages/domain/saved-views" },
+    { "path": "./packages/persistence/saved-views" },
+    { "path": "./apps/api/saved-views" }
   ]
 }

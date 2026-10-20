@@ -418,6 +418,18 @@ suite('persistent document store on MySQL', () => {
       expect(await ids({ ownerType: 'vehicle', ownerId: 'veh-2' })).toEqual([d2.id]);
       expect(await ids({ ownerType: 'employee', ownerId: 'veh-2' })).toEqual([]);
       expect(await ids({ typeCode: 'ownership_title' })).toEqual([d3.id]);
+      // The expiry range is inclusive, leaves out documents without expiry and combines with the status.
+      expect(await ids({ expiresFrom: '2026-10-06', expiresTo: '2026-11-05' })).toEqual([
+        d4.id,
+        e1.id,
+        d5.id,
+      ]);
+      expect(await ids({ expiresFrom: '2026-11-06' })).toEqual([d6.id, d1.id]);
+      expect(await ids({ expiresTo: '2026-10-01' })).toEqual([d2.id]);
+      expect(
+        await ids({ status: 'valid', expiresFrom: '2026-11-06', expiresTo: '2026-11-30' }),
+      ).toEqual([d6.id]);
+      expect(await ids({ status: 'expired', expiresFrom: '2026-11-06' })).toEqual([]);
       const page = await svcA.list(tenant, { limit: 3, offset: 2 });
       expect(page.items.map((d) => d.id)).toEqual([e1.id, d5.id, d6.id]);
       expect(page.total).toBe(7);

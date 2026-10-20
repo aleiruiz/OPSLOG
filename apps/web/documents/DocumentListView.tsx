@@ -19,6 +19,9 @@ import { linkSx, RouterButton, RouterLink } from '../app/router';
 import { ScrollRegion } from '../app/ScrollRegion';
 import type { Document, DocumentOwnerType, DocumentStatus } from '../app/types';
 import type { VehicleOptions } from '../app/vehicleOptions';
+import { ExtraFilters } from '../features/search/views/ExtraFilters';
+import type { ListState } from '../features/search/views/useListState';
+import { ViewsBar } from '../features/search/views/ViewsBar';
 import {
   allTypes,
   expiryNote,
@@ -66,6 +69,8 @@ export interface DocumentListViewProps {
   readonly vehicles: VehicleOptions | null;
   readonly can: (permission: 'create' | 'edit') => boolean;
   readonly filtersActive: boolean;
+  /** Address filters, saved views and columns; stories and tests of the bare view omit it. */
+  readonly list?: ListState;
   readonly loadingMore?: boolean;
   readonly notice?: { readonly text: string; readonly severity: 'success' | 'error' } | null;
   readonly onFiltersChange: (filters: DocumentFilters) => void;
@@ -81,6 +86,7 @@ export function DocumentListView({
   vehicles,
   can,
   filtersActive,
+  list,
   loadingMore = false,
   notice = null,
   onFiltersChange,
@@ -89,6 +95,8 @@ export function DocumentListView({
   onLoadMore,
 }: DocumentListViewProps) {
   const uid = React.useId();
+  const shown = <T extends { key: string }>(columns: T[]): T[] =>
+    list ? list.columns.visible(columns) : columns;
   const names = new Map((vehicles?.items ?? []).map((item) => [item.id, item.economicNumber]));
   const typeChoices = filters.ownerType === '' ? allTypes() : DOCUMENT_TYPES[filters.ownerType];
   const select = (
@@ -138,6 +146,7 @@ export function DocumentListView({
       )}
       <NoSubmit>
         <Panel>
+          {list && <ViewsBar list={list} />}
           <FilterBar onClear={onClear}>
             {select(
               'status',
@@ -215,6 +224,13 @@ export function DocumentListView({
                 <option value="true">Incluir archivados</option>
               </>,
             )}
+            {list && (
+              <ExtraFilters
+                list={list}
+                keys={['expiresFrom', 'expiresTo']}
+                pageSizeLabel="Documentos por página"
+              />
+            )}
           </FilterBar>
         </Panel>
       </NoSubmit>
@@ -244,7 +260,7 @@ export function DocumentListView({
                 <ScrollRegion label="Tabla de documentos">
                   <DataTable<Row>
                     caption={`Documentos (${page.total})`}
-                    columns={[
+                    columns={shown([
                       {
                         key: 'title',
                         label: 'Documento',
@@ -341,7 +357,7 @@ export function DocumentListView({
                             </Box>
                           ) : null,
                       },
-                    ]}
+                    ])}
                     rows={rows}
                   />
                 </ScrollRegion>

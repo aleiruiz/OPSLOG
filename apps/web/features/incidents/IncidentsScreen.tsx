@@ -109,6 +109,7 @@ export function IncidentsScreen({
       photoRequired,
       approvalThreshold: threshold,
       onExpired: markExpired,
+      views: ports.views,
     }),
     [ports, permissions, userId, zone, members, drivers, photoRequired, threshold],
   );

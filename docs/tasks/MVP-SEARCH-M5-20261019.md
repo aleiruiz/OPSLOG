@@ -132,3 +132,20 @@ Corrida local del 2026-10-19, MySQL 8.0.46 en loopback, una empresa, 100.000 ent
 Reconcile completo (fuentes en memoria): carga inicial 22,8 s, estado estable 1,2 s. EXPLAIN del
 prefijo: `range` sobre `ix_search_prefix`, `Using index`. Detalle en `docs/operations/SEARCH_PERFORMANCE.md`.
 La corrida de 1 M sigue como paso manual pendiente.
+
+## Evidencia (PR 2)
+
+Corrida local del 2026-10-19, MySQL 8.0.46 en loopback, rama `claude/mvp-search-pr2` sobre `claude/mvp-audit-ui`.
+Matriz requisito → contrato → implementación → prueba, claves de URL por listado e inventario de filtros de BRD
+§14.2 (hechos y pendientes): `docs/traceability/search.md`. Desviaciones: mantenimiento filtra en el cliente
+(`workOrders.list` no pagina), orden de servidor solo en siniestros, sin atajos de fecha, la página no va en la URL.
+
+```text
+pnpm install --frozen-lockfile && pnpm typecheck && pnpm lint && pnpm format:check
+pnpm --filter @opslog/web test:unit            # 101 archivos, 1.382 pruebas, umbrales 95/90 cumplidos
+pnpm test:unit de contracts, domain/persistence/api de saved-views y de vehículos, empleados, documentos, seguros
+OPSLOG_TEST_MYSQL_ADMIN_URL=mysql://root@127.0.0.1:3306/mysql pnpm --filter @opslog/persistence-saved-views test:integration
+OPSLOG_TEST_MYSQL_ADMIN_URL=... pnpm test:platform   # 5 archivos de tests/e2e/maintenance exigen MySQL 8.4 (local 8.0.46)
+```
+
+Las pruebas web asíncronas nuevas se repitieron 10 veces sin fallos.

@@ -41,6 +41,13 @@ export type { EmployeeAuditAction, MockEmployeeEnvironment, MockEmployeeStore };
 
 const NOW = '2026-10-06T12:00:00.000Z';
 
+/** Whether an optional day falls in the inclusive range; a record without the day never matches a bound. */
+const within = (day: string | null | undefined, from?: string, to?: string): boolean =>
+  (from === undefined && to === undefined) ||
+  (typeof day === 'string' &&
+    (from === undefined || day >= from) &&
+    (to === undefined || day <= to));
+
 export function createMockEmployeeStore(
   env: MockEmployeeEnvironment,
   seed: readonly EmployeeDetail[] = demoMockEmployees(),
@@ -135,7 +142,9 @@ export function createMockEmployeeStore(
             (query.includeArchived === 'true' || row.archivedAt === null) &&
             (query.kind === undefined || row.kind === query.kind) &&
             (query.status === undefined || row.status === query.status) &&
-            (query.areaId === undefined || row.areaId === query.areaId),
+            (query.areaId === undefined || row.areaId === query.areaId) &&
+            within(row.hireDate, query.hiredFrom, query.hiredTo) &&
+            within(row.licenseExpiresOn, query.licenseExpiresFrom, query.licenseExpiresTo),
         )
         .sort((a, b) => compare(sortKey(a), sortKey(b)) || compare(a.id, b.id))
         .map(view);

@@ -66,6 +66,12 @@ export interface BffVehiclesQuery {
   readonly areaId?: string;
   /** `true` to include archived vehicles (default: hidden). */
   readonly includeArchived?: 'true' | 'false';
+  /** Model year, inclusive range. */
+  readonly yearFrom?: number;
+  readonly yearTo?: number;
+  /** Odometer reading in km, inclusive range. */
+  readonly kmFrom?: number;
+  readonly kmTo?: number;
 }
 
 export interface BffVehicleStatusEntry {
