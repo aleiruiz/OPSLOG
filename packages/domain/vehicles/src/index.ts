@@ -45,6 +45,9 @@ export {
   type VehicleSlice,
   type VehicleStore,
   type VehicleAreaGate,
+  type VehicleAnalyticsReads,
+  type VehicleAnalyticsRow,
+  type VehicleStatusChange,
 } from './ports.js';
 export { InMemoryVehicleStore } from './store.js';
 export { type VehicleListQuery, type VehicleServiceOptions, VehicleService } from './service.js';

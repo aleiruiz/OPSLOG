@@ -1,9 +1,11 @@
 import 'reflect-metadata';
 import {
   Between,
+  In,
   IsNull,
   LessThan,
   MoreThan,
+  MoreThanOrEqual,
   type DataSource,
   type EntityManager,
   type FindOptionsWhere,
@@ -13,12 +15,16 @@ import {
   isDocumentType,
   isOwnerType,
   type Document,
+  type DocumentAnalyticsReads,
   type DocumentFilter,
+  type DocumentOwnerScope,
+  type DocumentOwnerType,
   type DocumentRevision,
   type DocumentRevisionSlice,
   type DocumentSlice,
   type DocumentStore,
   type DocumentWindow,
+  type ValidRequiredDocument,
 } from '../../../domain/documents/src/index.js';
 import { DOCUMENTS_RUNTIME_ACCOUNT } from './data-source.js';
 import { appendLocalAuditAndDelivery, type AuditEvent } from '../../audit/src/index.js';
@@ -155,7 +161,7 @@ function expiryCondition(expiry: NonNullable<DocumentFilter['expiry']>) {
  * - Driver errors never leave this class: everything becomes the sanitized `DocumentStoreError`
  *   (no SQL, no parameters).
  */
-export class TypeOrmDocumentStore implements DocumentStore {
+export class TypeOrmDocumentStore implements DocumentStore, DocumentAnalyticsReads {
   private readonly maxAttempts: number;
   private readonly onError: ((event: StoreErrorEvent) => void) | undefined;
 
@@ -284,6 +290,65 @@ export class TypeOrmDocumentStore implements DocumentStore {
           skip: window.offset,
         });
       return { items: rows.map(toRevision), total };
+    });
+  }
+
+  public async analyticsCountExpiring(
+    tenantId: string,
+    window: { readonly from: string; readonly until: string },
+    scope: DocumentOwnerScope | null,
+  ): Promise<number> {
+    const base = {
+      tenantId,
+      archivedAt: IsNull(),
+      expiryKey: Between(window.from, window.until),
+    };
+    if (scope === null)
+      return this.single('analytics', () =>
+        this.dataSource.getRepository(DocumentEntity).countBy(base),
+      );
+    // One condition per owner type: a list of conditions is an OR.
+    const owners: FindOptionsWhere<DocumentEntity>[] = [
+      ...(scope.vehicle.length === 0 ? [] : [{ ...base, vehicleId: In([...scope.vehicle]) }]),
+      ...(scope.employee.length === 0 ? [] : [{ ...base, employeeId: In([...scope.employee]) }]),
+    ];
+    if (owners.length === 0) return 0;
+    return this.single('analytics', () =>
+      this.dataSource.getRepository(DocumentEntity).count({ where: owners }),
+    );
+  }
+
+  public async analyticsValidRequired(
+    tenantId: string,
+    today: string,
+    types: Readonly<Record<DocumentOwnerType, readonly string[]>>,
+  ): Promise<readonly ValidRequiredDocument[]> {
+    return this.single('analytics', async () => {
+      const found = new Map<string, ValidRequiredDocument>();
+      for (const ownerType of ['vehicle', 'employee'] as const) {
+        if (types[ownerType].length === 0) continue;
+        const rows = await this.dataSource.getRepository(DocumentEntity).find({
+          select: { vehicleId: true, employeeId: true, typeCode: true },
+          where: {
+            tenantId,
+            ownerType,
+            archivedAt: IsNull(),
+            typeCode: In([...types[ownerType]]),
+            // `9999-12-31` stands for "no expiry", so this also keeps documents that never expire.
+            expiryKey: MoreThanOrEqual(today),
+          },
+        });
+        for (const row of rows) {
+          const ownerId = ownerType === 'vehicle' ? row.vehicleId : row.employeeId;
+          if (ownerId === null) throw new DocumentStoreError('integrity');
+          found.set(`${ownerType}\u0000${ownerId}\u0000${row.typeCode}`, {
+            ownerType,
+            ownerId,
+            typeCode: row.typeCode,
+          });
+        }
+      }
+      return [...found.values()];
     });
   }
 }

@@ -159,6 +159,22 @@ export interface WorkOrderMutation {
   readonly idempotency?: IdempotencyClaim;
 }
 
+/** Aggregate read of a closed order for the dashboard: only dates, kind and money, no free text. */
+export interface ClosedOrderFact {
+  readonly vehicleId: string;
+  readonly kind: WorkOrderKind;
+  readonly scheduledDate: string | null;
+  readonly actualDate: string | null;
+  readonly costs: readonly Money[];
+}
+/** Optional analytics port of the store (dashboard); orders closed in `[from, to)` by `closedAt`. */
+export interface WorkOrderAnalyticsReads {
+  closedFacts(
+    tenantId: string,
+    window: { readonly from: string; readonly to: string },
+  ): Promise<readonly ClosedOrderFact[]>;
+}
+
 export interface WorkOrderStore {
   /** Applies the mutation atomically; returns false on a stale version or a taken key (nothing written). */
   apply(mutation: WorkOrderMutation): Promise<boolean>;

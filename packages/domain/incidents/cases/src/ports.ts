@@ -30,6 +30,28 @@ export interface IncidentStore {
   ): Promise<IdempotencyRecord | null>;
 }
 
+/** Report, first resolution and closure instants of a case, for the dashboard. No text, no ids. */
+export interface IncidentTimelineRow {
+  readonly reportedAt: string | null;
+  /** Resolution of the first cycle (the first `resolve` entry); null while it is unresolved. */
+  readonly firstResolvedAt: string | null;
+  readonly closedAt: string | null;
+}
+/** Optional aggregate reads of the store (dashboard). `areaIds: null` reads the whole company. */
+export interface IncidentAnalyticsReads {
+  /** Cases past `draft` and not `closed` or `cancelled`, whole (the SLA reader needs the case). */
+  analyticsOpenCases(
+    tenantId: string,
+    areaIds: readonly string[] | null,
+  ): Promise<readonly Incident[]>;
+  /** Cases reported, first resolved or closed in `[from, to)`. */
+  analyticsTimeline(
+    tenantId: string,
+    areaIds: readonly string[] | null,
+    window: { readonly from: string; readonly to: string },
+  ): Promise<readonly IncidentTimelineRow[]>;
+}
+
 /** A live (not archived) vehicle of the tenant. */
 export interface VehicleRef {
   readonly id: string;

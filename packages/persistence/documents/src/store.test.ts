@@ -509,3 +509,104 @@ describe('through the domain service', () => {
     });
   });
 });
+
+describe('aggregate reads for the dashboard', () => {
+  async function seeded() {
+    const ctx = setup();
+    const docs = [
+      document(A, 'd1', { expiresOn: '2026-10-25' }),
+      document(A, 'd2', {
+        ownerId: 'veh-2',
+        typeCode: 'technical_inspection',
+        expiresOn: '2026-11-18',
+      }),
+      document(A, 'd3', { ownerId: 'veh-2', expiresOn: '2026-11-19' }),
+      document(A, 'd4', { typeCode: 'transport_permit', expiresOn: '2026-10-18' }),
+      document(A, 'd5', {
+        ownerType: 'employee',
+        ownerId: 'emp-1',
+        typeCode: 'medical_exam',
+        expiresOn: '2026-10-19',
+      }),
+      bare(A, 'd6', { ownerId: 'emp-2', typeCode: 'other' }),
+      document(A, 'd7', {
+        ownerId: 'veh-3',
+        expiresOn: '2026-10-30',
+        archivedAt: NOW.toISOString(),
+      }),
+      document(A, 'd9', { expiresOn: '2027-06-01' }),
+      document(B, 'd8', { expiresOn: '2026-10-25' }),
+    ];
+    for (const d of docs) await ctx.store.insert(d, revision(d));
+    return ctx;
+  }
+  const range = { from: '2026-10-19', until: '2026-11-18' };
+
+  it('counts the documents that expire in the window, per tenant and owners, archived never', async () => {
+    const { db, store } = await seeded();
+    expect(await store.analyticsCountExpiring(A, range, null)).toBe(3);
+    expect(await store.analyticsCountExpiring(A, range, { vehicle: ['veh-1'], employee: [] })).toBe(
+      1,
+    );
+    expect(
+      await store.analyticsCountExpiring(A, range, { vehicle: ['veh-2'], employee: ['emp-1'] }),
+    ).toBe(2);
+    expect(await store.analyticsCountExpiring(A, range, { vehicle: [], employee: ['emp-1'] })).toBe(
+      1,
+    );
+    expect(await store.analyticsCountExpiring(A, range, { vehicle: [], employee: [] })).toBe(0);
+    expect(await store.analyticsCountExpiring(B, range, null)).toBe(1);
+    expect(await store.analyticsCountExpiring('tenant-c', range, null)).toBe(0);
+    for (const statement of db.statements.filter((s) => s.operation === 'count'))
+      for (const where of [statement.where].flat()) expect(where).toHaveProperty('tenantId');
+  });
+
+  it('lists the distinct valid (owner, type) pairs of the types asked, without titles or numbers', async () => {
+    const { store } = await seeded();
+    const types = {
+      vehicle: ['registration_card', 'technical_inspection', 'transport_permit'],
+      employee: ['medical_exam'],
+    };
+    const found = await store.analyticsValidRequired(A, '2026-10-19', types);
+    expect(
+      found.map((pair) => `${pair.ownerType}/${pair.ownerId}/${pair.typeCode}`).sort(),
+    ).toEqual([
+      'employee/emp-1/medical_exam',
+      'vehicle/veh-1/registration_card',
+      'vehicle/veh-2/registration_card',
+      'vehicle/veh-2/technical_inspection',
+    ]);
+    for (const pair of found)
+      expect(Object.keys(pair).sort()).toEqual(['ownerId', 'ownerType', 'typeCode']);
+    expect(
+      await store.analyticsValidRequired(B, '2026-10-19', { vehicle: [], employee: [] }),
+    ).toEqual([]);
+    expect(
+      (
+        await store.analyticsValidRequired(B, '2026-10-19', {
+          vehicle: ['registration_card'],
+          employee: [],
+        })
+      ).length,
+    ).toBe(1);
+  });
+
+  it('reports a corrupt owner and a failing read without leaking', async () => {
+    const { db, store } = await seeded();
+    db.failNext('count', CONNECTION_LOST, { leak: 'veh-secret' });
+    const failure = await rejection(
+      store.analyticsCountExpiring(A, range, { vehicle: ['veh-secret'], employee: [] }),
+    );
+    expect(failure).toMatchObject({ code: 'unavailable' });
+    expect(JSON.stringify(failure)).not.toContain('veh-secret');
+    db.seed(DocumentEntity, { ...(db.committed(DocumentEntity)[0] as object), vehicleId: null });
+    expect(
+      await rejection(
+        store.analyticsValidRequired(A, '2026-10-19', {
+          vehicle: ['registration_card', 'technical_inspection', 'transport_permit'],
+          employee: [],
+        }),
+      ),
+    ).toMatchObject({ code: 'integrity' });
+  });
+});

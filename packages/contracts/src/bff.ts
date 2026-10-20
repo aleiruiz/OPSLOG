@@ -32,6 +32,8 @@ import type { IncidentWorkflowRouteTypes } from './bff/incident-workflow.js';
 import { INCIDENT_WORKFLOW_ROUTES } from './bff/incident-workflow.js';
 import type { AuditRouteTypes } from './bff/audit.js';
 import { AUDIT_ROUTES } from './bff/audit.js';
+import type { AnalyticsRouteTypes } from './bff/analytics.js';
+import { ANALYTICS_ROUTES } from './bff/analytics.js';
 import type { SearchRouteTypes } from './bff/search.js';
 import { SEARCH_ROUTES } from './bff/search.js';
 import type { BffRouteDefinition } from './bff/shared.js';
@@ -65,7 +67,8 @@ export interface BffRouteTypes
     IncidentCostRouteTypes,
     IncidentSlaRouteTypes,
     AuditRouteTypes,
-    SearchRouteTypes {}
+    SearchRouteTypes,
+    AnalyticsRouteTypes {}
 
 export type BffRouteId = keyof BffRouteTypes;
 
@@ -88,6 +91,7 @@ export const BFF_ROUTES = {
   ...INCIDENT_SLA_ROUTES,
   ...AUDIT_ROUTES,
   ...SEARCH_ROUTES,
+  ...ANALYTICS_ROUTES,
 } as const satisfies Record<BffRouteId, BffRouteDefinition>;
 
 type Parts<K extends BffRouteId> = Omit<BffRouteTypes[K], 'response'>;

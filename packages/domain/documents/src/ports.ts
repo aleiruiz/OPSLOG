@@ -56,3 +56,38 @@ export interface DocumentStore {
 export interface DocumentOwnerGate {
   assertLive(tenantId: string, ownerType: DocumentOwnerType, ownerId: string): Promise<void>;
 }
+
+/** The owners a document count is restricted to; `null` where it is used means no restriction. */
+export interface DocumentOwnerScope {
+  readonly vehicle: readonly string[];
+  readonly employee: readonly string[];
+}
+
+/** A (owner, type) pair that has a valid document: the dashboard needs no title, number or note. */
+export interface ValidRequiredDocument {
+  readonly ownerType: DocumentOwnerType;
+  readonly ownerId: string;
+  readonly typeCode: string;
+}
+
+/**
+ * Aggregate reads of the dashboard (MVP-ANALYTICS), apart from `DocumentStore` so other stores keep
+ * working. Every method names the tenant; archived documents never count.
+ */
+export interface DocumentAnalyticsReads {
+  /** Documents whose last valid day is within `[from, until]` (inclusive), of the given owners. */
+  analyticsCountExpiring(
+    tenantId: string,
+    window: { readonly from: string; readonly until: string },
+    scope: DocumentOwnerScope | null,
+  ): Promise<number>;
+  /**
+   * The distinct (owner, type) pairs, of the given types per owner type, that have a document that
+   * is valid on `today` (last valid day today or later, or no expiry).
+   */
+  analyticsValidRequired(
+    tenantId: string,
+    today: string,
+    types: Readonly<Record<DocumentOwnerType, readonly string[]>>,
+  ): Promise<readonly ValidRequiredDocument[]>;
+}

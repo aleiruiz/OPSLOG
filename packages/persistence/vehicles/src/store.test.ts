@@ -466,3 +466,103 @@ describe('through the domain service', () => {
     expect((await svc.list(B)).total).toBe(1);
   });
 });
+
+describe('aggregate reads for the dashboard', () => {
+  const at = (hours: number) => new Date(NOW.getTime() + hours * 3_600_000);
+  async function seeded() {
+    const { db, store, events } = setup();
+    const rows = [
+      vehicle(A, 'v1', { economicNumber: 'U-1', plate: 'P1', vin: null, areaId: 'area-1' }),
+      vehicle(A, 'v2', {
+        economicNumber: 'U-2',
+        plate: 'P2',
+        vin: null,
+        areaId: 'area-2',
+        status: 'out_of_service',
+        odometerUpdatedAt: NOW.toISOString(),
+      }),
+      vehicle(A, 'v3', {
+        economicNumber: 'U-3',
+        plate: 'P3',
+        vin: null,
+        areaId: 'area-1',
+        archivedAt: at(5).toISOString(),
+      }),
+      vehicle(B, 'v1', { economicNumber: 'U-1', plate: 'P1', vin: null, areaId: 'area-1' }),
+    ];
+    for (const row of rows) await store.insert(row, entryOf(row));
+    return { db, store, events };
+  }
+
+  it('reads the live vehicles and the ones archived since the instant, by area, per tenant', async () => {
+    const { db, store } = await seeded();
+    const ids = async (tenant: string, areas: string[] | null, since: Date) =>
+      (await store.analyticsVehicles(tenant, areas, since.toISOString()))
+        .map((row) => row.id)
+        .sort();
+    expect(await ids(A, null, at(6))).toEqual(['v1', 'v2']);
+    expect(await ids(A, null, at(5))).toEqual(['v1', 'v2', 'v3']);
+    expect(await ids(A, ['area-1'], at(0))).toEqual(['v1', 'v3']);
+    expect(await ids(A, ['area-1', 'area-2'], at(6))).toEqual(['v1', 'v2']);
+    expect(await ids(A, [], at(0))).toEqual([]);
+    expect(await ids(B, null, at(0))).toEqual(['v1']);
+    expect(await ids('tenant-c', null, at(0))).toEqual([]);
+    expect(await store.analyticsVehicles(A, ['area-2'], at(0).toISOString())).toEqual([
+      {
+        id: 'v2',
+        areaId: 'area-2',
+        status: 'out_of_service',
+        odometerKm: 1000,
+        odometerUpdatedAt: NOW.toISOString(),
+        archivedAt: null,
+      },
+    ]);
+    // Only the lite columns are selected, and every statement names the tenant.
+    for (const statement of db.statements.filter((s) => s.operation === 'find'))
+      for (const where of [statement.where].flat()) expect(where).toHaveProperty('tenantId');
+  });
+
+  it('reads the status changes up to the instant for the vehicles asked, oldest first', async () => {
+    const { store } = await seeded();
+    const current = (await store.find(A, 'v2')) as Vehicle;
+    const back = { ...current, status: 'active' as const, version: 2 };
+    expect(
+      await store.replace(back, 1, statusEntry(back, 'out_of_service', 'entry-2b', ACTOR, at(2))),
+    ).toBe(true);
+    const early = await store.analyticsStatusChanges(A, ['v2', 'v1'], at(1).toISOString());
+    expect(early.map((change) => [change.vehicleId, change.to]).sort()).toEqual([
+      ['v1', 'active'],
+      ['v2', 'out_of_service'],
+    ]);
+    const all = await store.analyticsStatusChanges(A, ['v2'], at(3).toISOString());
+    expect(all.map((change) => change.to)).toEqual(['out_of_service', 'active']);
+    expect(await store.analyticsStatusChanges(B, ['v2'], at(3).toISOString())).toEqual([]);
+    expect(await store.analyticsStatusChanges(A, [], at(3).toISOString())).toEqual([]);
+  });
+
+  it('reads a long fleet in several statements', async () => {
+    const { db, store } = await seeded();
+    const ids = Array.from({ length: 1201 }, (_, index) => `ghost-${index}`);
+    const before = db.statements.length;
+    expect(await store.analyticsStatusChanges(A, ids, at(1).toISOString())).toEqual([]);
+    expect(db.statements.slice(before).filter((s) => s.operation === 'find')).toHaveLength(3);
+  });
+
+  it('reports a corrupt status and a failing read without leaking', async () => {
+    const { db, store, events } = await seeded();
+    db.seed(VehicleEntity, { ...db.committed(VehicleEntity)[0], status: 'Activo' });
+    expect(await rejection(store.analyticsVehicles(A, null, at(0).toISOString()))).toMatchObject({
+      code: 'integrity',
+    });
+    const history = db.committed(VehicleStatusEntryEntity)[0] as Record<string, unknown>;
+    db.seed(VehicleStatusEntryEntity, { ...history, toStatus: 'Baja' });
+    expect(
+      await rejection(store.analyticsStatusChanges(A, ['v1', 'v2'], at(1).toISOString())),
+    ).toMatchObject({ code: 'integrity' });
+    db.failNext('find', CONNECTION_LOST, { leak: 'area-secret' });
+    const error = await rejection(store.analyticsVehicles(A, ['area-secret'], at(0).toISOString()));
+    expect(error).toMatchObject({ code: 'unavailable' });
+    expect(JSON.stringify(error)).not.toContain('area-secret');
+    expect(events.map((event) => event.code)).toEqual(['integrity', 'integrity', 'unavailable']);
+  });
+});

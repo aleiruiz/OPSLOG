@@ -31,7 +31,9 @@ import type { PlatformAdapters } from './types.js';
 const idOrNull = (value: unknown): string | null => (typeof value === 'string' ? value : null);
 
 /** One set of maintenance stores shared by the plans and work order APIs (in-memory by default). */
-export function withMaintenanceDefaults(adapters: PlatformAdapters): PlatformAdapters {
+export function withMaintenanceDefaults(
+  adapters: PlatformAdapters,
+): PlatformAdapters & Required<Pick<PlatformAdapters, 'maintenancePlans' | 'maintenanceOrders'>> {
   return {
     ...adapters,
     maintenancePlans: adapters.maintenancePlans ?? new InMemoryMaintenancePlanStore(),

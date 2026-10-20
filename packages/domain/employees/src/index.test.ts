@@ -793,6 +793,28 @@ describe('EmployeeService', () => {
     expect(await store.countLiveInArea(B, 'a-1')).toBe(1);
     expect(await store.countLiveInArea('tenant-c', 'a-1')).toBe(0);
   });
+
+  it('reads kind and status of the live employees for the dashboard, per area and tenant', async () => {
+    const store = new InMemoryEmployeeStore();
+    const { svc } = setup({ store });
+    const a = await svc.create(A, ACTOR, minimal({ areaId: 'a-1' }));
+    const b = await svc.create(A, ACTOR, driver({ areaId: 'a-2' }));
+    const gone = await svc.create(A, ACTOR, minimal({ firstName: 'C', areaId: 'a-1' }));
+    await svc.create(B, ACTOR, minimal({ firstName: 'D', areaId: 'a-1' }));
+    await svc.archive(A, gone.id, 1);
+    await svc.changeStatus(A, ACTOR, a.id, 1, 'inactive', 'x');
+    const rows = await store.analyticsEmployees(A, null);
+    expect(rows.map((row) => row.id).sort()).toEqual([a.id, b.id].sort());
+    expect(rows.find((row) => row.id === a.id)).toEqual({
+      id: a.id,
+      kind: a.kind,
+      status: 'inactive',
+    });
+    expect((await store.analyticsEmployees(A, ['a-2'])).map((row) => row.id)).toEqual([b.id]);
+    expect(await store.analyticsEmployees(A, [])).toEqual([]);
+    expect(await store.analyticsEmployees('tenant-c', null)).toEqual([]);
+    expect(await store.analyticsEmployees(B, null)).toHaveLength(1);
+  });
 });
 
 describe('area membership', () => {

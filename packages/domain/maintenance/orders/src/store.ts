@@ -1,6 +1,8 @@
 import { validateWorkOrderEvent } from './events.js';
 import type { IdempotencyRecord, IdempotentCommand } from './idempotency.js';
 import type {
+  ClosedOrderFact,
+  WorkOrderAnalyticsReads,
   WorkOrderAttachment,
   WorkOrder,
   WorkOrderEvent,
@@ -13,7 +15,7 @@ const key = (tenantId: string, id: string) => `${tenantId.length}:${tenantId}${i
 const OPEN_WORKSHOP: readonly WorkOrder['status'][] = ['in_progress', 'completed'];
 
 /** In-memory store for unit tests and the non-persistent composition; same CAS semantics as MySQL. */
-export class InMemoryWorkOrderStore implements WorkOrderStore {
+export class InMemoryWorkOrderStore implements WorkOrderStore, WorkOrderAnalyticsReads {
   private readonly orders = new Map<string, WorkOrder>();
   private readonly transitions = new Map<string, WorkOrderTransition[]>();
   private readonly files = new Map<string, WorkOrderAttachment[]>();
@@ -87,6 +89,27 @@ export class InMemoryWorkOrderStore implements WorkOrderStore {
       )
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id))
       .map((order) => structuredClone(order));
+  }
+  public async closedFacts(
+    tenantId: string,
+    window: { readonly from: string; readonly to: string },
+  ): Promise<readonly ClosedOrderFact[]> {
+    return [...this.orders.values()]
+      .filter(
+        (order) =>
+          order.tenantId === tenantId &&
+          order.status === 'closed' &&
+          order.closedAt !== null &&
+          order.closedAt >= window.from &&
+          order.closedAt < window.to,
+      )
+      .map((order) => ({
+        vehicleId: order.vehicleId,
+        kind: order.kind,
+        scheduledDate: order.scheduledDate,
+        actualDate: order.actualDate,
+        costs: order.costs.map((cost) => ({ ...cost.amount })),
+      }));
   }
   public async history(tenantId: string, id: string): Promise<readonly WorkOrderTransition[]> {
     return structuredClone(this.transitions.get(key(tenantId, id)) ?? []);

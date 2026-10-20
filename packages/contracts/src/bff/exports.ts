@@ -311,3 +311,4 @@ export type {
   BffSearchResult,
   BffSearchQuery,
 } from './search.js';
+export * from './analytics.js';

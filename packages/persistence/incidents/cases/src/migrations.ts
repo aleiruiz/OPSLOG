@@ -126,3 +126,24 @@ export class CreateIncidentCases2026101500010 implements MigrationInterface {
     await queryRunner.dropTable(T.incidents);
   }
 }
+
+export const INCIDENT_ANALYTICS_INDEX_MIGRATION_VERSION = '2026101900010';
+
+/** Dashboard reads (MVP-ANALYTICS): open cases, and cases reported, resolved or closed in a range. */
+export class AddIncidentAnalyticsIndexes2026101900010 implements MigrationInterface {
+  public name = 'AddIncidentAnalyticsIndexes2026101900010';
+  private static readonly INDEXES = [
+    ['ix_incident_status', 'company_id,status'],
+    ['ix_incident_reported', 'company_id,reported_at'],
+    ['ix_incident_closed', 'company_id,closed_at'],
+    ['ix_incident_resolved', 'company_id,cycle,resolved_at'],
+  ] as const;
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    for (const [name, columns] of AddIncidentAnalyticsIndexes2026101900010.INDEXES)
+      await queryRunner.query(`CREATE INDEX ${name} ON \`${T.incidents}\` (${columns})`);
+  }
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    for (const [name] of AddIncidentAnalyticsIndexes2026101900010.INDEXES)
+      await queryRunner.query(`DROP INDEX ${name} ON \`${T.incidents}\``);
+  }
+}

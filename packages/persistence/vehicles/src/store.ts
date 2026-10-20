@@ -1,14 +1,25 @@
 import 'reflect-metadata';
-import { IsNull, LessThanOrEqual, Not, type DataSource, type EntityManager } from 'typeorm';
+import {
+  In,
+  IsNull,
+  LessThanOrEqual,
+  MoreThanOrEqual,
+  Not,
+  type DataSource,
+  type EntityManager,
+} from 'typeorm';
 import {
   VehicleError,
   economicNumberKey,
   isVehicleStatus,
   plateKey,
   type Vehicle,
+  type VehicleAnalyticsReads,
+  type VehicleAnalyticsRow,
   type VehicleConflictField,
   type VehicleFilter,
   type VehicleSlice,
+  type VehicleStatusChange,
   type VehicleStatusEntry,
   type VehicleStore,
   type VehicleWindow,
@@ -23,6 +34,9 @@ import {
   sanitizeStoreError,
   type VehicleStoreErrorCode,
 } from './errors.js';
+
+/** Ids per `IN (...)` list: the status history of a large fleet is read in several statements. */
+const ID_CHUNK = 500;
 
 /** Structured, PII-free report of a failed operation (operation name, coarse code, driver errno). */
 export interface StoreErrorEvent {
@@ -145,7 +159,7 @@ const auditEvent = (entry: VehicleStatusEntry): AuditEvent => ({
  * - Driver errors never leave this class: duplicates become `VehicleError('duplicate', field)`,
  *   everything else the sanitized `VehicleStoreError` (no SQL, parameters, plates or VINs).
  */
-export class TypeOrmVehicleStore implements VehicleStore {
+export class TypeOrmVehicleStore implements VehicleStore, VehicleAnalyticsReads {
   private readonly maxAttempts: number;
   private readonly onError: ((event: StoreErrorEvent) => void) | undefined;
 
@@ -311,5 +325,72 @@ export class TypeOrmVehicleStore implements VehicleStore {
           .find({ where: { tenantId, vehicleId }, order: { version: 'ASC' } })
       ).map(toEntry),
     );
+  }
+
+  public async analyticsVehicles(
+    tenantId: string,
+    areaIds: readonly string[] | null,
+    archivedSince: string,
+  ): Promise<readonly VehicleAnalyticsRow[]> {
+    if (areaIds !== null && areaIds.length === 0) return [];
+    const area = areaIds === null ? {} : { areaId: In([...areaIds]) };
+    return this.single('analytics', async () => {
+      const rows = await this.dataSource.getRepository(VehicleEntity).find({
+        select: {
+          id: true,
+          areaId: true,
+          status: true,
+          odometerKm: true,
+          odometerUpdatedAt: true,
+          archivedAt: true,
+        },
+        // Live vehicles, or archived at or after the instant (alive during the range).
+        where: [
+          { tenantId, ...area, archivedAt: IsNull() },
+          { tenantId, ...area, archivedAt: MoreThanOrEqual(new Date(archivedSince)) },
+        ],
+      });
+      return rows.map((row): VehicleAnalyticsRow => {
+        if (!isVehicleStatus(row.status)) throw new VehicleStoreError('integrity');
+        return {
+          id: row.id,
+          areaId: row.areaId,
+          status: row.status,
+          odometerKm: row.odometerKm,
+          odometerUpdatedAt: row.odometerUpdatedAt?.toISOString() ?? null,
+          archivedAt: row.archivedAt === null ? null : row.archivedAt.toISOString(),
+        };
+      });
+    });
+  }
+
+  public async analyticsStatusChanges(
+    tenantId: string,
+    vehicleIds: readonly string[],
+    until: string,
+  ): Promise<readonly VehicleStatusChange[]> {
+    return this.single('analytics', async () => {
+      const changes: { change: VehicleStatusChange; version: number }[] = [];
+      for (let start = 0; start < vehicleIds.length; start += ID_CHUNK) {
+        const rows = await this.dataSource.getRepository(VehicleStatusEntryEntity).find({
+          select: { vehicleId: true, toStatus: true, at: true, version: true },
+          where: {
+            tenantId,
+            vehicleId: In(vehicleIds.slice(start, start + ID_CHUNK)),
+            at: LessThanOrEqual(new Date(until)),
+          },
+        });
+        for (const row of rows) {
+          if (!isVehicleStatus(row.toStatus)) throw new VehicleStoreError('integrity');
+          changes.push({
+            version: row.version,
+            change: { vehicleId: row.vehicleId, to: row.toStatus, at: row.at.toISOString() },
+          });
+        }
+      }
+      return changes
+        .sort((a, b) => Date.parse(a.change.at) - Date.parse(b.change.at) || a.version - b.version)
+        .map(({ change }) => change);
+    });
   }
 }

@@ -491,3 +491,44 @@ describe('PolicyService', () => {
     expect((await svc.get(A, policy.id)).insurer).toBe('Aseguradora Ficticia');
   });
 });
+
+describe('aggregate reads for the dashboard', () => {
+  async function seeded() {
+    const store = new InMemoryPolicyStore();
+    const { svc } = service({ store });
+    const make = (tenant: string, over: Record<string, unknown>) =>
+      svc.create(tenant, ACTOR, body(over));
+    await make(A, { vehicleId: 'veh-1', endsOn: '2026-10-25' });
+    await make(A, { vehicleId: 'veh-2', endsOn: '2026-11-18' });
+    await make(A, { vehicleId: 'veh-3', endsOn: '2026-11-19' });
+    await make(A, { vehicleId: 'veh-4', endsOn: '2026-10-18' });
+    await make(A, { vehicleId: 'veh-5', startsOn: '2026-10-20', endsOn: '2027-10-19' });
+    const filed = await make(A, { vehicleId: 'veh-6', endsOn: '2026-10-30' });
+    await svc.archive(A, filed.id, filed.version);
+    await make(A, { vehicleId: 'veh-1', endsOn: '2027-06-01' });
+    await make(B, { vehicleId: 'veh-1', endsOn: '2026-10-25' });
+    return store;
+  }
+  const range = { from: '2026-10-19', until: '2026-11-18' };
+
+  it('counts the policies that end in the window, archived never, per tenant and vehicles', async () => {
+    const store = await seeded();
+    expect(await store.analyticsCountExpiring(A, range, null)).toBe(2);
+    expect(await store.analyticsCountExpiring(A, range, ['veh-1'])).toBe(1);
+    expect(await store.analyticsCountExpiring(A, range, [])).toBe(0);
+    expect(await store.analyticsCountExpiring(B, range, null)).toBe(1);
+  });
+
+  it('lists the vehicles covered on a day, each once, archived policies never', async () => {
+    const store = await seeded();
+    const ids = ['veh-1', 'veh-2', 'veh-3', 'veh-4', 'veh-5', 'veh-6', 'veh-9'];
+    expect([...(await store.analyticsCoveredVehicleIds(A, '2026-10-19', ids))].sort()).toEqual([
+      'veh-1',
+      'veh-2',
+      'veh-3',
+    ]);
+    expect(await store.analyticsCoveredVehicleIds(A, '2026-10-20', ['veh-5'])).toEqual(['veh-5']);
+    expect(await store.analyticsCoveredVehicleIds(B, '2026-10-19', ids)).toEqual(['veh-1']);
+    expect(await store.analyticsCoveredVehicleIds('tenant-c', '2026-10-19', ids)).toEqual([]);
+  });
+});

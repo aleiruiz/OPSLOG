@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { IsNull, Not, type DataSource, type EntityManager } from 'typeorm';
+import { In, IsNull, Not, type DataSource, type EntityManager } from 'typeorm';
 import {
   EmployeeError,
   employeeNumberKey,
@@ -7,6 +7,8 @@ import {
   isEmployeeStatus,
   nameKey,
   type Employee,
+  type EmployeeAnalyticsReads,
+  type EmployeeAnalyticsRow,
   type EmployeeConflictField,
   type EmployeeFilter,
   type EmployeeHistoryEntry,
@@ -174,7 +176,7 @@ const auditEvent = (entry: EmployeeHistoryEntry): AuditEvent => ({
  * - Driver errors never leave this class: duplicates become `EmployeeError('duplicate', field)`,
  *   everything else the sanitized `EmployeeStoreError` (no SQL, no parameters).
  */
-export class TypeOrmEmployeeStore implements EmployeeStore {
+export class TypeOrmEmployeeStore implements EmployeeStore, EmployeeAnalyticsReads {
   private readonly maxAttempts: number;
   private readonly onError: ((event: StoreErrorEvent) => void) | undefined;
 
@@ -350,6 +352,28 @@ export class TypeOrmEmployeeStore implements EmployeeStore {
           skip: window.offset,
         });
       return { items: rows.map(toEntry), total };
+    });
+  }
+
+  public async analyticsEmployees(
+    tenantId: string,
+    areaIds: readonly string[] | null,
+  ): Promise<readonly EmployeeAnalyticsRow[]> {
+    if (areaIds !== null && areaIds.length === 0) return [];
+    return this.single('analytics', async () => {
+      const rows = await this.dataSource.getRepository(EmployeeEntity).find({
+        select: { id: true, kind: true, status: true },
+        where: {
+          tenantId,
+          archivedAt: IsNull(),
+          ...(areaIds === null ? {} : { areaId: In([...areaIds]) }),
+        },
+      });
+      return rows.map((row): EmployeeAnalyticsRow => {
+        if (!isEmployeeKind(row.kind) || !isEmployeeStatus(row.status))
+          throw new EmployeeStoreError('integrity');
+        return { id: row.id, kind: row.kind, status: row.status };
+      });
     });
   }
 }

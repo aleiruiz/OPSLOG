@@ -54,6 +54,9 @@ interface Fault {
   readonly leak: string;
 }
 
+const comparable = (value: unknown): number | string =>
+  value instanceof Date ? value.getTime() : (value as number | string);
+
 const clone = (row: Row): Row => {
   const copy: Row = {};
   for (const [key, value] of Object.entries(row))
@@ -69,7 +72,11 @@ export class FakeDatabase {
     synchronize: false,
   };
   public readonly isolations: unknown[] = [];
-  public readonly statements: { operation: string; table: string; where: Row | null }[] = [];
+  public readonly statements: {
+    operation: string;
+    table: string;
+    where: Row | readonly Row[] | null;
+  }[] = [];
   public transactions = 0;
   /** Runs at the start of every statement; tests use it to commit a competing change in between. */
   public intercept: ((operation: string, table: string) => void) | null = null;
@@ -159,7 +166,12 @@ export class FakeDatabase {
     return table.primary.map((column) => String(row[column])).join('\u0000');
   }
 
-  public begin(operation: string, entity: EntityClass, where: Row | null, row: Row | null): void {
+  public begin(
+    operation: string,
+    entity: EntityClass,
+    where: Row | readonly Row[] | null,
+    row: Row | null,
+  ): void {
     const table = this.table(entity);
     this.statements.push({ operation, table: table.name, where });
     this.intercept?.(operation, table.name);
@@ -190,7 +202,13 @@ export class FakeDatabase {
           case 'not':
             return actual !== value;
           case 'lessThanOrEqual':
-            return typeof actual === 'number' && typeof value === 'number' && actual <= value;
+            return comparable(actual) <= comparable(value);
+          case 'moreThanOrEqual':
+            return (
+              actual !== null && actual !== undefined && comparable(actual) >= comparable(value)
+            );
+          case 'in':
+            return (value as unknown[]).includes(actual);
           default:
             throw new Error(`fake database: unsupported operator ${expected.type}`);
         }
@@ -226,8 +244,12 @@ export class FakeRepository {
     private readonly entity: EntityClass,
   ) {}
 
-  private select(where: Row): Row[] {
-    return [...this.db.rows(this.entity).values()].filter((row) => this.db.matches(row, where));
+  /** A list of conditions is an OR, as in TypeORM. */
+  private select(where: Row | readonly Row[]): Row[] {
+    const options = Array.isArray(where) ? (where as readonly Row[]) : [where as Row];
+    return [...this.db.rows(this.entity).values()].filter((row) =>
+      options.some((option) => this.db.matches(row, option)),
+    );
   }
 
   public async insert(row: Row): Promise<void> {
@@ -248,11 +270,17 @@ export class FakeRepository {
   }
 
   public async find(options: {
-    where: Row;
+    where: Row | readonly Row[];
     order?: Record<string, 'ASC' | 'DESC'>;
+    select?: Record<string, boolean>;
   }): Promise<Row[]> {
     this.db.begin('find', this.entity, options.where, null);
-    return this.sorted(this.select(options.where), options.order).map(clone);
+    const found = this.sorted(this.select(options.where), options.order).map(clone);
+    const columns = Object.entries(options.select ?? {}).filter(([, picked]) => picked);
+    // A projection returns only the selected columns, as the database does.
+    return columns.length === 0
+      ? found
+      : found.map((row) => Object.fromEntries(columns.map(([column]) => [column, row[column]])));
   }
 
   public async findAndCount(options: {

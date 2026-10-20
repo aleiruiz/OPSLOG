@@ -469,4 +469,63 @@ suite('persistent vehicle store on MySQL', () => {
         expect(text).not.toContain(secret);
     });
   });
+  describe('aggregate reads for the dashboard', () => {
+    it('reads live vehicles by area, archived ones since an instant, and the status history, per company', async () => {
+      const tenant = randomUUID();
+      const other = randomUUID();
+      const parent = vehicleOf(tenant, { areaId: 'area-p' });
+      const child = vehicleOf(tenant, { areaId: 'area-c' });
+      const gone = vehicleOf(tenant, { areaId: 'area-p' });
+      const foreign = vehicleOf(other, { areaId: 'area-p' });
+      for (const row of [parent, child, gone]) await storeA.insert(row, entryOf(row));
+      await storeA.insert(foreign, entryOf(foreign));
+      const archived = { ...gone, version: 2, archivedAt: '2026-10-07T00:00:00.000Z' };
+      expect(await storeA.replace(archived, 1)).toBe(true);
+      const ids = async (areas: string[] | null, since: string) =>
+        (await storeB.analyticsVehicles(tenant, areas, since)).map((row) => row.id).sort();
+      const all = [parent.id, child.id, gone.id].sort();
+      expect(await ids(null, '2026-10-07T00:00:00.000Z')).toEqual(all);
+      expect(await ids(null, '2026-10-07T00:00:00.001Z')).toEqual([parent.id, child.id].sort());
+      expect(await ids(['area-p'], '2026-10-01T00:00:00.000Z')).toEqual(
+        [parent.id, gone.id].sort(),
+      );
+      expect(await ids(['area-p', 'area-c'], '2026-10-08T00:00:00.000Z')).toEqual(
+        [parent.id, child.id].sort(),
+      );
+      expect(await ids([], '2026-10-01T00:00:00.000Z')).toEqual([]);
+      expect(await storeB.analyticsVehicles(other, null, '2026-10-01T00:00:00.000Z')).toHaveLength(
+        1,
+      );
+      const row = (
+        await storeB.analyticsVehicles(tenant, ['area-c'], '2026-10-08T00:00:00.000Z')
+      )[0];
+      expect(row).toEqual({
+        id: child.id,
+        areaId: 'area-c',
+        status: 'active',
+        odometerKm: 1000,
+        odometerUpdatedAt: child.odometerUpdatedAt,
+        archivedAt: null,
+      });
+      const changes = await storeB.analyticsStatusChanges(
+        tenant,
+        [parent.id, child.id],
+        '2026-10-06T12:00:00.000Z',
+      );
+      expect(changes.map((change) => change.vehicleId).sort()).toEqual(
+        [child.id, parent.id].sort(),
+      );
+      expect(
+        await storeB.analyticsStatusChanges(other, [parent.id], '2026-10-06T12:00:00.000Z'),
+      ).toEqual([]);
+      expect(
+        await storeB.analyticsStatusChanges(tenant, [parent.id], '2026-10-06T11:59:59.999Z'),
+      ).toEqual([]);
+      const plan = await db.rows<{ detail: string }>(
+        `EXPLAIN SELECT id FROM ${VEHICLE_TABLES.vehicles} WHERE company_id = ? AND area_id IN (?) AND archived_at IS NULL`,
+        [tenant, 'area-p'],
+      );
+      expect(JSON.stringify(plan)).toContain('ix_vehicles_area');
+    });
+  });
 });

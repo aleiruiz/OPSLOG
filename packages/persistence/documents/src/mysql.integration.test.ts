@@ -426,6 +426,66 @@ suite('persistent document store on MySQL', () => {
     });
   });
 
+  describe('aggregate reads for the dashboard', () => {
+    it('counts expiring documents and lists valid required pairs, per company, archived never', async () => {
+      const tenant = randomUUID();
+      const other = randomUUID();
+      const make = (t: string, over: Record<string, unknown>) => svcA.create(t, ACTOR, input(over));
+      await make(tenant, { ownerId: 'veh-1', expiresOn: '2026-10-25' });
+      await make(tenant, {
+        ownerId: 'veh-2',
+        typeCode: 'technical_inspection',
+        expiresOn: '2026-11-18',
+      });
+      await make(tenant, { ownerId: 'veh-2', expiresOn: '2026-11-19' });
+      await make(tenant, {
+        ownerId: 'veh-1',
+        typeCode: 'transport_permit',
+        expiresOn: '2026-10-18',
+      });
+      await make(tenant, {
+        ownerType: 'employee',
+        ownerId: 'emp-1',
+        typeCode: 'medical_exam',
+        expiresOn: '2026-10-19',
+      });
+      await make(tenant, { ownerId: 'veh-1', typeCode: 'ownership_title', expiresOn: undefined });
+      const filed = await make(tenant, { ownerId: 'veh-3', expiresOn: '2026-10-30' });
+      await svcA.archive(tenant, filed.id, 1);
+      await make(tenant, { ownerId: 'veh-1', expiresOn: '2027-06-01' });
+      await make(other, { ownerId: 'veh-1', expiresOn: '2026-10-25' });
+      const range = { from: '2026-10-19', until: '2026-11-18' };
+      expect(await storeB.analyticsCountExpiring(tenant, range, null)).toBe(3);
+      expect(
+        await storeB.analyticsCountExpiring(tenant, range, { vehicle: ['veh-1'], employee: [] }),
+      ).toBe(1);
+      expect(
+        await storeB.analyticsCountExpiring(tenant, range, {
+          vehicle: ['veh-2'],
+          employee: ['emp-1'],
+        }),
+      ).toBe(2);
+      expect(
+        await storeB.analyticsCountExpiring(tenant, range, { vehicle: [], employee: [] }),
+      ).toBe(0);
+      expect(await storeB.analyticsCountExpiring(other, range, null)).toBe(1);
+      const types = {
+        vehicle: ['registration_card', 'technical_inspection', 'transport_permit'],
+        employee: ['medical_exam'],
+      };
+      const found = await storeB.analyticsValidRequired(tenant, '2026-10-19', types);
+      expect(
+        found.map((pair) => `${pair.ownerType}/${pair.ownerId}/${pair.typeCode}`).sort(),
+      ).toEqual([
+        'employee/emp-1/medical_exam',
+        'vehicle/veh-1/registration_card',
+        'vehicle/veh-2/registration_card',
+        'vehicle/veh-2/technical_inspection',
+      ]);
+      expect(await storeB.analyticsValidRequired(randomUUID(), '2026-10-19', types)).toEqual([]);
+    });
+  });
+
   describe('failure hygiene', () => {
     it('does not leak titles, numbers or SQL when the database refuses a statement', async () => {
       const tenant = randomUUID();

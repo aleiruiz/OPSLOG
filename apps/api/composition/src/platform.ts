@@ -14,8 +14,10 @@ import {
   type PersistedAuditEvent,
 } from '../../../../packages/platform/audit/src/index.js';
 import { isDurableAuditAdapterSet } from './platform/durable-audit.js';
-import { hasPersistentBusinessStores } from './platform/persistence-flags.js';
-import { TypeOrmFileSagaStore } from '../../../../packages/persistence/files/src/index.js';
+import {
+  assertDurableFileStores,
+  hasPersistentBusinessStores,
+} from './platform/persistence-flags.js';
 import type { VerifiedExternalPrincipal } from '../../../../packages/platform/auth/src/index.js';
 import {
   InMemoryOutboxStore,
@@ -45,6 +47,7 @@ import type { DocumentsApi } from './documents.js';
 import type { AssignmentsApi } from './assignments.js';
 import type { ImportsApi } from './imports.js';
 import type { AlertsApi } from './alerts.js';
+import type { DashboardApi } from '../../analytics/src/index.js';
 import type { CompanySettingsApi } from './settings.js';
 import type { InsuranceApi } from './insurance.js';
 import type { EmployeesApi } from './employees.js';
@@ -111,6 +114,8 @@ export class Platform {
   public readonly alerts: AlertsApi;
   /** Global and per-record audit history, and the relay reconciliation (`view_audit`). */
   public readonly auditQuery: DomainApis['auditQuery'];
+  /** The indicators of Inicio (`GET /api/v1/dashboard`). */
+  public readonly dashboard: DashboardApi;
   public readonly maintenance: MaintenanceApi;
   public readonly workOrders: WorkOrderApi;
   public readonly incidents: IncidentApi;
@@ -154,13 +159,7 @@ export class Platform {
       !isDurableAuditAdapterSet(adapters.audit, adapters.auditRelay, adapters.outbox)
     )
       throw new Error('persistent stores require durable tenant-scoped audit, relay, and outbox');
-    if (
-      adapters.records instanceof TypeOrmFileSagaStore &&
-      (adapters.fileSagaJournal !== adapters.records || adapters.scanQueue !== adapters.records)
-    )
-      throw new Error(
-        'persistent file stores require one durable file saga store for records, queue and journal',
-      );
+    assertDurableFileStores(adapters);
     this.audit = adapters.audit ?? new InMemoryAuditStore();
     this.outbox = adapters.outbox ?? new InMemoryOutboxStore(() => this.now().getTime());
     this.records = adapters.records ?? new InMemoryFileRecordStore();
@@ -247,6 +246,7 @@ export class Platform {
     this.companySettings = apis.companySettings;
     this.alerts = apis.alerts;
     this.auditQuery = apis.auditQuery;
+    this.dashboard = apis.dashboard;
     this.maintenance = apis.maintenance;
     this.workOrders = apis.workOrders;
     this.incidents = apis.incidents;

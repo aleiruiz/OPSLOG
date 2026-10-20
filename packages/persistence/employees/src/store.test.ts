@@ -683,3 +683,51 @@ describe('through the domain service', () => {
     expect((await svc.list(B)).total).toBe(1);
   });
 });
+
+describe('aggregate read for the dashboard', () => {
+  it('reads kind and status of the employees of the areas that are not archived, per tenant', async () => {
+    const { db, store } = setup();
+    const rows = [
+      employee(A, 'e1'),
+      employee(A, 'e2', { status: 'inactive', kind: 'dispatcher' }),
+      employee(A, 'e3', { areaId: 'area-2' }),
+      employee(A, 'e4', { archivedAt: NOW.toISOString() }),
+      employee(B, 'e1'),
+    ];
+    for (const row of rows) await store.insert(row, entryOf(row));
+    const ids = async (tenant: string, areas: string[] | null) =>
+      (await store.analyticsEmployees(tenant, areas)).map((row) => row.id).sort();
+    expect(await ids(A, null)).toEqual(['e1', 'e2', 'e3']);
+    expect(await ids(A, ['area-1'])).toEqual(['e1', 'e2']);
+    expect(await ids(A, ['area-1', 'area-2'])).toEqual(['e1', 'e2', 'e3']);
+    expect(await ids(A, [])).toEqual([]);
+    expect(await ids(B, null)).toEqual(['e1']);
+    expect(await ids('tenant-c', null)).toEqual([]);
+    expect(await store.analyticsEmployees(A, ['area-1'])).toEqual(
+      expect.arrayContaining([
+        { id: 'e1', kind: 'driver', status: 'active' },
+        { id: 'e2', kind: 'dispatcher', status: 'inactive' },
+      ]),
+    );
+    // Only three columns are read: no name, number or personal data crosses the port.
+    expect(Object.keys((await store.analyticsEmployees(A, null))[0] as object).sort()).toEqual([
+      'id',
+      'kind',
+      'status',
+    ]);
+    for (const statement of db.statements.filter((s) => s.operation === 'find'))
+      expect(statement.where).toHaveProperty('tenantId');
+  });
+
+  it('reports a corrupt row and a failing read without leaking', async () => {
+    const { db, store } = setup();
+    const e = employee(A, 'e1');
+    await store.insert(e, entryOf(e));
+    db.failNext('find', CONNECTION_LOST, { leak: 'area-secret' });
+    const failure = await rejection(store.analyticsEmployees(A, ['area-secret']));
+    expect(failure).toMatchObject({ code: 'unavailable' });
+    expect(JSON.stringify(failure)).not.toContain('area-secret');
+    db.seed(EmployeeEntity, { ...(db.committed(EmployeeEntity)[0] as object), kind: 'mechanic' });
+    expect(await rejection(store.analyticsEmployees(A, null))).toMatchObject({ code: 'integrity' });
+  });
+});

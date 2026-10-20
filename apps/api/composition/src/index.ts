@@ -1,5 +1,6 @@
 export * from './access.js';
 export * from './alerts.js';
+export * from '../../analytics/src/index.js';
 export * from './areas.js';
 export * from './assignments.js';
 export * from './directory.js';

@@ -52,3 +52,42 @@ export interface VehicleStore {
 export interface VehicleAreaGate {
   withActiveArea<T>(tenantId: string, areaId: string, work: () => Promise<T>): Promise<T>;
 }
+
+/** What the dashboard reads of a vehicle: no plate, VIN or free text. */
+export interface VehicleAnalyticsRow {
+  readonly id: string;
+  readonly areaId: string;
+  readonly status: VehicleStatus;
+  readonly odometerKm: number;
+  readonly odometerUpdatedAt: string | null;
+  readonly archivedAt: string | null;
+}
+
+/** One status change of the history, as the availability indicator reads it. */
+export interface VehicleStatusChange {
+  readonly vehicleId: string;
+  readonly to: VehicleStatus;
+  readonly at: string;
+}
+
+/**
+ * Aggregate reads of the dashboard (MVP-ANALYTICS), kept apart from `VehicleStore` so a store that
+ * only serves the module keeps working. Every method names the tenant.
+ */
+export interface VehicleAnalyticsReads {
+  /**
+   * The vehicles of `areaIds` (every area when null) that are not archived, plus the ones archived
+   * at or after `archivedSince` (an instant): the vehicles that were alive during a range.
+   */
+  analyticsVehicles(
+    tenantId: string,
+    areaIds: readonly string[] | null,
+    archivedSince: string,
+  ): Promise<readonly VehicleAnalyticsRow[]>;
+  /** The status changes of the vehicles up to `until` (inclusive), oldest first. */
+  analyticsStatusChanges(
+    tenantId: string,
+    vehicleIds: readonly string[],
+    until: string,
+  ): Promise<readonly VehicleStatusChange[]>;
+}

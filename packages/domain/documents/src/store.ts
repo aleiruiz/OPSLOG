@@ -1,12 +1,15 @@
 import {
+  type DocumentAnalyticsReads,
   type DocumentFilter,
+  type DocumentOwnerScope,
   type DocumentRevisionSlice,
   type DocumentSlice,
   type DocumentStore,
   type DocumentWindow,
+  type ValidRequiredDocument,
 } from './ports.js';
 import { expiryKeyOf, matchesExpiry } from './rules.js';
-import { type Document, type DocumentRevision } from './types.js';
+import { type Document, type DocumentOwnerType, type DocumentRevision } from './types.js';
 
 /** Plain code-unit order, so every store lists in the same order. */
 const compareKeys = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
@@ -15,7 +18,7 @@ const storeKey = (tenantId: string, id: string): string =>
   `${tenantId.length}:${tenantId}${id.length}:${id}`;
 
 /** In-memory double of the port. Each method is synchronous inside, so every operation is atomic. */
-export class InMemoryDocumentStore implements DocumentStore {
+export class InMemoryDocumentStore implements DocumentStore, DocumentAnalyticsReads {
   private readonly documents = new Map<string, Document>();
   private readonly revisionRows: DocumentRevision[] = [];
 
@@ -85,5 +88,46 @@ export class InMemoryDocumentStore implements DocumentStore {
         .map((row) => structuredClone(row)),
       total: all.length,
     };
+  }
+
+  public async analyticsCountExpiring(
+    tenantId: string,
+    window: { readonly from: string; readonly until: string },
+    scope: DocumentOwnerScope | null,
+  ): Promise<number> {
+    return [...this.documents.values()].filter(
+      (document) =>
+        document.tenantId === tenantId &&
+        document.archivedAt === null &&
+        matchesExpiry(expiryKeyOf(document.expiresOn), {
+          status: 'expiring',
+          from: window.from,
+          until: window.until,
+        }) &&
+        (scope === null || scope[document.ownerType].includes(document.ownerId)),
+    ).length;
+  }
+
+  public async analyticsValidRequired(
+    tenantId: string,
+    today: string,
+    types: Readonly<Record<DocumentOwnerType, readonly string[]>>,
+  ): Promise<readonly ValidRequiredDocument[]> {
+    const pairs = new Map<string, ValidRequiredDocument>();
+    for (const document of this.documents.values()) {
+      if (
+        document.tenantId !== tenantId ||
+        document.archivedAt !== null ||
+        !types[document.ownerType].includes(document.typeCode) ||
+        expiryKeyOf(document.expiresOn) < today
+      )
+        continue;
+      pairs.set(`${document.ownerType}\u0000${document.ownerId}\u0000${document.typeCode}`, {
+        ownerType: document.ownerType,
+        ownerId: document.ownerId,
+        typeCode: document.typeCode,
+      });
+    }
+    return [...pairs.values()];
   }
 }

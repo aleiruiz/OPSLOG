@@ -64,6 +64,7 @@ export {
   type PolicyRevisionSlice,
   type PolicyStore,
   type PolicyVehicleGate,
+  type PolicyAnalyticsReads,
 } from './ports.js';
 export { InMemoryPolicyStore } from './store.js';
 export {

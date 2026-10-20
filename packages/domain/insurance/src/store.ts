@@ -1,5 +1,6 @@
 import { matchesExpiry } from '../../documents/src/index.js';
 import {
+  type PolicyAnalyticsReads,
   type PolicyFilter,
   type PolicyRevisionSlice,
   type PolicySlice,
@@ -16,7 +17,7 @@ const storeKey = (tenantId: string, id: string): string =>
   `${tenantId.length}:${tenantId}${id.length}:${id}`;
 
 /** In-memory double of the port. Each method is synchronous inside, so every operation is atomic. */
-export class InMemoryPolicyStore implements PolicyStore {
+export class InMemoryPolicyStore implements PolicyStore, PolicyAnalyticsReads {
   private readonly policies = new Map<string, Policy>();
   private readonly revisionRows: PolicyRevision[] = [];
 
@@ -81,5 +82,37 @@ export class InMemoryPolicyStore implements PolicyStore {
         .map((row) => structuredClone(row)),
       total: all.length,
     };
+  }
+
+  public async analyticsCountExpiring(
+    tenantId: string,
+    window: { readonly from: string; readonly until: string },
+    vehicleIds: readonly string[] | null,
+  ): Promise<number> {
+    return [...this.policies.values()].filter(
+      (policy) =>
+        policy.tenantId === tenantId &&
+        policy.archivedAt === null &&
+        policy.endsOn >= window.from &&
+        policy.endsOn <= window.until &&
+        (vehicleIds === null || vehicleIds.includes(policy.vehicleId)),
+    ).length;
+  }
+
+  public async analyticsCoveredVehicleIds(
+    tenantId: string,
+    day: string,
+    vehicleIds: readonly string[],
+  ): Promise<readonly string[]> {
+    const covered = new Set<string>();
+    for (const policy of this.policies.values())
+      if (
+        policy.tenantId === tenantId &&
+        policy.archivedAt === null &&
+        vehicleIds.includes(policy.vehicleId) &&
+        coversOn(policy, day)
+      )
+        covered.add(policy.vehicleId);
+    return [...covered];
   }
 }

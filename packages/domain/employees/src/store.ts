@@ -49,6 +49,22 @@ export interface EmployeeStore {
   countLiveInArea(tenantId: string, areaId: string): Promise<number>;
 }
 
+/** What the dashboard reads of an employee: no name, number or personal data. */
+export interface EmployeeAnalyticsRow {
+  readonly id: string;
+  readonly kind: EmployeeKind;
+  readonly status: EmployeeStatus;
+}
+
+/** Aggregate read of the dashboard (MVP-ANALYTICS), apart from `EmployeeStore` so other stores keep working. */
+export interface EmployeeAnalyticsReads {
+  /** The employees of `areaIds` (every area when null) that are not archived. */
+  analyticsEmployees(
+    tenantId: string,
+    areaIds: readonly string[] | null,
+  ): Promise<readonly EmployeeAnalyticsRow[]>;
+}
+
 /** The employees that block deactivating their area (see `EmployeeStore.countLiveInArea`). */
 export const isLiveEmployee = (employee: Pick<Employee, 'status' | 'archivedAt'>): boolean =>
   employee.archivedAt === null && employee.status !== 'terminated';
@@ -62,7 +78,7 @@ const storeKey = (tenantId: string, id: string): string =>
 const orderKey = (employee: Employee): string => nameKey(employee.firstName, employee.lastName);
 
 /** In-memory double of the port. Each method is synchronous inside, so every operation is atomic. */
-export class InMemoryEmployeeStore implements EmployeeStore {
+export class InMemoryEmployeeStore implements EmployeeStore, EmployeeAnalyticsReads {
   private readonly employees = new Map<string, Employee>();
   private readonly entries: EmployeeHistoryEntry[] = [];
 
@@ -159,5 +175,19 @@ export class InMemoryEmployeeStore implements EmployeeStore {
         .map((entry) => structuredClone(entry)),
       total: all.length,
     };
+  }
+
+  public async analyticsEmployees(
+    tenantId: string,
+    areaIds: readonly string[] | null,
+  ): Promise<readonly EmployeeAnalyticsRow[]> {
+    return [...this.employees.values()]
+      .filter(
+        (employee) =>
+          employee.tenantId === tenantId &&
+          employee.archivedAt === null &&
+          (areaIds === null || areaIds.includes(employee.areaId)),
+      )
+      .map((employee) => ({ id: employee.id, kind: employee.kind, status: employee.status }));
   }
 }

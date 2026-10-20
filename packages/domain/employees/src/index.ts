@@ -66,6 +66,8 @@ export type {
   EmployeeSlice,
   EmployeeHistorySlice,
   EmployeeStore,
+  EmployeeAnalyticsReads,
+  EmployeeAnalyticsRow,
 } from './store.js';
 export { EmployeeService, writesPii } from './service.js';
 export type {

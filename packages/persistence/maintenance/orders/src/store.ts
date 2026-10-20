@@ -1,11 +1,21 @@
 import 'reflect-metadata';
 import { createHash } from 'node:crypto';
-import { In, LessThanOrEqual, type DataSource, type EntityManager } from 'typeorm';
+import {
+  And,
+  In,
+  LessThan,
+  LessThanOrEqual,
+  MoreThanOrEqual,
+  type DataSource,
+  type EntityManager,
+} from 'typeorm';
 import { appendLocalAuditAndDelivery, MySqlTenantOutboxStore } from '../../../audit/src/index.js';
 import {
   validateWorkOrderEvent,
+  type ClosedOrderFact,
   type IdempotencyRecord,
   type WorkOrder,
+  type WorkOrderAnalyticsReads,
   type WorkOrderAttachment,
   type WorkOrderCommand,
   type WorkOrderMutation,
@@ -40,7 +50,7 @@ const digest = (value: string) => createHash('sha256').update(value).digest('hex
  * Tenant is part of every selector. Each mutation commits the order (version CAS), its work facts,
  * the timeline entry, the local audit row and the allowlisted outbox events in one transaction.
  */
-export class TypeOrmWorkOrderStore implements WorkOrderStore {
+export class TypeOrmWorkOrderStore implements WorkOrderStore, WorkOrderAnalyticsReads {
   private readonly outbox: MySqlTenantOutboxStore;
   public constructor(
     private readonly dataSource: DataSource,
@@ -212,6 +222,41 @@ export class TypeOrmWorkOrderStore implements WorkOrderStore {
       take: 500,
     });
     return this.hydrate(tenantId, rows);
+  }
+
+  /** Orders closed in `[from, to)`: two aggregate selects (orders, then their costs in chunks). */
+  public async closedFacts(
+    tenantId: string,
+    window: { readonly from: string; readonly to: string },
+  ): Promise<readonly ClosedOrderFact[]> {
+    const rows = await this.dataSource.getRepository(WorkOrderSchema).find({
+      select: { id: true, kind: true, vehicleId: true, scheduledDate: true, actualDate: true },
+      where: {
+        tenantId,
+        status: 'closed',
+        closedAt: And(MoreThanOrEqual(new Date(window.from)), LessThan(new Date(window.to))),
+      },
+      order: { id: 'ASC' },
+    });
+    const costs = new Map<string, { amountMinor: string; currency: string }[]>();
+    for (let at = 0; at < rows.length; at += 500) {
+      const found = await this.dataSource.getRepository(WorkOrderCostSchema).find({
+        select: { orderId: true, amountMinor: true, currency: true },
+        where: { tenantId, orderId: In(rows.slice(at, at + 500).map((row) => row.id)) },
+      });
+      for (const cost of found) {
+        const list = costs.get(cost.orderId) ?? [];
+        list.push({ amountMinor: String(cost.amountMinor), currency: cost.currency });
+        costs.set(cost.orderId, list);
+      }
+    }
+    return rows.map((row) => ({
+      vehicleId: row.vehicleId,
+      kind: row.kind as ClosedOrderFact['kind'],
+      scheduledDate: row.scheduledDate,
+      actualDate: row.actualDate,
+      costs: costs.get(row.id) ?? [],
+    }));
   }
 
   public async history(tenantId: string, id: string): Promise<readonly WorkOrderTransition[]> {
