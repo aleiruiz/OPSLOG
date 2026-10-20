@@ -95,6 +95,36 @@ describe('GET /api/v1/search', () => {
     expect(answer.json.groups.map((g: { type: string }) => g.type)).toEqual(['vehicle', 'policy']);
   });
 
+  it('answers a saturated pool as a 503 unavailable with Retry-After, never a 500', async () => {
+    const f = await fixture();
+    const original = world.platform.search.api.search.bind(world.platform.search.api);
+    world.platform.search.api.search = async () => ({
+      ok: false,
+      error: { code: 'unavailable', status: 503, message: 'Service temporarily unavailable' },
+    });
+    const mapped = await f.adminA.get(`${P}?q=src`);
+    expect(mapped.status).toBe(503);
+    expect(mapped.json).toMatchObject({ code: 'unavailable', status: 503 });
+    expect(mapped.headers['retry-after']).toBe('2');
+    // Whatever escapes the route is mapped the same way when it is pool saturation...
+    world.platform.search.api.search = async () => {
+      throw new Error('Queue limit reached.');
+    };
+    const thrown = await f.adminA.get(`${P}?q=src`);
+    expect(thrown.status).toBe(503);
+    expect(thrown.json.code).toBe('unavailable');
+    expect(thrown.headers['retry-after']).toBe('2');
+    expect(thrown.text).not.toContain('Queue limit');
+    // ...and any other failure stays a 500 without the hint.
+    world.platform.search.api.search = async () => {
+      throw new Error('boom');
+    };
+    const broken = await f.adminA.get(`${P}?q=src`);
+    expect(broken.status).toBe(500);
+    expect(broken.headers['retry-after']).toBeUndefined();
+    world.platform.search.api.search = original;
+  });
+
   it('rejects anything but a strict query with a uniform 400', async () => {
     const f = await fixture();
     const bad = [
