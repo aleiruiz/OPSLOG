@@ -112,7 +112,12 @@ describe('contract drift: BFF routing table against the contract module', () => 
 
 describe('typed client against the real BFF', () => {
   it('walks every contract route end to end with the CSRF handshake and cookie session', async () => {
-    world = createBffWorld();
+    world = createBffWorld({
+      adapters: {
+        webhookResolver: async () => [{ address: '93.184.216.34', family: 4 }],
+        webhookClient: { send: async () => ({ status: 200, durationMs: 3, failure: null }) },
+      },
+    });
     await world.tenant('Empresa Alfa', 'subject-admin');
     const editor = await world.member('subject-admin', 'editor', 'subject-editor');
     const { client, used } = trackedClient(world.handler);
@@ -1209,6 +1214,46 @@ describe('typed client against the real BFF', () => {
         params: { type: 'vehicle', entityId: 'none' },
       }),
     ).toEqual({ ok: true, value: undefined });
+    // Outgoing webhooks: register (the secret comes back once), edit, rotate, test, history, retry, delete.
+    const hook = await client.call('webhooks.create', {
+      body: { url: 'https://hooks.ejemplo.com/opslog', events: ['vehicle.created'] },
+    });
+    expect(hook).toMatchObject({ ok: true, value: { secret: expect.stringMatching(/^whsec_/) } });
+    const hookId = hook.ok ? hook.value.endpoint.id : '';
+    expect(await client.call('webhooks.list')).toMatchObject({ ok: true, value: { max: 5 } });
+    expect(await client.call('webhooks.get', { params: { endpointId: hookId } })).toMatchObject({
+      ok: true,
+      value: { id: hookId },
+    });
+    expect(
+      await client.call('webhooks.update', {
+        params: { endpointId: hookId },
+        body: { version: 1, events: ['vehicle.created', 'driver.created'] },
+      }),
+    ).toMatchObject({ ok: true, value: { version: 2 } });
+    expect(
+      await client.call('webhooks.rotate', {
+        params: { endpointId: hookId },
+        body: { version: 2 },
+      }),
+    ).toMatchObject({ ok: true, value: { secret: expect.any(String) } });
+    const ping = await client.call('webhooks.test', { params: { endpointId: hookId } });
+    expect(ping).toMatchObject({ ok: true, value: { eventType: 'ping' } });
+    expect(
+      await client.call('webhooks.deliveries', {
+        params: { endpointId: hookId },
+        query: { limit: 5 },
+      }),
+    ).toMatchObject({ ok: true, value: { total: 1 } });
+    expect(
+      await client.call('webhooks.retry', {
+        params: { endpointId: hookId, deliveryId: ping.ok ? ping.value.id : '' },
+      }),
+    ).toMatchObject({ ok: false, error: { status: 409 } });
+    expect(await client.call('webhooks.delete', { params: { endpointId: hookId } })).toEqual({
+      ok: true,
+      value: undefined,
+    });
     // The file is not JSON: the browser opens it with its cookie, so the typed client never calls
     // it (the download is covered by the BFF tests over HTTP).
     used.add('exports.download');

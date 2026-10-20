@@ -48,6 +48,7 @@ export const allPermissions: readonly Permission[] = [
   'incidents:close',
   'incidents:reopen',
   'incidents:view_costs',
+  'integrations:manage',
 ];
 
 export const systemRoles: RoleSummary[] = [

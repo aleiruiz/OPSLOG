@@ -15,6 +15,7 @@ import { SAVED_VIEWS_RUNTIME_ACCOUNT } from '../../../../packages/persistence/sa
 import { SEARCH_RUNTIME_ACCOUNT } from '../../../../packages/persistence/search/src/index.js';
 import { EXPORT_RUNTIME_ACCOUNT } from '../../../../packages/persistence/exports/src/index.js';
 import { NOTIFICATION_RUNTIME_ACCOUNT } from '../../../../packages/persistence/notifications/src/index.js';
+import { WEBHOOK_RUNTIME_ACCOUNT } from '../../../../packages/persistence/webhooks/src/index.js';
 import { runIdentityControlMigrations } from './control-plane/identity-schema.js';
 import {
   runFleetAuditMigrations,
@@ -102,6 +103,8 @@ export function buildFleetAccounts(
     throw new Error('exports runtime account name is invalid');
   if (!NOTIFICATION_RUNTIME_ACCOUNT.test(set.runtime.notify.username))
     throw new Error('notifications runtime account name is invalid');
+  if (!WEBHOOK_RUNTIME_ACCOUNT.test(set.runtime.webhooks.username))
+    throw new Error('webhooks runtime account name is invalid');
   return set;
 }
 

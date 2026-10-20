@@ -35,6 +35,7 @@ export const ROLE_PERMISSIONS: Readonly<Record<RoleName, readonly Permission[]>>
     'incidents:close',
     'incidents:reopen',
     'incidents:view_costs',
+    'integrations:manage',
   ],
   // Siniestros tiene permisos propios (ADR-0014): la flotilla solo consulta.
   editor: ['view', 'create', 'edit', 'incidents:view'],

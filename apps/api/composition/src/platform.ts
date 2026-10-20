@@ -14,6 +14,7 @@ import {
   type PersistedAuditEvent,
 } from '../../../../packages/platform/audit/src/index.js';
 import { isDurableAuditAdapterSet } from './platform/durable-audit.js';
+import { unconfiguredRecoveryNotifier } from './platform/recovery.js';
 import {
   assertDurableFileStores,
   hasPersistentBusinessStores,
@@ -133,6 +134,7 @@ export class Platform {
   public readonly reports: DomainApis['reports'];
   /** Notification center: its API, the ingest and dispatcher the worker runs and the mail port. */
   public readonly notifications: DomainApis['notifications'];
+  public readonly webhooks: DomainApis['webhooks'];
   public readonly access: AccessDirectory;
   public readonly tenants: InMemoryTenantStore;
   public readonly audit: AuditStore;
@@ -175,11 +177,7 @@ export class Platform {
     this.roles = new RoleDirectory(
       adapters.roleStore ?? (isRoleDirectoryStore(identityStore) ? identityStore : undefined),
     );
-    const notifier = adapters.recoveryNotifier ?? {
-      deliver: async () => {
-        throw new Error('recovery notifier is not configured');
-      },
-    };
+    const notifier = adapters.recoveryNotifier ?? unconfiguredRecoveryNotifier;
     this.identity = new GatedIdentityService(
       identityStore,
       notifier,
@@ -264,6 +262,7 @@ export class Platform {
     this.savedViews = apis.savedViews;
     this.reports = apis.reports;
     this.notifications = apis.notifications;
+    this.webhooks = apis.webhooks;
     this.runtime = buildWorkerRuntime(
       this.kernel,
       this.pipeline,

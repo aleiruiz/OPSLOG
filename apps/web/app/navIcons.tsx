@@ -12,6 +12,7 @@ import ReportProblemOutlined from '@mui/icons-material/ReportProblemOutlined';
 import LocalShippingOutlined from '@mui/icons-material/LocalShippingOutlined';
 import NotificationsActiveOutlined from '@mui/icons-material/NotificationsActiveOutlined';
 import TuneOutlined from '@mui/icons-material/TuneOutlined';
+import SettingsEthernetOutlined from '@mui/icons-material/SettingsEthernetOutlined';
 import UploadFileOutlined from '@mui/icons-material/UploadFileOutlined';
 import VerifiedUserOutlined from '@mui/icons-material/VerifiedUserOutlined';
 
@@ -30,6 +31,7 @@ export const navIcons: Readonly<Record<string, typeof HomeOutlined>> = {
   imports: UploadFileOutlined,
   audit: FactCheckOutlined,
   alertSettings: TuneOutlined,
+  integrations: SettingsEthernetOutlined,
   company: BusinessOutlined,
   users: GroupOutlined,
   roles: AdminPanelSettingsOutlined,

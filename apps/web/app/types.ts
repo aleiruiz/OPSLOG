@@ -5,6 +5,7 @@ import type { MaintenancePorts } from '../features/maintenance/ports';
 import type { SearchPorts } from '../features/search/ports';
 import type { ViewsPorts } from '../features/search/views/ports';
 import type { NotificationsPorts } from '../features/notifications/ports';
+import type { IntegrationsPorts } from '../settings/integrations/ports';
 import type { ReportsPorts } from '../features/reports/ports';
 import type {
   AlertsClient,
@@ -419,5 +420,7 @@ export interface ApiPorts {
   readonly reports: ReportsPorts;
   /** Notification center, preferences and subscriptions (MVP-NOTIFY). */
   readonly notifications: NotificationsPorts;
+  /** Outgoing webhooks: endpoints, secret and delivery history (MVP-WEBHOOKS). */
+  readonly integrations: IntegrationsPorts;
   readonly oidc: OidcPort;
 }

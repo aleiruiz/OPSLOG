@@ -52,6 +52,7 @@ import {
   createNotificationsRuntimeSource,
   notificationsRuntimeAdapters,
 } from './notifications-source.js';
+import { createWebhooksRuntimeSource, webhooksRuntimeAdapters } from './webhooks-source.js';
 import type { FleetDatabaseEndpoint } from './fleet-migrations.js';
 
 export * from './fleet-migrations.js';
@@ -75,6 +76,7 @@ export interface FleetRuntimeCredentials extends FleetDatabaseEndpoint {
     readonly views: { readonly username: string; readonly password: string };
     readonly exports: { readonly username: string; readonly password: string };
     readonly notify: { readonly username: string; readonly password: string };
+    readonly webhooks: { readonly username: string; readonly password: string };
     readonly auditRuntime: { readonly username: string; readonly password: string };
     readonly auditRelay: { readonly username: string; readonly password: string };
   };
@@ -108,6 +110,7 @@ export interface FleetRuntimeStores {
       | 'exportJobs'
       | 'notifications'
       | 'notificationEvents'
+      | 'webhooks'
     >
   >;
   readonly audit: NonNullable<PlatformAdapters['audit']>;
@@ -179,6 +182,7 @@ export async function openFleetRuntimeStores(
   const viewsSource = createSavedViewsRuntimeSource(endpoint, credentials.accounts.views);
   const exportsSource = createExportsRuntimeSource(endpoint, credentials.accounts.exports);
   const notifySource = createNotificationsRuntimeSource(endpoint, credentials.accounts.notify);
+  const webhooksSource = createWebhooksRuntimeSource(endpoint, credentials.accounts.webhooks);
   sources.push(
     maintenance.plans,
     maintenance.orders,
@@ -187,6 +191,7 @@ export async function openFleetRuntimeStores(
     viewsSource,
     exportsSource,
     notifySource,
+    webhooksSource,
   );
   const initialized: FleetDataSource[] = [];
   let auditRuntimeInitialized = false;
@@ -244,6 +249,7 @@ export async function openFleetRuntimeStores(
         ...savedViewsRuntimeAdapters(viewsSource),
         ...exportsRuntimeAdapters(exportsSource),
         ...notificationsRuntimeAdapters(notifySource),
+        ...webhooksRuntimeAdapters(webhooksSource),
         get records() {
           if (!fileStore) throw new Error('fleet file runtime must be bound to a tenant first');
           return fileStore;

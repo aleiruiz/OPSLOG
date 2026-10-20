@@ -24,6 +24,13 @@ export const configuracionRoutes: readonly RouteDefinition[] = [
     nav: { group: 'Configuración', label: 'Usuarios' },
   },
   {
+    id: 'integrations',
+    pattern: '/configuracion/integraciones',
+    title: 'Integraciones',
+    access: { permission: 'integrations:manage' },
+    nav: { group: 'Configuración', label: 'Integraciones' },
+  },
+  {
     id: 'roles',
     pattern: '/configuracion/roles',
     title: 'Roles',

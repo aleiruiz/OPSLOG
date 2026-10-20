@@ -41,6 +41,7 @@ import {
   type NotificationApis,
 } from './notification-apis.js';
 import { buildAlertService } from './alert-service.js';
+import { driverWriteNotifier, vehicleWriteNotifier, type WebhookApis } from './webhook-apis.js';
 import { AreasApi } from '../areas.js';
 import { AssignmentsApi } from '../assignments.js';
 import { ROLE_LABELS } from '../directory.js';
@@ -65,7 +66,8 @@ export interface DomainApis
   extends IncidentDomainApis,
     AnalyticsApis,
     ReportApis,
-    NotificationApis {
+    NotificationApis,
+    WebhookApis {
   readonly vehicles: VehiclesApi;
   readonly areas: AreasApi;
   readonly employees: EmployeesApi;
@@ -154,6 +156,7 @@ export function buildDomainApis(
             kernel.auditNow(kernel.userActor(context), action, 'vehicle', entityId, correlationId),
     },
     vehicleStatusNotifier(kernel, notificationEvents(kernel, adapters)),
+    vehicleWriteNotifier(kernel, notificationEvents(kernel, adapters)),
   );
   const employeeService = new EmployeeService(employeeStore, {
     now: kernel.now,
@@ -177,6 +180,8 @@ export function buildDomainApis(
       ? () => undefined
       : (context, action, entityId, correlationId) =>
           kernel.auditNow(kernel.userActor(context), action, 'employee', entityId, correlationId),
+    // Drivers are announced to the webhooks (`driver.created`, `driver.updated`) through the outbox.
+    published: driverWriteNotifier(kernel, notificationEvents(kernel, adapters)),
   });
   const documentStore = adapters.documents ?? new InMemoryDocumentStore();
   const policyStore = adapters.insurance ?? new InMemoryPolicyStore();

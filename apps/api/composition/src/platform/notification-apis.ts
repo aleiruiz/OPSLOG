@@ -106,8 +106,30 @@ export class NotifyingVehiclesApi extends VehiclesApi {
       correlationId: string,
       vehicle: { readonly id: string; readonly status: string; readonly version: number },
     ) => Promise<void>,
+    private readonly written?: (
+      kind: 'created' | 'updated',
+      token: string,
+      correlationId: string,
+      vehicle: { readonly id: string; readonly version: number },
+    ) => Promise<void>,
   ) {
     super(deps);
+  }
+
+  public override async create(
+    ...args: Parameters<VehiclesApi['create']>
+  ): ReturnType<VehiclesApi['create']> {
+    const result = await super.create(...args);
+    if (result.ok && result.value) await this.written?.('created', args[0], args[1], result.value);
+    return result;
+  }
+
+  public override async update(
+    ...args: Parameters<VehiclesApi['update']>
+  ): ReturnType<VehiclesApi['update']> {
+    const result = await super.update(...args);
+    if (result.ok && result.value) await this.written?.('updated', args[0], args[1], result.value);
+    return result;
   }
 
   public override async changeStatus(

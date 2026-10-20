@@ -22,7 +22,8 @@ export type Permission =
   | 'incidents:approve'
   | 'incidents:close'
   | 'incidents:reopen'
-  | 'incidents:view_costs';
+  | 'incidents:view_costs'
+  | 'integrations:manage';
 
 export interface ActorRef {
   readonly subject: string;

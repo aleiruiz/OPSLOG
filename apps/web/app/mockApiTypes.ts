@@ -24,6 +24,7 @@ export type MockOperation =
   | 'views'
   | 'reports'
   | 'notifications'
+  | 'integrations'
   | 'exportReport'
   | 'listExports'
   | 'getSession'

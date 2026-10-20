@@ -44,6 +44,7 @@ import { savedViewsMigrationSteps } from './saved-views-source.js';
 import { searchMigrationSteps } from './search-source.js';
 import { exportsMigrationSteps } from './exports-source.js';
 import { notificationsMigrationSteps } from './notifications-source.js';
+import { webhooksMigrationSteps } from './webhooks-source.js';
 
 type FleetDataSource = ReturnType<typeof createAreasMigrationDataSource>;
 
@@ -173,6 +174,11 @@ export function createFleetMigrationModules(
     ).map((step) => migrationModule(step.name, step.version, step.source, step.run)),
     // Notices are read through the modules' ports; they reference no table of theirs.
     ...notificationsMigrationSteps(
+      { host: credentials.host, port: credentials.port, database: credentials.database },
+      { username: credentials.username, password: credentials.password },
+    ).map((step) => migrationModule(step.name, step.version, step.source, step.run)),
+    // Endpoints, deliveries and driver state; the secrets are sealed by the company cipher.
+    ...webhooksMigrationSteps(
       { host: credentials.host, port: credentials.port, database: credentials.database },
       { username: credentials.username, password: credentials.password },
     ).map((step) => migrationModule(step.name, step.version, step.source, step.run)),
