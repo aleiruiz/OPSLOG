@@ -59,7 +59,7 @@ Cada fila se lee del flujo `quality` en GitHub, que es lo único que cuenta como
 | `pnpm ops:drill` / `pnpm ops:load`                                                                         | local; no corren en el CI ordinario    | medidos en MVP-OPS con MySQL 8.0.46 (§5); **no** repetidos sobre el candidato                                                                                                                   |
 | `pnpm test:visual`                                                                                         | fuera del CI                           | según la decisión del propietario sobre M-1 de G4; **no** es puerta                                                                                                                             |
 
-Estado de `main` al redactar: la corrida de `c64881e` (fusión de #148) estaba en curso; su resultado es el que debe anotarse aquí cuando termine. Los escenarios MySQL de las suites solo se omiten sin `OPSLOG_TEST_MYSQL_ADMIN_URL`; en el CI la variable existe y las suites de este paquete no se omiten.
+Estado de `main` al redactar: la corrida de `c64881e` (fusión de #148) terminó en verde; las duraciones de la fila de arriba son las de `ca2ee13`. Los escenarios MySQL de las suites solo se omiten sin `OPSLOG_TEST_MYSQL_ADMIN_URL`; en el CI la variable existe y las suites de este paquete no se omiten.
 
 Validación local de este PR (MySQL 8.0 en loopback, no 8.4): `tests/integration/mvp` 13 pruebas, `e2e/mvp-journeys.spec.ts` 3 pruebas, ambas en verde; `pnpm typecheck` sin errores. Las cifras de la ejecución en MySQL 8.4 las da el CI de este PR.
 

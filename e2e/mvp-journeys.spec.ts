@@ -22,6 +22,7 @@ let stack: Awaited<ReturnType<typeof startRealStack>>;
 let a: RealTenant;
 let b: RealTenant;
 let vehicleId: string;
+let vehicleB: string;
 let license: string;
 
 test.beforeAll(async () => {
@@ -49,7 +50,7 @@ test.beforeAll(async () => {
   await a.member(SUPERVISOR as RoleName, 'e2e-supervisor-a');
   await a.member(DISPATCHER as RoleName, 'e2e-dispatcher-a');
   // Company B has a vehicle with the same shape: it must never show up in A's journey.
-  await b.vehicle('J01');
+  vehicleB = await b.vehicle('J01');
   await a.tick();
   await b.tick();
 });
@@ -134,6 +135,8 @@ test('dispatcher without costs or personal data: same journey, no amounts and no
   // The catalog does not offer the cost reports.
   await page.goto(`${a.webUrl}/real/analisis/reportes`);
   await expect(page.getByRole('heading', { name: 'Reportes', level: 1 })).toBeVisible();
+  // The list has loaded (a report the role may see is there) before the cost reports are checked.
+  await expect(page.getByLabel(/Abrir reporte: Conductores/)).toBeVisible();
   await expect(page.getByText('Costos de mantenimiento')).toHaveCount(0);
 
   await page.goto(`${a.webUrl}/real/notificaciones`);
@@ -147,8 +150,10 @@ test('company B signs in to its own space and sees nothing of company A', async 
   // Company B has its own MNJ01 (same tag): the hit opens B's vehicle, never A's.
   await expect(hit.first()).toBeVisible();
   await hit.first().click();
-  await expect(page).not.toHaveURL(new RegExp(vehicleId));
+  await expect(page).toHaveURL(new RegExp(`/flota/vehiculos/${vehicleB}`));
+  expect(vehicleB).not.toBe(vehicleId);
   await page.goto(`${b.webUrl}/real/flota/vehiculos/${vehicleId}`);
+  await expect(page.getByRole('heading', { name: 'Vehículo no encontrado' })).toBeVisible();
   await expect(page.getByText(license)).toHaveCount(0);
   await expect(page.getByText('MNJ01')).toHaveCount(0);
 });

@@ -47,6 +47,8 @@ suite(
       secret = hook.json.secret as string;
       const followed = await dispatcher.put(`${API}/subscriptions/vehicle/${vehicleId}`);
       expect(followed.status, followed.text).toBeLessThan(300);
+      // The search projection follows through the periodic reconcile, as the api process does.
+      await w.platformA.runtime.periodic.tick('search.reconcile');
       await tick(w.platformA);
       w.mailA.messages.length = 0;
       w.receiverA.received.length = 0;
@@ -79,7 +81,11 @@ suite(
     it('exporta la plantilla de conductores sin el número de licencia, que el administrador sí recibe', async () => {
       const own = await exported(dispatcher, 'drivers', 'a');
       expect(own.status).toBe(200);
-      expect(own.text.length).toBeGreaterThan(0);
+      // A header and at least one data row.
+      expect(own.text.split(/\r?\n/).filter((line) => line.trim() !== '').length).toBeGreaterThan(
+        1,
+      );
+      expect(own.text).toContain('Perez');
       expect(own.text).not.toContain(license);
       const admin = await exported(w.adminA, 'drivers', 'b');
       expect(admin.status).toBe(200);
@@ -98,10 +104,16 @@ suite(
     });
 
     it('no halla al conductor por su licencia ni ve el número en la ficha', async () => {
-      const search = await dispatcher.get(`${API}/search?q=${encodeURIComponent(license)}`);
+      const query = `${API}/search?q=${encodeURIComponent(license)}`;
+      // Positive control: whoever may read personal data finds the driver by the license.
+      const found = await w.adminA.get(query);
+      expect(found.status, found.text).toBe(200);
+      expect(found.text).toContain(driverId);
+      const search = await dispatcher.get(query);
       expect(search.status).toBe(200);
       expect(search.text).not.toContain(driverId);
       const detail = await dispatcher.get(`/api/employees/${driverId}`);
+      expect(detail.status, detail.text).toBe(200);
       expect(detail.text).not.toContain(license);
     });
 

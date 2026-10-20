@@ -163,19 +163,21 @@ suite('Matriz de aislamiento de M5 (sentido B → A)', { timeout: 180_000 }, () 
     await tick(w.platformA);
     const page = await w.adminB.get(`${API}/audit?limit=25`);
     expect(page.status, page.text).toBe(200);
-    const cursor = page.json.nextCursor as string | null;
+    const cursor = page.json.nextCursor as string;
+    expect(cursor, 'more than one page of audit for B').toBeTruthy();
+    const own = await w.adminB.get(`${API}/audit/entities/vehicle/${vehicleId}`);
+    expect(own.status, own.text).toBe(200);
+    expect(own.json.items.length).toBeGreaterThan(0);
     for (const browser of [w.auditorA, w.adminA]) {
       noEcho(await browser.get(`${API}/audit?limit=100`), vehicleId);
       const entity = await browser.get(`${API}/audit/entities/vehicle/${vehicleId}`);
       if (entity.status === 200) expect(entity.json.items).toEqual([]);
       else expect(entity.status).toBe(404);
-      if (cursor) {
-        const replayed = await browser.get(
-          `${API}/audit?limit=25&cursor=${encodeURIComponent(cursor)}`,
-        );
-        expect(replayed.status).toBeGreaterThanOrEqual(400);
-        noEcho(replayed, vehicleId);
-      }
+      const replayed = await browser.get(
+        `${API}/audit?limit=25&cursor=${encodeURIComponent(cursor)}`,
+      );
+      expect(replayed.status).toBeGreaterThanOrEqual(400);
+      noEcho(replayed, vehicleId);
     }
   });
 
