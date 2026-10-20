@@ -65,6 +65,12 @@ services:
       OPSLOG_S3_REGION: ${OPSLOG_S3_REGION:-}
       OPSLOG_S3_ACCESS_KEY_ID: ${OPSLOG_S3_ACCESS_KEY_ID:-}
       OPSLOG_S3_SECRET_ACCESS_KEY: ${OPSLOG_S3_SECRET_ACCESS_KEY:-}
+      # Optional SMTP mail: set all five or none (none keeps the log-only sink). TLS is required.
+      OPSLOG_SMTP_HOST: ${OPSLOG_SMTP_HOST:-}
+      OPSLOG_SMTP_PORT: ${OPSLOG_SMTP_PORT:-}
+      OPSLOG_SMTP_USER: ${OPSLOG_SMTP_USER:-}
+      OPSLOG_SMTP_PASSWORD: ${OPSLOG_SMTP_PASSWORD:-}
+      OPSLOG_SMTP_FROM: ${OPSLOG_SMTP_FROM:-}
     expose:
       - '8080'
 

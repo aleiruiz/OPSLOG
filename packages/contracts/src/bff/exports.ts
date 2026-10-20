@@ -334,3 +334,24 @@ export type {
   BffExportList,
   BffExportsQuery,
 } from './reports.js';
+export { BFF_NOTIFICATION_KINDS, BFF_SUBSCRIPTION_TYPES } from './notifications.js';
+export type {
+  BffNotificationKind,
+  BffNotificationSeverity,
+  BffNotificationEntityType,
+  BffSubscriptionType,
+  BffNotification,
+  BffNotificationList,
+  BffNotificationsQuery,
+  BffUnreadCount,
+  BffReadAllResult,
+  BffNotificationPreference,
+  BffNotificationPreferences,
+  BffNotificationPreferenceInput,
+  BffSubscription,
+  BffSubscriptionList,
+  BffNotificationRule,
+  BffNotificationRuleInput,
+  BffFailedDelivery,
+  BffFailedDeliveryList,
+} from './notifications.js';

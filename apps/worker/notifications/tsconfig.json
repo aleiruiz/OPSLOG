@@ -1,0 +1,20 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../../",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
+  },
+  "include": [
+    "src/**/*.ts",
+    "../base/src/index.ts",
+    "../../../packages/domain/notifications/src/**/*.ts",
+    "../../../packages/domain/identity/src/**/*.ts",
+    "../../../packages/domain/incidents/cases/src/**/*.ts",
+    "../../../packages/domain/maintenance/orders/src/**/*.ts",
+    "../../../packages/platform/mail/src/**/*.ts",
+    "../../../packages/platform/outbox/src/**/*.ts",
+    "../../../packages/platform/audit/src/**/*.ts",
+    "../../../infra/queues/src/**/*.ts"
+  ]
+}

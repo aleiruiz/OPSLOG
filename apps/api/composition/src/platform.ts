@@ -131,6 +131,8 @@ export class Platform {
   public readonly savedViews: DomainApis['savedViews'];
   /** Report catalog and preview (`/reports`), exports (`/exports`) and the job service the worker runs. */
   public readonly reports: DomainApis['reports'];
+  /** Notification center: its API, the ingest and dispatcher the worker runs and the mail port. */
+  public readonly notifications: DomainApis['notifications'];
   public readonly access: AccessDirectory;
   public readonly tenants: InMemoryTenantStore;
   public readonly audit: AuditStore;
@@ -236,7 +238,7 @@ export class Platform {
       this.kernel,
       adapters,
       { records: this.records, pipeline: this.pipeline, files: this.files, storage: this.storage },
-      options.environment ?? process.env['OPSLOG_ENV'],
+      options,
     );
     this.vehicles = apis.vehicles;
     this.areas = apis.areas;
@@ -261,6 +263,7 @@ export class Platform {
     this.search = apis.search;
     this.savedViews = apis.savedViews;
     this.reports = apis.reports;
+    this.notifications = apis.notifications;
     this.runtime = buildWorkerRuntime(
       this.kernel,
       this.pipeline,
@@ -283,10 +286,9 @@ export class Platform {
    * Creates an active tenant and its first administrator from a verified external principal.
    * If the administrator cannot be activated, the tenant is marked failed and never serves requests.
    */
-  public bootstrapTenant(input: {
-    name: string;
-    adminPrincipal: unknown;
-  }): Promise<PlatformResponse<{ tenantId: string; adminIdentityId: string }>> {
+  public bootstrapTenant(
+    input: Parameters<typeof bootstrapTenant>[1],
+  ): ReturnType<typeof bootstrapTenant> {
     return bootstrapTenant(this.kernel, input);
   }
 

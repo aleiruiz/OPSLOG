@@ -189,4 +189,37 @@ describe('readConfig', () => {
     };
     expect(() => readConfig(env)).toThrow(message);
   });
+
+  describe('SMTP', () => {
+    const smtp = {
+      OPSLOG_SMTP_HOST: 'smtp.example.test',
+      OPSLOG_SMTP_PORT: '587',
+      OPSLOG_SMTP_USER: 'mailer',
+      OPSLOG_SMTP_PASSWORD: 'not-a-real-secret',
+      OPSLOG_SMTP_FROM: 'opslog@example.test',
+    };
+
+    it('keeps the sink when none is set and enables SMTP when all five are', () => {
+      expect(readConfig(base).smtp).toBeUndefined();
+      expect(readConfig({ ...base, ...smtp }).smtp).toMatchObject({
+        host: 'smtp.example.test',
+        port: 587,
+      });
+    });
+
+    it('fails at start naming the variable, never its value', () => {
+      const partial: Record<string, string> = { ...smtp };
+      delete partial.OPSLOG_SMTP_USER;
+      expect(() => readConfig({ ...base, ...partial })).toThrow('OPSLOG_SMTP_USER');
+      let message = '';
+      try {
+        readConfig({ ...base, ...smtp, OPSLOG_SMTP_PORT: 'banana' });
+      } catch (error) {
+        message = (error as Error).message;
+      }
+      expect(message).toContain('OPSLOG_SMTP_PORT');
+      expect(message).not.toContain('banana');
+      expect(message).not.toContain(smtp.OPSLOG_SMTP_PASSWORD);
+    });
+  });
 });

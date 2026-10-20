@@ -47,6 +47,9 @@ import { IncidentsScreen } from '../features/incidents/IncidentsScreen';
 import { MaintenanceScreen } from '../features/maintenance/MaintenanceScreen';
 import { SearchBox } from '../features/search/SearchBox';
 import { SearchScreen } from '../features/search/SearchScreen';
+import { NotificationBell } from '../features/notifications/NotificationBell';
+import { NotificationsScreen } from '../features/notifications/NotificationsScreen';
+import { PreferencesScreen } from '../features/notifications/PreferencesScreen';
 import { ReportsScreen } from '../features/reports/ReportsScreen';
 import { RouterProvider, useRouter } from './router';
 import { isAllowed, loginPath, resolveRoute } from './routes';
@@ -294,6 +297,12 @@ function Routes() {
       case 'search':
         screen = <SearchScreen />;
         break;
+      case 'notifications':
+        screen = <NotificationsScreen />;
+        break;
+      case 'notificationPreferences':
+        screen = <PreferencesScreen />;
+        break;
       case 'reports':
         screen = <ReportsScreen />;
         break;
@@ -348,6 +357,9 @@ function Routes() {
       onSignOut={() => void logout().then((result) => setSignOutFailed(!result.ok))}
       locked={expired}
       search={<SearchBox ports={ports.search} onExpired={markExpired} disabled={expired} />}
+      notifications={
+        <NotificationBell ports={ports.notifications} onExpired={markExpired} disabled={expired} />
+      }
     >
       {signOutFailed && !expired && (
         <UiState

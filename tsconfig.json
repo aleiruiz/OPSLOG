@@ -98,6 +98,9 @@
     { "path": "./packages/platform/exports" },
     { "path": "./packages/domain/reports" },
     { "path": "./packages/domain/exports" },
-    { "path": "./packages/persistence/exports" }
+    { "path": "./packages/persistence/exports" },
+    { "path": "./packages/platform/mail" },
+    { "path": "./packages/domain/notifications" },
+    { "path": "./packages/persistence/notifications" }
   ]
 }

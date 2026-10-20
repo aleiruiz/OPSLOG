@@ -23,6 +23,7 @@ import { AUDIT_ROUTES } from './routes/audit.js';
 import { SAVED_VIEWS_ROUTES } from './routes/saved-views.js';
 import { SEARCH_ROUTES } from './routes/search.js';
 import { REPORT_ROUTES } from './routes/reports.js';
+import { NOTIFICATION_ROUTES } from './routes/notifications.js';
 
 export type { Route, RouteContext, RouteKind } from './routes/shared.js';
 
@@ -52,4 +53,5 @@ export const ROUTES: readonly Route[] = [
   ...ANALYTICS_ROUTES,
   ...SAVED_VIEWS_ROUTES,
   ...REPORT_ROUTES,
+  ...NOTIFICATION_ROUTES,
 ];

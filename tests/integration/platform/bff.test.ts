@@ -285,6 +285,12 @@ function writes(f: Fixture): [string, string, unknown?][] {
       { version: 1 },
     ],
     ['POST', '/api/v1/reports/drivers/exports', { format: 'csv' }],
+    ['POST', '/api/v1/notifications/read-all'],
+    ['POST', '/api/v1/notifications/00000000-0000-4000-8000-000000000001/read'],
+    ['PUT', '/api/v1/notification-preferences', { items: [] }],
+    ['PUT', '/api/v1/notification-rules', { emailKinds: [], quietHours: false }],
+    ['PUT', '/api/v1/subscriptions/vehicle/00000000-0000-4000-8000-000000000001'],
+    ['DELETE', '/api/v1/subscriptions/vehicle/00000000-0000-4000-8000-000000000001'],
     ['POST', '/api/v1/incidents', { vehicleId: f.vehicleId, type: 'collision' }],
     [
       'PATCH',

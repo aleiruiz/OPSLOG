@@ -4,6 +4,19 @@ import type { RouteDefinition } from './types';
 export const shellRoutes: readonly RouteDefinition[] = [
   // Global search results (FR-160); the box in the top bar is shown to every signed-in user.
   { id: 'search', pattern: '/buscar', title: 'Buscar', access: 'authenticated' },
+  // Notification center (MVP-NOTIFY): reached from the bell of the top bar, so it has no navigation entry.
+  {
+    id: 'notifications',
+    pattern: '/notificaciones',
+    title: 'Notificaciones',
+    access: 'authenticated',
+  },
+  {
+    id: 'notificationPreferences',
+    pattern: '/notificaciones/preferencias',
+    title: 'Preferencias de notificaciones',
+    access: 'authenticated',
+  },
   {
     id: 'home',
     pattern: '/',

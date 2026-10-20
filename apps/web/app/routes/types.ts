@@ -66,7 +66,9 @@ export interface RouteDefinition {
     | 'incidentTab'
     | 'audit'
     | 'search'
-    | 'reports';
+    | 'reports'
+    | 'notifications'
+    | 'notificationPreferences';
   readonly pattern: string;
   readonly title: string;
   readonly access: RouteAccess;

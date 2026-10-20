@@ -124,6 +124,8 @@ importers:
 
   apps/api/maintenance/plans: {}
 
+  apps/api/notifications: {}
+
   apps/api/reports: {}
 
   apps/api/saved-views: {}
@@ -199,6 +201,8 @@ importers:
 
   apps/worker/maintenance-plans: {}
 
+  apps/worker/notifications: {}
+
   packages/contracts:
     devDependencies:
       vitest:
@@ -248,6 +252,8 @@ importers:
   packages/domain/maintenance/plans: {}
 
   packages/domain/maintenance/workshops: {}
+
+  packages/domain/notifications: {}
 
   packages/domain/reports: {}
 
@@ -540,6 +546,22 @@ importers:
 
   packages/persistence/maintenance/workshops: {}
 
+  packages/persistence/notifications:
+    dependencies:
+      mysql2:
+        specifier: 3.22.0
+        version: 3.22.0(@types/node@22.15.21)
+      reflect-metadata:
+        specifier: 0.2.2
+        version: 0.2.2
+      typeorm:
+        specifier: 1.1.1
+        version: 1.1.1(babel-plugin-macros@3.1.0)(mysql2@3.22.0(@types/node@22.15.21))(supports-color@7.2.0)
+    devDependencies:
+      vitest:
+        specifier: 3.2.6
+        version: 3.2.6(@types/node@22.15.21)(jsdom@26.0.0(supports-color@7.2.0))(supports-color@7.2.0)
+
   packages/persistence/saved-views:
     dependencies:
       mysql2:
@@ -650,6 +672,16 @@ importers:
         version: 3.2.6(@types/node@22.15.21)(jsdom@26.0.0(supports-color@7.2.0))(supports-color@7.2.0)
 
   packages/platform/files: {}
+
+  packages/platform/mail:
+    dependencies:
+      nodemailer:
+        specifier: 10.0.14
+        version: 10.0.14
+    devDependencies:
+      vitest:
+        specifier: 3.2.6
+        version: 3.2.6(@types/node@22.15.21)(jsdom@26.0.0(supports-color@7.2.0))(supports-color@7.2.0)
 
   packages/platform/outbox: {}
 
@@ -3192,6 +3224,10 @@ packages:
   node-releases@2.0.57:
     resolution: {integrity: sha512-kQK9LGGFiHtrWiNhZtA7Qbw17AQz+dmsEKODRIVTXA9+e5MS/2gZEBhYJt13GrAz5/IOZKddH/0Z3TP/Zgo+yw==}
     engines: {node: '>=18'}
+
+  nodemailer@10.0.14:
+    resolution: {integrity: sha512-eJoLFKg55fesSlzUekmfOv/SBXh4KUYT8oiQc2RLP0tfG0rbNMJBK7wgHJwXTJwqyKlSJMz9UzDZ4v+aHEvo8g==}
+    engines: {node: '>=20.0.0'}
 
   normalize-path@3.0.0:
     resolution: {integrity: sha512-6eZs5Ls3WtCisHWp9S2GUy8dqkpGi4BVSz3GaqiE6ezub0512ESztXUwUB6C6IKbQkY2Pnb/mD4WYojCRwcwLA==}
@@ -6800,6 +6836,8 @@ snapshots:
       content-type: 2.1.0
 
   node-releases@2.0.57: {}
+
+  nodemailer@10.0.14: {}
 
   normalize-path@3.0.0: {}
 

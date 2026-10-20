@@ -14,6 +14,7 @@ import { createMockIncidentPorts } from './mockIncidents';
 import { createFakeDashboard } from '../features/dashboard/fakePorts';
 import { createMockSearchPorts } from './mockSearch';
 import { createMockViewsPorts } from './mockViews';
+import { createMockNotificationsPorts } from './mockNotifications';
 import { createMockReportsPorts } from './mockReports';
 import { createMockMaintenancePorts } from './mockMaintenance';
 import { createMockAreaStore, type MockAreaStore } from './mockAreas';
@@ -311,6 +312,7 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     },
     views: createMockViewsPorts(guarded, { userId: () => currentUser()?.id ?? null, can }),
     reports: createMockReportsPorts(guarded),
+    notifications: createMockNotificationsPorts(guarded),
     drafts: {
       load: (scope) => guarded('loadDraft', null, () => ok(drafts.get(draftKey(scope)) ?? null)),
       save: (scope, values) =>

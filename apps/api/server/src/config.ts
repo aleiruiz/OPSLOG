@@ -2,6 +2,7 @@ import {
   cognitoConfigFromEnv,
   type CognitoOidcConfig,
 } from '../../../../packages/platform/auth/src/cognito.js';
+import { readSmtpConfig, type SmtpConfig } from '../../../../packages/platform/mail/src/index.js';
 import { readMysqlConfig, type MysqlServerConfig } from './mysql-config.js';
 
 /** Everything the server reads from the environment, validated once at start-up. */
@@ -26,6 +27,8 @@ export interface ServerConfig {
   readonly persistence: 'memory' | 'mysql';
   /** Present exactly when `persistence` is `mysql`. */
   readonly mysql?: MysqlServerConfig;
+  /** Present only when all five OPSLOG_SMTP_* variables are set; otherwise mail goes to the sink. */
+  readonly smtp?: SmtpConfig;
 }
 
 export type Env = Readonly<Record<string, string | undefined>>;
@@ -105,6 +108,9 @@ export function readConfig(env: Env): ServerConfig {
   if (persistence !== 'memory' && persistence !== 'mysql')
     throw new Error('OPSLOG_PERSISTENCE must be memory or mysql');
 
+  // Throws naming the first missing or invalid OPSLOG_SMTP_* variable, never its value.
+  const smtp = readSmtpConfig(env);
+
   return {
     host: env.HOST?.trim() || '0.0.0.0',
     port,
@@ -117,5 +123,6 @@ export function readConfig(env: Env): ServerConfig {
     objectStorage,
     persistence,
     ...(persistence === 'mysql' ? { mysql: readMysqlConfig(env) } : {}),
+    ...(smtp ? { smtp } : {}),
   };
 }
