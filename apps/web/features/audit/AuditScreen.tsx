@@ -19,6 +19,18 @@ interface Filters {
   readonly entityType: string;
   readonly result: string;
 }
+/** Record types the `audit_log` report accepts as a filter; the others are left out of the link. */
+const EXPORTABLE: ReadonlySet<string> = new Set([
+  'vehicle',
+  'employee',
+  'area',
+  'document',
+  'insurance_policy',
+  'incident',
+  'maintenance_work_order',
+  'maintenance_plan',
+  'company_settings',
+]);
 const NONE: Filters = { fromDay: '', toDay: '', action: '', entityType: '', result: '' };
 
 /** S26 Auditoría: who did what and when, read-only, with the reconciliation of what was recorded (FR-170/171). */
@@ -85,7 +97,7 @@ export function AuditScreen({ now = Date.now }: { readonly now?: () => number })
               to={reportPath('audit_log', {
                 from: filters.fromDay,
                 to: filters.toDay,
-                entityType: filters.entityType,
+                entityType: EXPORTABLE.has(filters.entityType) ? filters.entityType : '',
                 result: filters.result,
               })}
             >

@@ -14,8 +14,8 @@ import {
 import { startFleetDatabase, type FleetDatabase } from '../fleet/mysql.js';
 import { startFleetWorld, type FleetWorld } from '../fleet/world.js';
 
-/** 2026-11-01 10:00 in America/Mexico_City: the instant every journey of M5 runs at. */
-export const T0 = new Date('2026-11-01T16:00:00.000Z');
+/** The journeys run this far past the database clock, so rows it stamps are already available. */
+const MARGIN_MS = 60_000;
 export const API = '/api/v1';
 
 /**
@@ -106,7 +106,8 @@ export async function startMvpWorld(): Promise<MvpWorld> {
     throw error;
   }
   const { worldA, worldB } = fleet;
-  (ROLE_PERMISSIONS as Record<string, readonly string[]>)['incident_auditor'] = INCIDENT_AUDITOR;
+  const templates = ROLE_PERMISSIONS as Record<string, readonly string[]>;
+  templates['incident_auditor'] = INCIDENT_AUDITOR;
   await worldA.member('subject-admin-a', 'auditor', 'subject-auditor-a');
   await worldA.member('subject-admin-a', 'pii_reader', 'subject-pii-a');
   await worldA.member('subject-admin-a', 'incident_auditor' as RoleName, 'subject-iaud-a');
@@ -114,7 +115,10 @@ export async function startMvpWorld(): Promise<MvpWorld> {
   await worldB.member('subject-admin-b', 'viewer', 'subject-viewer-b');
   // The database stamps rows with its own clock, which is later than the fixtures': move to the journeys'
   // instant, then sign everybody in again (a session idles out when the clock jumps).
-  vi.setSystemTime(T0);
+  const [clock] = await database.rows<{ ms: string | number }>(
+    'SELECT UNIX_TIMESTAMP(NOW(3)) * 1000 AS ms',
+  );
+  vi.setSystemTime(new Date(Math.round(Number(clock?.ms)) + MARGIN_MS));
   const [
     adminA,
     adminA2,
@@ -157,6 +161,7 @@ export async function startMvpWorld(): Promise<MvpWorld> {
     managerAId: manager.identityId,
     viewerB,
     async stop() {
+      delete templates['incident_auditor'];
       fleet.world.dispose();
       await database.close();
     },

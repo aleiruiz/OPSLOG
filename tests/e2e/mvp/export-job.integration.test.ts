@@ -46,28 +46,91 @@ suite('Journey: reporte grande → job → notificación → descarga → revoca
       json: { format: 'csv' },
       headers: { 'idempotency-key': key },
     });
-  let first: BffExport;
 
-  it('queues a report over the direct limit instead of building it in the request', async () => {
-    const reply = await request(exporter, 'mvp-export-key-0001');
-    expect(reply.status, reply.text).toBeLessThan(300);
-    first = reply.json as BffExport;
-    expect(first).toMatchObject({ mode: 'job', status: 'queued', format: 'csv' });
-    const again = await request(exporter, 'mvp-export-key-0001');
-    expect(again.json).toMatchObject({ id: first.id, replayed: true });
-  }, 120_000);
+  // Everything the journey does happens once, in order, here; each test below only reads what came back.
+  const seen: {
+    first?: BffExport;
+    again?: BffExport;
+    done?: BffExport;
+    notices: { eventKind: string; link: string; title: string }[];
+    file?: { status: number; text: string };
+    others: number[];
+    foreignNotices: string;
+    trail: { action: string; entityId: string; entityType: string }[];
+    outbox: { type: string }[];
+    pending?: BffExport;
+    afterRevoke: number;
+    failed?: { status: string; failure: string | null };
+    completedByExporter: number;
+  } = {
+    notices: [],
+    others: [],
+    foreignNotices: '',
+    trail: [],
+    outbox: [],
+    afterRevoke: 0,
+    completedByExporter: 0,
+  };
 
-  it('produces it on the tick, notifies the person and serves the file only to them', async () => {
+  beforeAll(async () => {
+    const queued = await request(exporter, 'mvp-export-key-0001');
+    expect(queued.status, queued.text).toBeLessThan(300);
+    seen.first = queued.json as BffExport;
+    seen.again = (await request(exporter, 'mvp-export-key-0001')).json as BffExport;
+    const id = seen.first.id;
     // Two ticks, as the api process runs them: the first writes the file and the notice, the second delivers.
     await tick(w.platformA);
     await tick(w.platformA);
-    const done = await exporter.get(`${API}/exports/${first.id}`);
-    expect(done.json).toMatchObject({ status: 'completed', rowCount: ROWS });
+    seen.done = (await exporter.get(`${API}/exports/${id}`)).json as BffExport;
+    seen.notices = (await exporter.get(`${API}/notifications?limit=100`)).json.items;
+    const file = await exporter.get(`${API}/exports/${id}/download`);
+    seen.file = {
+      status: file.status,
+      text: Buffer.from(file.bytes ?? file.text).toString('utf8'),
+    };
+    seen.others = [
+      (await w.adminA.get(`${API}/exports/${id}/download`)).status,
+      (await w.adminB.get(`${API}/exports/${id}/download`)).status,
+      (await w.adminB.get(`${API}/exports/${id}`)).status,
+    ];
+    seen.foreignNotices = JSON.stringify(
+      (await w.adminB.get(`${API}/notifications?limit=100`)).json,
+    );
+    seen.outbox = await w.database.rows<{ type: string }>(
+      'SELECT type FROM opslog_tenant_outbox WHERE event_id = ?',
+      [`export-completed-${id}`],
+    );
+    seen.trail = (await w.auditorA.get(`${API}/audit?limit=100`)).json.items;
 
-    const notices = await exporter.get(`${API}/notifications?limit=100`);
-    const ready = (
-      notices.json.items as { eventKind: string; link: string; title: string }[]
-    ).filter((item) => item.eventKind === 'export_ready');
+    // The membership is revoked while a second job waits.
+    const pending = await request(exporter, 'mvp-export-key-0002');
+    seen.pending = pending.json as BffExport;
+    const revoked = await w.adminA.post(`/api/users/${exporterId}/deactivate`, {
+      json: { reason: 'Baja del recorrido' },
+    });
+    expect(revoked.status, revoked.text).toBeLessThan(300);
+    seen.afterRevoke = (await exporter.get(`${API}/exports/${id}/download`)).status;
+    await tick(w.platformA);
+    const rows = await w.database.rows<{ status: string; failure: string | null }>(
+      'SELECT status, failure FROM opslog_export_jobs WHERE id = ?',
+      [seen.pending.id],
+    );
+    seen.failed = rows[0];
+    const files = await w.database.rows<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM opslog_export_jobs WHERE status = 'completed' AND actor_id = ?",
+      [exporterId],
+    );
+    seen.completedByExporter = Number(files[0]?.n);
+  }, 240_000);
+
+  it('queues a report over the direct limit instead of building it in the request', () => {
+    expect(seen.first).toMatchObject({ mode: 'job', status: 'queued', format: 'csv' });
+    expect(seen.again).toMatchObject({ id: seen.first?.id, replayed: true });
+  });
+
+  it('produces it on the tick and notifies the person without the content of the file', () => {
+    expect(seen.done).toMatchObject({ status: 'completed', rowCount: ROWS });
+    const ready = seen.notices.filter((item) => item.eventKind === 'export_ready');
     expect(ready.length).toBe(1);
     // The notice carries a label and a link, never the file name, a filter value or a figure.
     expect(JSON.stringify(ready[0])).not.toMatch(/BIG-|\.csv/);
@@ -78,56 +141,37 @@ suite('Journey: reporte grande → job → notificación → descarga → revoca
       [],
     );
     expect(JSON.stringify(mail)).not.toMatch(/BIG-/);
+    expect(seen.foreignNotices).not.toContain('export_ready');
+  });
 
-    const file = await exporter.get(`${API}/exports/${first.id}/download`);
-    expect(file.status, file.text).toBe(200);
-    const text = Buffer.from(file.bytes ?? file.text).toString('utf8');
-    expect(text).toContain('BIG-4999');
-    expect(text.split('\n').filter((line) => line.includes('BIG-')).length).toBe(ROWS - 1);
-
-    // Another person of the same company and a person of the other company do not get the file.
-    expect((await w.adminA.get(`${API}/exports/${first.id}/download`)).status).toBe(404);
-    expect((await w.adminB.get(`${API}/exports/${first.id}/download`)).status).toBe(404);
-    expect((await w.adminB.get(`${API}/exports/${first.id}`)).status).toBe(404);
-    const foreign = await w.adminB.get(`${API}/notifications?limit=100`);
-    expect(JSON.stringify(foreign.json)).not.toContain('export_ready');
-  }, 120_000);
-
-  it('leaves the export and its completion in the audit trail and the outbox', async () => {
-    await tick(w.platformA);
-    const events = await w.database.rows<{ type: string }>(
-      'SELECT type FROM opslog_tenant_outbox WHERE event_id = ?',
-      [`export-completed-${first.id}`],
+  it('serves the file only to the person who asked for it', () => {
+    expect(seen.file?.status).toBe(200);
+    expect(seen.file?.text).toContain('BIG-4999');
+    expect(seen.file?.text.split('\n').filter((line) => line.includes('BIG-')).length).toBe(
+      ROWS - 1,
     );
-    expect(events).toEqual([{ type: 'export.completed' }]);
-    const trail = await w.auditorA.get(`${API}/audit?limit=100`);
-    expect(trail.status, trail.text).toBe(200);
-    expect(JSON.stringify(trail.json.items)).toMatch(/export/i);
-  }, 120_000);
+    // Another person of the same company and a person of the other company do not get it.
+    expect(seen.others).toEqual([404, 404, 404]);
+  });
 
-  it('drops the file and fails a pending job when the membership is revoked', async () => {
-    const pending = await request(exporter, 'mvp-export-key-0002');
-    expect(pending.json).toMatchObject({ mode: 'job', status: 'queued' });
-    const revoked = await w.adminA.post(`/api/users/${exporterId}/deactivate`, {
-      json: { reason: 'Baja del recorrido' },
+  it('leaves the completion in the outbox and the export in the audit trail', () => {
+    expect(seen.outbox).toEqual([{ type: 'export.completed' }]);
+    const entry = seen.trail.find((item) => item.entityId === seen.first?.id);
+    expect(
+      entry,
+      JSON.stringify(seen.trail.map((item) => [item.action, item.entityType])),
+    ).toMatchObject({
+      entityId: seen.first?.id,
     });
-    expect(revoked.status, revoked.text).toBeLessThan(300);
+    expect(entry?.action).toMatch(/export/i);
+  });
 
-    expect([401, 403, 404]).toContain(
-      (await exporter.get(`${API}/exports/${first.id}/download`)).status,
-    );
-    await tick(w.platformA);
-    const rows = await w.database.rows<{ status: string; failure: string | null }>(
-      'SELECT status, failure FROM opslog_export_jobs WHERE id = ?',
-      [(pending.json as BffExport).id],
-    );
-    expect(rows[0]?.status).toBe('failed');
-    expect(['permission_revoked', 'session_ended']).toContain(rows[0]?.failure);
+  it('drops the file and fails a pending job when the membership is revoked', () => {
+    expect(seen.pending).toMatchObject({ mode: 'job', status: 'queued' });
+    expect([401, 403, 404]).toContain(seen.afterRevoke);
+    expect(seen.failed?.status).toBe('failed');
+    expect(['permission_revoked', 'session_ended']).toContain(seen.failed?.failure);
     // No second file was written for the revoked person.
-    const files = await w.database.rows<{ n: number }>(
-      "SELECT COUNT(*) AS n FROM opslog_export_jobs WHERE status = 'completed' AND actor_id = ?",
-      [exporterId],
-    );
-    expect(Number(files[0]?.n)).toBe(1);
-  }, 120_000);
+    expect(seen.completedByExporter).toBe(1);
+  });
 });

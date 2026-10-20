@@ -43,10 +43,8 @@ suite('Journey: estado de vehículo → notificación + correo → webhook', { t
     await tick(w.platformB);
     w.receiverA.received.length = 0;
     w.mailA.messages.length = 0;
-  }, 120_000);
-  afterAll(async () => w?.stop(), 60_000);
 
-  it('changes the status, which persists, audits and queues the events', async () => {
+    // The status change and the ticks that follow it happen once, here; the tests only read the outcome.
     const current = await w.adminA.get(`/api/vehicles/${vehicleId}`);
     const moved = await w.adminA.post(`/api/vehicles/${vehicleId}/status`, {
       json: {
@@ -56,26 +54,40 @@ suite('Journey: estado de vehículo → notificación + correo → webhook', { t
       },
     });
     expect(moved.status, moved.text).toBe(200);
-    expect((await w.adminA.get(`/api/vehicles/${vehicleId}`)).json.status).toBe('out_of_service');
+    after.status = (await w.adminA.get(`/api/vehicles/${vehicleId}`)).json.status;
     await tick(w.platformA);
     await tick(w.platformA);
     await tick(w.platformB);
-    const trail = await w.auditorA.get(`${API}/audit/entities/vehicle/${vehicleId}`);
-    expect(trail.status, trail.text).toBe(200);
-    expect(trail.json.items.length).toBeGreaterThanOrEqual(2);
+    after.trail = (await w.auditorA.get(`${API}/audit/entities/vehicle/${vehicleId}`)).json.items;
+    after.notices = (await w.viewerA.get(`${API}/notifications?limit=100`)).json.items;
+    after.unread = (await w.viewerA.get(`${API}/notifications/unread-count`)).json.unread;
+    after.foreignNotices = JSON.stringify(
+      (await w.viewerB.get(`${API}/notifications?limit=100`)).json,
+    );
+    after.deliveries = (await w.adminA.get(`${HOOKS}/${endpointId}/deliveries`)).json;
+  }, 120_000);
+  afterAll(async () => w?.stop(), 60_000);
+
+  const after: {
+    status?: string;
+    trail: unknown[];
+    notices: { eventKind: string; link: string }[];
+    unread: number;
+    foreignNotices: string;
+    deliveries?: { items: Record<string, unknown>[] };
+  } = { trail: [], notices: [], unread: 0, foreignNotices: '' };
+
+  it('persists the status and audits it', () => {
+    expect(after.status).toBe('out_of_service');
+    expect(after.trail.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('gives the follower the in-app notice and the e-mail of the sink, without the free text', async () => {
-    const list = await w.viewerA.get(`${API}/notifications?limit=100`);
-    const notices = (
-      list.json.items as { eventKind: string; link: string; title: string }[]
-    ).filter((item) => item.eventKind === 'vehicle_out_of_service');
+  it('gives the follower the in-app notice and the e-mail of the sink, without the free text', () => {
+    const notices = after.notices.filter((item) => item.eventKind === 'vehicle_out_of_service');
     expect(notices.length).toBe(1);
     expect(notices[0]?.link).toContain(vehicleId);
     expect(JSON.stringify(notices)).not.toContain('Falla de motor');
-    expect((await w.viewerA.get(`${API}/notifications/unread-count`)).json.unread).toBeGreaterThan(
-      0,
-    );
+    expect(after.unread).toBeGreaterThan(0);
 
     const mail = w.mailA.messages.filter(
       (message) => message.template === 'vehicle_out_of_service',
@@ -94,15 +106,13 @@ suite('Journey: estado de vehículo → notificación + correo → webhook', { t
     const body = JSON.parse(w.receiverA.bodyOf(0)) as Record<string, unknown>;
     expect(JSON.stringify(body)).toContain(vehicleId);
     expect(JSON.stringify(body)).not.toMatch(/Falla de motor|licen|@/i);
-    const history = await w.adminA.get(`${HOOKS}/${endpointId}/deliveries`);
-    expect(history.json.items[0]).toMatchObject({ status: 'delivered', attempts: 1 });
-    expect(JSON.stringify(history.json)).not.toContain(secret);
+    expect(after.deliveries?.items[0]).toMatchObject({ status: 'delivered', attempts: 1 });
+    expect(JSON.stringify(after.deliveries)).not.toContain(secret);
   });
 
   it('keeps company B out of it', async () => {
     expect(w.receiverB.received).toEqual([]);
-    const foreign = await w.viewerB.get(`${API}/notifications?limit=100`);
-    expect(JSON.stringify(foreign.json)).not.toContain(vehicleId);
+    expect(after.foreignNotices).not.toContain(vehicleId);
     expect((await w.adminB.get(`${HOOKS}/${endpointId}`)).status).toBe(404);
     expect((await w.viewerA.get(`${HOOKS}/${endpointId}`)).status).toBe(403);
   });

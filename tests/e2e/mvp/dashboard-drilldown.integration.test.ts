@@ -15,10 +15,12 @@ type Browser = MvpWorld['adminA'];
 suite('Journey: dashboard → drill-down', { timeout: 180_000 }, () => {
   let w: MvpWorld;
   const ids: string[] = [];
+  let areaId: string;
   beforeAll(async () => {
     w = await startMvpWorld();
-    const area = await w.area(w.adminA, 'Flota tablero');
-    for (const tag of ['DD1', 'DD2', 'DD3', 'DD4']) ids.push(await w.vehicle(w.adminA, area, tag));
+    areaId = await w.area(w.adminA, 'Flota tablero');
+    for (const tag of ['DD1', 'DD2', 'DD3', 'DD4'])
+      ids.push(await w.vehicle(w.adminA, areaId, tag));
     // One in maintenance and one out of service: the «fuera de servicio» widget counts both.
     for (const [index, status] of [
       [1, 'in_maintenance'],
@@ -70,8 +72,6 @@ suite('Journey: dashboard → drill-down', { timeout: 180_000 }, () => {
   });
 
   it('filters by area and keeps the formula of every figure in the payload', async () => {
-    const area = await w.adminA.get('/api/areas');
-    const areaId = area.json.items[0].id as string;
     const filtered = await dashboard(w.adminA, `?areaId=${areaId}`);
     expect(countOf(filtered, 'vehicles_active')).toBe(2);
     expect(widget(filtered, 'vehicles_active')?.drilldown.filters).toMatchObject({ areaId });
