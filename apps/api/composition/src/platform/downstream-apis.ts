@@ -14,6 +14,7 @@ import type { AreaService } from '../../../../../packages/domain/areas/src/index
 import { buildAuditQueryApi } from './audit-query-apis.js';
 import { buildSavedViews } from './saved-views-apis.js';
 import { buildSearch } from './search-apis.js';
+import { buildReports } from './report-apis.js';
 import type { PiiCipher } from '../../../../../packages/platform/pii/src/index.js';
 
 /** Maintenance, work orders and incidents: the modules that build on the fleet services. */
@@ -58,6 +59,7 @@ export function buildDownstreamApis(
     ),
     ...incidents,
     search: buildSearch(kernel, defaults, services, stores.store, pii),
+    reports: buildReports(kernel, defaults, services, fleet, files.storage),
     ...buildAnalytics(kernel, {
       areas: fleet.areaService,
       vehicles: fleet.vehicleStore,

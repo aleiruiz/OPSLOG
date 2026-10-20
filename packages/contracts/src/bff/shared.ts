@@ -19,6 +19,8 @@ export const BFF_ERRORS = {
   forbidden: { status: 403, message: 'Permission denied' },
   csrf_failed: { status: 403, message: 'Request rejected' },
   not_found: { status: 404, message: 'Resource not found' },
+  gone: { status: 410, message: 'Resource no longer available' },
+  rate_limited: { status: 429, message: 'Too many requests' },
   method_not_allowed: { status: 405, message: 'Method not allowed' },
   conflict: { status: 409, message: 'Conflict' },
   last_admin: { status: 409, message: 'Conflict' },

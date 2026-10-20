@@ -83,6 +83,8 @@ export function failure(
     unauthorized: 'unauthorized',
     forbidden: 'forbidden',
     not_found: 'not_found',
+    gone: 'gone',
+    rate_limited: 'rate_limited',
     conflict: 'conflict',
     last_admin: 'last_admin',
     duplicate: 'duplicate',

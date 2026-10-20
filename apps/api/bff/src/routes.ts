@@ -22,6 +22,7 @@ import { INCIDENT_WORKFLOW_ROUTES } from './routes/incident-workflow.js';
 import { AUDIT_ROUTES } from './routes/audit.js';
 import { SAVED_VIEWS_ROUTES } from './routes/saved-views.js';
 import { SEARCH_ROUTES } from './routes/search.js';
+import { REPORT_ROUTES } from './routes/reports.js';
 
 export type { Route, RouteContext, RouteKind } from './routes/shared.js';
 
@@ -50,4 +51,5 @@ export const ROUTES: readonly Route[] = [
   ...SEARCH_ROUTES,
   ...ANALYTICS_ROUTES,
   ...SAVED_VIEWS_ROUTES,
+  ...REPORT_ROUTES,
 ];

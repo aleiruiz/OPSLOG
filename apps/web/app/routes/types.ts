@@ -65,7 +65,8 @@ export interface RouteDefinition {
     | 'incidentDetail'
     | 'incidentTab'
     | 'audit'
-    | 'search';
+    | 'search'
+    | 'reports';
   readonly pattern: string;
   readonly title: string;
   readonly access: RouteAccess;

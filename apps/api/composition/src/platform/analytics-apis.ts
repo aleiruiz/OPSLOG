@@ -34,6 +34,7 @@ import type {
 } from '../../../../../packages/domain/vehicles/src/index.js';
 import { DashboardApi } from '../../../analytics/src/index.js';
 import type { PlatformKernel } from './kernel.js';
+import type { ReportsModule } from './report-apis.js';
 
 /** The fleet stores and the area service as `buildDomainApis` holds them. */
 export interface AnalyticsFleet {
@@ -46,6 +47,11 @@ export interface AnalyticsFleet {
 /** What `GET /api/v1/dashboard` adds to the platform. */
 export interface AnalyticsApis {
   readonly dashboard: DashboardApi;
+}
+
+/** What the reports and their exports add to the platform. */
+export interface ReportApis {
+  readonly reports: ReportsModule;
 }
 
 /** The stores and services the dashboard reads; each module answers with aggregates only. */

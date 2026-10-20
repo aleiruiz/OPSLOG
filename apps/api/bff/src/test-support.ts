@@ -22,6 +22,8 @@ export interface Reply {
   readonly text: string;
   readonly json: any;
   readonly setCookies: readonly string[];
+  /** The file of a download answer. */
+  readonly bytes?: Uint8Array;
 }
 
 export interface SendInit {
@@ -104,6 +106,7 @@ export class Browser {
       text: response.body,
       json,
       setCookies,
+      ...(response.bytes ? { bytes: response.bytes } : {}),
     };
   }
   public get(path: string, init: SendInit = {}): Promise<Reply> {

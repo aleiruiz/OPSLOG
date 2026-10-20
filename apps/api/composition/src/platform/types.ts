@@ -25,6 +25,7 @@ import type {
   IncidentAlertMailer,
   IncidentSlaStore,
 } from '../../../../../packages/domain/incidents/sla/src/index.js';
+import type { ExportJobStore } from '../../../../../packages/domain/exports/src/index.js';
 import type {
   ReconcileQueue,
   SearchStore,
@@ -111,6 +112,8 @@ export interface PlatformAdapters {
   readonly search?: SearchStore & ReconcileQueue;
   /** Persistent saved views and visible columns (`packages/persistence/saved-views`). In memory by default. */
   readonly savedViews?: SavedViewStore;
+  /** Persistent export jobs (`packages/persistence/exports`). In memory by default. */
+  readonly exportJobs?: ExportJobStore;
   /** The mail adapter of the SLA notices. Without one, outside production, a test sink records them. */
   readonly incidentAlertMailer?: IncidentAlertMailer;
   /** Where a member's address lives; read at send time. Defaults to a reserved, undeliverable address. */

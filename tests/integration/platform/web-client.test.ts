@@ -1144,6 +1144,30 @@ describe('typed client against the real BFF', () => {
       ok: true,
       value: undefined,
     });
+    expect(await client.call('reports.catalog')).toMatchObject({
+      ok: true,
+      value: { canExport: true },
+    });
+    expect(
+      await client.call('reports.preview', {
+        params: { reportId: 'areas' },
+        query: { limit: 5, columns: 'name' },
+      }),
+    ).toMatchObject({ ok: true, value: { reportId: 'areas' } });
+    const exported = await client.call('reports.export', {
+      params: { reportId: 'areas' },
+      body: { format: 'csv' },
+    });
+    expect(exported).toMatchObject({ ok: true, value: { status: 'completed', mode: 'direct' } });
+    const exportId = exported.ok ? exported.value.id : '';
+    expect(await client.call('exports.list')).toMatchObject({ ok: true, value: { total: 1 } });
+    expect(await client.call('exports.get', { params: { exportId } })).toMatchObject({
+      ok: true,
+      value: { id: exportId },
+    });
+    // The file is not JSON: the browser opens it with its cookie, so the typed client never calls
+    // it (the download is covered by the BFF tests over HTTP).
+    used.add('exports.download');
     expect(await client.call('auth.logout')).toEqual({ ok: true, value: undefined });
     expect(await client.call('users.list')).toMatchObject({ ok: false, error: { status: 401 } });
 

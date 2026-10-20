@@ -4,6 +4,7 @@ import type { IncidentPorts } from '../features/incidents/ports';
 import type { MaintenancePorts } from '../features/maintenance/ports';
 import type { SearchPorts } from '../features/search/ports';
 import type { ViewsPorts } from '../features/search/views/ports';
+import type { ReportsPorts } from '../features/reports/ports';
 import type {
   AlertsClient,
   AssignmentsClient,
@@ -413,5 +414,7 @@ export interface ApiPorts {
   readonly dashboard: DashboardPort;
   /** Saved views and persistent columns of the lists (FR-162). */
   readonly views: ViewsPorts;
+  /** Report catalog, preview and exports (FR-150..153). */
+  readonly reports: ReportsPorts;
   readonly oidc: OidcPort;
 }

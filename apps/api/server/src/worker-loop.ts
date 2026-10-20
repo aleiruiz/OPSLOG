@@ -11,8 +11,9 @@ const TICK_MS = 5_000;
 
 /**
  * Runs the worker in the API process: with in-memory adapters the outbox, scan queue and audit
- * relay live in this process, so a separate worker container could not see them. Each tick drains
- * the outbox, runs due scans and relays audit rows; a failing tick never stops the next one.
+ * relay live in this process, so a separate worker container could not see them. Each tick walks the
+ * registered jobs in order (outbox, scans, audit relay, then each module's own, such as exports);
+ * a failing job never stops the next one, nor the next tick.
  */
 export function startWorkerLoop(
   runtime: WorkerRuntime,
@@ -21,12 +22,13 @@ export function startWorkerLoop(
 ): WorkerLoop {
   let running: Promise<void> | undefined;
   const run = async (): Promise<void> => {
-    try {
-      await runtime.drainOutbox();
-      await runtime.runScans();
-      await runtime.runAuditRelay();
-    } catch (error) {
-      report(`worker_tick_failed ${error instanceof Error ? error.name : 'Error'}`);
+    // Each registered job runs on its own: one that fails is reported by name and the rest still run.
+    for (const job of runtime.jobs.list()) {
+      try {
+        await job.run();
+      } catch (error) {
+        report(`worker_job_failed ${job.name} ${error instanceof Error ? error.name : 'Error'}`);
+      }
     }
   };
   const tick = (): Promise<void> => {

@@ -129,6 +129,8 @@ export class Platform {
   public readonly search: DomainApis['search'];
   /** Saved views and visible columns of the lists (`/views`). */
   public readonly savedViews: DomainApis['savedViews'];
+  /** Report catalog and preview (`/reports`), exports (`/exports`) and the job service the worker runs. */
+  public readonly reports: DomainApis['reports'];
   public readonly access: AccessDirectory;
   public readonly tenants: InMemoryTenantStore;
   public readonly audit: AuditStore;
@@ -233,7 +235,7 @@ export class Platform {
     const apis = buildDomainApis(
       this.kernel,
       adapters,
-      { records: this.records, pipeline: this.pipeline, files: this.files },
+      { records: this.records, pipeline: this.pipeline, files: this.files, storage: this.storage },
       options.environment ?? process.env['OPSLOG_ENV'],
     );
     this.vehicles = apis.vehicles;
@@ -258,14 +260,13 @@ export class Platform {
     this.incidentSlaModule = apis.incidentSla;
     this.search = apis.search;
     this.savedViews = apis.savedViews;
+    this.reports = apis.reports;
     this.runtime = buildWorkerRuntime(
       this.kernel,
       this.pipeline,
       options.worker,
       adapters.auditRelay,
-      apis.maintenancePlanWorker,
-      apis.incidentSla,
-      apis.search,
+      apis,
     );
   }
 

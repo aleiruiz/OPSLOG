@@ -312,3 +312,25 @@ export type {
   BffSearchQuery,
 } from './search.js';
 export * from './analytics.js';
+export { BFF_REPORT_FORMATS, BFF_REPORT_RESERVED_QUERY } from './reports.js';
+export type {
+  BffReportFormat,
+  BffReportFamilyId,
+  BffReportFamily,
+  BffReportColumnKind,
+  BffReportColumn,
+  BffReportFilterKind,
+  BffReportFilterOption,
+  BffReportFilter,
+  BffReportSummary,
+  BffReportCatalog,
+  BffReportCell,
+  BffReportPreview,
+  BffReportPreviewQuery,
+  BffExportInput,
+  BffExportStatus,
+  BffExportFailure,
+  BffExport,
+  BffExportList,
+  BffExportsQuery,
+} from './reports.js';

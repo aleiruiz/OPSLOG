@@ -15,6 +15,7 @@ import { WORK_ORDER_TABLES } from '../../../packages/persistence/maintenance/ord
 import { INCIDENT_TABLES } from '../../../packages/persistence/incidents/cases/src/index.js';
 import { INCIDENT_REPAIR_TABLES } from '../../../packages/persistence/incidents/repairs/src/index.js';
 import { INCIDENT_COST_TABLES } from '../../../packages/persistence/incidents/costs/src/index.js';
+import { EXPORT_TABLES } from '../../../packages/persistence/exports/src/index.js';
 import { SEARCH_TABLES } from '../../../packages/persistence/search/src/index.js';
 import { INCIDENT_SLA_TABLES } from '../../../packages/persistence/incidents/sla/src/index.js';
 import { INCIDENT_WORKFLOW_TABLES } from '../../../packages/persistence/incidents/workflow/src/index.js';
@@ -54,6 +55,7 @@ suite('fleet tenant migration composition on real MySQL', () => {
       'incident-sla:2026101700030',
       'search:2026101900010',
       'saved_views:2026101900020',
+      'exports:2026101900050',
       'audit:2026100700010',
     ]);
     expect(database.databaseName).toMatch(/^opslog_t_[a-f0-9]+$/);
@@ -99,6 +101,7 @@ suite('fleet tenant migration composition on real MySQL', () => {
         ...Object.values(INCIDENT_COST_TABLES),
         ...Object.values(INCIDENT_SLA_TABLES),
         ...Object.values(SEARCH_TABLES),
+        ...Object.values(EXPORT_TABLES),
         'opslog_audit_local',
         'opslog_audit_delivery',
         'opslog_audit_log',

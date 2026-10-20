@@ -21,7 +21,10 @@ import {
   type FileRecordStore,
 } from '../../../../../packages/domain/files/src/index.js';
 import type { SettingsService } from '../../../../../packages/domain/settings/src/index.js';
-import type { FilePipeline } from '../../../../../packages/platform/files/src/index.js';
+import type {
+  FilePipeline,
+  ObjectStorage,
+} from '../../../../../packages/platform/files/src/index.js';
 import type { FilesApi } from '../../../files/src/index.js';
 import { WorkOrderApi } from '../../../maintenance/orders/src/index.js';
 import { createMechanicScope } from './mechanic-scope.js';
@@ -66,6 +69,8 @@ export interface WorkOrderFileSupport {
   readonly records: FileRecordStore;
   readonly pipeline: FilePipeline;
   readonly files: FilesApi;
+  /** The object storage the files live in; exports keep theirs under their own area. */
+  readonly storage: ObjectStorage;
 }
 
 /**

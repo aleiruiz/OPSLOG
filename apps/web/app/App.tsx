@@ -47,6 +47,7 @@ import { IncidentsScreen } from '../features/incidents/IncidentsScreen';
 import { MaintenanceScreen } from '../features/maintenance/MaintenanceScreen';
 import { SearchBox } from '../features/search/SearchBox';
 import { SearchScreen } from '../features/search/SearchScreen';
+import { ReportsScreen } from '../features/reports/ReportsScreen';
 import { RouterProvider, useRouter } from './router';
 import { isAllowed, loginPath, resolveRoute } from './routes';
 import type { ApiPorts } from './types';
@@ -292,6 +293,9 @@ function Routes() {
         break;
       case 'search':
         screen = <SearchScreen />;
+        break;
+      case 'reports':
+        screen = <ReportsScreen />;
         break;
       case 'maintenance':
         screen = <MaintenanceScreen />;
