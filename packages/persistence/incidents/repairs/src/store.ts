@@ -1,12 +1,14 @@
 import 'reflect-metadata';
-import { type DataSource, type EntityManager } from 'typeorm';
-import type {
-  IncidentApplyResult,
-  IncidentMutation,
-  IncidentStore,
+import { In, type DataSource, type EntityManager } from 'typeorm';
+import {
+  chunksOf,
+  type IncidentApplyResult,
+  type IncidentMutation,
+  type IncidentStore,
 } from '../../../../domain/incidents/cases/src/index.js';
 import type {
   IncidentRepairStore,
+  RepairBatchReads,
   RepairChange,
   RepairLink,
 } from '../../../../domain/incidents/repairs/src/index.js';
@@ -34,7 +36,7 @@ export const linkRow = rowOf;
  * Links of the cases. Every selector carries the tenant. Writes join the transaction of the incident
  * store, so the case row, its timeline, audit, outbox and the link commit or fail together.
  */
-export class TypeOrmIncidentRepairStore implements IncidentRepairStore {
+export class TypeOrmIncidentRepairStore implements IncidentRepairStore, RepairBatchReads {
   public constructor(
     private readonly dataSource: DataSource,
     private readonly base: IncidentStore,
@@ -60,6 +62,36 @@ export class TypeOrmIncidentRepairStore implements IncidentRepairStore {
       .getRepository(IncidentRepairLinkSchema)
       .findOneBy({ tenantId, orderId });
     return row ? linkFrom(row) : null;
+  }
+
+  public async linksOfOrders(
+    tenantId: string,
+    orderIds: readonly string[],
+  ): Promise<ReadonlyMap<string, RepairLink>> {
+    const result = new Map<string, RepairLink>();
+    for (const chunk of chunksOf(orderIds)) {
+      const rows = await this.dataSource
+        .getRepository(IncidentRepairLinkSchema)
+        .find({ where: { tenantId, orderId: In([...chunk]) } });
+      for (const row of rows) result.set(row.orderId, linkFrom(row));
+    }
+    return result;
+  }
+
+  public async linksOfIncidents(
+    tenantId: string,
+    incidentIds: readonly string[],
+  ): Promise<ReadonlyMap<string, readonly RepairLink[]>> {
+    const result = new Map<string, RepairLink[]>();
+    for (const chunk of chunksOf(incidentIds)) {
+      const rows = await this.dataSource.getRepository(IncidentRepairLinkSchema).find({
+        where: { tenantId, incidentId: In([...chunk]) },
+        order: { linkedAt: 'ASC', id: 'ASC' },
+      });
+      for (const row of rows)
+        result.set(row.incidentId, [...(result.get(row.incidentId) ?? []), linkFrom(row)]);
+    }
+    return result;
   }
 
   private async write(manager: EntityManager, change: RepairChange): Promise<boolean> {

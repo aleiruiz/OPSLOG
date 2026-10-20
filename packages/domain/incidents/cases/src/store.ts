@@ -1,7 +1,12 @@
 import { validateIncidentEvent } from './events.js';
 import { formatFolio } from './folio.js';
 import type { IdempotencyRecord } from './idempotency.js';
-import type { IncidentAnalyticsReads, IncidentStore, IncidentTimelineRow } from './ports.js';
+import type {
+  IncidentAnalyticsReads,
+  IncidentBatchReads,
+  IncidentStore,
+  IncidentTimelineRow,
+} from './ports.js';
 import { SEVERITY_RANK, TERMINAL_STATUSES } from './catalog.js';
 import type {
   Incident,
@@ -26,7 +31,9 @@ const SORT_VALUE: Readonly<Record<IncidentListQuery['sort'], (incident: Incident
 };
 
 /** In-memory store for unit tests and the non-persistent composition; same CAS semantics as MySQL. */
-export class InMemoryIncidentStore implements IncidentStore, IncidentAnalyticsReads {
+export class InMemoryIncidentStore
+  implements IncidentStore, IncidentAnalyticsReads, IncidentBatchReads
+{
   private readonly incidents = new Map<string, Incident>();
   private readonly timelines = new Map<string, IncidentTransition[]>();
   private readonly keys = new Map<string, IdempotencyRecord>();
@@ -161,6 +168,25 @@ export class InMemoryIncidentStore implements IncidentStore, IncidentAnalyticsRe
 
   public async history(tenantId: string, id: string): Promise<readonly IncidentTransition[]> {
     return structuredClone(this.timelines.get(key(tenantId, id)) ?? []);
+  }
+
+  public async getMany(tenantId: string, ids: readonly string[]): Promise<readonly Incident[]> {
+    return [...new Set(ids)].flatMap((id) => {
+      const incident = this.incidents.get(key(tenantId, id));
+      return incident ? [structuredClone(incident)] : [];
+    });
+  }
+
+  public async historyMany(
+    tenantId: string,
+    ids: readonly string[],
+  ): Promise<ReadonlyMap<string, readonly IncidentTransition[]>> {
+    const result = new Map<string, readonly IncidentTransition[]>();
+    for (const id of new Set(ids)) {
+      const timeline = this.timelines.get(key(tenantId, id));
+      if (timeline && timeline.length > 0) result.set(id, structuredClone(timeline));
+    }
+    return result;
   }
 
   public async idempotency(

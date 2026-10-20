@@ -5,12 +5,15 @@ import {
   type AuditEntryView,
   type AuditQueryService,
 } from '../../../../../packages/domain/audit-query/src/index.js';
-import type { CostLedger } from '../../../../../packages/domain/incidents/costs/src/index.js';
 import type {
-  Incident,
-  IncidentStore,
-} from '../../../../../packages/domain/incidents/cases/src/index.js';
-import type { IncidentRepairStore } from '../../../../../packages/domain/incidents/repairs/src/index.js';
+  CostLedger,
+  LedgerRead,
+} from '../../../../../packages/domain/incidents/costs/src/index.js';
+import type { IncidentStore } from '../../../../../packages/domain/incidents/cases/src/index.js';
+import type {
+  IncidentRepairStore,
+  RepairLink,
+} from '../../../../../packages/domain/incidents/repairs/src/index.js';
 import type { IncidentSlaReader } from '../../../../../packages/domain/incidents/sla/src/index.js';
 import type { WorkshopStore } from '../../../../../packages/domain/maintenance/workshops/src/index.js';
 import type {
@@ -39,6 +42,8 @@ import type {
   VehicleStore,
 } from '../../../../../packages/domain/vehicles/src/index.js';
 
+import { casesOf, historiesOf, linksOfOrders } from './report-batch-reads.js';
+
 const PAGE = 100;
 
 export interface OperationalInputs {
@@ -47,7 +52,8 @@ export interface OperationalInputs {
   readonly workshops: Pick<WorkshopStore, 'list'>;
   readonly incidents: IncidentStore;
   readonly repairs: Pick<IncidentRepairStore, 'linkOfOrder'>;
-  readonly ledger: Pick<CostLedger, 'read'>;
+  /** `readMany` is the batch read; a ledger without it is read one case at a time. */
+  readonly ledger: Pick<CostLedger, 'read'> & Partial<Pick<CostLedger, 'readMany'>>;
   readonly sla: Pick<IncidentSlaReader, 'forIncidents'>;
   readonly assignments: AssignmentStore;
   readonly vehicleStore: VehicleStore;
@@ -109,10 +115,15 @@ export function operationalSources(inputs: OperationalInputs): OperationalSource
   // ADR-0014: cases belong to `incidents:view`; no other permission reads a folio or a step.
   const noCases = async (reader: ReportReader, edit: 'incidents:edit' = 'incidents:edit') =>
     !has(reader, 'incidents:view') || (await scoped(reader, edit));
-  const caseOf = async (tenantId: string, ids: readonly string[]): Promise<readonly Incident[]> =>
-    (await Promise.all(ids.map((id) => inputs.incidents.get(tenantId, id)))).filter(
-      (incident): incident is Incident => incident !== null,
-    );
+  const ledgerOf = async (
+    tenantId: string,
+    ids: readonly string[],
+  ): Promise<ReadonlyMap<string, LedgerRead>> => {
+    if (inputs.ledger.readMany) return inputs.ledger.readMany(tenantId, ids);
+    const reads = new Map<string, LedgerRead>();
+    for (const id of new Set(ids)) reads.set(id, await inputs.ledger.read(tenantId, id));
+    return reads;
+  };
 
   return {
     workOrders: async (reader, options) => {
@@ -139,14 +150,23 @@ export function operationalSources(inputs: OperationalInputs): OperationalSource
               targetKm: (scheduled.snapshot['targetKm'] as number | null | undefined) ?? null,
             });
       const facts: WorkOrderFact[] = [];
-      const folios = new Map<string, string | null>();
+      // One batch read of the links and one of the linked cases, however many orders there are.
+      const links = seeCases
+        ? await linksOfOrders(
+            inputs.repairs,
+            tenantId,
+            kept.map((o) => o.id),
+          )
+        : new Map<string, RepairLink>();
+      const folios = new Map<string, string | null>(
+        (
+          await casesOf(inputs.incidents, tenantId, [
+            ...new Set([...links.values()].map((l) => l.incidentId)),
+          ])
+        ).map((incident) => [incident.id, incident.folio]),
+      );
       for (const o of kept) {
-        const link = seeCases ? await inputs.repairs.linkOfOrder(tenantId, o.id) : null;
-        if (link && !folios.has(link.incidentId))
-          folios.set(
-            link.incidentId,
-            (await inputs.incidents.get(tenantId, link.incidentId))?.folio ?? null,
-          );
+        const link = links.get(o.id) ?? null;
         const linked = link ? { folio: folios.get(link.incidentId) ?? null } : null;
         const snapshot = snapshots.get(o.id);
         facts.push({
@@ -234,8 +254,10 @@ export function operationalSources(inputs: OperationalInputs): OperationalSource
     incidentCosts: async (reader, ids) => {
       const result = new Map<string, readonly IncidentCostFact[]>();
       if (!has(reader, 'incidents:view_costs') || (await noCases(reader))) return result;
+      const reads = await ledgerOf(reader.tenantId, ids);
       for (const id of ids) {
-        const read = await inputs.ledger.read(reader.tenantId, id);
+        const read = reads.get(id);
+        if (!read) continue;
         result.set(
           id,
           read.totals.map((t) => {
@@ -263,10 +285,11 @@ export function operationalSources(inputs: OperationalInputs): OperationalSource
     incidentSteps: async (reader, ids) => {
       const result = new Map<string, readonly { command: string; to: string; at: string }[]>();
       if (await noCases(reader)) return result;
+      const histories = await historiesOf(inputs.incidents, reader.tenantId, ids);
       for (const id of ids)
         result.set(
           id,
-          (await inputs.incidents.history(reader.tenantId, id)).map((t) => ({
+          (histories.get(id) ?? []).map((t) => ({
             command: t.command,
             to: t.to,
             at: t.occurredAt,
@@ -280,7 +303,7 @@ export function operationalSources(inputs: OperationalInputs): OperationalSource
       if (await noCases(reader)) return result;
       const views = await inputs.sla.forIncidents(
         reader.tenantId,
-        await caseOf(reader.tenantId, ids),
+        await casesOf(inputs.incidents, reader.tenantId, ids),
       );
       for (const [id, v] of views)
         result.set(id, {
