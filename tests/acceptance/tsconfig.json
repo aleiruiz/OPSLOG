@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "outDir": "../../dist/tests/acceptance",
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["**/*.ts"],
+  "references": [
+    { "path": "../../apps/api/composition" },
+    { "path": "../../apps/api/bff" },
+    { "path": "../e2e/fleet" }
+  ]
+}
