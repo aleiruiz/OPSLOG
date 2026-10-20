@@ -3,6 +3,7 @@ import { useRouter } from '../../app/router';
 import { loadVehicleOptions, type VehicleOptions } from '../../app/vehicleOptions';
 import { useSession } from '../../auth/session';
 import type { MemberOption } from './CatalogForms';
+import { EntityAuditTab } from '../audit';
 import { MaintenanceArea } from './MaintenanceArea';
 import { loadMemberOptions } from './members';
 
@@ -66,6 +67,11 @@ export function MaintenanceScreen({ orderId = null }: { orderId?: string | null 
       onOrderChange={(next) => router.navigate(next ? maintenanceOrderPath(next) : maintenancePath)}
       onExpired={markExpired}
       views={ports.views}
+      auditHistory={
+        can('view_audit')
+          ? (id) => <EntityAuditTab entityType="maintenance_work_order" entityId={id} />
+          : undefined
+      }
     />
   );
 }

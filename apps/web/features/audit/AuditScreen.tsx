@@ -3,7 +3,9 @@ import React from 'react';
 import type { BffAuditQuery } from '@opslog/contracts';
 import { Button, Field, FilterBar, InlineAlert, PageHeader, Panel, UiState } from '@opslog/ui';
 import { NoSubmit } from '../../app/resource';
+import { RouterButton } from '../../app/router';
 import { useSession } from '../../auth/session';
+import { reportPath } from '../reports/ReportLinks';
 import { AuditResults } from './AuditResults';
 import { DOMAIN_OPTIONS, ENTITY_OPTIONS, RESULT_OPTIONS } from './labels';
 import { ReconciliationPanel } from './ReconciliationPanel';
@@ -76,6 +78,21 @@ export function AuditScreen({ now = Date.now }: { readonly now?: () => number })
         eyebrow="Análisis"
         title="Auditoría"
         description="Quién hizo qué y cuándo. Sin periodo se muestran los últimos 30 días. Es de solo lectura."
+        actions={
+          can('export') ? (
+            // The report takes the same period, record type and result; the module filter has no report twin.
+            <RouterButton
+              to={reportPath('audit_log', {
+                from: filters.fromDay,
+                to: filters.toDay,
+                entityType: filters.entityType,
+                result: filters.result,
+              })}
+            >
+              Exportar
+            </RouterButton>
+          ) : undefined
+        }
       />
       <NoSubmit>
         <Panel>

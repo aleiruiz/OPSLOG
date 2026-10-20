@@ -8,6 +8,19 @@ import { ExportsTab } from './ExportsTab';
 import { copy } from './labels';
 import { ReportWorkspace } from './ReportWorkspace';
 
+/** Filters named in the address (`?reporte=x&vehicle=ECO-1`): only the ones the report defines. */
+function initialFilters(
+  ids: readonly string[],
+  search: URLSearchParams,
+): Readonly<Record<string, string>> {
+  const found: Record<string, string> = {};
+  for (const id of ids) {
+    const value = search.get(id);
+    if (value) found[id] = value;
+  }
+  return found;
+}
+
 /**
  * `/analisis/reportes`: the catalog by family, a report with its preview and export, and the
  * person's exports. The open report and the tab live in the address, so a reload keeps them.
@@ -34,6 +47,10 @@ export function ReportsScreen({ pollMs }: { readonly pollMs?: number | undefined
             <ReportWorkspace
               key={report.id}
               report={report}
+              initialFilters={initialFilters(
+                report.filters.map((f) => f.id),
+                router.search,
+              )}
               canExport={catalog.canExport}
               onBack={() => go({})}
               onShowExports={() => go({ pestana: 'exportaciones' })}

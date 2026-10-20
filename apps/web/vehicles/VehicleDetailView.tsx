@@ -43,6 +43,8 @@ export interface VehicleDetailViewProps {
   readonly areas?: readonly Area[];
   readonly can: (permission: 'edit' | 'delete' | 'incidents:view') => boolean;
   readonly notice?: string | null;
+  /** Extra header actions (follow, report links) that the screen composes from other modules. */
+  readonly extraActions?: (vehicle: Vehicle) => React.ReactNode;
   readonly archive: ArchiveDialogState;
   readonly onRetry: () => void;
   readonly onArchiveRequest: () => void;
@@ -102,6 +104,7 @@ export function VehicleDetailView({
   areas = [],
   can,
   notice = null,
+  extraActions,
   archive,
   onRetry,
   onArchiveRequest,
@@ -122,6 +125,7 @@ export function VehicleDetailView({
               description={`${vehicle.make} ${vehicle.model} ${vehicle.year}`}
               actions={
                 <>
+                  {extraActions?.(vehicle)}
                   {can('incidents:view') && (
                     <RouterButton
                       to={`/incidents?vehicleId=${encodeURIComponent(vehicle.id)}`}

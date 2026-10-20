@@ -4,6 +4,8 @@ import { useRouter } from '../app/router';
 import type { Employee, EmployeeHistoryEntry, EmployeeStatus } from '../app/types';
 import { useSession } from '../auth/session';
 import { AssignmentHistorySection } from '../assignments/AssignmentHistorySection';
+import { EntityAuditTab } from '../features/audit';
+import { ReportLinks } from '../features/reports';
 import {
   dialogClosed,
   EmployeeDetailView,
@@ -167,6 +169,19 @@ export function EmployeeDetailScreen({ id }: { id: string }) {
         }}
         can={can}
         notice={notice}
+        extraActions={(employee) =>
+          employee.kind === 'driver' && employee.employeeNumber ? (
+            <ReportLinks
+              links={[
+                {
+                  label: 'Ficha PDF',
+                  reportId: 'driver_sheet',
+                  filters: { employee: employee.employeeNumber },
+                },
+              ]}
+            />
+          ) : null
+        }
         dialog={dialog}
         statusPanel={panel}
         onRetry={reload}
@@ -189,6 +204,9 @@ export function EmployeeDetailScreen({ id }: { id: string }) {
       />
       {state.status === 'ready' && state.data.employee.kind === 'driver' && (
         <AssignmentHistorySection employeeId={state.data.employee.id} />
+      )}
+      {state.status === 'ready' && can('view_audit') && (
+        <EntityAuditTab entityType="employee" entityId={state.data.employee.id} />
       )}
     </>
   );

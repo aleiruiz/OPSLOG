@@ -48,7 +48,9 @@ export function IncidentDetail({ id, tab }: { id: string; tab?: string | undefin
   const [notice, setNotice] = React.useState<string | null>(null);
   const [stale, setStale] = React.useState(false);
   const viewCosts = mayViewCosts(env.permissions);
-  const active = asTab(tab, viewCosts);
+  // The audit history comes from the shell and only for `view_audit`: the tab is absent otherwise.
+  const viewAudit = env.extras?.history !== undefined && env.permissions.includes('view_audit');
+  const active = asTab(tab, viewCosts, viewAudit);
   const back = <BackLink to={incidentsPath}>Siniestros</BackLink>;
 
   if (incident.data === null) {
@@ -103,6 +105,7 @@ export function IncidentDetail({ id, tab }: { id: string; tab?: string | undefin
       <CostsTab {...child} approvalPending={approvalPending(stepViews(steps.data?.items ?? []))} />
     ),
     timeline: <TimelineTab incidentId={current.id} version={current.version} />,
+    history: env.extras?.history?.(current.id) ?? null,
   };
 
   return (
@@ -112,6 +115,7 @@ export function IncidentDetail({ id, tab }: { id: string; tab?: string | undefin
         title={current.folio}
         description={`${TYPE_LABELS[current.type]} · ${current.vehicle.economicNumber} · ${current.vehicle.plate}`}
         eyebrow="Siniestro"
+        actions={env.extras?.actions?.(current)}
       />
       <Stack direction="row" gap={1} flexWrap="wrap" sx={{ mb: 2, mt: -2 }}>
         <StatusBadge label={STATUS_LABELS[current.status]} tone={STATUS_TONES[current.status]} />
@@ -143,7 +147,7 @@ export function IncidentDetail({ id, tab }: { id: string; tab?: string | undefin
           <DetailTabs
             value={active}
             onChange={(next) => router.navigate(incidentPath(id, next))}
-            tabs={tabsFor(viewCosts).map((tabId) => ({
+            tabs={tabsFor(viewCosts, viewAudit).map((tabId) => ({
               id: tabId,
               label: TAB_LABELS[tabId],
               content: content[tabId],
