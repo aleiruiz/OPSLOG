@@ -32,10 +32,6 @@ export interface BffOptions {
   readonly maxBodyBytes?: number;
   readonly now?: () => Date;
   /**
-   * Receives only a correlation id, a static route id and the error class name of unexpected
-   * failures; never a message, a stack, a request value or a token.
-   */
-  /**
    * Called once per request after the session resolves, with the ids the caller needs to derive an
    * opaque reference (never logged as is). Lets the request logger carry `actorRef`.
    */
@@ -43,6 +39,10 @@ export interface BffOptions {
     readonly tenantId: string;
     readonly identityId: string;
   }) => void;
+  /**
+   * Receives only a correlation id, a static route id and the error class name of unexpected
+   * failures; never a message, a stack, a request value or a token.
+   */
   readonly onError?: (event: {
     readonly correlationId: string;
     readonly route: string;
