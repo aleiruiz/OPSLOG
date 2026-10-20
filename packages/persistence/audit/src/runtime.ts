@@ -2,7 +2,11 @@ import { MySqlAuditApiStore, MySqlAuditRelay } from './store.js';
 import { appendLocalAuditAndDelivery, type TenantAuditDataSourceResolver } from './store.js';
 import type { EntityManager } from 'typeorm';
 import { AUDIT_ENTITIES } from './entities.js';
-import { CreateAuditStore2026100700010, CreateTenantOutbox2026100900010 } from './migrations.js';
+import {
+  AddAuditReadIndexes2026101900010,
+  CreateAuditStore2026100700010,
+  CreateTenantOutbox2026100900010,
+} from './migrations.js';
 import { MySqlTenantOutboxStore } from './outbox-store.js';
 
 export interface IdentityMutationAuditRecord {
@@ -45,7 +49,11 @@ export function createMySqlAuditRuntime(options: MySqlAuditRuntimeOptions) {
     /** Spread into createIdentityDataSource/createIdentityMigrationDataSource for same-DB tables. */
     identitySchema: {
       additionalEntities: AUDIT_ENTITIES,
-      additionalMigrations: [CreateAuditStore2026100700010, CreateTenantOutbox2026100900010],
+      additionalMigrations: [
+        CreateAuditStore2026100700010,
+        CreateTenantOutbox2026100900010,
+        AddAuditReadIndexes2026101900010,
+      ],
     },
   } as const;
 }

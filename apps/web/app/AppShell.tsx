@@ -19,6 +19,7 @@ const navGroups: readonly NavGroup[] = [
   'Plantilla',
   'Flota',
   'Operación',
+  'Análisis',
   'Configuración',
 ];
 

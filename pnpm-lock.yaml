@@ -80,6 +80,8 @@ importers:
 
   apps/api: {}
 
+  apps/api/audit-query: {}
+
   apps/api/auth: {}
 
   apps/api/bff:
@@ -200,6 +202,8 @@ importers:
   packages/domain/areas: {}
 
   packages/domain/assignments: {}
+
+  packages/domain/audit-query: {}
 
   packages/domain/documents: {}
 

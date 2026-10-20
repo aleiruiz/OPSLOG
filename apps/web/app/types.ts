@@ -1,3 +1,4 @@
+import type { AuditPort } from '../features/audit/ports';
 import type { IncidentPorts } from '../features/incidents/ports';
 import type { MaintenancePorts } from '../features/maintenance/ports';
 import type { SearchPorts } from '../features/search/ports';
@@ -402,6 +403,8 @@ export interface ApiPorts {
   readonly maintenance: MaintenancePorts;
   /** Incident cases, their children and workflow (INC-CASES/INC-WORKFLOW routes). */
   readonly incidents: IncidentPorts;
+  /** Audit listing, per-record history and reconciliation (AUDIT-UI routes); read-only. */
+  readonly audit: AuditPort;
   /** Global search (FR-160). */
   readonly search: SearchPorts;
   readonly oidc: OidcPort;

@@ -306,6 +306,33 @@ describe('createHttpApi', () => {
     });
   });
 
+  it('maps the audit calls to their routes, with the record in the path', async () => {
+    const { api, calls } = scripted({});
+    await api.audit.list();
+    await api.audit.list({ result: 'denied', limit: 25 });
+    await api.audit.forEntity('incident', 'inc-1');
+    await api.audit.forEntity('incident', 'inc-1', { cursor: 'c' });
+    await api.audit.reconciliation();
+    await api.audit.reconciliation({
+      from: '2026-10-01T00:00:00.000Z',
+      to: '2026-10-02T00:00:00.000Z',
+    });
+    expect(calls.map((call) => call.id)).toEqual([
+      'audit.list',
+      'audit.list',
+      'audit.entity',
+      'audit.entity',
+      'audit.reconciliation',
+      'audit.reconciliation',
+    ]);
+    expect(calls[1]?.input).toEqual({ query: { result: 'denied', limit: 25 } });
+    expect(calls[2]?.input).toEqual({ params: { entityType: 'incident', entityId: 'inc-1' } });
+    expect(calls[3]?.input).toEqual({
+      params: { entityType: 'incident', entityId: 'inc-1' },
+      query: { cursor: 'c' },
+    });
+  });
+
   it('maps every assignment and import call to its route', async () => {
     const { api, calls } = scripted({});
     await api.assignments.list();

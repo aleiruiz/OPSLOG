@@ -17,6 +17,7 @@ import {
 } from './entities.js';
 import { AUDIT_TENANT_DATABASE } from './data-source.js';
 import type { DataSource, EntityManager } from 'typeorm';
+import * as read from './query-store.js';
 
 export class AuditPersistenceError extends Error {
   constructor() {
@@ -339,6 +340,18 @@ export class MySqlAuditApiStore implements AuditStore {
   ): Promise<readonly PersistedAuditEvent[]> {
     return listTenantAuditProjection(this.resolveReader, tenantId, range);
   }
+
+  /** Filtered, keyset-paged read for the audit screens; the tenant is the caller's session tenant. */
+  public async query(
+    tenantId: string,
+    filter: read.AuditQueryFilter,
+    page: read.AuditQueryPage,
+  ): Promise<read.AuditQuerySlice> {
+    read.assertAuditTenant(tenantId);
+    const source = await this.resolveReader(tenantId);
+    requireTenantSource(source);
+    return read.queryAuditProjection(source, tenantId, filter, page);
+  }
 }
 
 /** Runs the durable tenant-local delivery queue and never treats a missing relay as an empty batch. */
@@ -347,6 +360,14 @@ export class MySqlAuditRelay {
     private readonly tenantIds: () => readonly string[] | Promise<readonly string[]>,
     private readonly resolveRelay: TenantAuditDataSourceResolver,
   ) {}
+
+  /** Local audit against the durable store for a range, as the relay account reads both (FR-170). */
+  public async reconcile(tenantId: string, from: string, to: string, now: Date) {
+    read.assertAuditTenant(tenantId);
+    const source = await this.resolveRelay(tenantId);
+    requireTenantSource(source);
+    return read.reconcileAudit(source, tenantId, from, to, now);
+  }
 
   public async runBatch(max = 100): Promise<number> {
     if (!Number.isInteger(max) || max < 1 || max > 1000)

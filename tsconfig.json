@@ -70,6 +70,8 @@
     { "path": "./apps/api/composition" },
     { "path": "./apps/api/maintenance/plans" },
     { "path": "./apps/api/maintenance/orders" },
+    { "path": "./packages/domain/audit-query" },
+    { "path": "./apps/api/audit-query" },
     { "path": "./apps/api/incidents/cases" },
     { "path": "./apps/api/incidents/third-parties" },
     { "path": "./apps/api/incidents/workflow" },

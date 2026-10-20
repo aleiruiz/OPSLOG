@@ -4,6 +4,8 @@ import { DataSource, type QueryRunner, type Table } from 'typeorm';
 import { AUDIT_ENTITIES, AUDIT_TABLES } from './entities.js';
 import {
   AUDIT_MIGRATION_VERSION,
+  READ_INDEX_MIGRATION_VERSION,
+  AddAuditReadIndexes2026101900010,
   CreateAuditStore2026100700010,
   CreateTenantOutbox2026100900010,
   ensureAuditYearPartition,
@@ -106,6 +108,19 @@ describe('audit persistence schema', () => {
     expect(queries[0]).not.toContain('p_available_at');
     expect(queries[0]).not.toContain('status, attempts');
     await expect(migration.down()).rejects.toThrow(/cannot be rolled back destructively/);
+  });
+
+  it('adds only read indexes for the audit screens and drops them on rollback', async () => {
+    const { runner, queries } = runnerForMigration();
+    const migration = new AddAuditReadIndexes2026101900010();
+    await migration.up(runner);
+    await migration.down(runner);
+    expect(migration.name.endsWith(READ_INDEX_MIGRATION_VERSION)).toBe(true);
+    expect(queries[0]).toContain('ADD INDEX ix_audit_projection_entity');
+    expect(queries[0]).toContain('(tenant_id, entity_type, entity_id, occurred_at)');
+    expect(queries[0]).toContain('(tenant_id, actor_id, occurred_at)');
+    expect(queries[0]).not.toMatch(/ADD COLUMN|DROP COLUMN|MODIFY/);
+    expect(queries[1]).toContain('DROP INDEX ix_audit_projection_entity');
   });
 
   it('extends the future catch-all one safe annual partition at a time', async () => {

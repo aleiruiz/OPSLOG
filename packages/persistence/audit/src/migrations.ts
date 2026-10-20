@@ -9,6 +9,7 @@ import { AUDIT_TABLES } from './entities.js';
 
 export const AUDIT_MIGRATION_VERSION = '2026100700010';
 export const OUTBOX_MIGRATION_VERSION = '2026100900010';
+export const READ_INDEX_MIGRATION_VERSION = '2026101900010';
 export const AUDIT_MIGRATIONS_TABLE = 'opslog_audit_migrations';
 const text = (name: string, length: number, primary = false): TableColumnOptions => ({
   name,
@@ -230,6 +231,29 @@ export class CreateTenantOutbox2026100900010 implements MigrationInterface {
   /** Durable event history is not destructively rolled back. */
   public async down(): Promise<void> {
     throw new Error('Outbox migrations cannot be rolled back destructively');
+  }
+}
+
+/**
+ * Read indexes of the audit screens (FR-171): one record's history and one actor's activity, newest first.
+ * No column and no write path change; the existing `(tenant_id, occurred_at)` index serves the global listing.
+ */
+export class AddAuditReadIndexes2026101900010 implements MigrationInterface {
+  name = 'AddAuditReadIndexes2026101900010';
+
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(
+      `ALTER TABLE \`${AUDIT_TABLES.projection}\`
+         ADD INDEX ix_audit_projection_entity (tenant_id, entity_type, entity_id, occurred_at),
+         ADD INDEX ix_audit_projection_actor (tenant_id, actor_id, occurred_at)`,
+    );
+  }
+
+  /** Indexes only: dropping them loses no audit data. */
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(
+      `ALTER TABLE \`${AUDIT_TABLES.projection}\` DROP INDEX ix_audit_projection_entity, DROP INDEX ix_audit_projection_actor`,
+    );
   }
 }
 

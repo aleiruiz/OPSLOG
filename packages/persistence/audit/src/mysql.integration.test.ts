@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import mysql from 'mysql2/promise';
 import { createHash, randomBytes } from 'node:crypto';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { DataSource } from 'typeorm';
 import {
   AUDIT_TABLES,
@@ -896,5 +896,157 @@ describe.skipIf(!adminUrl)('tenant-local audit persistence against MySQL 8', () 
         to: '2037-01-01T00:00:00.000Z',
       }),
     ).toHaveLength(1);
+  });
+
+  describe('audit screens: filtered queries and reconciliation', () => {
+    const wide = { from: '2026-10-01T00:00:00.000Z', to: '2026-11-01T00:00:00.000Z' };
+    beforeEach(async () => {
+      for (const tenant of [a, b]) {
+        await tenant.admin.query(`DELETE FROM ${identifier(AUDIT_TABLES.projection)}`);
+        await tenant.admin.query(`DELETE FROM ${identifier(AUDIT_TABLES.registry)}`);
+      }
+    });
+    const row = (
+      tenantId: string,
+      eventId: string,
+      over: Partial<ReturnType<typeof event>> = {},
+    ) => ({ ...event(tenantId, eventId), ...over });
+    const seed = async () => {
+      const events = [
+        row(a.tenantId, 'q-1', { occurredAt: '2026-10-10T10:00:00.000Z' }),
+        row(a.tenantId, 'q-2', {
+          occurredAt: '2026-10-10T10:00:00.000Z',
+          action: 'file.access_denied',
+          entityType: 'file',
+          entityId: 'file-1',
+        }),
+        row(a.tenantId, 'q-3', {
+          occurredAt: '2026-10-11T10:00:00.000Z',
+          action: 'vehicle_assignment.created',
+          entityType: 'vehicle_assignment',
+          entityId: 'asg-1',
+          actor: { id: 'user-aaaaaaaa-0000-0000-0000-000000000001', kind: 'user' as never },
+        }),
+        row(a.tenantId, 'q-4', {
+          occurredAt: '2026-10-12T10:00:00.000Z',
+          action: 'vehicleXassignment.created',
+          entityId: 'veh-9',
+        }),
+        row(a.tenantId, 'q-5', { occurredAt: '2026-09-01T10:00:00.000Z' }),
+      ];
+      for (const item of events) await apiStore.append(item);
+      await relay.runBatch(50);
+    };
+
+    it('filters by entity, actor, action prefix and result, newest first, with an exact total', async () => {
+      await seed();
+      const all = await apiStore.query(a.tenantId, wide, { limit: 25 });
+      expect(all.rows.map((r) => r.eventId)).toEqual(['q-4', 'q-3', 'q-2', 'q-1']);
+      expect(all).toMatchObject({ total: 4, hasMore: false });
+      const byEntity = await apiStore.query(
+        a.tenantId,
+        { ...wide, entityType: 'vehicle', entityId: 'opaque-vehicle-1' },
+        { limit: 25 },
+      );
+      expect(byEntity.rows.map((r) => r.eventId)).toEqual(['q-1']);
+      const byActor = await apiStore.query(
+        a.tenantId,
+        { ...wide, actorId: 'user-aaaaaaaa-0000-0000-0000-000000000001' },
+        { limit: 25 },
+      );
+      expect(byActor.rows.map((r) => r.eventId)).toEqual(['q-3']);
+      const denied = await apiStore.query(a.tenantId, { ...wide, result: 'denied' }, { limit: 25 });
+      expect(denied.rows.map((r) => r.eventId)).toEqual(['q-2']);
+      const performed = await apiStore.query(
+        a.tenantId,
+        { ...wide, result: 'success' },
+        { limit: 25 },
+      );
+      expect(performed.rows.map((r) => r.eventId)).toEqual(['q-4', 'q-3', 'q-1']);
+      // The underscore of the prefix is literal: `vehicle_assignment.` does not match `vehicleXassignment.`.
+      const prefix = await apiStore.query(
+        a.tenantId,
+        { ...wide, actionPrefix: 'vehicle_assignment.' },
+        { limit: 25 },
+      );
+      expect(prefix.rows.map((r) => r.eventId)).toEqual(['q-3']);
+      const outside = await apiStore.query(
+        a.tenantId,
+        { from: '2026-08-01T00:00:00.000Z', to: '2026-09-30T00:00:00.000Z' },
+        { limit: 25 },
+      );
+      expect(outside.rows.map((r) => r.eventId)).toEqual(['q-5']);
+    });
+
+    it('pages by keyset in a stable order, including events with the same instant', async () => {
+      await seed();
+      const first = await apiStore.query(a.tenantId, wide, { limit: 25 });
+      const seen: string[] = [];
+      let after: { occurredAt: string; eventId: string } | undefined;
+      // Walk with a tiny page through the private port: 2 rows at a time via the same ordering.
+      for (let guard = 0; guard < 6; guard += 1) {
+        const page = await apiStore.query(a.tenantId, wide, {
+          limit: 2,
+          ...(after ? { after } : {}),
+        });
+        seen.push(...page.rows.map((r) => r.eventId));
+        const last = page.rows[page.rows.length - 1];
+        if (!page.hasMore || !last) break;
+        after = { occurredAt: last.occurredAt, eventId: last.eventId };
+      }
+      expect(seen).toEqual(first.rows.map((r) => r.eventId));
+    });
+
+    it('never reads another company: B ids and B events are invisible to A', async () => {
+      await apiStore.append(row(b.tenantId, 'q-b1', { entityId: 'shared-id' }));
+      await apiStore.append(row(a.tenantId, 'q-a1', { entityId: 'shared-id' }));
+      await relay.runBatch(50);
+      const forA = await apiStore.query(
+        a.tenantId,
+        { ...wide, entityId: 'shared-id' },
+        { limit: 25 },
+      );
+      expect(forA.rows.map((r) => r.eventId)).toEqual(['q-a1']);
+      const forB = await apiStore.query(
+        b.tenantId,
+        { ...wide, entityId: 'shared-id' },
+        { limit: 25 },
+      );
+      expect(forB.rows.map((r) => r.eventId)).toEqual(['q-b1']);
+      await expect(apiStore.query('bad tenant!', wide, { limit: 25 })).rejects.toThrow();
+    });
+
+    it('reports pending events with their age and drops them after the relay', async () => {
+      await apiStore.append(row(a.tenantId, 'r-1', { occurredAt: '2026-10-10T10:00:00.000Z' }));
+      await apiStore.append(row(a.tenantId, 'r-2', { occurredAt: '2026-10-11T10:00:00.000Z' }));
+      const now = new Date(Date.now() + 60_000);
+      const before = await relay.reconcile(a.tenantId, wide.from, wide.to, now);
+      expect(before).toMatchObject({ local: 2, relayed: 0, pendingTotal: 2 });
+      expect(before.pending.map((item) => item.eventId).sort()).toEqual(['r-1', 'r-2']);
+      expect(before.pending.every((item) => item.delivery === 'pending')).toBe(true);
+      expect(before.oldestPendingAgeSeconds).toBeGreaterThanOrEqual(59);
+      await relay.runBatch(50);
+      const after = await relay.reconcile(a.tenantId, wide.from, wide.to, now);
+      expect(after).toMatchObject({
+        local: 2,
+        relayed: 2,
+        pendingTotal: 0,
+        pending: [],
+        oldestPendingAgeSeconds: null,
+      });
+      expect((await relay.reconcile(b.tenantId, wide.from, wide.to, now)).local).toBe(0);
+    });
+
+    it('serves an entity history from the entity index without sorting the whole range', async () => {
+      await seed();
+      const [plan] = await a.admin.query(
+        `EXPLAIN SELECT event_id FROM ${identifier(AUDIT_TABLES.projection)} WHERE tenant_id = ? AND entity_type = ? AND entity_id = ? AND occurred_at >= ? AND occurred_at < ? ORDER BY occurred_at DESC, event_id DESC`,
+        [a.tenantId, 'vehicle', 'opaque-vehicle-1', '2026-10-01 00:00:00', '2026-11-01 00:00:00'],
+      );
+      // A table this small may still be read through the primary key; the index must at least be a candidate.
+      expect((plan as { possible_keys?: string }[])[0]?.possible_keys).toContain(
+        'ix_audit_projection_entity',
+      );
+    });
   });
 });
