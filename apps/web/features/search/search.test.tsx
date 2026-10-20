@@ -3,7 +3,7 @@ import { createMockApi } from '../../app/mockApi';
 import { fireEvent, renderApp, screen, waitFor } from '../../app/test/utils';
 import { violations } from '../maintenance/testing';
 import { createSearchPorts } from './ports';
-import { resultsAnnouncement, resultsPath } from './labels';
+import { resultsAnnouncement, resultsPath, searchCopy, searchErrorMessage } from './labels';
 
 const type = (text: string) =>
   fireEvent.change(screen.getByRole('combobox', { name: 'Buscar' }), { target: { value: text } });
@@ -100,6 +100,14 @@ describe('global search box', () => {
     api.controls.failNext('search', 500);
     await renderApp({ path: '/buscar?q=ec', api });
     expect(await screen.findByText('No pudimos buscar. Intenta nuevamente.')).toBeInTheDocument();
+  });
+
+  it('asks to wait and retry when the search is saturated (503)', async () => {
+    const api = createMockApi();
+    api.controls.failNext('search', 503);
+    await renderApp({ path: '/buscar?q=ec', api });
+    expect(await screen.findByText(searchCopy.busy)).toBeInTheDocument();
+    expect(searchErrorMessage({ status: 500 })).toBe(searchCopy.error);
   });
 
   it('hands a 401 to the session handling', async () => {
