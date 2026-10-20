@@ -1,11 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { AuthError } from '../../../../packages/domain/identity/src/index.js';
 import { ALL, READER, engineFor } from '../../../../packages/domain/reports/src/test-support.js';
 import { ReportsApi } from './index.js';
 
-function api(permissions: readonly string[] = ALL, tenantId = 'A') {
+function api(permissions: readonly string[] = ALL, tenantId = 'A', fixture = engineFor()) {
   return new ReportsApi({
-    engine: engineFor().engine,
+    engine: fixture.engine,
     authorize: async (token) => {
       if (token === 'bad') throw new AuthError('unauthorized');
       return { tenantId, subject: 'u1', sessionId: 's', permissions };
@@ -35,6 +35,18 @@ describe('ReportsApi', () => {
       columns: ['name', 'phone'],
     });
     expect(piiFree.ok && piiFree.value.columns.map((c) => c.id)).toEqual(['name']);
+  });
+
+  it('loads the report once for all the pages of a preview and once per reader', async () => {
+    const fixture = engineFor();
+    const loads = vi.spyOn(fixture.sources, 'people');
+    const reports = api(ALL, 'A', fixture);
+    await reports.preview('t', 'c', 'drivers', { limit: 1 });
+    await reports.preview('t', 'c', 'drivers', { limit: 1, offset: 1 });
+    expect(loads).toHaveBeenCalledTimes(1);
+    // Another report or another filter is another load.
+    await reports.preview('t', 'c', 'drivers', { limit: 1, filters: { status: 'active' } });
+    expect(loads).toHaveBeenCalledTimes(2);
   });
 
   it('rejects a bad window, an unknown report, an unknown filter and a hidden sort', async () => {

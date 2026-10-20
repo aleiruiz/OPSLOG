@@ -15,7 +15,7 @@ import {
 
 export interface ReportsApiDeps {
   readonly authorize: ReportsAuthorize;
-  readonly engine: Pick<ReportEngine, 'summaries' | 'plan' | 'context' | 'run'>;
+  readonly engine: Pick<ReportEngine, 'summaries' | 'plan' | 'context' | 'preview'>;
 }
 
 export interface ReportCatalogView {
@@ -79,8 +79,8 @@ export class ReportsApi {
         throw new ReportError('invalid_input', 'limit');
       const permissions = new Set(session.permissions as readonly Permission[]);
       const plan = this.deps.engine.plan(reportId, permissions, request);
-      const ctx = await this.deps.engine.context(session.tenantId, permissions);
-      const result = await this.deps.engine.run(ctx, plan);
+      const ctx = await this.deps.engine.context(session.tenantId, permissions, session.subject);
+      const result = await this.deps.engine.preview(ctx, plan);
       return {
         ok: true,
         value: {

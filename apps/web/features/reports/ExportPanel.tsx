@@ -24,11 +24,14 @@ type Outcome =
 export function ExportPanel({
   report,
   canExport,
+  blocked = false,
   request,
   onShowExports,
 }: {
   readonly report: BffReportSummary;
   readonly canExport: boolean;
+  /** A required filter is still empty: there is nothing to export yet. */
+  readonly blocked?: boolean;
   /** The columns, filters and order on screen, exactly what the file will hold. */
   readonly request: Omit<BffExportInput, 'format'>;
   readonly onShowExports: () => void;
@@ -98,7 +101,7 @@ export function ExportPanel({
             </option>
           ))}
         </Field>
-        <Button loading={busy} onClick={() => void run()}>
+        <Button loading={busy} disabled={blocked} onClick={() => void run()}>
           {copy.export}
         </Button>
       </Box>

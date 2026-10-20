@@ -11,7 +11,8 @@ import {
   type WorkOrderFileSupport,
 } from './work-order-apis.js';
 import type { AreaService } from '../../../../../packages/domain/areas/src/index.js';
-import { buildAuditQueryApi } from './audit-query-apis.js';
+import { costPorts, repairOrderReader } from './incident-cost-apis.js';
+import { buildAuditQueryApi, buildAuditQueryService } from './audit-query-apis.js';
 import { buildSavedViews } from './saved-views-apis.js';
 import { buildSearch } from './search-apis.js';
 import { buildReports } from './report-apis.js';
@@ -33,16 +34,27 @@ export function buildDownstreamApis(
   const defaults = withMaintenanceDefaults(adapters);
   const stores = incidentStores(defaults);
   const incidents = buildIncidentApis(kernel, defaults, services, pii, files, stores, environment);
-  const reports = buildReports(kernel, defaults, services, fleet, files.storage);
+  // The audit screens read the modules through their ports only (descriptions and field histories).
+  const auditService = buildAuditQueryService(kernel, adapters.auditRelay, {
+    vehicles: services.vehicles,
+    employees: services.employees,
+    areas,
+    incidents: stores.store,
+    workOrders: defaults.maintenanceOrders as NonNullable<typeof defaults.maintenanceOrders>,
+  });
+  const reports = buildReports(kernel, defaults, services, fleet, files.storage, {
+    orders: defaults.maintenanceOrders,
+    plans: defaults.maintenancePlans,
+    workshops: defaults.maintenanceWorkshops as NonNullable<typeof defaults.maintenanceWorkshops>,
+    mechanics: defaults.maintenanceMechanics as NonNullable<typeof defaults.maintenanceMechanics>,
+    incidents: stores.store,
+    repairs: stores.repairs,
+    ledger: costPorts(stores.repairs, stores.costs, repairOrderReader(defaults)).ledger,
+    sla: incidents.incidentSla.reader,
+    audit: auditService,
+  });
   return {
-    // The audit screens read the modules through their ports only (descriptions and field histories).
-    auditQuery: buildAuditQueryApi(kernel, adapters.auditRelay, {
-      vehicles: services.vehicles,
-      employees: services.employees,
-      areas,
-      incidents: stores.store,
-      workOrders: defaults.maintenanceOrders as NonNullable<typeof defaults.maintenanceOrders>,
-    }),
+    auditQuery: buildAuditQueryApi(kernel, auditService),
     ...buildMaintenanceApis(kernel, defaults, services.vehicles, services.settings),
     // Closing an order cannot return the vehicle to `active` while an open case holds it (D11).
     workOrders: buildWorkOrderApi(

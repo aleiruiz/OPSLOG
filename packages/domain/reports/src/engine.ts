@@ -2,6 +2,7 @@ import type { Permission } from '../../identity/src/index.js';
 import { dayInZone, isDay } from './calendar.js';
 import { ReportError } from './errors.js';
 import type { ReportSources } from './ports.js';
+import { PreviewCache } from './preview-cache.js';
 import {
   SENSITIVITY_PERMISSION,
   type Cell,
@@ -100,6 +101,9 @@ export function planReport(
     if (!filter || typeof raw !== 'string') throw new ReportError('invalid_input', 'filters');
     filters.set(id, parseFilter(filter, raw));
   }
+  for (const filter of definition.filters)
+    if (filter.required && !filters.has(filter.id))
+      throw new ReportError('invalid_input', filter.id);
   const sortColumn = request.sort ?? definition.defaultSort.column;
   if (!known.has(sortColumn)) throw new ReportError('invalid_input', 'sort');
   // Ordering by a column the reader may not see would reveal its order.
@@ -133,14 +137,20 @@ export interface ReportEngineDeps {
   readonly sources: ReportSources;
   readonly timeZone: (tenantId: string) => Promise<string>;
   readonly now: () => Date;
+  /** Monotonic milliseconds for the preview cache; default `performance.now`. */
+  readonly clock?: () => number;
 }
 
 /** Runs report definitions: plans a request, loads the rows, filters, orders and projects them. */
 export class ReportEngine {
+  private readonly previews: PreviewCache;
+
   public constructor(
     public readonly catalog: ReportCatalog,
     private readonly deps: ReportEngineDeps,
-  ) {}
+  ) {
+    this.previews = new PreviewCache(deps.clock ?? (() => performance.now()));
+  }
 
   /** The reports the reader may see, with only the columns they may see. */
   public summaries(permissions: ReadonlySet<Permission>): readonly ReportSummary[] {
@@ -152,11 +162,12 @@ export class ReportEngine {
         title: definition.title,
         description: definition.description,
         columns: permittedColumns(definition, permissions),
-        filters: definition.filters.map(({ id, label, kind, options }) => ({
+        filters: definition.filters.map(({ id, label, kind, options, required }) => ({
           id,
           label,
           kind,
           ...(options ? { options } : {}),
+          ...(required ? { required } : {}),
         })),
         formats: definition.formats,
         defaultSort: definition.defaultSort,
@@ -176,16 +187,37 @@ export class ReportEngine {
   public async context(
     tenantId: string,
     permissions: ReadonlySet<Permission>,
+    actorId?: string,
   ): Promise<ReportContext> {
     const now = this.deps.now();
     const timeZone = await this.deps.timeZone(tenantId);
-    return { tenantId, permissions, timeZone, today: dayInZone(now, timeZone), now };
+    return {
+      tenantId,
+      permissions,
+      ...(actorId === undefined ? {} : { actorId }),
+      timeZone,
+      today: dayInZone(now, timeZone),
+      now,
+    };
+  }
+
+  /**
+   * The result a preview pages through. The same plan of the same reader within a few seconds reuses
+   * the result instead of loading the report again for each page (`run` always loads afresh).
+   */
+  public async preview(ctx: ReportContext, plan: ReportPlan): Promise<ReportResult> {
+    const key = PreviewCache.key(ctx.tenantId, ctx.actorId, ctx.permissions, plan);
+    const cached = this.previews.get(key);
+    if (cached) return cached;
+    const result = await this.run(ctx, plan);
+    this.previews.set(key, result);
+    return result;
   }
 
   /** Every row of the plan, filtered and ordered; `total` counts them all. */
   public async run(ctx: ReportContext, plan: ReportPlan): Promise<ReportResult> {
     const needed = new Set([...plan.columns.map((c) => c.id), plan.sort.column]);
-    const loaded = await plan.definition.load(ctx, needed, this.deps.sources);
+    const loaded = await plan.definition.load(ctx, needed, this.deps.sources, plan.filters);
     const tests = [...plan.filters].map(([id, value]) => {
       const filter = plan.definition.filters.find(
         (candidate) => candidate.id === id,

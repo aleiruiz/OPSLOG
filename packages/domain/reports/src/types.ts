@@ -58,6 +58,8 @@ export interface ReportFilter {
   readonly kind: FilterKind;
   /** The only values an `enum` filter accepts. */
   readonly options?: readonly FilterOption[];
+  /** The report cannot run without it (a record sheet names its record). */
+  readonly required?: boolean;
   /** True when the row passes the filter; it reads the internal `_` facts of the row. */
   readonly test: (row: Row, value: FilterValue) => boolean;
 }
@@ -67,6 +69,8 @@ export type SortDirection = 'asc' | 'desc';
 export interface ReportContext {
   readonly tenantId: string;
   readonly permissions: ReadonlySet<Permission>;
+  /** Identity subject of the reader: sources that scope by person (D9) need it. Absent: fail closed. */
+  readonly actorId?: string;
   /** IANA zone of the company: days, "days left" and "days in state" are counted in it. */
   readonly timeZone: string;
   /** Today in the company's zone, `YYYY-MM-DD`. */
@@ -93,6 +97,8 @@ export interface ReportDefinition {
     ctx: ReportContext,
     needed: ReadonlySet<string>,
     sources: ReportSources,
+    /** The validated filters: a report that aggregates narrows its facts first (its `test` then passes). */
+    filters: ReadonlyMap<string, FilterValue>,
   ) => Promise<readonly Row[]>;
 }
 
@@ -125,7 +131,7 @@ export interface ReportSummary {
   readonly title: string;
   readonly description: string;
   readonly columns: readonly ReportColumn[];
-  readonly filters: readonly Pick<ReportFilter, 'id' | 'label' | 'kind' | 'options'>[];
+  readonly filters: readonly Pick<ReportFilter, 'id' | 'label' | 'kind' | 'options' | 'required'>[];
   readonly formats: readonly ReportFormat[];
   readonly defaultSort: ReportDefinition['defaultSort'];
 }

@@ -159,7 +159,7 @@ export class ExportService {
     if (open.actor >= MAX_OPEN_PER_ACTOR || open.tenant >= MAX_OPEN_PER_TENANT)
       throw new ExportError('too_many_open');
 
-    const ctx = await engine.context(actor.tenantId, actor.permissions);
+    const ctx = await engine.context(actor.tenantId, actor.permissions, actor.actorId);
     const started = this.clock();
     const result = await engine.run(ctx, plan);
     const elapsed = this.clock() - started;
@@ -229,7 +229,7 @@ export class ExportService {
       // A reader who lost a sensitive column does not get a lighter file by surprise.
       if (plan.columns.length !== job.columns.length || missingPermission(plan, permissions))
         return void (await this.fail(job, 'permission_revoked', correlationId));
-      const ctx = await this.deps.engine.context(job.tenantId, permissions);
+      const ctx = await this.deps.engine.context(job.tenantId, permissions, job.actorId);
       const result = await this.deps.engine.run(ctx, plan);
       assertPdfSize(job.format, result.total, this.deps.pdfMaxRows ?? PDF_MAX_ROWS);
       await this.produce(job, ctx, plan, result, correlationId);

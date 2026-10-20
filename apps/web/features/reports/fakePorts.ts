@@ -75,6 +75,16 @@ export const DEMO_REPORTS: readonly BffReportSummary[] = [
     formats: ['csv', 'xlsx', 'pdf'],
     defaultSort: { column: 'expiresOn', direction: 'asc' },
   },
+  {
+    id: 'vehicle_sheet',
+    family: 'vehicles',
+    title: 'Ficha de vehículo',
+    description: 'Ficha de un vehículo con sus datos, documentos y servicios.',
+    columns: [column('section', 'Sección'), column('field', 'Campo'), column('value', 'Valor')],
+    filters: [{ id: 'vehicle', label: 'Vehículo', kind: 'text', required: true }],
+    formats: ['pdf'],
+    defaultSort: { column: 'section', direction: 'asc' },
+  },
 ];
 
 export const DEMO_FAMILIES: BffReportCatalog['families'] = [

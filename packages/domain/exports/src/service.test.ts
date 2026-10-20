@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ReportError } from '../../reports/src/index.js';
 import { companyA } from '../../reports/src/test-support.js';
 import { ExportError } from './errors.js';
@@ -41,6 +41,25 @@ describe('direct export', () => {
     expect(download.contentType).toBe('text/csv; charset=utf-8');
     expect(Buffer.from(download.bytes).toString('utf8')).toContain('ECO-1,PLA-100');
     expect(h.audit.map((a) => a.action)).toContain('export.downloaded:vehicle_inventory:csv');
+  });
+
+  it('loads the report once for a direct export and tells the sources who asks', async () => {
+    const h = harness();
+    const loads = vi.spyOn(h.sources, 'vehicles');
+    await h.service.request(actor(FULL), { reportId: 'vehicle_inventory', format: 'csv' });
+    expect(loads).toHaveBeenCalledTimes(1);
+    const open = await h.service.request(actor(BASIC), {
+      reportId: 'maintenance_corrective',
+      format: 'csv',
+    });
+    expect(open.job.rowCount).toBeGreaterThan(0);
+    // A mechanic-scoped person reads nothing of the orders (D9): the actor id reaches the source.
+    h.sources.scopedActors.add('u1');
+    const scoped = await h.service.request(actor(BASIC), {
+      reportId: 'maintenance_corrective',
+      format: 'csv',
+    });
+    expect(scoped.job.rowCount).toBe(0);
   });
 
   it('writes the filtered, ordered and projected rows in every format', async () => {

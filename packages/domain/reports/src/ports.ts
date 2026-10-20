@@ -1,3 +1,5 @@
+import type { OperationalSources } from './ports-ops.js';
+
 /**
  * What the reports read of the owning modules. Each method names the tenant, returns only what the
  * reports need and never returns a value the reader may not see: personal data comes through
@@ -77,7 +79,7 @@ export interface PolicyFact {
 export type PiiField = 'licenseNumber' | 'phone' | 'email';
 export type PiiValues = Readonly<Partial<Record<PiiField, string | null>>>;
 
-export interface ReportSources {
+export interface ReportSources extends OperationalSources {
   /** Vehicles that are not archived. */
   vehicles(tenantId: string): Promise<readonly VehicleFact[]>;
   /** People of one kind that are not archived. */

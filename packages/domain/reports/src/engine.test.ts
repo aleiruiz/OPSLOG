@@ -10,7 +10,7 @@ import { ALL, READER, engineFor, runReport } from './test-support.js';
 const perms = (...p: string[]) => new Set(p) as never as ReadonlySet<'view'>;
 
 describe('catalog', () => {
-  it('provides the eight reports of PR 1, each its own definition', () => {
+  it('provides the 21 reports of BRD §13.1 and the three record sheets, each its own definition', () => {
     expect(REPORT_DEFINITIONS.map((d) => d.id)).toEqual([
       'drivers',
       'dispatchers',
@@ -20,14 +20,41 @@ describe('catalog', () => {
       'fleet_status',
       'insurance',
       'vehicle_documents',
+      'vehicle_history',
+      'maintenance_plan_vs_actual',
+      'maintenance_corrective',
+      'maintenance_costs',
+      'maintenance_frequency',
+      'incidents_by_period',
+      'incidents_by_subject',
+      'incidents_distribution',
+      'incident_costs',
+      'incident_resolution',
+      'incident_aging',
+      'expirations',
+      'audit_log',
+      'vehicle_sheet',
+      'driver_sheet',
+      'incident_sheet',
     ]);
     for (const definition of REPORT_DEFINITIONS) {
-      expect(definition.view).toBe('view');
-      expect(definition.columns.length).toBeGreaterThan(3);
+      expect(definition.columns.length).toBeGreaterThan(2);
       expect(definition.filters.length).toBeGreaterThan(0);
-      expect(definition.formats).toContain('csv');
-      expect(definition.formats).toContain('xlsx');
+      if (definition.id.endsWith('_sheet')) {
+        expect(definition.formats).toEqual(['pdf']);
+        expect(definition.filters.every((f) => f.required)).toBe(true);
+      } else if (definition.id !== 'vehicle_history') {
+        expect(definition.formats).toContain('csv');
+        expect(definition.formats).toContain('xlsx');
+      }
     }
+    // Reports that are wholly about money need the permission that protects it just to be listed.
+    const views = Object.fromEntries(REPORT_DEFINITIONS.map((d) => [d.id, d.view]));
+    expect(views['maintenance_costs']).toBe('view_costs');
+    expect(views['incident_costs']).toBe('incidents:view_costs');
+    expect(views['audit_log']).toBe('view_audit');
+    expect(views['incident_aging']).toBe('incidents:view');
+    expect(views['vehicle_sheet']).toBe('view');
   });
 
   it('refuses duplicates and unknown default sorts', () => {
@@ -51,7 +78,8 @@ describe('summaries', () => {
     const { engine } = engineFor();
     expect(engine.summaries(new Set())).toEqual([]);
     const plain = engine.summaries(new Set(READER));
-    expect(plain).toHaveLength(8);
+    expect(plain).toHaveLength(15);
+    expect(plain.map((r) => r.id)).not.toContain('incident_aging');
     const drivers = plain.find((s) => s.id === 'drivers')!;
     expect(drivers.columns.map((c) => c.id)).not.toContain('licenseNumber');
     const insurance = plain.find((s) => s.id === 'insurance')!;
@@ -167,5 +195,24 @@ describe('helpers', () => {
     expect(expiryStatus('2026-01-01', 31)).toBe('valid');
     expect(fullName({ firstName: 'A', lastName: '' })).toBe('A');
     void ReportEngine;
+  });
+});
+
+describe('required filters', () => {
+  it('refuse a plan that does not name them and say which one is missing', () => {
+    const sheet = REPORT_DEFINITIONS.find((d) => d.id === 'vehicle_sheet')!;
+    try {
+      planReport(sheet, new Set(READER), {});
+      throw new Error('expected a refusal');
+    } catch (e) {
+      expect(e).toBeInstanceOf(ReportError);
+      expect((e as ReportError).field).toBe('vehicle');
+    }
+    expect(planReport(sheet, new Set(READER), { filters: { vehicle: 'ECO-1' } }).filters.size).toBe(
+      1,
+    );
+    const { engine } = engineFor();
+    const summary = engine.summaries(new Set(READER)).find((s) => s.id === 'vehicle_sheet')!;
+    expect(summary.filters).toEqual([expect.objectContaining({ id: 'vehicle', required: true })]);
   });
 });

@@ -15,6 +15,7 @@ import type {
   VehicleService,
   VehicleStore,
 } from '../../../../../packages/domain/vehicles/src/index.js';
+import { operationalSources, type OperationalInputs } from './report-ops-sources.js';
 
 /** Window the owning modules accept per read. */
 const PAGE = 100;
@@ -30,6 +31,8 @@ export interface ReportSourceInputs {
   readonly policies: PolicyStore;
   readonly vehicleStore: VehicleStore;
   readonly now: () => Date;
+  /** The stores of the maintenance, incident and audit reports. */
+  readonly ops: OperationalInputs;
 }
 
 /**
@@ -63,6 +66,7 @@ export function reportSources(inputs: ReportSourceInputs): ReportSources {
     return inputs.vehicleStore as VehicleStore & VehicleAnalyticsReads;
   };
   return {
+    ...operationalSources(inputs.ops),
     vehicles: async (tenantId) =>
       (await everything((offset, limit) => inputs.vehicles.list(tenantId, { limit, offset }))).map(
         (v) => ({

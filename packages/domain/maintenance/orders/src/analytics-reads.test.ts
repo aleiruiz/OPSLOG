@@ -67,3 +67,22 @@ describe('InMemoryWorkOrderStore.closedFacts', () => {
     expect(JSON.stringify(facts)).not.toContain('texto libre');
   });
 });
+
+describe('InMemoryWorkOrderStore.reportPage', () => {
+  it('walks the company by keyset, oldest first, without crossing tenants', async () => {
+    const store = new InMemoryWorkOrderStore();
+    await put(store, order({ id: 'b', createdAt: '2026-10-02T00:00:00.000Z' }));
+    await put(store, order({ id: 'a', createdAt: '2026-10-02T00:00:00.000Z' }));
+    await put(store, order({ id: 'c', createdAt: '2026-10-01T00:00:00.000Z' }));
+    await put(store, order({ id: 'z', tenantId: 'tenant-b' }));
+    const first = await store.reportPage('tenant-a', null, 2);
+    expect(first.map((o) => o.id)).toEqual(['c', 'a']);
+    const last = first[1] as WorkOrder;
+    const second = await store.reportPage(
+      'tenant-a',
+      { createdAt: last.createdAt, id: last.id },
+      2,
+    );
+    expect(second.map((o) => o.id)).toEqual(['b']);
+  });
+});

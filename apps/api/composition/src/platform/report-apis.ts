@@ -22,6 +22,9 @@ import type { IncidentServices } from './incident-apis.js';
 import { ACTOR_PREFIX, type PlatformKernel } from './kernel.js';
 import { sessionIdOf } from './gate.js';
 import { reportSources } from './report-sources.js';
+import type { OperationalInputs } from './report-ops-sources.js';
+import { createMechanicScope } from './mechanic-scope.js';
+import type { MechanicStore } from '../../../../../packages/domain/maintenance/mechanics/src/index.js';
 import type { PlatformAdapters } from './types.js';
 
 /** Reports and their exports: the two APIs, the service the worker runs and its job store. */
@@ -79,13 +82,22 @@ export function exportAuthority(kernel: PlatformKernel): ExportAuthority {
   };
 }
 
+/** The stores the maintenance, incident and audit reports read, beyond the fleet services. */
+export type ReportStores = Omit<
+  OperationalInputs,
+  'assignments' | 'vehicleStore' | 'mechanicLinked' | 'now'
+> & { readonly mechanics: MechanicStore };
+
 export function buildReports(
   kernel: PlatformKernel,
   adapters: PlatformAdapters,
   services: IncidentServices,
   fleet: AnalyticsFleet,
   storage: ObjectStorage,
+  stores: ReportStores,
 ): ReportsModule {
+  const { mechanics, ...operational } = stores;
+  const scope = createMechanicScope(mechanics);
   const engine = new ReportEngine(createReportCatalog(), {
     sources: reportSources({
       vehicles: services.vehicles,
@@ -96,6 +108,13 @@ export function buildReports(
       policies: services.policies,
       vehicleStore: fleet.vehicleStore,
       now: kernel.now,
+      ops: {
+        ...operational,
+        assignments: services.assignments,
+        vehicleStore: fleet.vehicleStore,
+        mechanicLinked: scope.mechanicLinked,
+        now: kernel.now,
+      },
     }),
     timeZone: async (tenantId) => (await services.settings.get(tenantId)).timeZone,
     now: kernel.now,
