@@ -3,7 +3,7 @@ import React from 'react';
 import { UiState } from '@opslog/ui';
 import { RouterLink, useRouter } from '../../app/router';
 import { useSession } from '../../auth/session';
-import { searchCopy, searchTypeLabels } from './labels';
+import { searchCopy, searchErrorMessage, searchTypeLabels } from './labels';
 import { totalHits, useSearch } from './useSearch';
 
 /** `/buscar?q=`: the hits of every type the reader may see, grouped by type (up to 10 each, with the total of the type). */
@@ -18,7 +18,7 @@ export function SearchScreen() {
       </Typography>
       {state.status === 'idle' && <UiState kind="empty" title={searchCopy.hint} />}
       {state.status === 'loading' && <UiState kind="loading" title={searchCopy.loading} />}
-      {state.status === 'error' && <UiState kind="error" title={searchCopy.error} />}
+      {state.status === 'error' && <UiState kind="error" title={searchErrorMessage(state.error)} />}
       {state.status === 'ready' && totalHits(state.result) === 0 && (
         <UiState kind="empty" title={searchCopy.empty} />
       )}

@@ -12,11 +12,13 @@ import { BffCrypto, originAllowed, parseAllowedOrigins } from './csrf.js';
 import {
   errorResponse,
   normalizeHeaders,
+  RETRY_AFTER,
   singleHeader,
   type BffHandler,
   type BffRequest,
   type BffResponse,
 } from './http.js';
+import { isPoolSaturation } from '../../../../packages/platform/observability/src/index.js';
 import { ROUTES, type Route, type RouteContext } from './routes.js';
 
 export const DEFAULT_MAX_BODY_BYTES = 16 * 1024;
@@ -225,6 +227,7 @@ export function createBffHandler(options: BffOptions): BffHandler {
             ? error.constructor.name
             : 'Error',
       });
+      if (isPoolSaturation(error)) return errorResponse('unavailable', correlationId, RETRY_AFTER);
       return errorResponse('internal_error', correlationId);
     }
   };

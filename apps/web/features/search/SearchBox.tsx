@@ -11,6 +11,7 @@ import {
   resultsAnnouncement,
   resultsPath,
   searchCopy,
+  searchErrorMessage,
   searchTypeLabels,
 } from './labels';
 import type { SearchPorts } from './ports';
@@ -57,7 +58,7 @@ export function SearchBox({
         ? searchCopy.empty
         : null
       : state.status === 'error'
-        ? searchCopy.error
+        ? searchErrorMessage(state.error)
         : searchCopy.loading;
   const activeKey = showPanel && active >= 0 ? flat[active]?.key : undefined;
 

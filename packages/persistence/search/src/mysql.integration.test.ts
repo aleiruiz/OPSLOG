@@ -19,6 +19,7 @@ import {
 } from '../../../domain/search/src/test-support.js';
 import { AUDIT_TABLES } from '../../audit/src/index.js';
 import { SEARCH_TABLES } from './entities.js';
+import { searchSql } from './query.js';
 import { TypeOrmSearchStore } from './store.js';
 import { adminUrl, startSearchDatabase, type SearchDatabase } from './test-support/mysql.js';
 
@@ -39,6 +40,11 @@ function seed(sources: FakeSources) {
     vehicle('v2', { plate: 'KLM-900', economicNumber: 'U-2', vin: '3N6AD33C9XK000123' }),
     vehicle('v3', { plate: 'XABC1', economicNumber: 'U-3' }),
   );
+  // More matches than the per-type limit: covers the `rn <= ?` cut-off and a total above it.
+  for (let i = 1; i <= 13; i++)
+    a.vehicles.push(
+      vehicle(`m${i}`, { plate: `ZMANY-${String(i).padStart(2, '0')}`, economicNumber: `M-${i}` }),
+    );
   a.employees.push(
     employee('e1', { licenseIndex: LICENSE, firstName: 'Washington', lastName: 'Pérez' }),
     employee('e2', { kind: 'dispatcher', firstName: 'Theodore', lastName: 'Gómez' }),
@@ -96,6 +102,8 @@ suite('persistent search projection on MySQL', () => {
     'LIC-1',
     'LIC',
     'zzz',
+    'zmany',
+    'many',
     'u',
   ];
 
@@ -107,6 +115,17 @@ suite('persistent search projection on MySQL', () => {
           const reference = await new SearchService(memory, exact).search(tenant, searcher, term);
           expect(real, `${tenant} ${term}`).toEqual(reference);
         }
+  });
+
+  it('cuts each type at the limit and still reports the full total', async () => {
+    const service = new SearchService(store, exact);
+    for (const term of ['zmany', 'many']) {
+      const vehicles = (await service.search(A, ALL, term)).groups.find(
+        (g) => g.type === 'vehicle',
+      );
+      expect(vehicles?.items).toHaveLength(10);
+      expect(vehicles?.total).toBe(13);
+    }
   });
 
   it('finds fragments that the default stopword list would hide', async () => {
@@ -207,19 +226,24 @@ suite('persistent search projection on MySQL', () => {
     });
   });
 
-  it('uses the prefix index and the FULLTEXT index in the plans', async () => {
-    const plan = async (sql: string, params: unknown[]) =>
-      JSON.stringify(await db.rows(`EXPLAIN ${sql}`, params));
-    const prefix = await plan(
-      `SELECT entity_id FROM \`${SEARCH_TABLES.entries}\` WHERE company_id = ? AND entity_type = ? AND key_kind NOT IN ('license','identification_hmac') AND normalized LIKE ?`,
-      [A, 'vehicle', 'abc%'],
-    );
+  it('uses the prefix index and the FULLTEXT index in the plans of the real statement', async () => {
+    const plan = async (term: string) => {
+      const built = searchSql({
+        tenantId: A,
+        term,
+        exactKeys: [],
+        types: [
+          { entityType: 'vehicle', permissions: ['view'] },
+          { entityType: 'driver', permissions: ['view', 'view_pii'] },
+        ],
+        limit: 10,
+      });
+      return JSON.stringify(await db.rows(`EXPLAIN ${built.sql}`, built.params));
+    };
+    // On the tiny seed the optimizer may scan the primary key, so the plans prove the indexes are reachable.
+    const prefix = await plan('ab');
     expect(prefix).toContain('ix_search_prefix');
-    const contains = await plan(
-      `SELECT entity_id FROM \`${SEARCH_TABLES.entries}\` WHERE MATCH(normalized) AGAINST (? IN BOOLEAN MODE) AND company_id = ? AND entity_type = ?`,
-      ['"abc"', A, 'vehicle'],
-    );
-    expect(contains).toContain('ft_search_normalized');
+    expect(await plan('abc')).toContain('ft_search_normalized');
   });
 
   it('queues one reconcile event per job id in the durable outbox of the company', async () => {
