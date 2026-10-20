@@ -40,7 +40,7 @@ write_paths:
 forbidden_paths:
   - SPECS.md, Orchestrator.md, docs/baselines/**, Tasks.md, .env*, AWS nuevo, producción y datos reales
   - reglas de negocio en packages/domain/** (una brecha se registra y se pide un FIX)
-status: planned
+status: in_progress (PR 1: cableado web, comprobación del worker y journeys por API; PR 2 pendiente)
 ```
 
 ## Objetivo y límites
@@ -90,3 +90,12 @@ git diff --check
 ```
 
 PR listo, CI verde y la única revisión Opus por PR/SHA. El autor no fusiona ni declara G5.
+
+## Estado y notas
+
+PR 1 (cableado y journeys por API):
+
+- **Cableado web (alcance 1).** `Historial de auditoría` (`EntityAuditTab`) en vehículo, conductor y orden de trabajo como sección bajo la ficha, y como pestaña «Historial» en el siniestro; solo con `view_audit` (sin permiso no se pide nada ni aparece la pestaña). «Seguir» en vehículo y siniestro. Enlaces a la ficha PDF (`vehicle_sheet`, `driver_sheet`, `incident_sheet`) y al reporte `vehicle_history`, solo con `export` (igual que la entrada «Reportes»); `ReportsScreen` abre el reporte con los filtros que lleva la dirección. «Exportar» de Auditoría abre `audit_log` con el periodo, tipo y resultado elegidos. Dashboard en Inicio, búsqueda y campana ya estaban montados.
+- **Worker compuesto (alcance 2).** `tests/integration/platform/worker-tick.test.ts` fija el orden de los jobs del tick del proceso `api` (outbox, escaneos, relevo de audit, exportaciones, notificaciones, webhooks) y que un job que falla, aun a mitad del tick, no detiene a los demás. Planes, SLA y proyección de búsqueda corren como jobs periódicos que encolan en el outbox; su registro con MySQL lo cubren `periodic.test.ts` y los journeys.
+- **Journeys por API (alcance 3).** `tests/e2e/mvp/*.integration.test.ts` sobre dos bases MySQL y HTTP: búsqueda → detalle, dashboard → drill-down, reporte grande → job → notificación → descarga → revocación, estado de vehículo → notificación y correo del sumidero → webhook firmado en un receptor local, siniestro → historial de audit sin texto libre ni importes. Entran en `pnpm test:fleet-integration`.
+- **Pendiente para PR 2 y siguientes.** Matriz de aislamiento consolidada (alcance 4), journey de navegador (5), demo, manifiesto y regresión (6 a 8). Las pestañas de vehículo y conductor son secciones, no `DetailTabs`, porque esas fichas no tienen pestañas.

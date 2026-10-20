@@ -48,6 +48,7 @@ export function MaintenanceArea({
   onOrderChange,
   onExpired,
   views,
+  auditHistory,
 }: {
   ports: MaintenancePorts;
   permissions: readonly string[];
@@ -65,6 +66,8 @@ export function MaintenanceArea({
   onExpired: () => void;
   /** Saved views and columns of the order list; without them the list keeps its filters on screen only. */
   views?: ViewsPorts;
+  /** Audit history of an open order, supplied by the shell. */
+  auditHistory?: ((orderId: string) => React.ReactNode) | undefined;
 }) {
   const [view, setView] = React.useState<MaintenanceView>(initialView);
   const [localOrderId, setLocalOrderId] = React.useState<string | null>(null);
@@ -129,6 +132,7 @@ export function MaintenanceArea({
             orderId={orderId}
             workshops={workshops}
             mechanics={mechanics}
+            auditHistory={auditHistory}
             onBack={() => setOrderId(null)}
             onExpired={onExpired}
           />

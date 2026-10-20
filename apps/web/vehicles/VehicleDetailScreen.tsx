@@ -5,6 +5,9 @@ import type { ApiError } from '../app/types';
 import { loadAllAreas } from '../areas/loadAreas';
 import { useSession } from '../auth/session';
 import { AssignmentHistorySection } from '../assignments/AssignmentHistorySection';
+import { EntityAuditTab } from '../features/audit';
+import { FollowButton } from '../features/notifications';
+import { ReportLinks } from '../features/reports';
 import { archiveClosed, VehicleDetailView, type ArchiveDialogState } from './VehicleDetailView';
 
 const notices: Record<string, string> = {
@@ -67,6 +70,25 @@ export function VehicleDetailScreen({ id }: { id: string }) {
         areas={catalog.state.status === 'ready' ? catalog.state.data.areas : []}
         can={can}
         notice={notice}
+        extraActions={(vehicle) => (
+          <>
+            <FollowButton type="vehicle" entityId={vehicle.id} />
+            <ReportLinks
+              links={[
+                {
+                  label: 'Ficha PDF',
+                  reportId: 'vehicle_sheet',
+                  filters: { vehicle: vehicle.economicNumber },
+                },
+                {
+                  label: 'Historial del vehículo',
+                  reportId: 'vehicle_history',
+                  filters: { vehicle: vehicle.economicNumber },
+                },
+              ]}
+            />
+          </>
+        )}
         archive={archive}
         onRetry={reload}
         onArchiveRequest={() => setArchive({ open: true, busy: false })}
@@ -78,6 +100,9 @@ export function VehicleDetailScreen({ id }: { id: string }) {
         }}
       />
       {state.status === 'ready' && <AssignmentHistorySection vehicleId={state.data.id} />}
+      {state.status === 'ready' && can('view_audit') && (
+        <EntityAuditTab entityType="vehicle" entityId={state.data.id} />
+      )}
     </>
   );
 }

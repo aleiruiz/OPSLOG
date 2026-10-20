@@ -1,11 +1,12 @@
 import Box from '@mui/material/Box';
+import type { ReactNode } from 'react';
 import ArchiveOutlined from '@mui/icons-material/ArchiveOutlined';
 import EditOutlined from '@mui/icons-material/EditOutlined';
 import SwapHorizOutlined from '@mui/icons-material/SwapHorizOutlined';
 import { ConfirmDialog, PageHeader, Panel, Button, UiState } from '@opslog/ui';
 import { ResourceView, type ResourceState } from '../app/resource';
 import { RouterButton } from '../app/router';
-import type { EmployeeStatus } from '../app/types';
+import type { Employee, EmployeeStatus } from '../app/types';
 import { Detail } from './EmployeeDetailData';
 import { BackLink, FocusNotice } from './EmployeeDetailShared';
 import {
@@ -38,6 +39,8 @@ export interface EmployeeDetailViewProps {
   readonly history: HistoryProps;
   readonly can: (permission: 'edit' | 'delete' | 'view_pii') => boolean;
   readonly notice?: string | null;
+  /** Extra header actions (report links) that the screen composes from other modules. */
+  readonly extraActions?: (employee: Employee) => ReactNode;
   readonly dialog: EmployeeDialogState;
   readonly statusPanel: StatusPanelState;
   /** Initial values of the status panel (stories and tests); the person types over them. */
@@ -61,6 +64,7 @@ export function EmployeeDetailView({
   history,
   can,
   notice = null,
+  extraActions,
   dialog,
   statusPanel,
   statusDraft = { to: '', reason: '' },
@@ -91,6 +95,7 @@ export function EmployeeDetailView({
                 description={`${kindLabels[employee.kind]}${employee.position ? ` · ${employee.position}` : ''}`}
                 actions={
                   <>
+                    {extraActions?.(employee)}
                     {can('edit') && isEditable(employee) && (
                       <RouterButton
                         to={`${employeePath(employee.id)}/editar`}

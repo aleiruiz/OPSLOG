@@ -3,7 +3,9 @@ import React from 'react';
 import type { BffAuditQuery } from '@opslog/contracts';
 import { Button, Field, FilterBar, InlineAlert, PageHeader, Panel, UiState } from '@opslog/ui';
 import { NoSubmit } from '../../app/resource';
+import { RouterButton } from '../../app/router';
 import { useSession } from '../../auth/session';
+import { reportPath } from '../reports/ReportLinks';
 import { AuditResults } from './AuditResults';
 import { DOMAIN_OPTIONS, ENTITY_OPTIONS, RESULT_OPTIONS } from './labels';
 import { ReconciliationPanel } from './ReconciliationPanel';
@@ -17,6 +19,18 @@ interface Filters {
   readonly entityType: string;
   readonly result: string;
 }
+/** Record types the `audit_log` report accepts as a filter; the others are left out of the link. */
+const EXPORTABLE: ReadonlySet<string> = new Set([
+  'vehicle',
+  'employee',
+  'area',
+  'document',
+  'insurance_policy',
+  'incident',
+  'maintenance_work_order',
+  'maintenance_plan',
+  'company_settings',
+]);
 const NONE: Filters = { fromDay: '', toDay: '', action: '', entityType: '', result: '' };
 
 /** S26 Auditoría: who did what and when, read-only, with the reconciliation of what was recorded (FR-170/171). */
@@ -76,6 +90,21 @@ export function AuditScreen({ now = Date.now }: { readonly now?: () => number })
         eyebrow="Análisis"
         title="Auditoría"
         description="Quién hizo qué y cuándo. Sin periodo se muestran los últimos 30 días. Es de solo lectura."
+        actions={
+          can('export') ? (
+            // The report takes the same period, record type and result; the module filter has no report twin.
+            <RouterButton
+              to={reportPath('audit_log', {
+                from: filters.fromDay,
+                to: filters.toDay,
+                entityType: EXPORTABLE.has(filters.entityType) ? filters.entityType : '',
+                result: filters.result,
+              })}
+            >
+              Exportar
+            </RouterButton>
+          ) : undefined
+        }
       />
       <NoSubmit>
         <Panel>

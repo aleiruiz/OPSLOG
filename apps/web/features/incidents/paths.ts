@@ -17,6 +17,7 @@ export const TAB_IDS = [
   'repair',
   'costs',
   'timeline',
+  'history',
 ] as const;
 export type TabId = (typeof TAB_IDS)[number];
 export const TAB_LABELS: Readonly<Record<TabId, string>> = {
@@ -27,9 +28,13 @@ export const TAB_LABELS: Readonly<Record<TabId, string>> = {
   repair: 'Reparación',
   costs: 'Costos',
   timeline: 'Timeline',
+  history: 'Historial',
 };
-/** The tabs a caller gets: Costos only with `incidents:view_costs` (the others follow `incidents:view`). */
-export const tabsFor = (viewCosts: boolean): readonly TabId[] =>
-  TAB_IDS.filter((id) => id !== 'costs' || viewCosts);
-export const asTab = (value: string | undefined, viewCosts = false): TabId =>
-  tabsFor(viewCosts).find((id) => id === value) ?? 'summary';
+/**
+ * The tabs a caller gets: Costos only with `incidents:view_costs`, Historial only with `view_audit`
+ * (the others follow `incidents:view`).
+ */
+export const tabsFor = (viewCosts: boolean, viewAudit = false): readonly TabId[] =>
+  TAB_IDS.filter((id) => (id !== 'costs' || viewCosts) && (id !== 'history' || viewAudit));
+export const asTab = (value: string | undefined, viewCosts = false, viewAudit = false): TabId =>
+  tabsFor(viewCosts, viewAudit).find((id) => id === value) ?? 'summary';

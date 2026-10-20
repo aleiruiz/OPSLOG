@@ -509,7 +509,13 @@ test('permissions: view-only has no buttons, the fleet editor cannot start cases
   await expect(page.getByRole('link', { name: 'Nuevo siniestro' })).toHaveCount(0);
   await page.goto(`${a.webUrl}/real${casePath}`);
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-  await expect(page.getByRole('main').getByRole('button')).toHaveCount(0);
+  // Following a case is personal, so a viewer keeps «Seguir»; every other button would mutate the case.
+  await expect(
+    page
+      .getByRole('main')
+      .getByRole('button')
+      .filter({ hasNotText: /^(Seguir|Siguiendo)$/ }),
+  ).toHaveCount(0);
   await page.getByRole('tab', { name: 'Terceros' }).click();
   await expect(page.getByRole('button', { name: /Agregar tercero|Editar|Retirar/ })).toHaveCount(0);
   await page.goto(`${a.webUrl}/real/incidents/new`);

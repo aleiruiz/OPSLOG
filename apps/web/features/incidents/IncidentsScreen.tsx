@@ -11,6 +11,7 @@ import { IncidentAlertsScreen } from './IncidentAlertsScreen';
 import { IncidentDetail } from './IncidentDetail';
 import { IncidentListScreen } from './IncidentListScreen';
 import { IncidentWizard } from './IncidentWizard';
+import { incidentExtras } from './extras';
 import { IncidentEnvProvider, type IncidentEnv } from './context';
 import { mayStartIncident, mayViewCosts, mayViewIncidents } from './model';
 import { DEFAULT_ZONE } from './time';
@@ -110,6 +111,7 @@ export function IncidentsScreen({
       approvalThreshold: threshold,
       onExpired: markExpired,
       views: ports.views,
+      extras: incidentExtras,
     }),
     [ports, permissions, userId, zone, members, drivers, photoRequired, threshold],
   );

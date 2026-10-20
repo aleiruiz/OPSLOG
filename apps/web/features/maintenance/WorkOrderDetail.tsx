@@ -57,6 +57,7 @@ export function WorkOrderDetail({
   orderId,
   workshops = [],
   mechanics = [],
+  auditHistory,
   onBack,
   onExpired,
 }: {
@@ -65,6 +66,8 @@ export function WorkOrderDetail({
   orderId: string;
   workshops?: readonly BffMaintenanceWorkshop[];
   mechanics?: readonly BffMaintenanceMechanic[];
+  /** Audit history of the order (the shell mounts it for `view_audit`); absent in isolated screens. */
+  auditHistory?: ((orderId: string) => React.ReactNode) | undefined;
   onBack: () => void;
   onExpired: () => void;
 }) {
@@ -352,6 +355,7 @@ export function WorkOrderDetail({
               </Typography>
             )}
           </Panel>
+          {auditHistory?.(order.id)}
         </Stack>
         <Stack spacing={2} sx={{ width: { xs: '100%', md: 320 } }}>
           <NextStepPanel

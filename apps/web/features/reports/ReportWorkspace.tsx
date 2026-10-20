@@ -38,11 +38,14 @@ function PreviewBody({
 /** One report: filters, column selector, paginated preview and the export. */
 export function ReportWorkspace({
   report,
+  initialFilters = {},
   canExport,
   onBack,
   onShowExports,
 }: {
   readonly report: BffReportSummary;
+  /** Filters the report opens with (from a link); they are applied at once. */
+  readonly initialFilters?: Readonly<Record<string, string>>;
   readonly canExport: boolean;
   readonly onBack: () => void;
   readonly onShowExports: () => void;
@@ -52,8 +55,8 @@ export function ReportWorkspace({
   const [columns, setColumns] = React.useState<readonly string[]>(
     defaults.length > 0 ? defaults : report.columns.slice(0, 1).map((c) => c.id),
   );
-  const [draft, setDraft] = React.useState<Readonly<Record<string, string>>>({});
-  const [applied, setApplied] = React.useState<Readonly<Record<string, string>>>({});
+  const [draft, setDraft] = React.useState<Readonly<Record<string, string>>>(initialFilters);
+  const [applied, setApplied] = React.useState<Readonly<Record<string, string>>>(initialFilters);
   const [sort, setSort] = React.useState(report.defaultSort.column);
   const [direction, setDirection] = React.useState<'asc' | 'desc'>(report.defaultSort.direction);
   const [offset, setOffset] = React.useState(0);
