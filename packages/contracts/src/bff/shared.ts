@@ -43,6 +43,7 @@ export const BFF_ERRORS = {
   missing_requirements: { status: 422, message: 'Unprocessable request' },
   payload_too_large: { status: 413, message: 'Payload too large' },
   unsupported_media_type: { status: 415, message: 'Unsupported media type' },
+  unavailable: { status: 503, message: 'Service temporarily unavailable' },
   internal_error: { status: 500, message: 'Request failed' },
 } as const;
 

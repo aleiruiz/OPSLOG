@@ -7,14 +7,22 @@ import type {
   IncidentCostPresence,
   IncidentCostTotals,
 } from '../../workflow/src/index.js';
+import { chunksOf } from '../../cases/src/index.js';
 import {
   readLinkedOrders,
   type IncidentRepairStore,
+  type RepairBatchReads,
   type RepairLink,
   type RepairOrderReader,
   type RepairOrderRef,
 } from '../../repairs/src/index.js';
-import type { ClosedOrder, CostLine, CurrencyTotals, IncidentCostStore } from './ports.js';
+import type {
+  ClosedOrder,
+  CostLine,
+  CurrencyTotals,
+  IncidentCostBatchReads,
+  IncidentCostStore,
+} from './ports.js';
 import { summarize } from './summary.js';
 
 export interface LedgerRead {
@@ -44,11 +52,45 @@ export class CostLedger implements IncidentCostPresence, IncidentCostTotals, Inc
 
   public async read(tenantId: string, incidentId: string, tx?: unknown): Promise<LedgerRead> {
     const lines = await this.costs.lines(tenantId, incidentId, tx);
-    const links = await readLinkedOrders(
-      await this.links.links(tenantId, incidentId, tx),
-      this.orders,
-      tenantId,
-    );
+    return this.assemble(tenantId, lines, await this.links.links(tenantId, incidentId, tx));
+  }
+
+  /**
+   * `read` for many cases of one tenant, for the reports: the own lines and the links come in a
+   * bounded number of reads when the stores have the batch reads, one case at a time otherwise.
+   * Every case of `incidentIds` is in the answer, with exactly what `read` gives for it.
+   */
+  public async readMany(
+    tenantId: string,
+    incidentIds: readonly string[],
+  ): Promise<ReadonlyMap<string, LedgerRead>> {
+    const costs = this.costs as Partial<IncidentCostBatchReads>;
+    const links = this.links as Partial<RepairBatchReads>;
+    const result = new Map<string, LedgerRead>();
+    if (
+      typeof costs.linesOfIncidents !== 'function' ||
+      typeof links.linksOfIncidents !== 'function'
+    ) {
+      for (const id of new Set(incidentIds)) result.set(id, await this.read(tenantId, id));
+      return result;
+    }
+    for (const chunk of chunksOf(incidentIds)) {
+      const [lines, linked] = await Promise.all([
+        costs.linesOfIncidents(tenantId, chunk),
+        links.linksOfIncidents(tenantId, chunk),
+      ]);
+      for (const id of chunk)
+        result.set(id, await this.assemble(tenantId, lines.get(id) ?? [], linked.get(id) ?? []));
+    }
+    return result;
+  }
+
+  private async assemble(
+    tenantId: string,
+    lines: readonly CostLine[],
+    rows: readonly RepairLink[],
+  ): Promise<LedgerRead> {
+    const links = await readLinkedOrders(rows, this.orders, tenantId);
     const counted = links.filter(({ order }) => order.status !== 'cancelled');
     return {
       lines,

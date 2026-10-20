@@ -35,6 +35,22 @@ export interface RepairLink {
   readonly linkedBy: string;
 }
 
+/**
+ * Optional batch reads of the links for the reports: the same answers as `linkOfOrder` and `links`,
+ * for many ids in a bounded number of reads. Ids without a link are absent from the answer.
+ */
+export interface RepairBatchReads {
+  linksOfOrders(
+    tenantId: string,
+    orderIds: readonly string[],
+  ): Promise<ReadonlyMap<string, RepairLink>>;
+  /** Oldest first, by case id. */
+  linksOfIncidents(
+    tenantId: string,
+    incidentIds: readonly string[],
+  ): Promise<ReadonlyMap<string, readonly RepairLink[]>>;
+}
+
 export type RepairChange =
   | { readonly kind: 'link'; readonly link: RepairLink }
   | {

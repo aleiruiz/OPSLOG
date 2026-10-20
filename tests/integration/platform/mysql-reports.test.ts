@@ -42,6 +42,7 @@ suite('report reads on the real MySQL stores', () => {
   let incidents: IncidentTestDatabase;
   const open: { destroy(): Promise<void> }[] = [];
   let sources: OperationalSources;
+  let incidentStore: TypeOrmIncidentStore;
   let linked = false;
   const tenantA = randomUUID();
 
@@ -56,7 +57,7 @@ suite('report reads on the real MySQL stores', () => {
     const areas = ['area-1', 'area-2'];
     await seedOrders(orderSource, tenantA);
     await seedIncidents(incidentSource, tenantA, areas);
-    const incidentStore = new TypeOrmIncidentStore(incidentSource);
+    incidentStore = new TypeOrmIncidentStore(incidentSource);
     sources = operationalSources({
       orders: new TypeOrmWorkOrderStore(orderSource),
       plans: new InMemoryMaintenancePlanStore(),
@@ -106,6 +107,28 @@ suite('report reads on the real MySQL stores', () => {
     });
     expect(mine.length).toBeGreaterThan(0);
     expect(mine.every((incident) => incident.vehicleId === 'veh-3')).toBe(true);
+  }, 120_000);
+
+  it('reads timelines and cases in batches, with the answer of one-by-one reads', async () => {
+    const all = await sources.incidents(reader(tenantA, ['incidents:view']), {});
+    // More cases than one `IN` list holds, so the read is chunked.
+    const ids = all.slice(0, 700).map((incident) => incident.id);
+    expect(ids.length).toBeGreaterThan(500);
+    const viewer = reader(tenantA, ['incidents:view', 'incidents:edit']);
+    const steps = await sources.incidentSteps(viewer, ids);
+    expect(steps.size).toBe(ids.length);
+    for (const id of ids.filter((_, at) => at % 50 === 0))
+      expect(steps.get(id)).toEqual(
+        (await incidentStore.history(tenantA, id)).map((t) => ({
+          command: t.command,
+          to: t.to,
+          at: t.occurredAt,
+        })),
+      );
+    const cases = await incidentStore.getMany(tenantA, ids);
+    expect(cases.map((incident) => incident.id).sort()).toEqual([...ids].sort());
+    expect(await incidentStore.getMany(randomUUID(), ids)).toEqual([]);
+    expect((await incidentStore.historyMany(randomUUID(), ids)).size).toBe(0);
   }, 120_000);
 
   it("never reads another company's rows and leaves a mechanic-scoped member with nothing", async () => {

@@ -1,3 +1,4 @@
+import { isPoolSaturation } from '../../../../packages/platform/observability/src/index.js';
 import type { SearchApiDeps, SearchApiQuery, SearchApiResponse } from './types.js';
 
 export type * from './types.js';
@@ -10,6 +11,11 @@ const STATUS: Readonly<Record<string, number>> = {
 
 /** A failure as a fixed code and message: never what was typed, a stack or a store detail. */
 function fail(error: unknown): SearchApiResponse {
+  if (isPoolSaturation(error))
+    return {
+      ok: false,
+      error: { code: 'unavailable', status: 503, message: 'Service temporarily unavailable' },
+    };
   const raw = (error as { code?: unknown } | null)?.code;
   const code = raw === 'expired' ? 'unauthorized' : typeof raw === 'string' ? raw : '';
   const known = code in STATUS ? code : 'internal_error';

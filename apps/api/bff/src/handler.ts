@@ -12,11 +12,13 @@ import { BffCrypto, originAllowed, parseAllowedOrigins } from './csrf.js';
 import {
   errorResponse,
   normalizeHeaders,
+  RETRY_AFTER,
   singleHeader,
   type BffHandler,
   type BffRequest,
   type BffResponse,
 } from './http.js';
+import { isPoolSaturation } from '../../../../packages/platform/observability/src/index.js';
 import { ROUTES, type Route, type RouteContext } from './routes.js';
 
 export const DEFAULT_MAX_BODY_BYTES = 16 * 1024;
@@ -31,6 +33,14 @@ export interface BffOptions {
   readonly allowedOrigins: readonly string[];
   readonly maxBodyBytes?: number;
   readonly now?: () => Date;
+  /**
+   * Called once per request after the session resolves, with the ids the caller needs to derive an
+   * opaque reference (never logged as is). Lets the request logger carry `actorRef`.
+   */
+  readonly onAuthenticated?: (identity: {
+    readonly tenantId: string;
+    readonly identityId: string;
+  }) => void;
   /**
    * Receives only a correlation id, a static route id and the error class name of unexpected
    * failures; never a message, a stack, a request value or a token.
@@ -195,6 +205,10 @@ export function createBffHandler(options: BffOptions): BffHandler {
         }
         if (route.kind === 'session-csrf' && !crypto.verifySession(token, headers))
           return errorResponse('csrf_failed', correlationId);
+        options.onAuthenticated?.({
+          tenantId: details.value.tenantId,
+          identityId: details.value.identityId,
+        });
         const authenticated: RouteContext = { ...context, token, session: details.value };
         const response = await route.handle(authenticated);
         return withCookies(
@@ -213,6 +227,7 @@ export function createBffHandler(options: BffOptions): BffHandler {
             ? error.constructor.name
             : 'Error',
       });
+      if (isPoolSaturation(error)) return errorResponse('unavailable', correlationId, RETRY_AFTER);
       return errorResponse('internal_error', correlationId);
     }
   };

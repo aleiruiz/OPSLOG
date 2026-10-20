@@ -851,6 +851,18 @@ describe('uniform, PII-free errors', () => {
     expect((await browser.get('/api/users')).status).toBe(200);
   });
 
+  it('reports the tenant and identity of an authenticated request once, and nothing for anonymous ones', async () => {
+    const seen: { tenantId: string; identityId: string }[] = [];
+    world = createBffWorld({ bff: { onAuthenticated: (identity) => seen.push(identity) } });
+    const { tenantId, adminId } = await world.tenant('Acme', 'subject-admin-a');
+    const browser = await world.loginAs('subject-admin-a');
+    seen.length = 0;
+    await world.browser().get('/api/auth/csrf');
+    expect(seen).toEqual([]);
+    expect((await browser.get('/api/users')).status).toBe(200);
+    expect(seen).toEqual([{ tenantId, identityId: adminId }]);
+  });
+
   it('works without an error hook', async () => {
     world = createBffWorld();
     const handler = createBffHandler({

@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { describe, expect, it } from 'vitest';
 import type { DataSource } from 'typeorm';
 import type { EntityProjection, SearchStoreQuery } from '../../../domain/search/src/index.js';
-import { hitsSql, matchesSql, totalSql } from './query.js';
+import { searchSql } from './query.js';
 import { TypeOrmSearchStore } from './store.js';
 
 const query = (over: Partial<SearchStoreQuery> = {}): SearchStoreQuery => ({
@@ -13,38 +13,49 @@ const query = (over: Partial<SearchStoreQuery> = {}): SearchStoreQuery => ({
   limit: 10,
   ...over,
 });
-const type = { entityType: 'driver', permissions: ['view', 'view_pii'] } as const;
 
 describe('search SQL', () => {
-  it('scopes every branch to the company, the type and the permissions, with bound values', () => {
-    const { sql, params } = matchesSql(query(), type);
+  const types = [
+    { entityType: 'driver', permissions: ['view', 'view_pii'] },
+    { entityType: 'vehicle', permissions: ['view'] },
+  ] as const;
+
+  it('is ONE statement scoped to the company and to the (type, permission) pairs, with bound values', () => {
+    const { sql, params } = searchSql(query({ types: [...types] }));
     expect(sql.match(/company_id = \?/g)).toHaveLength(2);
-    expect(sql.match(/required_permission IN \(\?,\?\)/g)).toHaveLength(2);
+    expect(sql.match(/\(entity_type = \? AND required_permission IN \(\?,\?\)\)/g)).toHaveLength(2);
+    expect(sql.match(/\(entity_type = \? AND required_permission IN \(\?\)\)/g)).toHaveLength(2);
     expect(sql).toContain('MATCH(normalized) AGAINST (? IN BOOLEAN MODE)');
     expect(sql).toContain('normalized LIKE ?');
     expect(params).toContain('tenant-1');
     expect(params).toContain('"abc123"');
     expect(params).toContain('%abc123%');
     expect(params).toContain('abc123%');
+    expect(params).toEqual(expect.arrayContaining(['driver', 'view_pii', 'vehicle']));
     // Nothing typed is ever part of the statement text.
     expect(sql).not.toContain('abc123');
+    expect(sql).not.toContain('tenant-1');
   });
 
   it('adds the exact-key branch only with blind indexes and contains only from three characters', () => {
-    const plain = matchesSql(query({ term: 'ab' }), type);
+    const plain = searchSql(query({ term: 'ab' }));
     expect(plain.sql).not.toContain('MATCH');
     expect(plain.sql).not.toContain('normalized IN');
-    const exact = matchesSql(query({ exactKeys: ['f'.repeat(64), 'e'.repeat(64)] }), type);
+    const exact = searchSql(query({ exactKeys: ['f'.repeat(64), 'e'.repeat(64)] }));
     expect(exact.sql).toContain('normalized IN (?,?)');
     expect(exact.sql).toContain('key_kind IN (?,?)');
     expect(exact.params).toContain('f'.repeat(64));
   });
 
-  it('groups by entity, ranks and limits the hits, and counts distinct entities', () => {
-    const hits = hitsSql(query({ limit: 7 }), type);
-    expect(hits.sql).toContain('GROUP BY entity_id ORDER BY rnk, display, entity_id LIMIT ?');
-    expect(hits.params.at(-1)).toBe(7);
-    expect(totalSql(query(), type).sql).toContain('COUNT(DISTINCT entity_id)');
+  it('groups by entity, ranks and limits the hits per type, and counts the entities per type', () => {
+    const built = searchSql(query({ limit: 7, types: [...types] }));
+    expect(built.sql).toContain('GROUP BY entity_type, entity_id');
+    expect(built.sql).toContain(
+      'ROW_NUMBER() OVER (PARTITION BY entity_type ORDER BY rnk, display, entity_id)',
+    );
+    expect(built.sql).toContain('COUNT(*) OVER (PARTITION BY entity_type)');
+    expect(built.sql).toContain('WHERE rn <= ?');
+    expect(built.params.at(-1)).toBe(7);
   });
 });
 
@@ -64,10 +75,13 @@ function fakeSource(username = 'opslog_search_t1') {
     options: { username },
     query: async (sql: string, params: unknown[]) => {
       calls.push({ sql, params });
-      if (sql.startsWith('SELECT entity_type'))
+      if (sql.includes('MIN(fingerprint)'))
         return [{ entity_type: 'vehicle', entity_id: 'v1', fingerprint: 'fp' }];
-      if (sql.includes('COUNT(DISTINCT')) return [{ n: '12' }];
-      return [{ entity_id: 'v1', area_id: null, display: 'U-1' }];
+      return [
+        { entity_type: 'vehicle', entity_id: 'v1', area_id: null, display: 'U-1', n: '12' },
+        { entity_type: 'vehicle', entity_id: 'v2', area_id: 'a1', display: 'U-2', n: '12' },
+        { entity_type: 'driver', entity_id: 'd1', area_id: null, display: 'Ana', n: 1 },
+      ];
     },
     transaction: async (work: (m: typeof manager) => Promise<void>) => work(manager),
   } as unknown as DataSource;
@@ -141,16 +155,36 @@ describe('TypeOrmSearchStore', () => {
     expect(deletes).toHaveLength(0);
   });
 
-  it('answers hits and the total of each type', async () => {
-    const { source } = fakeSource();
-    const groups = await new TypeOrmSearchStore(source).search(query());
+  it('answers hits and the total of each type from a single statement', async () => {
+    const { source, calls } = fakeSource();
+    const groups = await new TypeOrmSearchStore(source).search(
+      query({
+        types: [
+          { entityType: 'vehicle', permissions: ['view'] },
+          { entityType: 'driver', permissions: ['view'] },
+          { entityType: 'policy', permissions: ['view'] },
+        ],
+      }),
+    );
+    expect(calls).toHaveLength(1);
     expect(groups).toEqual([
       {
         entityType: 'vehicle',
         total: 12,
-        hits: [{ entityId: 'v1', areaId: null, display: 'U-1' }],
+        hits: [
+          { entityId: 'v1', areaId: null, display: 'U-1' },
+          { entityId: 'v2', areaId: 'a1', display: 'U-2' },
+        ],
       },
+      { entityType: 'driver', total: 1, hits: [{ entityId: 'd1', areaId: null, display: 'Ana' }] },
+      { entityType: 'policy', total: 0, hits: [] },
     ]);
+  });
+
+  it('does not query when no type is allowed', async () => {
+    const { source, calls } = fakeSource();
+    expect(await new TypeOrmSearchStore(source).search(query({ types: [] }))).toEqual([]);
+    expect(calls).toHaveLength(0);
   });
 
   it('queues one durable reconcile event per job id, as a system actor', async () => {
