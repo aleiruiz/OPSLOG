@@ -26,6 +26,37 @@ import { TypeOrmIncidentStore } from '../../../cases/src/store.js';
 import { TypeOrmIncidentRepairStore } from '../../../repairs/src/store.js';
 import { TypeOrmIncidentCostStore } from '../store.js';
 
+/**
+ * The same connection with every `find` of a repository counted: lets a test prove that a batch
+ * read costs a bounded number of statements however many ids it gets.
+ */
+export function countingSource(source: DataSource): { source: DataSource; finds: () => number } {
+  let finds = 0;
+  const bound = <T extends object>(target: T, wrap?: (name: string | symbol) => unknown) =>
+    new Proxy(target, {
+      get: (object, name) => {
+        const own = wrap?.(name);
+        if (own !== undefined) return own;
+        const value = Reflect.get(object, name, object) as unknown;
+        return typeof value === 'function' ? value.bind(object) : value;
+      },
+    });
+  const counted = bound(source, (name) =>
+    name === 'getRepository'
+      ? (entity: never) =>
+          bound(source.getRepository(entity), (method) =>
+            method === 'find'
+              ? (...args: never[]) => {
+                  finds += 1;
+                  return (source.getRepository(entity).find as (...a: never[]) => unknown)(...args);
+                }
+              : undefined,
+          )
+      : undefined,
+  );
+  return { source: counted, finds: () => finds };
+}
+
 export const actor = (permissions: string[]): IncidentActor => {
   const subject = randomUUID();
   return { id: `user-${subject}`, subject, permissions, mechanicLinked: false };

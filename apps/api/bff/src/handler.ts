@@ -35,6 +35,14 @@ export interface BffOptions {
    * Receives only a correlation id, a static route id and the error class name of unexpected
    * failures; never a message, a stack, a request value or a token.
    */
+  /**
+   * Called once per request after the session resolves, with the ids the caller needs to derive an
+   * opaque reference (never logged as is). Lets the request logger carry `actorRef`.
+   */
+  readonly onAuthenticated?: (identity: {
+    readonly tenantId: string;
+    readonly identityId: string;
+  }) => void;
   readonly onError?: (event: {
     readonly correlationId: string;
     readonly route: string;
@@ -195,6 +203,10 @@ export function createBffHandler(options: BffOptions): BffHandler {
         }
         if (route.kind === 'session-csrf' && !crypto.verifySession(token, headers))
           return errorResponse('csrf_failed', correlationId);
+        options.onAuthenticated?.({
+          tenantId: details.value.tenantId,
+          identityId: details.value.identityId,
+        });
         const authenticated: RouteContext = { ...context, token, session: details.value };
         const response = await route.handle(authenticated);
         return withCookies(

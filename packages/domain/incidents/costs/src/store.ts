@@ -8,6 +8,7 @@ import type {
   CostChange,
   CostLine,
   CostSnapshot,
+  IncidentCostBatchReads,
   IncidentCostStore,
   Money,
 } from './ports.js';
@@ -16,7 +17,7 @@ const scope = (tenantId: string, incidentId: string) =>
   `${tenantId.length}:${tenantId}${incidentId}`;
 
 /** In-memory lines, estimates and snapshots, written through the incident store like the MySQL adapter. */
-export class InMemoryIncidentCostStore implements IncidentCostStore {
+export class InMemoryIncidentCostStore implements IncidentCostStore, IncidentCostBatchReads {
   private readonly lineRows = new Map<string, CostLine[]>();
   private readonly estimates = new Map<string, Money>();
   private readonly approvals = new Map<string, Money[]>();
@@ -25,6 +26,18 @@ export class InMemoryIncidentCostStore implements IncidentCostStore {
 
   public async lines(tenantId: string, incidentId: string): Promise<readonly CostLine[]> {
     return structuredClone(this.lineRows.get(scope(tenantId, incidentId)) ?? []);
+  }
+
+  public async linesOfIncidents(
+    tenantId: string,
+    incidentIds: readonly string[],
+  ): Promise<ReadonlyMap<string, readonly CostLine[]>> {
+    const result = new Map<string, readonly CostLine[]>();
+    for (const id of new Set(incidentIds)) {
+      const lines = this.lineRows.get(scope(tenantId, id));
+      if (lines && lines.length > 0) result.set(id, structuredClone(lines));
+    }
+    return result;
   }
 
   public async estimate(tenantId: string, incidentId: string): Promise<Money | null> {

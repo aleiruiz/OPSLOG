@@ -7,6 +7,7 @@ export * from './events.js';
 export * from './folio.js';
 export * from './idempotency.js';
 export { EVENT_KEYS, LIMITS, WRITABLE_KEYS, type EventChanges, type WritableKey } from './input.js';
+export * from './batch.js';
 export * from './ports.js';
 export {
   assertEditable,

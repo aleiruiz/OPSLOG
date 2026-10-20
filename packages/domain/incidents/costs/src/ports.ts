@@ -51,6 +51,17 @@ export interface CostChange {
   readonly at: string;
 }
 
+/**
+ * Optional batch read of the own lines for the reports: the same answer as `lines`, for many cases
+ * in a bounded number of reads. A case without lines is absent from the answer.
+ */
+export interface IncidentCostBatchReads {
+  linesOfIncidents(
+    tenantId: string,
+    incidentIds: readonly string[],
+  ): Promise<ReadonlyMap<string, readonly CostLine[]>>;
+}
+
 export type ApprovalKind = 'assumption' | 'close';
 
 export interface IncidentCostStore {

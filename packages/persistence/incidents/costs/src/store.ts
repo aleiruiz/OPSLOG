@@ -1,9 +1,10 @@
 import 'reflect-metadata';
-import type { DataSource, EntityManager } from 'typeorm';
-import type {
-  IncidentApplyResult,
-  IncidentMutation,
-  IncidentStore,
+import { In, type DataSource, type EntityManager } from 'typeorm';
+import {
+  chunksOf,
+  type IncidentApplyResult,
+  type IncidentMutation,
+  type IncidentStore,
 } from '../../../../domain/incidents/cases/src/index.js';
 import type {
   ApprovalKind,
@@ -12,6 +13,7 @@ import type {
   CostLine,
   CostSnapshot,
   CurrencyTotals,
+  IncidentCostBatchReads,
   IncidentCostStore,
   Money,
 } from '../../../../domain/incidents/costs/src/index.js';
@@ -72,7 +74,7 @@ export const snapshotFrom = (row: IncidentCostSnapshotEntity): CostSnapshot => (
  * Costs of the cases. Every selector carries the tenant. Writes join the transaction of the incident
  * store, so the case row (version CAS), its timeline, audit, outbox and the lines commit together.
  */
-export class TypeOrmIncidentCostStore implements IncidentCostStore {
+export class TypeOrmIncidentCostStore implements IncidentCostStore, IncidentCostBatchReads {
   public constructor(
     private readonly dataSource: DataSource,
     private readonly base: IncidentStore,
@@ -94,6 +96,25 @@ export class TypeOrmIncidentCostStore implements IncidentCostStore {
       .getRepository(IncidentCostLineSchema)
       .find({ where: { tenantId, incidentId }, order: { position: 'ASC', id: 'ASC' } });
     return rows.map(lineFrom);
+  }
+
+  public async linesOfIncidents(
+    tenantId: string,
+    incidentIds: readonly string[],
+  ): Promise<ReadonlyMap<string, readonly CostLine[]>> {
+    const result = new Map<string, CostLine[]>();
+    for (const chunk of chunksOf(incidentIds)) {
+      const rows = await this.dataSource.getRepository(IncidentCostLineSchema).find({
+        where: { tenantId, incidentId: In([...chunk]) },
+        order: { incidentId: 'ASC', position: 'ASC', id: 'ASC' },
+      });
+      for (const row of rows) {
+        const list = result.get(row.incidentId) ?? [];
+        list.push(lineFrom(row));
+        result.set(row.incidentId, list);
+      }
+    }
+    return result;
   }
 
   public async estimate(tenantId: string, incidentId: string, tx?: unknown): Promise<Money | null> {

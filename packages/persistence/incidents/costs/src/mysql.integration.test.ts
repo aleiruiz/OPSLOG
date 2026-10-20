@@ -24,7 +24,18 @@ import {
   runIncidentWorkflowMigrations,
 } from '../../workflow/src/data-source.js';
 import { INCIDENT_WORKFLOW_TABLES as W } from '../../workflow/src/entities.js';
-import { DRAFT, MANAGER, NO_COSTS, Shared, incidentWorld } from './test-support/world.js';
+import { CostLedger } from '../../../../domain/incidents/costs/src/index.js';
+import { TypeOrmIncidentStore } from '../../cases/src/store.js';
+import { TypeOrmIncidentRepairStore } from '../../repairs/src/store.js';
+import { TypeOrmIncidentCostStore } from './store.js';
+import {
+  DRAFT,
+  MANAGER,
+  NO_COSTS,
+  Shared,
+  countingSource,
+  incidentWorld,
+} from './test-support/world.js';
 
 const suite = adminUrl ? describe : describe.skip;
 const expense = (category: string, amountMinor: string, currency = 'MXN') => ({
@@ -606,5 +617,72 @@ suite('incident costs and repair links on disposable MySQL 8.4', () => {
     }
     // The change itself is committed (it needs no order); the answer is what fails.
     expect(await count(T.lines, 'company_id', tenantA, `incident_id='${incident.id}'`)).toBe(1);
+  });
+
+  it('batch reads give exactly what the single reads give, per company, in a bounded number of statements', async () => {
+    const w = world(sourceA);
+    const cases: { id: string; orderId: string }[] = [];
+    for (const amount of ['100', '250', '400']) {
+      const incident = await underReview(w);
+      const orderId = `order-${randomUUID()}`;
+      shared.orders.add(orderId, { costs: [{ amountMinor: amount, currency: 'MXN' }] }, tenantA);
+      const linked = await w.links.link(
+        tenantA,
+        MANAGER,
+        incident.id,
+        { version: incident.version, orderId },
+        key(),
+      );
+      await put(w, linked.incident, { lines: [expense('towing', amount), recovery('5')] });
+      cases.push({ id: incident.id, orderId });
+    }
+    const bare = await underReview(w);
+    const ids = [...cases.map((c) => c.id), bare.id];
+    const orderIds = cases.map((c) => c.orderId);
+    // More ids than one `IN` list holds: unknown ids fill the rest.
+    const crowd = (real: readonly string[]) => [
+      ...real,
+      ...Array.from({ length: 1100 }, () => randomUUID()),
+    ];
+
+    const counted = countingSource(sourceA);
+    const store = new TypeOrmIncidentStore(counted.source);
+    const links = new TypeOrmIncidentRepairStore(counted.source, store);
+    const lines = new TypeOrmIncidentCostStore(counted.source, store);
+
+    const many = await store.getMany(tenantA, crowd(ids));
+    expect(many.map((i) => i.id).sort()).toEqual([...ids].sort());
+    for (const incident of many) expect(incident).toEqual(await w.store.get(tenantA, incident.id));
+    expect(counted.finds()).toBe(3);
+    const histories = await store.historyMany(tenantA, crowd(ids));
+    expect([...histories.keys()].sort()).toEqual([...ids].sort());
+    for (const id of ids) expect(histories.get(id)).toEqual(await w.store.history(tenantA, id));
+
+    const byOrder = await links.linksOfOrders(tenantA, crowd(orderIds));
+    expect([...byOrder.keys()].sort()).toEqual([...orderIds].sort());
+    for (const orderId of orderIds)
+      expect(byOrder.get(orderId)).toEqual(await w.repairs.linkOfOrder(tenantA, orderId));
+    const byIncident = await links.linksOfIncidents(tenantA, crowd(ids));
+    expect([...byIncident.keys()].sort()).toEqual(cases.map((c) => c.id).sort());
+    for (const id of ids)
+      expect(byIncident.get(id) ?? []).toEqual(await w.repairs.links(tenantA, id));
+    const ownLines = await lines.linesOfIncidents(tenantA, crowd(ids));
+    expect([...ownLines.keys()].sort()).toEqual(cases.map((c) => c.id).sort());
+    for (const id of ids) expect(ownLines.get(id) ?? []).toEqual(await w.costs.lines(tenantA, id));
+
+    // The ledger over the batch stores equals the ledger one case at a time.
+    const before = counted.finds();
+    const ledger = new CostLedger(lines, links, shared.orders);
+    const reads = await ledger.readMany(tenantA, ids);
+    expect(counted.finds() - before).toBe(2);
+    for (const id of ids) expect(reads.get(id)).toEqual(await w.ledger.read(tenantA, id));
+
+    // Another company sees none of it, whichever ids it asks for.
+    expect((await store.getMany(tenantB, ids)).length).toBe(0);
+    expect((await store.historyMany(tenantB, ids)).size).toBe(0);
+    expect((await links.linksOfOrders(tenantB, orderIds)).size).toBe(0);
+    expect((await links.linksOfIncidents(tenantB, ids)).size).toBe(0);
+    expect((await lines.linesOfIncidents(tenantB, ids)).size).toBe(0);
+    expect((await store.getMany(tenantA, [])).length).toBe(0);
   });
 });
