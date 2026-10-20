@@ -11,6 +11,7 @@ import { createModulePorts } from './mockApiModulePorts';
 import type { Guarded, MockApi, MockApiOptions, MockOperation } from './mockApiTypes';
 import { createMockAlertsStore, type MockAlertsStore } from './mockAlerts';
 import { createMockIncidentPorts } from './mockIncidents';
+import { createFakeDashboard } from '../features/dashboard/fakePorts';
 import { createMockSearchPorts } from './mockSearch';
 import { createMockViewsPorts } from './mockViews';
 import { createMockMaintenancePorts } from './mockMaintenance';
@@ -304,6 +305,9 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     maintenance: createMockMaintenancePorts({ userId: () => currentUser()?.id ?? null, can }),
     incidents: createMockIncidentPorts({ userId: () => currentUser()?.id ?? null, can }),
     search: createMockSearchPorts(guarded, fleet, staff),
+    dashboard: {
+      get: (query) => guarded('dashboard', null, () => createFakeDashboard({ can }).get(query)),
+    },
     views: createMockViewsPorts(guarded, { userId: () => currentUser()?.id ?? null, can }),
     drafts: {
       load: (scope) => guarded('loadDraft', null, () => ok(drafts.get(draftKey(scope)) ?? null)),

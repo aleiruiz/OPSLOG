@@ -1,4 +1,5 @@
 import type { AuditPort } from '../features/audit/ports';
+import type { DashboardPort } from '../features/dashboard/ports';
 import type { IncidentPorts } from '../features/incidents/ports';
 import type { MaintenancePorts } from '../features/maintenance/ports';
 import type { SearchPorts } from '../features/search/ports';
@@ -408,6 +409,8 @@ export interface ApiPorts {
   readonly audit: AuditPort;
   /** Global search (FR-160). */
   readonly search: SearchPorts;
+  /** Dashboard of Inicio: only the widgets the reader may see (FR-140/141). */
+  readonly dashboard: DashboardPort;
   /** Saved views and persistent columns of the lists (FR-162). */
   readonly views: ViewsPorts;
   readonly oidc: OidcPort;
