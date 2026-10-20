@@ -717,6 +717,8 @@ importers:
         specifier: 3.2.6
         version: 3.2.6(@types/node@22.15.21)(jsdom@26.0.0(supports-color@7.2.0))(supports-color@7.2.0)
 
+  packages/platform/observability: {}
+
   packages/platform/outbox: {}
 
   packages/platform/pii: {}

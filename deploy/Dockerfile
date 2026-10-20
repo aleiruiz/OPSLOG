@@ -33,6 +33,21 @@ HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=3 \
   CMD ["node", "-e", "fetch('http://127.0.0.1:'+process.env.PORT+'/healthz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
 CMD ["node", "server.mjs"]
 
+# The `backup` service of docker-compose.yml: MySQL's own client tools (same major version as the
+# server, so mysqldump and mysqlbinlog read its logs) plus the scripts of infra/operations. It holds
+# the backup account's password and nothing else; OPSLOG_PII_MASTER_KEY is never given to it.
+FROM mysql:8.4 AS backup
+USER root
+COPY infra/operations/lib /opt/opslog-ops/lib
+COPY infra/operations/backup /opt/opslog-ops/backup
+RUN chmod +x /opt/opslog-ops/backup/*.sh \
+ && for tool in bash gzip sha256sum stat mysql mysqldump mysqlbinlog; do command -v "$tool" >/dev/null || echo "warning: missing $tool in the backup image" >&2; done
+ENV OPSLOG_BACKUP_DIR=/backups
+VOLUME ["/backups"]
+HEALTHCHECK --interval=60s --timeout=10s --start-period=120s --retries=3 \
+  CMD ["/opt/opslog-ops/backup/backup.sh", "health"]
+ENTRYPOINT ["/opt/opslog-ops/backup/entrypoint.sh"]
+
 FROM nginx:1.27-alpine AS web
 COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /repo/apps/web/dist-web /usr/share/nginx/html

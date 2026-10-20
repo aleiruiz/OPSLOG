@@ -9,6 +9,8 @@ export interface MysqlServerConfig {
   readonly secret: string;
   /** Base64 master key of the local KMS that seals personal data (at least 32 bytes). */
   readonly piiMasterKey: string;
+  /** Suffix of the account names (default `app`); only tests that share one MySQL set it. */
+  readonly accountTag?: string;
 }
 
 const MIN_SECRET = 32;
@@ -32,6 +34,25 @@ export function readMysqlEndpoint(env: Env): Pick<MysqlServerConfig, 'host' | 'p
   return { host: env.OPSLOG_MYSQL_HOST?.trim() || 'mysql', port, database };
 }
 
+const ACCOUNT_TAG_PATTERN = /^[a-z0-9]{1,8}$/;
+const BACKUP_USER_PATTERN = /^[a-z][a-z0-9_]{0,31}$/;
+
+/** `OPSLOG_MYSQL_ACCOUNT_TAG`: suffix of the runtime account names; the same on `migrate` and `api`. */
+export function readAccountTag(env: Env): string {
+  const tag = env.OPSLOG_MYSQL_ACCOUNT_TAG?.trim() || 'app';
+  if (!ACCOUNT_TAG_PATTERN.test(tag))
+    throw new Error('OPSLOG_MYSQL_ACCOUNT_TAG must be 1 to 8 lowercase letters or digits');
+  return tag;
+}
+
+/** `OPSLOG_BACKUP_USER`: name of the backup account (default `opslog_backup`). */
+export function readBackupUser(env: Env): string {
+  const user = env.OPSLOG_BACKUP_USER?.trim() || 'opslog_backup';
+  if (!BACKUP_USER_PATTERN.test(user))
+    throw new Error('OPSLOG_BACKUP_USER must be lowercase letters, digits and underscores');
+  return user;
+}
+
 export function readMysqlSecret(env: Env): string {
   const secret = required(env, 'OPSLOG_MYSQL_SECRET');
   if (secret.length < MIN_SECRET)
@@ -44,5 +65,10 @@ export function readMysqlConfig(env: Env): MysqlServerConfig {
   const piiMasterKey = required(env, 'OPSLOG_PII_MASTER_KEY');
   if (Buffer.from(piiMasterKey, 'base64').length < MIN_SECRET)
     throw new Error('OPSLOG_PII_MASTER_KEY must be base64 of at least 32 bytes');
-  return { ...readMysqlEndpoint(env), secret: readMysqlSecret(env), piiMasterKey };
+  return {
+    ...readMysqlEndpoint(env),
+    secret: readMysqlSecret(env),
+    piiMasterKey,
+    accountTag: readAccountTag(env),
+  };
 }

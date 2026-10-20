@@ -5,11 +5,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { START, createBffWorld, type BffWorld } from '../../../apps/api/bff/src/test-support.js';
 import { readConfig } from '../../../apps/api/server/src/config.js';
 import { readMysqlConfig } from '../../../apps/api/server/src/mysql-config.js';
-import {
-  ACCOUNT_TAG,
-  openPersistentAdapters,
-  runMigrate,
-} from '../../../apps/api/server/src/persistence.js';
+import { openPersistentAdapters, runMigrate } from '../../../apps/api/server/src/persistence.js';
 import { bootstrapFirstCompany } from '../../../apps/api/server/src/bootstrap.js';
 import { startServer } from '../../../apps/api/server/src/server.js';
 import { buildFleetAccounts, type MysqlPlatform } from '../../../apps/api/composition/src/index.js';
@@ -27,6 +23,10 @@ if (!adminUrlValue && process.env.CI)
     'OPSLOG_TEST_MYSQL_ADMIN_URL is required in CI; MySQL integration must not be skipped',
   );
 const suite = adminUrlValue ? describe : describe.skip;
+
+// Own account names: another suite using the same MySQL in the same vitest call must not collide.
+const TAG = `r${randomBytes(3).toString('hex')}`;
+const BACKUP_USER = `opslog_backup_${TAG}`;
 
 const identifier = (value: string): string => {
   if (!/^[A-Za-z0-9_]+$/.test(value)) throw new Error('unsafe synthetic identifier');
@@ -75,6 +75,10 @@ suite('API on MySQL across a restart', () => {
       OPSLOG_MYSQL_ROOT_PASSWORD: connection.password,
       OPSLOG_MYSQL_SECRET: randomBytes(32).toString('base64url'),
       OPSLOG_PII_MASTER_KEY: randomBytes(32).toString('base64'),
+      // The migrate job also provisions the backup account when this is set.
+      OPSLOG_BACKUP_PASSWORD: randomBytes(24).toString('base64url'),
+      OPSLOG_MYSQL_ACCOUNT_TAG: TAG,
+      OPSLOG_BACKUP_USER: BACKUP_USER,
     };
     await runMigrate(env, () => undefined);
   }, 180_000);
@@ -84,13 +88,15 @@ suite('API on MySQL across a restart', () => {
   afterAll(async () => {
     await shutdown();
     if (!admin) return;
-    const accounts = buildFleetAccounts(ACCOUNT_TAG, ACCOUNT_TAG, () => '');
+    const accounts = buildFleetAccounts(TAG, TAG, () => '');
     const users = [
       ...Object.values(accounts.runtime),
       accounts.identity,
+      accounts.ops,
       accounts.auditMigrator,
       accounts.filesMigrator,
       accounts.maintenanceMigrator,
+      { username: BACKUP_USER },
     ];
     await admin.query(`DROP DATABASE IF EXISTS ${identifier(database)}`);
     for (const { username } of users) await admin.query(`DROP USER IF EXISTS '${username}'@'%'`);
@@ -284,8 +290,9 @@ suite('API on MySQL across a restart', () => {
       (line) => lines.push(line),
     );
     try {
-      expect(lines).toContain(
-        'bootstrap_skipped company already exists (configured admin cannot sign in)',
+      // The configured admin cannot sign in any more, yet the start does not crash-loop.
+      expect(lines.map((line) => JSON.parse(line).msg)).toContain(
+        'bootstrap_skipped_company_exists',
       );
     } finally {
       await running.stop();
@@ -320,8 +327,11 @@ suite('API on MySQL across a restart', () => {
       const health = await fetch(`http://127.0.0.1:${running.port}/healthz`);
       expect(health.status).toBe(200);
       await running.tick();
-      expect(lines.filter((line) => line.startsWith('worker_tick_failed'))).toEqual([]);
-      expect(lines.some((line) => line.startsWith('restored '))).toBe(true);
+      const events = lines.map((line) => JSON.parse(line) as { msg: string; level: string });
+      expect(events.filter((event) => event.msg === 'worker_job_failed')).toEqual([]);
+      expect(events.some((event) => event.msg === 'access_restored')).toBe(true);
+      // The database is reachable by the probe account and every migration is applied.
+      expect((await fetch(`http://127.0.0.1:${running.port}/readyz`)).status).toBe(200);
     } finally {
       await running.stop();
     }

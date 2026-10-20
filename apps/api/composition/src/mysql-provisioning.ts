@@ -24,6 +24,7 @@ import {
   type FleetRuntimeCredentials,
 } from './fleet-persistence.js';
 import { FLEET_MODULES, FLEET_TABLE_GRANTS } from './mysql-grants.js';
+import { provisionOpsAccount } from './ops-provisioning.js';
 
 export interface DbAccount {
   readonly username: string;
@@ -35,6 +36,8 @@ export interface FleetAccountSet {
   readonly runtime: FleetRuntimeCredentials['accounts'];
   /** Identity store and control plane (one pool, one account). */
   readonly identity: DbAccount;
+  /** Read-only probe account: migration tables and the queue tables behind `ops_stats`. */
+  readonly ops: DbAccount;
   readonly auditMigrator: DbAccount;
   readonly filesMigrator: DbAccount;
   readonly maintenanceMigrator: DbAccount;
@@ -43,11 +46,11 @@ export interface FleetAccountSet {
 /** Account names are interpolated into SQL (they cannot be bound), so they are checked first. */
 const SAFE_NAME = /^[A-Za-z0-9_]{1,32}$/;
 const SAFE_IDENTIFIER = /^[A-Za-z0-9_]{1,64}$/;
-const quoteName = (value: string): string => {
+export const quoteName = (value: string): string => {
   if (!SAFE_IDENTIFIER.test(value)) throw new Error('unsafe MySQL identifier');
   return `\`${value}\``;
 };
-const quoteUser = (username: string): string => {
+export const quoteUser = (username: string): string => {
   if (!SAFE_NAME.test(username)) throw new Error('unsafe MySQL account name');
   return `'${username}'@'%'`;
 };
@@ -83,6 +86,7 @@ export function buildFleetAccounts(
       auditRelay: account(`opslog_audit_relay_${auditTag}`),
     },
     identity: account(`opslog_identity_${tag}`),
+    ops: account(`opslog_ops_${tag}`),
     auditMigrator: account(`opslog_audit_migrator_${auditTag}`),
     filesMigrator: account(`opslog_files_migrator_${auditTag}`),
     maintenanceMigrator: account(`opslog_migrator_${auditTag}`),
@@ -291,6 +295,7 @@ export async function migrateFleetDatabase(
     await runIdentityControlMigrations(credentials);
     await provisionFleetRuntimeAccounts(connection, database, set);
     await provisionIdentityAccount(connection, database, set);
+    await provisionOpsAccount(connection, database, set);
     return [...applied, 'audit', 'identity', 'control-plane'];
   } finally {
     try {

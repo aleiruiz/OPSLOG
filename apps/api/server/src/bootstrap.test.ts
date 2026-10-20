@@ -29,9 +29,9 @@ describe('bootstrapFirstCompany', () => {
   it('creates the company once and skips when the admin already has a membership', async () => {
     const platform = newPlatform();
     const first = await bootstrapFirstCompany(platform, issuer, input);
-    expect(first).toMatch(/^bootstrap_created/);
+    expect(first).toBe('bootstrap_created');
     const second = await bootstrapFirstCompany(platform, issuer, input);
-    expect(second).toMatch(/^bootstrap_skipped/);
+    expect(second).toBe('bootstrap_skipped_admin_exists');
     expect(`${first} ${second}`).not.toContain(input.adminSubject);
     expect(`${first} ${second}`).not.toContain(input.companyName);
   });

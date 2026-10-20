@@ -29,6 +29,12 @@ export interface ServerConfig {
   readonly mysql?: MysqlServerConfig;
   /** Present only when all five OPSLOG_SMTP_* variables are set; otherwise mail goes to the sink. */
   readonly smtp?: SmtpConfig;
+  /**
+   * `OPSLOG_READ_ONLY=true`: serves a restored database without writing to it (restore smoke test).
+   * No worker, no bootstrap, no `ops_stats`. Only valid with `mysql` persistence. Opening the control
+   * plane still purges expired sessions (one DELETE), so a read-only MySQL is switched on after start.
+   */
+  readonly readOnly: boolean;
 }
 
 export type Env = Readonly<Record<string, string | undefined>>;
@@ -108,6 +114,13 @@ export function readConfig(env: Env): ServerConfig {
   if (persistence !== 'memory' && persistence !== 'mysql')
     throw new Error('OPSLOG_PERSISTENCE must be memory or mysql');
 
+  const readOnlyValue = env.OPSLOG_READ_ONLY?.trim().toLowerCase() || 'false';
+  if (!['true', 'false', '1', '0'].includes(readOnlyValue))
+    throw new Error('OPSLOG_READ_ONLY must be true or false');
+  const readOnly = readOnlyValue === 'true' || readOnlyValue === '1';
+  if (readOnly && persistence !== 'mysql')
+    throw new Error('OPSLOG_READ_ONLY needs OPSLOG_PERSISTENCE=mysql');
+
   // Throws naming the first missing or invalid OPSLOG_SMTP_* variable, never its value.
   const smtp = readSmtpConfig(env);
 
@@ -124,5 +137,6 @@ export function readConfig(env: Env): ServerConfig {
     persistence,
     ...(persistence === 'mysql' ? { mysql: readMysqlConfig(env) } : {}),
     ...(smtp ? { smtp } : {}),
+    readOnly,
   };
 }

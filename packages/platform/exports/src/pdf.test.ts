@@ -22,6 +22,7 @@ describe('renderPdf', () => {
     );
   });
 
+  // 120 rows over several pages take about 5 s on a loaded CI runner, so the default 5 s is too tight.
   it('paginates with company, cut-off, author and «Página n de m» on every page', async () => {
     const rows = Array.from(
       { length: 120 },
@@ -42,7 +43,7 @@ describe('renderPdf', () => {
     });
     expect(text[0]).toContain('Filtros aplicados: Área, Estado');
     expect(text.join(' ')).toContain('Unidad 119 ñandú');
-  });
+  }, 20_000);
 
   it('says so when there are no rows', async () => {
     const text = await pages((await renderPdf(table([]))).bytes);

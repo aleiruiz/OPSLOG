@@ -20,6 +20,9 @@ services:
       OPSLOG_MYSQL_DATABASE: ${OPSLOG_MYSQL_DATABASE:-opslog_t_main}
       OPSLOG_MYSQL_ROOT_PASSWORD: ${OPSLOG_MYSQL_ROOT_PASSWORD:?root password for the database}
       OPSLOG_MYSQL_SECRET: ${OPSLOG_MYSQL_SECRET:-}
+      # Creates the `opslog_backup` account (SELECT and binlog reading only) when set; the `backup`
+      # service signs in with the same value.
+      OPSLOG_BACKUP_PASSWORD: ${OPSLOG_BACKUP_PASSWORD:-}
     depends_on:
       mysql:
         condition: service_healthy
@@ -73,6 +76,21 @@ services:
       OPSLOG_SMTP_FROM: ${OPSLOG_SMTP_FROM:-}
     expose:
       - '8080'
+    # Readiness (database reachable, migrations applied, worker ticking), not just liveness: an
+    # unhealthy `api` raises the Coolify container-health notification. `/healthz` stays the cheap
+    # liveness probe of the image.
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:'+(process.env.PORT||8080)+'/readyz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
 
   web:
     build:
@@ -113,11 +131,18 @@ services:
       - '8090'
 
   # Holds every record of the API when OPSLOG_PERSISTENCE=mysql. No published port; data lives in
-  # the mysql-data volume (back it up together with OPSLOG_PII_MASTER_KEY).
+  # the mysql-data volume; `backup` copies it to opslog-backups (keep OPSLOG_PII_MASTER_KEY elsewhere).
   mysql:
     image: mysql:8.4
     restart: unless-stopped
-    command: ['--innodb-buffer-pool-size=128M', '--performance-schema=OFF']
+    # The binary log is what lets the backup restore to a point in time: the `backup` service copies
+    # the closed logs every 15 minutes, so seven days of local logs is generous.
+    command:
+      - '--innodb-buffer-pool-size=128M'
+      - '--performance-schema=OFF'
+      - '--server-id=1'
+      - '--log-bin=binlog'
+      - '--binlog-expire-logs-seconds=604800'
     environment:
       MYSQL_ROOT_PASSWORD: ${OPSLOG_MYSQL_ROOT_PASSWORD:?root password for the database}
     volumes:
@@ -129,6 +154,29 @@ services:
       retries: 10
       start_period: 30s
 
+  # Daily mysqldump plus the closed binary logs every 15 minutes into the `opslog-backups` volume,
+  # 35 days of retention, SHA-256 per file. Same network as `mysql`, no published port. Restore:
+  # infra/operations/README.md. The volume lives on the same VPS as the database: copying it off the
+  # host is an owner decision that is not made here (docs/tasks/MVP-OPS-M5-20261019.md).
+  backup:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: backup
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      OPSLOG_BACKUP_HOST: mysql
+      OPSLOG_BACKUP_PASSWORD: ${OPSLOG_BACKUP_PASSWORD:-}
+      OPSLOG_BACKUP_RETENTION_DAYS: ${OPSLOG_BACKUP_RETENTION_DAYS:-35}
+    volumes:
+      - opslog-backups:/backups
+
 volumes:
   mysql-data:
   landing-data:
+  opslog-backups:
