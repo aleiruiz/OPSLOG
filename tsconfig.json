@@ -94,6 +94,8 @@
     { "path": "./tests/fixtures/maintenance" },
     { "path": "./tests/e2e/maintenance" },
     { "path": "./tests/e2e/mvp" },
+    { "path": "./tests/integration/mvp" },
+    { "path": "./tests/acceptance" },
     { "path": "./packages/domain/search" },
     { "path": "./packages/persistence/search" },
     { "path": "./apps/api/search" },

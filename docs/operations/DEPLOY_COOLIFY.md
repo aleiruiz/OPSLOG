@@ -39,6 +39,8 @@ Se definen en Coolify (Environment Variables de la aplicación) o en un `.env` l
 | `OPSLOG_OIDC_CLIENT_SECRET`                                                                      | con `cognito` | Secreto del app client (cliente confidencial). Solo lo lee la API; cargarlo como secreto en Coolify.                                                                                                                                                                      |
 | `OPSLOG_OIDC_REDIRECT_URI`                                                                       | con `cognito` | Exactamente `OPSLOG_PUBLIC_ORIGIN` + `/auth/callback` (`https://opslog.northsoftmx.com/auth/callback`).                                                                                                                                                                   |
 | `OPSLOG_BACKUP_PASSWORD`                                                                         | opcional      | Contraseña (mínimo 24 caracteres) de la cuenta `opslog_backup` (solo lectura y binlog). Si falta, el servicio `backup` no hace nada: escribe `{"level":"warn","msg":"backup_disabled_no_password"}` y queda en espera; el despliegue no falla. Ver «Copias de seguridad». |
+| `OPSLOG_SMTP_HOST`, `OPSLOG_SMTP_PORT`, `OPSLOG_SMTP_USER`, `OPSLOG_SMTP_PASSWORD`, `OPSLOG_SMTP_FROM` | opcionales | Correo real de avisos por SMTP (nodemailer). Se definen las cinco o ninguna: sin ninguna el correo queda en el sumidero (se registra el envío, sin contenido personal); con alguna incompleta o inválida la API no arranca y el error nombra la variable, nunca su valor. TLS obligatorio: el puerto 465 conecta cifrado y cualquier otro exige STARTTLS; el certificado siempre se verifica. `OPSLOG_SMTP_FROM` es un solo buzón. La contraseña va como secreto en Coolify. |
+| `OPSLOG_READ_ONLY` | no | `true` deja la instancia en solo lectura: apaga el worker, el alta inicial y los contadores `ops_stats`. Sirve para revisar una restauración sin que escriba (`docs/runbooks/backup-restore.md`). |
 | `OPSLOG_BOOTSTRAP_COMPANY`, `OPSLOG_BOOTSTRAP_ADMIN_SUB`                                         | opcionales    | Nombre de la primera empresa y `sub` de Cognito de su administrador. Se definen las dos o ninguna. Ver «Primer administrador».                                                                                                                                            |
 
 `OPSLOG_ENV=staging` ya está fijo en el compose. No definir `AWS_*` ni `NODE_ENV=production`: la guarda de arranque lo rechaza. Las claves de S3 van como `OPSLOG_S3_*`, no `AWS_*`.
@@ -93,7 +95,7 @@ Lo que sigue en memoria (y su consecuencia):
 - **Invitaciones pendientes:** tras reiniciar `api`, un enlace de invitación sin aceptar deja de funcionar (falla cerrado: «no encontrado»); el administrador debe volver a invitar. Las personas ya incorporadas no se ven afectadas, y los miembros dados de baja dejan de aparecer en el listado de miembros.
 - **Borradores de formularios** (`DraftStore`): se pierden al reiniciar.
 - **Contenido de los archivos:** con `OPSLOG_OBJECT_STORAGE=memory` se pierde (los metadatos sí se conservan y quedarían apuntando a nada). Para conservar archivos, usar `s3`.
-- **Escáner de virus y correo de avisos:** siguen siendo los sintéticos de staging.
+- **Escáner de virus:** sigue siendo el sintético de staging. **Correo de avisos:** sumidero hasta que se definan las cinco `OPSLOG_SMTP_*` (ver la tabla de variables).
 
 ## Prueba local
 
@@ -112,3 +114,9 @@ Para construir detrás de un proxy que inspecciona TLS: `docker build --secret i
 - **Inicio de sesión:** real con Cognito cuando `OPSLOG_AUTH_MODE=cognito` y las variables `OPSLOG_OIDC_*` están completas (también como build args de la web). Con `synthetic` nadie puede entrar de verdad.
 - **Estado en memoria solo con `OPSLOG_PERSISTENCE=memory`:** en ese modo reiniciar `api` borra empresas, usuarios y datos. Con `mysql` (por defecto) persiste lo descrito en «Persistencia», salvo lo que allí se lista como memoria.
 - **Archivos:** en memoria salvo que se active `OPSLOG_OBJECT_STORAGE=s3` (adaptador S3 ya disponible; no probado contra AWS real desde aquí).
+- **Correo:** sin las cinco `OPSLOG_SMTP_*` los avisos solo llegan a la campana y el correo se queda en el sumidero. SES u otro proveedor de la cuenta del cliente es pendiente de lanzamiento (ADR-0016).
+- **Respaldo:** el servicio `backup` escribe en un volumen del mismo VPS (sin copia fuera del servidor ni PITR gestionado). Sin `OPSLOG_BACKUP_PASSWORD` no respalda. El simulacro de restauración se midió con MySQL 8.0 y datos sintéticos; con 8.4 y el volumen real es pendiente (`docs/release/MVP-manifest.md`).
+- **Webhooks:** permitidos solo hacia HTTPS público (protección SSRF), máximo 5 endpoints por empresa. El worker de entregas y reintentos corre dentro de `api`: un reinicio los retoma desde las tablas, pero no hay réplica de reserva.
+- **Reportes grandes:** los de más de 5.000 filas pasan a un job del mismo proceso; el archivo vive en el almacén de objetos, en memoria salvo `OPSLOG_OBJECT_STORAGE=s3`: con `memory` un reinicio de `api` lo pierde.
+- **Una réplica de `api` y despliegue con corte breve:** no hay despliegue sin caída (NFR-A2) ni SLO medido (NFR-A1).
+- **Despliegue de la versión candidata:** lo hace el propietario (con respaldo previo, `readyz` verde, inicio de sesión con Cognito y un recorrido corto); queda como pendiente en `docs/release/MVP-manifest.md`.

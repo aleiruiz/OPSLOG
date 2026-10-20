@@ -66,6 +66,12 @@ export interface RealTenant {
   member(role: RoleName, subject: string): Promise<string>;
   /** Creates an area and a vehicle as the tenant administrator; returns the vehicle id. */
   vehicle(tag: string): Promise<string>;
+  /** Creates a driver with a license (personal data) as the administrator; returns its id and license number. */
+  driver(tag: string): Promise<{ id: string; license: string }>;
+  /** Moves a vehicle that was just created (version 1) out of service, as the administrator. */
+  outOfService(vehicleId: string, reason: string): Promise<void>;
+  /** One pass of the api process tick: the outbox, then every other job, then the outbox again. */
+  tick(): Promise<void>;
 }
 
 async function principal(platform: Platform, subject: string) {
@@ -161,6 +167,60 @@ export async function startRealStack(): Promise<{
         if (!accepted.ok || !accepted.value) throw new Error('harness accept failed');
         await platform.signOut(login.value.token);
         return accepted.value.identityId;
+      },
+      async driver(tag) {
+        const login = await platform.signIn(await principal(platform, admin));
+        if (!login.ok || !login.value) throw new Error('harness admin sign-in failed');
+        const area = await platform.areas.create(login.value.token, `seed-darea-${tag}`, {
+          name: `Área conductor ${tag}`,
+          code: null,
+          parentId: null,
+          responsibleIds: [],
+        });
+        if (!area.ok || !area.value) throw new Error('harness area failed');
+        const license = `LIC-HARNESS-${tag}`;
+        const driver = await platform.employees.create(login.value.token, `seed-driver-${tag}`, {
+          kind: 'driver',
+          firstName: 'Ana',
+          lastName: 'Perez',
+          areaId: area.value.id,
+          employeeNumber: `HRN-${tag}`,
+          idType: 'ine',
+          nationalId: `SYNTH-ID-${tag}`,
+          phone: '+52 555 100 0001',
+          email: `driver-${tag.toLowerCase()}@synthetic.example`,
+          licenseNumber: license,
+          licenseType: 'c',
+          licenseExpiresOn: '2099-12-31',
+        });
+        if (!driver.ok || !driver.value) throw new Error('harness driver failed');
+        await platform.signOut(login.value.token);
+        return { id: driver.value.id, license };
+      },
+      async outOfService(vehicleId, reason) {
+        const login = await platform.signIn(await principal(platform, admin));
+        if (!login.ok || !login.value) throw new Error('harness admin sign-in failed');
+        const moved = await platform.vehicles.changeStatus(
+          login.value.token,
+          `seed-status-${vehicleId}`,
+          vehicleId,
+          1,
+          'out_of_service',
+          reason,
+        );
+        if (!moved.ok) throw new Error('harness status change failed');
+        await platform.signOut(login.value.token);
+      },
+      async tick() {
+        const drain = async () => {
+          for (let round = 0; round < 20; round += 1)
+            if ((await platform.runtime.drainOutbox(500)) === 0) return;
+        };
+        await platform.runtime.periodic.tick('search.reconcile');
+        await drain();
+        for (const item of platform.runtime.jobs.list())
+          if (item.name !== 'outbox') await item.run();
+        await drain();
       },
       async vehicle(tag) {
         const login = await platform.signIn(await principal(platform, admin));

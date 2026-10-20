@@ -17,7 +17,7 @@ pnpm test:acceptance
 - Cada archivo levanta su propio par de bases (~20 s de migraciones) y no depende del orden de los demás ni de los casos entre sí (cada caso crea sus datos con etiquetas únicas).
 - Máximo 2 archivos en paralelo (`--maxWorkers=2`); en CI hace falta `max_connections` alto como en `test:integration`.
 - **No está cableada en CI.** Hoy `quality.yml` ejecuta `pnpm test:integration`, que lista a mano cada suite; no hay un patrón de «suite adicional opcional» al que sumarla sin tocar `.github/workflows/quality.yml` ni la lista de `test:platform` (ambos fuera de los paths de este paquete). La etapa 2 (candidato de MVP-INTEGRATE) la ejecuta como paso explícito y registra el resultado en `docs/traceability/final.md`.
-- Tampoco está en el `tsconfig.json` raíz (archivo compartido): se comprueba con `pnpm exec tsc -p tests/acceptance/tsconfig.json --noEmit`. Añadir la referencia y la carpeta al `format:check` es una línea que corresponde a quien tenga el lease de los archivos raíz.
+- Está en el `tsconfig.json` raíz (`pnpm typecheck`) y en `format:check`; sigue fuera del CI por duración (cada archivo migra dos bases).
 
 ## Contenido
 

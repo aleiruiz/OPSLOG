@@ -57,6 +57,7 @@
     "./real-api/**",
     "./maintenance-real.spec.ts",
     "./incidents-real.spec.ts",
-    "./incidents-journeys.spec.ts"
+    "./incidents-journeys.spec.ts",
+    "./mvp-journeys.spec.ts"
   ]
 }
