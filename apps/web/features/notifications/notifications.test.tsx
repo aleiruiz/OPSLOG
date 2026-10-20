@@ -1,5 +1,5 @@
 import axe from 'axe-core';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { createMockApi } from '../../app/mockApi';
 import {
   click,
@@ -44,6 +44,12 @@ describe('bell', () => {
   });
 
   it('shows no number when everything is read and refreshes after reading', async () => {
+    // The full app groups by the real date; pin it to the fixtures' day so "Hoy" exists.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-19T18:00:00.000Z'));
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     const { api, notifications } = withFake();
     await renderApp({ api, path: '/notificaciones' });
     await screen.findByRole('heading', { name: 'Hoy' });
