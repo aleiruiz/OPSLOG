@@ -69,6 +69,8 @@
     { "path": "./packages/persistence/files" },
     { "path": "./infra/storage" },
     { "path": "./infra/runtime" },
+    { "path": "./infra/operations/tenant-export" },
+    { "path": "./tests/performance/k6" },
     { "path": "./apps/worker/composition" },
     { "path": "./apps/api/composition" },
     { "path": "./apps/api/maintenance/plans" },

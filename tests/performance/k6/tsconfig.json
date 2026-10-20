@@ -1,0 +1,18 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../..",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo",
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["*.ts", "../search/generate.ts"],
+  "references": [
+    { "path": "../../../apps/api/composition" },
+    { "path": "../../../apps/api/bff" },
+    { "path": "../../../apps/api/server" },
+    { "path": "../../../packages/platform/audit" },
+    { "path": "../../../packages/domain/search" },
+    { "path": "../../../infra/runtime" }
+  ]
+}
