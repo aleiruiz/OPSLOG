@@ -60,7 +60,7 @@ suite('Journey: reporte grande → job → notificación → descarga → revoca
     outbox: { type: string }[];
     pending?: BffExport;
     afterRevoke: number;
-    failed?: { status: string; failure: string | null };
+    failed?: { status: string; failure: string | null } | undefined;
     completedByExporter: number;
   } = {
     notices: [],
