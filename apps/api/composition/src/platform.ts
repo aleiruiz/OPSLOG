@@ -286,10 +286,9 @@ export class Platform {
    * Creates an active tenant and its first administrator from a verified external principal.
    * If the administrator cannot be activated, the tenant is marked failed and never serves requests.
    */
-  public bootstrapTenant(input: {
-    name: string;
-    adminPrincipal: unknown;
-  }): Promise<PlatformResponse<{ tenantId: string; adminIdentityId: string }>> {
+  public bootstrapTenant(
+    input: Parameters<typeof bootstrapTenant>[1],
+  ): ReturnType<typeof bootstrapTenant> {
     return bootstrapTenant(this.kernel, input);
   }
 
