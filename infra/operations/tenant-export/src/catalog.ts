@@ -161,6 +161,9 @@ export const CATALOG: Readonly<Record<string, TableDisposition>> = {
   opslog_import_job_events: company,
   opslog_import_job_rows: company,
   opslog_export_jobs: company,
+  // Saved views and visible columns of the lists: configuration the company's people made.
+  opslog_saved_views: company,
+  opslog_list_columns: company,
   opslog_audit_log: { kind: 'export', scope: 'company' },
   // Not exported.
   opslog_area_locks: exclude('lock'),
