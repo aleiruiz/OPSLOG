@@ -184,7 +184,7 @@ acceptance('STRIDE · webhooks salientes', { timeout: 120_000 }, () => {
       'https://169.254.169.254/latest/meta-data',
       'https://[::1]/in',
       'https://2130706433/in',
-      'https://user:pass@hooks.example.com/in',
+      'https://user:pass@hooks.example.com/in', // secret-scan:allow synthetic URL with credentials the guard must refuse
       'https://hooks.example.com:8443/in',
       'https://service.internal/in',
       'file:///etc/passwd',
