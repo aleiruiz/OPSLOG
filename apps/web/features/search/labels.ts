@@ -15,9 +15,14 @@ export const searchCopy = {
   loading: 'Buscando…',
   empty: 'No encontramos resultados.',
   error: 'No pudimos buscar. Intenta nuevamente.',
+  busy: 'La búsqueda está saturada en este momento. Espera unos segundos e intenta de nuevo.',
   all: 'Ver todos los resultados',
   title: 'Resultados de búsqueda',
 } as const;
+
+/** Friendly text of a failed search: a 503 is load, so it asks to wait and retry. */
+export const searchErrorMessage = (error: { readonly status: number }): string =>
+  error.status === 503 ? searchCopy.busy : searchCopy.error;
 
 export const MIN_SEARCH_LENGTH = 2;
 

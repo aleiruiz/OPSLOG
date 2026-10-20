@@ -103,6 +103,12 @@ describe('FND-CONTRACTS', () => {
       correlationId: 'c',
       fieldErrors: [{ field: 'x', code: 'invalid_type', message: 'Invalid value' }],
     });
+    expect(serializeApiError({ code: 'unavailable', correlationId: 'c' })).toEqual({
+      code: 'unavailable',
+      status: 503,
+      message: 'Service temporarily unavailable',
+      correlationId: 'c',
+    });
     expect(serializeApiError(null)).toEqual({
       code: 'internal_error',
       status: 500,

@@ -113,6 +113,7 @@
     { "path": "../incidents/costs" },
     { "path": "../incidents/sla" },
     { "path": "../analytics" },
+    { "path": "../../../packages/platform/observability" },
     { "path": "../maintenance/plans" },
     { "path": "../../worker/maintenance-plans" },
     { "path": "../../worker/incident-sla" }

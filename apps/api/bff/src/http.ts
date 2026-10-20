@@ -5,6 +5,8 @@ import {
   type BffFieldError,
 } from '../../../../packages/contracts/src/index.js';
 
+import { UNAVAILABLE_RETRY_AFTER_SECONDS } from '../../../../packages/platform/observability/src/index.js';
+
 export type HeaderValue = string | readonly string[] | undefined;
 
 /**
@@ -33,6 +35,11 @@ export type ErrorBody = BffErrorBody;
 
 /** Fixed, generic texts shared with the web client through the contract module. */
 export const ERRORS: Readonly<Record<ErrorCode, { status: number; message: string }>> = BFF_ERRORS;
+
+/** A saturated pool is load, not a defect: the client is told to repeat the request shortly. */
+export const RETRY_AFTER: Readonly<Record<string, string>> = {
+  'retry-after': String(UNAVAILABLE_RETRY_AFTER_SECONDS),
+};
 
 /** Applied to every response, including errors. There is no CORS: the API is same-origin only. */
 export const SECURITY_HEADERS: Readonly<Record<string, string>> = {

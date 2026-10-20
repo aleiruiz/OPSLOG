@@ -9,7 +9,7 @@ import {
 import type { Platform, PlatformResponse, SessionDetails } from '../../../composition/src/index.js';
 import { parseObject } from '../body.js';
 import type { BffCrypto } from '../csrf.js';
-import { errorResponse, respond, type BffResponse, type ErrorCode } from '../http.js';
+import { errorResponse, respond, RETRY_AFTER, type BffResponse, type ErrorCode } from '../http.js';
 
 /** How a route is protected. Declared once, in the contract module. */
 export type RouteKind = BffRouteKind;
@@ -85,6 +85,7 @@ export function failure(
     not_found: 'not_found',
     gone: 'gone',
     rate_limited: 'rate_limited',
+    unavailable: 'unavailable',
     conflict: 'conflict',
     last_admin: 'last_admin',
     duplicate: 'duplicate',
@@ -111,7 +112,7 @@ export function failure(
   return errorResponse(
     code,
     ctx.correlationId,
-    {},
+    code === 'unavailable' ? RETRY_AFTER : {},
     code === 'duplicate' ||
       code === 'area_in_use' ||
       code === 'invalid_area' ||
