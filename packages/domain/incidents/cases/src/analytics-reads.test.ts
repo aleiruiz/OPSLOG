@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { BATCH_CHUNK, chunksOf } from './batch.js';
 import { InMemoryIncidentStore } from './store.js';
 import type { Incident } from './types.js';
 
@@ -133,5 +134,35 @@ describe('InMemoryIncidentStore dashboard reads', () => {
         to: '2026-12-02T00:00:00.000Z',
       }),
     ).toEqual([]);
+  });
+});
+
+describe('InMemoryIncidentStore batch reads', () => {
+  it('answers getMany and historyMany like get and history, for the tenant only', async () => {
+    const store = new InMemoryIncidentStore();
+    await put(store, { id: 'a', folio: 'SIN-2026-000001' }, '2026-10-05T10:00:00.000Z');
+    await put(store, { id: 'b', folio: 'SIN-2026-000002' });
+    await put(store, { id: 'c', folio: 'SIN-2026-000003', tenantId: 'tenant-b' });
+    const ids = ['a', 'b', 'c', 'a', 'missing'];
+    const many = await store.getMany('tenant-a', ids);
+    expect(many.map((i) => i.id).sort()).toEqual(['a', 'b']);
+    for (const incident of many) expect(incident).toEqual(await store.get('tenant-a', incident.id));
+    const histories = await store.historyMany('tenant-a', ids);
+    // `b` has no entries and `c` belongs to another tenant: both are absent.
+    expect([...histories.keys()]).toEqual(['a']);
+    expect(histories.get('a')).toEqual(await store.history('tenant-a', 'a'));
+    // The answers are copies.
+    (many[0] as { version: number }).version = 99;
+    expect((await store.get('tenant-a', 'a'))?.version).toBe(1);
+  });
+
+  it('chunksOf drops repeated ids and keeps each list within the size', () => {
+    expect(chunksOf(['a', 'b', 'a', 'c', 'd'], 2)).toEqual([
+      ['a', 'b'],
+      ['c', 'd'],
+    ]);
+    expect(chunksOf([])).toEqual([]);
+    const many = Array.from({ length: BATCH_CHUNK * 2 + 1 }, (_, i) => `id-${i}`);
+    expect(chunksOf(many).map((c) => c.length)).toEqual([BATCH_CHUNK, BATCH_CHUNK, 1]);
   });
 });

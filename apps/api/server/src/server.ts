@@ -24,7 +24,7 @@ import type { ServerConfig, Env } from './config.js';
 import { bootstrapFirstCompany } from './bootstrap.js';
 import { openOpsProbe, openPersistentAdapters } from './persistence.js';
 import type { OpsProbe } from './ops.js';
-import { withRequestLog } from './request-log.js';
+import { exposeActor, withRequestLog } from './request-log.js';
 import { startWorkerLoop, type WorkerLoop } from './worker-loop.js';
 
 /** Liveness endpoint for the container health check; answered before the BFF so it needs no session. */
@@ -139,6 +139,7 @@ async function listen(
     secret: config.bffSecret,
     allowedOrigins: [config.publicOrigin],
     // Only the correlation id, the route id and the error class are ever logged.
+    onAuthenticated: exposeActor,
     onError: (event) =>
       logger.error('bff_error', {
         correlationId: event.correlationId,

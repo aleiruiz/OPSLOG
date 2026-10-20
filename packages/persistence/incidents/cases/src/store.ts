@@ -14,6 +14,7 @@ import {
 } from 'typeorm';
 import { appendLocalAuditAndDelivery, MySqlTenantOutboxStore } from '../../../audit/src/index.js';
 import {
+  chunksOf,
   formatFolio,
   TERMINAL_STATUSES,
   validateIncidentEvent,
@@ -21,6 +22,7 @@ import {
   type Incident,
   type IncidentAnalyticsReads,
   type IncidentApplyResult,
+  type IncidentBatchReads,
   type IncidentExtraWrite,
   type IncidentListQuery,
   type IncidentMutation,
@@ -57,7 +59,9 @@ class ExtraWriteRefused extends Error {}
  * Tenant is part of every selector. Each mutation commits the incident (version CAS), the folio
  * counter, the timeline, the local audit rows and the allowlisted outbox events in one transaction.
  */
-export class TypeOrmIncidentStore implements IncidentStore, IncidentAnalyticsReads {
+export class TypeOrmIncidentStore
+  implements IncidentStore, IncidentAnalyticsReads, IncidentBatchReads
+{
   private readonly outbox: MySqlTenantOutboxStore;
   public constructor(
     private readonly dataSource: DataSource,
@@ -304,6 +308,36 @@ export class TypeOrmIncidentStore implements IncidentStore, IncidentAnalyticsRea
       .getRepository(IncidentTransitionSchema)
       .find({ where: { tenantId, incidentId: id }, order: { sequence: 'ASC' } });
     return rows.map(transitionFrom);
+  }
+
+  public async getMany(tenantId: string, ids: readonly string[]): Promise<readonly Incident[]> {
+    const found: Incident[] = [];
+    for (const chunk of chunksOf(ids)) {
+      const rows = await this.dataSource
+        .getRepository(IncidentSchema)
+        .find({ where: { tenantId, id: In([...chunk]) } });
+      found.push(...rows.map(incidentFrom));
+    }
+    return found;
+  }
+
+  public async historyMany(
+    tenantId: string,
+    ids: readonly string[],
+  ): Promise<ReadonlyMap<string, readonly IncidentTransition[]>> {
+    const result = new Map<string, IncidentTransition[]>();
+    for (const chunk of chunksOf(ids)) {
+      const rows = await this.dataSource.getRepository(IncidentTransitionSchema).find({
+        where: { tenantId, incidentId: In([...chunk]) },
+        order: { incidentId: 'ASC', sequence: 'ASC' },
+      });
+      for (const row of rows) {
+        const list = result.get(row.incidentId) ?? [];
+        list.push(transitionFrom(row));
+        result.set(row.incidentId, list);
+      }
+    }
+    return result;
   }
 
   public async idempotency(

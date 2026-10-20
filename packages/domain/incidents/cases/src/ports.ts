@@ -30,6 +30,19 @@ export interface IncidentStore {
   ): Promise<IdempotencyRecord | null>;
 }
 
+/**
+ * Optional batch reads of the store for the reports: the same answers as `get` and `history`, for
+ * many cases in a bounded number of reads. Ids unknown to the tenant are absent from the answer.
+ */
+export interface IncidentBatchReads {
+  getMany(tenantId: string, ids: readonly string[]): Promise<readonly Incident[]>;
+  /** Oldest first, by case id; a case without entries is absent. */
+  historyMany(
+    tenantId: string,
+    ids: readonly string[],
+  ): Promise<ReadonlyMap<string, readonly IncidentTransition[]>>;
+}
+
 /** Report, first resolution and closure instants of a case, for the dashboard. No text, no ids. */
 export interface IncidentTimelineRow {
   readonly reportedAt: string | null;

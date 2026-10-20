@@ -27,6 +27,7 @@
     "ops:load": "OPSLOG_LOAD=1 OPSLOG_PERF=1 vitest run tests/performance/k6/load.test.ts",
     "ops:export": "node infra/operations/tenant-export/build.mjs && node infra/operations/tenant-export/bundle/tenant-export.mjs",
     "ops:drill": "OPSLOG_DRILL=1 OPSLOG_PERF=1 vitest run tests/recovery",
+    "test:acceptance": "vitest run tests/acceptance --maxWorkers=2 --allowOnly=false --retry=0",
     "test:fleet-integration": "vitest run tests/e2e/fleet tests/e2e/incidents tests/integration/incidents tests/e2e/maintenance tests/e2e/mvp --maxWorkers=4"
   },
   "devDependencies": {
