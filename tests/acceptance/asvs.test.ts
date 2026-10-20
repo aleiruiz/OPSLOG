@@ -103,7 +103,8 @@ acceptance('ASVS L2 · controles verificables por HTTP', { timeout: 120_000 }, (
     const unknown = await w.adminB.get('/api/vehicles/00000000-0000-4000-8000-000000000001');
     const foreignArea = await w.fleet.area(w.adminA, 'Área solo de A');
     const foreign = await w.adminB.get(`/api/areas/${foreignArea}`);
-    expect(foreign.status).toBe(unknown.status);
+    expect(unknown.status).toBe(404);
+    expect(foreign.status).toBe(404);
     expect(Object.keys(foreign.json).sort()).toEqual(Object.keys(unknown.json).sort());
   });
 

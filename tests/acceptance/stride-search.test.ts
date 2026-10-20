@@ -35,6 +35,9 @@ acceptance('STRIDE · búsqueda global', { timeout: 120_000 }, () => {
     w = await startAcceptance();
     const area = await w.fleet.area(w.adminA, 'Flota búsqueda');
     vehicleId = await w.fleet.vehicle(w.adminA, area, unit);
+    // Otros vehículos con el mismo prefijo «FL»: si un comodín o un operador se filtrara, listaría
+    // a todos y la comprobación de la prueba T fallaría.
+    for (let i = 0; i < 3; i += 1) await w.fleet.vehicle(w.adminA, area, tag('SY'));
     driverId = ok(
       await w.adminA.post('/api/employees', {
         json: {
@@ -70,6 +73,8 @@ acceptance('STRIDE · búsqueda global', { timeout: 120_000 }, () => {
   it('T · metacaracteres SQL, comodines y operadores FULLTEXT se tratan como texto y no amplían el resultado', async () => {
     const baseline = idsOf(await find(w.adminA, `FL${unit}`), 'vehicle');
     expect(baseline).toEqual([vehicleId]);
+    // Control: el prefijo «FL» sí alcanza a todos los vehículos sembrados, así que un comodín filtrado se vería.
+    expect(idsOf(await find(w.adminA, 'FL'), 'vehicle').length).toBeGreaterThanOrEqual(4);
     for (const q of [
       "' OR '1'='1",
       `${unit}'; DROP TABLE opslog_search_entries; --`,
@@ -78,15 +83,20 @@ acceptance('STRIDE · búsqueda global', { timeout: 120_000 }, () => {
       '%%%%',
       '+FL* -zzz',
       '"FL" >x <y ~z',
-      '(FL)',
       '\\',
     ]) {
       const reply = await find(w.adminA, q);
       expect(reply.status, q).toBeLessThan(500);
-      // Nunca devuelve más que lo que el texto literal permite: un comodín no lista toda la flota.
+      // Nunca devuelve más que lo que el texto literal permite: un comodín no lista la flota sembrada.
       const vehicles = idsOf(reply, 'vehicle');
-      expect(vehicles.length, q).toBeLessThanOrEqual(1);
+      expect(
+        vehicles.filter((id) => id !== vehicleId),
+        q,
+      ).toEqual([]);
     }
+    // Los paréntesis se descartan al normalizar: «(FL)» equivale al texto «FL», ni más ni menos.
+    const plain = idsOf(await find(w.adminA, 'FL'), 'vehicle').sort();
+    expect(idsOf(await find(w.adminA, '(FL)'), 'vehicle').sort()).toEqual(plain);
     // La tabla sigue ahí y la búsqueda normal sigue funcionando.
     expect(idsOf(await find(w.adminA, `FL${unit}`), 'vehicle')).toEqual([vehicleId]);
   });
@@ -128,10 +138,11 @@ acceptance('STRIDE · búsqueda global', { timeout: 120_000 }, () => {
     }
     const repeated = await w.adminA.get(`${S}?q=a&q=b`);
     expect(repeated.status).toBe(400);
-    const started = Date.now();
+    // El reloj de la prueba está congelado (`vi.setSystemTime`): se mide con `performance.now()`.
+    const started = performance.now();
     const wide = await find(w.adminA, '%'.repeat(200));
     expect(wide.status).toBeLessThan(500);
-    expect(Date.now() - started).toBeLessThan(5_000);
+    expect(performance.now() - started).toBeLessThan(5_000);
   });
 
   it('E · quien no ve un tipo no recibe sus resultados, ni su conteo, aunque lo pida por nombre', async () => {

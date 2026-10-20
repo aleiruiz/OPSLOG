@@ -110,7 +110,8 @@ acceptance('Aislamiento A/B de las vías nuevas de M5 (SPECS §4.4)', { timeout:
     const before = await countOf(w.adminA);
     const beforeB = await countOf(w.adminB);
     await w.fleet.vehicle(w.adminB, await w.fleet.area(w.adminB), tag('DB'));
-    // Dentro del TTL (5 min) la cifra cacheada de A no cambia por una alta en B.
+    // Dentro del TTL (5 min) la cifra cacheada de A se mantiene; esto solo muestra la caché. El
+    // aislamiento se comprueba al expirar el TTL: A sigue igual y B suma la alta propia.
     expect(await countOf(w.adminA)).toBe(before);
     vi.setSystemTime(new Date(Date.now() + 6 * 60_000));
     const [afterA, afterB] = [await countOf(w.adminA), await countOf(w.adminB)];
@@ -200,6 +201,7 @@ acceptance('Aislamiento A/B de las vías nuevas de M5 (SPECS §4.4)', { timeout:
 
   it('notificaciones y correo: avisos, lecturas, suscripciones y sumidero quedan en su empresa', async () => {
     await w.fleet.worldA.member('subject-admin-a', 'viewer', `subject-notify-${tag('x')}`);
+    await w.fleet.worldB.member('subject-admin-b', 'viewer', `subject-notify-${tag('y')}`);
     await tick(w.fleet.platformA, 'notifications.scan', 'notifications.dispatch');
     await tick(w.fleet.platformB, 'notifications.scan', 'notifications.dispatch');
     const listA = ok(await w.adminA.get(`${N}?limit=100`)).json;
@@ -214,6 +216,8 @@ acceptance('Aislamiento A/B de las vías nuevas de M5 (SPECS §4.4)', { timeout:
     expect(ok(await w.adminA.get(`${N}/unread-count`)).json.unread).toBe(before);
     const vehicleId = await w.fleet.vehicle(w.adminA, area, tag('NV'));
     expect((await w.adminB.put(`/api/v1/subscriptions/vehicle/${vehicleId}`)).status).toBe(404);
+    expect(w.mailA.messages.length).toBeGreaterThan(0);
+    expect(w.mailB.messages.length).toBeGreaterThan(0);
     expect(w.mailA.messages.every((m) => m.companyId === w.fleet.tenantA)).toBe(true);
     expect(w.mailB.messages.every((m) => m.companyId === w.fleet.tenantB)).toBe(true);
     const rowsB = await w.database.rowsB<{ n: number }>(

@@ -69,6 +69,8 @@ acceptance('STRIDE · exportación de reportes', { timeout: 120_000 }, () => {
     // Ninguna celda empieza con un disparador de fórmula: el dato viaja como texto.
     const cells = text.split(/\r?\n/).flatMap((line) => line.split(','));
     expect(cells.some((cell) => /^"?[=+\-@]/.test(cell) && cell.includes('HYPERLINK'))).toBe(false);
+    // Positivo: el texto neutralizado sí está en el archivo (no es un archivo vacío).
+    expect(cells.some((cell) => cell.includes("'=HYPERLINK"))).toBe(true);
     expect(text).toContain("'=HYPERLINK");
     const xlsx = await exportOf('xlsx');
     const file = ok(await w.adminA.get(`${E}/${xlsx.id}/download`));
@@ -124,6 +126,7 @@ acceptance('STRIDE · exportación de reportes', { timeout: 120_000 }, () => {
       columns: { id: string }[];
     }[];
     const drivers = catalog.find((r) => r.id === 'drivers');
+    expect(drivers).toBeDefined();
     expect(drivers?.columns.map((c) => c.id)).not.toEqual(expect.arrayContaining(['nationalId']));
     // Un id ajeno o con forma de ruta es un 404/400 uniforme.
     for (const id of ['00000000-0000-4000-8000-000000000000', '..%2F..%2Fetc%2Fpasswd'])
