@@ -11,6 +11,7 @@ import {
 } from '../../../../packages/persistence/files/src/index.js';
 import { MAINTENANCE_RUNTIME_ACCOUNT } from '../../../../packages/persistence/maintenance/plans/src/index.js';
 import { INCIDENT_RUNTIME_ACCOUNT } from '../../../../packages/persistence/incidents/cases/src/index.js';
+import { SEARCH_RUNTIME_ACCOUNT } from '../../../../packages/persistence/search/src/index.js';
 import { runIdentityControlMigrations } from './control-plane/identity-schema.js';
 import {
   runFleetAuditMigrations,
@@ -90,6 +91,8 @@ export function buildFleetAccounts(
     throw new Error('maintenance runtime account name is invalid');
   if (!INCIDENT_RUNTIME_ACCOUNT.test(set.runtime.incidents.username))
     throw new Error('incidents runtime account name is invalid');
+  if (!SEARCH_RUNTIME_ACCOUNT.test(set.runtime.search.username))
+    throw new Error('search runtime account name is invalid');
   return set;
 }
 
@@ -172,8 +175,8 @@ export async function provisionFleetRuntimeAccounts(
       await grant(entry.privileges.join(', '), table(entry.table), account);
     await grant('EXECUTE', procedure(APPEND_AUDIT), account);
   }
-  // Maintenance and incidents enqueue their events through the durable tenant outbox.
-  for (const account of [set.runtime.maintenance, set.runtime.incidents]) {
+  // Maintenance, incidents and search enqueue their events through the durable tenant outbox.
+  for (const account of [set.runtime.maintenance, set.runtime.incidents, set.runtime.search]) {
     await grant('SELECT', table(AUDIT_TABLES.outbox), account);
     await grant('EXECUTE', procedure(ENQUEUE_OUTBOX), account);
   }

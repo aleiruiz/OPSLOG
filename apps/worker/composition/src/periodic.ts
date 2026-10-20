@@ -35,6 +35,8 @@ export const MIN_PERIODIC_INTERVAL_MS = 1000;
 export const DEFAULT_SLA_SCAN_INTERVAL_MS = 15 * 60_000;
 /** Default cadence of the maintenance plan scan: hourly, matching its per-hour dedupe window. */
 export const DEFAULT_PLAN_SCAN_INTERVAL_MS = 60 * 60_000;
+/** Default cadence of the search projection reconcile: the lag a change takes to become searchable. */
+export const DEFAULT_SEARCH_RECONCILE_INTERVAL_MS = 60_000;
 
 /**
  * Runs per-tenant jobs on a timer: every tick queues one job per ACTIVE tenant through the same

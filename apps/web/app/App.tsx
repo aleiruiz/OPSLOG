@@ -44,6 +44,8 @@ import { HomeScreen } from './HomeScreen';
 import { IncidentSettingsScreen } from '../features/incidents/IncidentSettingsScreen';
 import { IncidentsScreen } from '../features/incidents/IncidentsScreen';
 import { MaintenanceScreen } from '../features/maintenance/MaintenanceScreen';
+import { SearchBox } from '../features/search/SearchBox';
+import { SearchScreen } from '../features/search/SearchScreen';
 import { RouterProvider, useRouter } from './router';
 import { isAllowed, loginPath, resolveRoute } from './routes';
 import type { ApiPorts } from './types';
@@ -284,6 +286,9 @@ function Routes() {
       case 'alertSettings':
         screen = <AlertSettingsScreen />;
         break;
+      case 'search':
+        screen = <SearchScreen />;
+        break;
       case 'maintenance':
         screen = <MaintenanceScreen />;
         break;
@@ -334,6 +339,7 @@ function Routes() {
       can={can}
       onSignOut={() => void logout().then((result) => setSignOutFailed(!result.ok))}
       locked={expired}
+      search={<SearchBox ports={ports.search} onExpired={markExpired} disabled={expired} />}
     >
       {signOutFailed && !expired && (
         <UiState

@@ -40,7 +40,8 @@ test.describe('web shell: login, shell and navigation', () => {
   }) => {
     await signIn(page, '/');
     await expect(page.getByRole('heading', { name: 'Inicio', level: 1 })).toBeVisible();
-    await page.getByRole('button', { name: 'Cerrar sesión' }).focus();
+    // The skip link is the first stop: the top bar's search box comes right after it.
+    await page.getByRole('combobox', { name: 'Buscar' }).focus();
     await page.keyboard.press('Shift+Tab');
     const skip = page.getByRole('link', { name: 'Saltar al contenido' });
     await expect(skip).toBeFocused();

@@ -10,6 +10,7 @@ import {
 import { InMemoryMaintenancePlanStore } from '../../../packages/domain/maintenance/plans/src/index.js';
 import {
   DEFAULT_PLAN_SCAN_INTERVAL_MS,
+  DEFAULT_SEARCH_RECONCILE_INTERVAL_MS,
   DEFAULT_SLA_SCAN_INTERVAL_MS,
 } from '../../../apps/worker/composition/src/index.js';
 import { createWorld, type World } from './world.js';
@@ -196,10 +197,20 @@ describe('periodic maintenance plan scan of the composition', () => {
       world.dispose();
       return used;
     };
-    expect(intervals({})).toEqual([DEFAULT_SLA_SCAN_INTERVAL_MS, DEFAULT_PLAN_SCAN_INTERVAL_MS]);
+    expect(intervals({})).toEqual([
+      DEFAULT_SLA_SCAN_INTERVAL_MS,
+      DEFAULT_PLAN_SCAN_INTERVAL_MS,
+      DEFAULT_SEARCH_RECONCILE_INTERVAL_MS,
+    ]);
     expect(intervals({ worker: { planScanIntervalMs: 2_000 } })).toEqual([
       DEFAULT_SLA_SCAN_INTERVAL_MS,
       2_000,
+      DEFAULT_SEARCH_RECONCILE_INTERVAL_MS,
+    ]);
+    expect(intervals({ worker: { searchReconcileIntervalMs: 5_000 } })).toEqual([
+      DEFAULT_SLA_SCAN_INTERVAL_MS,
+      DEFAULT_PLAN_SCAN_INTERVAL_MS,
+      5_000,
     ]);
   });
 });

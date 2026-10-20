@@ -25,6 +25,10 @@ import type {
   IncidentAlertMailer,
   IncidentSlaStore,
 } from '../../../../../packages/domain/incidents/sla/src/index.js';
+import type {
+  ReconcileQueue,
+  SearchStore,
+} from '../../../../../packages/domain/search/src/index.js';
 import type { PiiCipher } from '../../../../../packages/platform/pii/src/index.js';
 import type {
   AreaResourceCounter,
@@ -99,6 +103,11 @@ export interface PlatformAdapters {
    * with the five stores above.
    */
   readonly incidentSla?: IncidentSlaStore;
+  /**
+   * Persistent projection of the global search (`packages/persistence/search`), with the queue of
+   * its reconcile jobs. In memory by default.
+   */
+  readonly search?: SearchStore & ReconcileQueue;
   /** The mail adapter of the SLA notices. Without one, outside production, a test sink records them. */
   readonly incidentAlertMailer?: IncidentAlertMailer;
   /** Where a member's address lives; read at send time. Defaults to a reserved, undeliverable address. */
@@ -142,6 +151,8 @@ export interface PlatformOptions {
     readonly slaScanIntervalMs?: number;
     /** Cadence of the periodic maintenance plan scan (default 1 hour). */
     readonly planScanIntervalMs?: number;
+    /** Cadence of the periodic search projection reconcile (default 1 minute). */
+    readonly searchReconcileIntervalMs?: number;
   };
   /** How long the scan runner holds back jobs of non-active tenants. */
   readonly scanHoldMs?: number;

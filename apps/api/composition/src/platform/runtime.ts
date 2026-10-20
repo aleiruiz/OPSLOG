@@ -2,6 +2,7 @@ import type { FilePipeline } from '../../../../../packages/platform/files/src/in
 import {
   createWorkerRuntime,
   DEFAULT_PLAN_SCAN_INTERVAL_MS,
+  DEFAULT_SEARCH_RECONCILE_INTERVAL_MS,
   DEFAULT_SLA_SCAN_INTERVAL_MS,
   type PeriodicTenantJob,
   type WorkerRuntime,
@@ -12,11 +13,15 @@ import type { PlatformOptions } from './types.js';
 import type { MaintenancePlanWorker } from '../../../../../packages/domain/maintenance/plans/src/index.js';
 import { registerIncidentSlaHandlers } from '../../../../worker/incident-sla/src/index.js';
 import { registerMaintenancePlanHandlers } from '../../../../worker/maintenance-plans/src/index.js';
+import { registerSearchHandlers } from '../../../../worker/composition/src/search-consumer.js';
+import type { SearchModule } from './search-apis.js';
 
 /** Name of the periodic SLA scan job in `runtime.periodic`. */
 export const INCIDENT_SLA_SCAN_JOB = 'incident.sla.scan';
 /** Name of the periodic maintenance plan scan job in `runtime.periodic`. */
 export const MAINTENANCE_PLAN_SCAN_JOB = 'maintenance.plan.scan';
+/** Name of the periodic search projection reconcile job in `runtime.periodic`. */
+export const SEARCH_RECONCILE_JOB = 'search.reconcile';
 
 /** Worker runtime over the platform's outbox, tenants and pipeline; the actor's current role gates each job. */
 export function buildWorkerRuntime(
@@ -28,6 +33,7 @@ export function buildWorkerRuntime(
   incidentSla?: Parameters<typeof registerIncidentSlaHandlers>[1] & {
     readonly enqueueScan: (tenantId: string) => Promise<void>;
   },
+  search?: SearchModule,
 ): WorkerRuntime {
   // The incident SLA scan is queued per active tenant on a local timer; the host calls
   // `runtime.periodic.start()`. The cloud trigger (EventBridge or similar) stays deferred (ADR-0002).
@@ -49,6 +55,16 @@ export function buildWorkerRuntime(
             intervalMs: worker?.planScanIntervalMs ?? DEFAULT_PLAN_SCAN_INTERVAL_MS,
             enqueue: async (tenantId: string) =>
               void (await maintenancePlans.enqueueScans(tenantId)),
+          },
+        ]
+      : []),
+    // The global search projection follows the modules: one reconcile job per active tenant.
+    ...(search
+      ? [
+          {
+            name: SEARCH_RECONCILE_JOB,
+            intervalMs: worker?.searchReconcileIntervalMs ?? DEFAULT_SEARCH_RECONCILE_INTERVAL_MS,
+            enqueue: (tenantId: string) => search.enqueueReconcile(tenantId),
           },
         ]
       : []),
@@ -79,5 +95,6 @@ export function buildWorkerRuntime(
   });
   if (maintenancePlans) registerMaintenancePlanHandlers(runtime.worker, maintenancePlans);
   if (incidentSla) registerIncidentSlaHandlers(runtime.worker, incidentSla);
+  if (search) registerSearchHandlers(runtime.worker, search.indexer);
   return runtime;
 }

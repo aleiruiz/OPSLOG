@@ -117,3 +117,18 @@ git diff --check
 ```
 
 Registrar SHA, MySQL exacto, tamaño del dataset, p95 y la matriz requisito → contrato → implementación → prueba → evidencia. PR listo, CI verde y la única revisión Opus por PR/SHA. El autor no fusiona ni declara G5.
+
+## Evidencia de rendimiento (PR 1)
+
+Corrida local del 2026-10-19, MySQL 8.0.46 en loopback, una empresa, 100.000 entidades (70 % vehículos,
+30 % conductores), `OPSLOG_PERF=1 pnpm test:perf`. Presupuesto: p95 <= 700 ms.
+
+| Escenario        | p95 (corrida 1) | p95 (corrida 2) |
+| ---------------- | --------------- | --------------- |
+| Prefijo          | 160,8 ms        | 245,4 ms        |
+| Contiene (ngram) | 277,5 ms        | 433,7 ms        |
+| Sin resultados   | 6,1 ms          | 12,3 ms         |
+
+Reconcile completo (fuentes en memoria): carga inicial 22,8 s, estado estable 1,2 s. EXPLAIN del
+prefijo: `range` sobre `ix_search_prefix`, `Using index`. Detalle en `docs/operations/SEARCH_PERFORMANCE.md`.
+La corrida de 1 M sigue como paso manual pendiente.

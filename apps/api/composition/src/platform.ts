@@ -56,6 +56,7 @@ import type { IncidentChildApi } from '../../incidents/third-parties/src/index.j
 import type { IncidentCostApi } from '../../incidents/costs/src/index.js';
 import type { IncidentSlaApi } from '../../incidents/sla/src/index.js';
 import type { IncidentSlaModule } from './platform/incident-sla-apis.js';
+import type { SearchModule } from './platform/search-apis.js';
 import type { IncidentRepairApi } from '../../incidents/repairs/src/index.js';
 import type { IncidentWorkflowApi } from '../../incidents/workflow/src/index.js';
 import { buildDomainApis } from './platform/apis.js';
@@ -119,6 +120,8 @@ export class Platform {
   public readonly incidentSla: IncidentSlaApi;
   /** SLA scan, delivery and mail port: what the worker runs; `enqueueScan` queues a scan job. */
   public readonly incidentSlaModule: IncidentSlaModule;
+  /** Global search (`GET /search`), the projection writer and its reconcile queue. */
+  public readonly search: SearchModule;
   public readonly access: AccessDirectory;
   public readonly tenants: InMemoryTenantStore;
   public readonly audit: AuditStore;
@@ -250,6 +253,7 @@ export class Platform {
     this.incidentCosts = apis.incidentCosts;
     this.incidentSla = apis.incidentSla.api;
     this.incidentSlaModule = apis.incidentSla;
+    this.search = apis.search;
     this.runtime = buildWorkerRuntime(
       this.kernel,
       this.pipeline,
@@ -257,6 +261,7 @@ export class Platform {
       adapters.auditRelay,
       apis.maintenancePlanWorker,
       apis.incidentSla,
+      apis.search,
     );
   }
 

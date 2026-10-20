@@ -30,6 +30,8 @@ import type { IncidentSlaRouteTypes } from './bff/incident-sla.js';
 import { INCIDENT_SLA_ROUTES } from './bff/incident-sla.js';
 import type { IncidentWorkflowRouteTypes } from './bff/incident-workflow.js';
 import { INCIDENT_WORKFLOW_ROUTES } from './bff/incident-workflow.js';
+import type { SearchRouteTypes } from './bff/search.js';
+import { SEARCH_ROUTES } from './bff/search.js';
 import type { BffRouteDefinition } from './bff/shared.js';
 
 /**
@@ -293,6 +295,14 @@ export type {
   BffIncidentSlaPreviousCycle,
   BffIncidentSlaState,
 } from './bff/incident-sla.js';
+export { BFF_SEARCH_TYPES, BFF_SEARCH_PER_TYPE, BFF_SEARCH_MAX_TERM } from './bff/search.js';
+export type {
+  BffSearchType,
+  BffSearchHit,
+  BffSearchGroup,
+  BffSearchResult,
+  BffSearchQuery,
+} from './bff/search.js';
 export { BFF_INCIDENT_IDEMPOTENCY_REQUIRED_COMMANDS } from './bff/incident-workflow.js';
 export type {
   BffIncidentTransitionInput,
@@ -347,7 +357,8 @@ export interface BffRouteTypes
     IncidentChildRouteTypes,
     IncidentWorkflowRouteTypes,
     IncidentCostRouteTypes,
-    IncidentSlaRouteTypes {}
+    IncidentSlaRouteTypes,
+    SearchRouteTypes {}
 
 export type BffRouteId = keyof BffRouteTypes;
 
@@ -368,6 +379,7 @@ export const BFF_ROUTES = {
   ...INCIDENT_WORKFLOW_ROUTES,
   ...INCIDENT_COST_ROUTES,
   ...INCIDENT_SLA_ROUTES,
+  ...SEARCH_ROUTES,
 } as const satisfies Record<BffRouteId, BffRouteDefinition>;
 
 type Parts<K extends BffRouteId> = Omit<BffRouteTypes[K], 'response'>;

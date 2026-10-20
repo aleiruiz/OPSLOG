@@ -49,6 +49,7 @@ import type { PlatformKernel } from './kernel.js';
 import type { PlatformAdapters } from './types.js';
 import type { buildWorkOrderApi, WorkOrderFileSupport } from './work-order-apis.js';
 import type { IncidentDomainApis } from './incident-apis.js';
+import type { SearchModule } from './search-apis.js';
 import { buildDownstreamApis } from './downstream-apis.js';
 import { resolvePiiCipher } from './pii-cipher.js';
 import type { MaintenanceApi } from '../../../maintenance/plans/src/index.js';
@@ -67,6 +68,8 @@ export interface DomainApis extends IncidentDomainApis {
   readonly maintenance: MaintenanceApi;
   readonly maintenancePlanWorker?: MaintenancePlanWorker;
   readonly workOrders: ReturnType<typeof buildWorkOrderApi>;
+  /** Global search: its API, the projection writer and the reconcile queue. */
+  readonly search: SearchModule;
 }
 
 /** Wires the domain services and their HTTP-facing APIs over the adapters (in-memory by default). */

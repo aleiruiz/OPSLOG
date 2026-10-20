@@ -18,6 +18,7 @@ import { INCIDENT_ROUTES } from './routes/incidents.js';
 import { INCIDENT_CHILD_ROUTES } from './routes/incident-children.js';
 import { INCIDENT_COST_ROUTES } from './routes/incident-costs.js';
 import { INCIDENT_WORKFLOW_ROUTES } from './routes/incident-workflow.js';
+import { SEARCH_ROUTES } from './routes/search.js';
 
 export type { Route, RouteContext, RouteKind } from './routes/shared.js';
 
@@ -42,4 +43,5 @@ export const ROUTES: readonly Route[] = [
   ...INCIDENT_CHILD_ROUTES,
   ...INCIDENT_WORKFLOW_ROUTES,
   ...INCIDENT_COST_ROUTES,
+  ...SEARCH_ROUTES,
 ];
