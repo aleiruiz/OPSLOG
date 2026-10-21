@@ -223,7 +223,8 @@ describe('incident costs over HTTP', () => {
       'lines[0].amount',
       'lines[1].category',
     ]);
-    expect(bad.text).not.toContain('-77');
+    // The correlation id is a random UUID and may itself contain '-77'.
+    expect(JSON.stringify({ ...bad.json, correlationId: undefined })).not.toContain('-77');
     const notObject = await f.managerA.put(`${P}/${incident.id}/costs`, {
       json: [] as never,
       headers: { 'idempotency-key': key() },
